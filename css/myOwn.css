@@ -1,0 +1,269 @@
+td input {
+	text-align: center;
+}
+
+.characterisitc-header {
+	width: 25%;
+	height: 20%;
+	background-color: transparent;
+}
+
+td label {
+	text-align: center;
+	font-weight: bold;
+	font-size: large;
+}
+
+.appliedAdvancements {
+	font-weight: normal;
+	font-size: 0.4em;
+	height: 10%;
+}
+
+input[data-dtype="Number"] {
+	text-align: center;
+	border: 2px solid;
+	background-color: #c9c7b8;
+}
+
+tr.advancement_inputs .advancement {
+	display: grid;
+}
+
+tr.advancement_inputs input[data-dtype="Number"] {
+	font-size: 0.7vw;
+}
+
+input:read-only {
+	background-color: transparent;
+	border: 0px solid;
+}
+
+td div {
+	font-size: 2rem;
+	text-align: center;
+}
+
+td {
+	border: 1px solid;
+}
+
+table#attribute-characteristics {
+	font-size: 1vw;
+	border-collapse: collapse;
+	border: hidden;
+}
+
+form.mySheetForm table#attribute-characteristics tr td.cell-label {
+	border-left: none;
+	border-top: none;
+	border-right: none;
+	color: white;
+	background-image: url("../images/blackLabelBackground.jpg");
+	background-repeat: no-repeat;
+	background-size: 100% 100%;
+}
+table#attribute-characteristics tr td.first-cell {
+	border-left: none;
+	border-top: none;
+	border-right: none;
+}
+
+table#attribute-characteristics tr#char-initial td {
+	border-top: none;
+}
+
+table#attribute-characteristics tr {
+	border-bottom: none;
+	border-top: none;
+}
+
+table td:first-child {
+	padding-left: 0.5em;
+}
+
+form.mySheetForm div#player-characteristics {
+	box-sizing: border-box;
+	padding-top: 0.75%;
+	padding-bottom: 0.75%;
+	padding-left: 0.75%;
+	background-image: url("../images/paneBorders.jpg");
+	background-repeat: no-repeat;
+	background-size: 100% 100%;
+}
+
+.tab {
+	font-size: 1.5em;
+	height: 100%;
+	padding-left: 2%;
+	padding-right: 0.75%;
+	padding-bottom: 0.75%;
+}
+
+form.mySheetForm
+	div#player-characteristics
+	table#attribute-characteristics
+	#characterisitcs-labels
+	th {
+	background-image: url("../images/characteristicBlackBackground.png");
+	background-size: cover;
+}
+
+form.mySheetForm tr#characterisitcs-labels th {
+	font-weight: bold;
+	color: white;
+}
+
+#player-characteristics {
+	flex: content;
+}
+
+#player-characteristics table {
+	position: relative;
+	padding-right: 2%;
+	background: none;
+}
+
+#attribute-characteristics {
+	height: 15%;
+	width: 98%;
+	margin: 0;
+}
+
+#attribute-characteristics tr#characterisitcs-labels {
+	height: 10%;
+}
+
+#attribute-characteristics tr {
+	height: 30%;
+}
+
+.rollable:hover,
+.rollable:focus {
+	color: #000;
+	text-shadow: 0 0 10px red;
+	cursor: pointer;
+}
+
+div.app.window-app.sheet {
+	min-width: 860px;
+	min-height: 1220px;
+}
+
+div.app.window-app {
+	min-width: 500px;
+	min-height: 520px;
+}
+
+.sheet-header .header-fields {
+	-webkit-box-flex: 1;
+	-ms-flex: 1;
+	flex: 1;
+}
+
+.sheet-header,
+.sheet-tabs,
+.sheet-body {
+	padding-left: 5%;
+	padding-right: 5%;
+}
+
+.sheet-header {
+	padding-top: 5%;
+}
+
+.sheet-body {
+	padding-bottom: 3.1%;
+	height: 57%;
+}
+
+.sheet nav.sheet-tabs {
+	font-size: 1.5em;
+	border-top: none;
+	border-bottom: none;
+	-webkit-box-flex: 0;
+	-ms-flex: 0;
+	flex: 0;
+}
+
+.myFlexcol > * {
+	flex: none;
+}
+
+.grid-span-2 {
+	grid-column-end: span 2;
+}
+
+.sheet header.sheet-header .grid-info {
+	display: grid;
+	grid-column: span 2 / span 2;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.grid-info {
+	display: inline-grid;
+	padding-bottom: 8px;
+	grid-column: span 2 / span 2;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.flex-reverseColumn {
+	display: flex;
+	flex-wrap: wrap;
+}
+
+div.app.window-app.sheet .window-content {
+	padding: 0;
+}
+form.mySheetForm {
+	background-image: url("../images/pergamin.jpg");
+	background-repeat: no-repeat;
+	background-size: 100% 100%;
+}
+form.mySheetForm .char-header-label {
+	text-align: center;
+	height: auto;
+	color: white;
+	background-image: url("../images/blackLabelBackground.jpg");
+	background-repeat: no-repeat;
+	background-size: 100% 100%;
+}
+
+form.mySheetForm .char-header-container {
+	background-image: url("../images/paneBorders.jpg");
+	background-repeat: no-repeat;
+	background-size: 100% 100%;
+}
+
+form.mySheetForm div.grid-info .char-header-container {
+	background-size: cover;
+}
+
+form.mySheetForm .char-header-input {
+	border: hidden;
+}
+
+.sheet header.sheet-header img#mySheet-img {
+	-webkit-box-flex: 0;
+	-ms-flex: 0 0 9vw;
+	flex: 0 0 9w;
+	height: 8vw;
+	margin-right: 10px;
+	margin-bottom: 10px;
+	object-fit: contain;
+}
+
+.item-img {
+	width: 305px;
+	height: 165px;
+}
+
+input.resources {
+	text-align: center;
+}
+
+div.scrorllable {
+	max-height: 82px;
+	min-height: 34px;
+	overflow-y: auto;
+}

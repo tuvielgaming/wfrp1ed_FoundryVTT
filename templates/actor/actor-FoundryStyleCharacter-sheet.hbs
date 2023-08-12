@@ -1,0 +1,652 @@
+<form
+	class="{{cssClass}} myFlexcol mySheetForm"
+	id="characterSheet"
+	autocomplete="off"
+>
+
+	{{! Sheet Header }}
+	<header class="sheet-header">
+		{{! Header stuff goes here }}
+		<img
+			id="mySheet-img"
+			src="{{actor.img}}"
+			data-edit="img"
+			title="{{actor.name}}"
+		/>
+		<div class="header-fields">
+			<div class="grid-span-3 char-header-container">
+				<h1 class="char-header-label">Name</h1>
+				<h2 class="char-header-input"><input
+						name="name"
+						type="text"
+						value="{{actor.name}}"
+						placeholder="Actor Name"
+						onblur="this.readOnly='true';"
+						readonly="true"
+						ondblclick="this.readOnly='';"
+					/></h2>
+			</div>
+			<div class="grid-span-2 char-header-container">
+				<h1 class="char-header-label">Class</h1>
+				<h2 class="char-header-input"><input
+						name="system.details.class.value"
+						type="text"
+						value="{{system.details.class.value}}"
+						onblur="this.readOnly='true';"
+						readonly="true"
+						ondblclick="this.readOnly='';"
+					/></h2>
+			</div>
+			<div class="grid-span-2 char-header-container">
+				<h1 class="char-header-label">Career</h1>
+				<h2 class="char-header-input"><input
+						name="system.details.career.value"
+						type="text"
+						value="{{system.details.career.value}}"
+						onblur="this.readOnly='true';"
+						readonly="true"
+						ondblclick="this.readOnly='';"
+					/></h2>
+			</div>
+		</div>
+		<div class="header-fields">
+			<div class="grid-span-2 char-header-container">
+				<h1 class="char-header-label">Race</h1>
+				<h2 class="char-header-input"><input
+						name="system.details.race.value"
+						type="text"
+						value="{{system.details.race.value}}"
+						onblur="this.readOnly='true';"
+						readonly="true"
+						ondblclick="this.readOnly='';"
+					/></h2>
+			</div>
+			<div class="grid-span-2 char-header-container">
+				<h1 class="char-header-label">Weight</h1>
+				<h2 class="char-header-input"><input
+						name="system.details.weight.value"
+						type="text"
+						value="{{system.details.weight.value}}"
+						onblur="this.readOnly='true';"
+						readonly="true"
+						ondblclick="this.readOnly='';"
+					/></h2>
+			</div>
+			<div class="grid-span-2 char-header-container">
+				<h1 class="char-header-label">Height</h1>
+				<h2 class="char-header-input"><input
+						name="system.details.height.value"
+						type="text"
+						value="{{system.details.height.value}}"
+						onblur="this.readOnly='true';"
+						readonly="true"
+						ondblclick="this.readOnly='';"
+					/></h2>
+			</div>
+		</div>
+		<div class="header-fields">
+			<div class="grid-span-2 char-header-container">
+				<h1 class="char-header-label">Gender</h1>
+				<h2 class="char-header-input"><input
+						name="system.details.gender.value"
+						type="text"
+						value="{{system.details.gender.value}}"
+						onblur="this.readOnly='true';"
+						readonly="true"
+						ondblclick="this.readOnly='';"
+					/></h2>
+			</div>
+			<div class="grid-span-2 char-header-container">
+				<h1 class="char-header-label">Age</h1>
+				<h2 class="char-header-input"><input
+						class="resources"
+						name="system.details.age.value"
+						type="text"
+						value="{{system.details.age.value}}"
+						onblur="this.readOnly='true';"
+						readonly="true"
+						ondblclick="this.readOnly='';"
+					/></h2>
+			</div>
+			<div class="grid-span-2 char-header-container">
+				<h1 class="char-header-label">Experience</h1>
+				<h2 class="char-header-input"><input
+						class="resources"
+						name="system.details.experience.value"
+						type="Number"
+						value="{{system.details.experience.value}}"
+						onblur="this.readOnly='true';"
+						readonly="true"
+						ondblclick="this.readOnly='';"
+					/></h2>
+			</div>
+		</div>
+		<div class="header-fields">
+			<div class="grid-span-2 char-header-container">
+				<h1 class="char-header-label">Fate</h1>
+				<h2 class="char-header-input"><input
+						class="resources"
+						name="system.status.fate.value"
+						type="Number"
+						value="{{system.status.fate.value}}"
+						onblur="this.readOnly='true';"
+						readonly="true"
+						ondblclick="this.readOnly='';"
+					/></h2>
+			</div>
+			<div class="grid-span-2 char-header-container">
+				<h1 class="char-header-label">Career Path</h1>
+				<h2 class="char-header-input">
+					<div class="scrorllable">
+						<ol>
+							{{#each system.details.careerTrack.value}}
+								<li>{{this}}</li>
+							{{/each}}
+						</ol>
+					</div>
+				</h2>
+			</div>
+		</div>
+		<div id="player-characteristics">
+			<table id="attribute-characteristics">
+				<tr id="characterisitcs-labels">
+					<th
+						style="width: 25%; background-image: none; color: black;"
+					>{{localize "WFRP1ed.CHAR.Characteristic"}}</th>
+					<th style="width: 5.0%">{{localize "WFRP1ed.CHARAbbrev.SP"}}</th>
+					<th style="width: 5.0%">{{localize "WFRP1ed.CHARAbbrev.WS"}}</th>
+					<th style="width: 5.0%">{{localize "WFRP1ed.CHARAbbrev.BS"}}</th>
+					<th style="width: 5.0%">{{localize "WFRP1ed.CHARAbbrev.S"}}</th>
+					<th style="width: 5.0%">{{localize "WFRP1ed.CHARAbbrev.T"}}</th>
+					<th style="width: 5.0%">{{localize "WFRP1ed.CHARAbbrev.W"}}</th>
+					<th style="width: 5.0%">{{localize "WFRP1ed.CHARAbbrev.I"}}</th>
+					<th style="width: 5.0%">{{localize "WFRP1ed.CHARAbbrev.A"}}</th>
+					<th style="width: 5.0%">{{localize "WFRP1ed.CHARAbbrev.Dex"}}</th>
+					<th style="width: 5.0%">{{localize "WFRP1ed.CHARAbbrev.Ld"}}</th>
+					<th style="width: 5.0%">{{localize "WFRP1ed.CHARAbbrev.Int"}}</th>
+					<th style="width: 5.0%">{{localize "WFRP1ed.CHARAbbrev.Cl"}}</th>
+					<th style="width: 5.0%">{{localize "WFRP1ed.CHARAbbrev.Wp"}}</th>
+					<th style="width: 5.0%">{{localize "WFRP1ed.CHARAbbrev.Fel"}}</th>
+				</tr>
+				<tr id="char-initial">
+					<td class="cell-label" style="width: 25%">{{localize
+							"WFRP1ed.CHAR.CharInitial"
+						}}</td>
+					<td class="first-cell">
+						<input
+							name="system.characteristics.sp.initial"
+							type="text"
+							value="{{system.characteristics.sp.initial}}"
+							data-dtype="Number"
+							onblur="this.readOnly='true';"
+							readonly="true"
+							ondblclick="this.readOnly='';"
+						/>
+					</td>
+					<td>
+						<input
+							name="system.characteristics.ws.initial"
+							type="text"
+							value="{{system.characteristics.ws.initial}}"
+							data-dtype="Number"
+							onblur="this.readOnly='true';"
+							readonly="true"
+							ondblclick="this.readOnly='';"
+						/>
+					</td>
+					<td>
+						<input
+							name="system.characteristics.bs.initial"
+							type="text"
+							value="{{system.characteristics.bs.initial}}"
+							data-dtype="Number"
+							onblur="this.readOnly='true';"
+							readonly="true"
+							ondblclick="this.readOnly='';"
+						/>
+					</td>
+					<td>
+						<input
+							name="system.characteristics.s.initial"
+							type="text"
+							value="{{system.characteristics.s.initial}}"
+							data-dtype="Number"
+							onblur="this.readOnly='true';"
+							readonly="true"
+							ondblclick="this.readOnly='';"
+						/>
+					</td>
+					<td>
+						<input
+							name="system.characteristics.t.initial"
+							type="text"
+							value="{{system.characteristics.t.initial}}"
+							data-dtype="Number"
+							onblur="this.readOnly='true';"
+							readonly="true"
+							ondblclick="this.readOnly='';"
+						/>
+					</td>
+					<td>
+						<input
+							name="system.characteristics.w.initial"
+							type="text"
+							value="{{system.characteristics.w.initial}}"
+							data-dtype="Number"
+							onblur="this.readOnly='true';"
+							readonly="true"
+							ondblclick="this.readOnly='';"
+						/>
+					</td>
+					<td>
+						<input
+							name="system.characteristics.i.initial"
+							type="text"
+							value="{{system.characteristics.i.initial}}"
+							data-dtype="Number"
+							onblur="this.readOnly='true';"
+							readonly="true"
+							ondblclick="this.readOnly='';"
+						/>
+					</td>
+					<td>
+						<input
+							name="system.characteristics.a.initial"
+							type="text"
+							value="{{system.characteristics.a.initial}}"
+							data-dtype="Number"
+							onblur="this.readOnly='true';"
+							readonly="true"
+							ondblclick="this.readOnly='';"
+						/>
+					</td>
+					<td>
+						<input
+							name="system.characteristics.dex.initial"
+							type="text"
+							value="{{system.characteristics.dex.initial}}"
+							data-dtype="Number"
+							onblur="this.readOnly='true';"
+							readonly="true"
+							ondblclick="this.readOnly='';"
+						/>
+					</td>
+					<td>
+						<input
+							name="system.characteristics.ld.initial"
+							type="text"
+							value="{{system.characteristics.ld.initial}}"
+							data-dtype="Number"
+							onblur="this.readOnly='true';"
+							readonly="true"
+							ondblclick="this.readOnly='';"
+						/>
+					</td>
+					<td>
+						<input
+							name="system.characteristics.int.initial"
+							type="text"
+							value="{{system.characteristics.int.initial}}"
+							data-dtype="Number"
+							onblur="this.readOnly='true';"
+							readonly="true"
+							ondblclick="this.readOnly='';"
+						/>
+					</td>
+					<td>
+						<input
+							name="system.characteristics.cl.initial"
+							type="text"
+							value="{{system.characteristics.cl.initial}}"
+							data-dtype="Number"
+							onblur="this.readOnly='true';"
+							readonly="true"
+							ondblclick="this.readOnly='';"
+						/>
+					</td>
+					<td>
+						<input
+							name="system.characteristics.wp.initial"
+							type="text"
+							value="{{system.characteristics.wp.initial}}"
+							data-dtype="Number"
+							onblur="this.readOnly='true';"
+							readonly="true"
+							ondblclick="this.readOnly='';"
+						/>
+					</td>
+					<td>
+						<input
+							name="system.characteristics.fel.initial"
+							type="text"
+							value="{{system.characteristics.fel.initial}}"
+							data-dtype="Number"
+							onblur="this.readOnly='true';"
+							readonly="true"
+							ondblclick="this.readOnly='';"
+						/>
+					</td>
+				</tr>
+				<tr class="advancement_inputs">
+					<td class="cell-label">{{localize "WFRP1ed.CHAR.Advances"}}</td>
+					<td class="first-cell">
+						<div class="advancement">
+							<label
+								class="appliedAdvancements"
+							>{{system.characteristics.sp.purchasedAdvances}}</label>
+							<input
+								name="system.characteristics.sp.advances"
+								type="text"
+								value="{{system.characteristics.sp.advances}}"
+								data-dtype="Number"
+								onblur="this.readOnly='true';"
+								readonly="true"
+								ondblclick="this.readOnly='';"
+							/>
+						</div>
+					</td>
+					<td>
+						<div class="advancement">
+							<label
+								class="appliedAdvancements"
+							>{{system.characteristics.ws.purchasedAdvances}}</label>
+							<input
+								name="system.characteristics.ws.advances"
+								type="text"
+								value="{{system.characteristics.ws.advances}}"
+								data-dtype="Number"
+								onblur="this.readOnly='true';"
+								readonly="true"
+								ondblclick="this.readOnly='';"
+							/>
+						</div>
+					</td>
+					<td>
+						<div class="advancement">
+							<label
+								class="appliedAdvancements"
+							>{{system.characteristics.bs.purchasedAdvances}}</label>
+							<input
+								name="system.characteristics.bs.advances"
+								type="text"
+								value="{{system.characteristics.bs.advances}}"
+								data-dtype="Number"
+								onblur="this.readOnly='true';"
+								readonly="true"
+								ondblclick="this.readOnly='';"
+							/>
+						</div>
+					</td>
+					<td>
+						<input
+							name="system.characteristics.s.advances"
+							type="text"
+							value="{{system.characteristics.s.advances}}"
+							data-dtype="Number"
+							onblur="this.readOnly='true';"
+							readonly="true"
+							ondblclick="this.readOnly='';"
+						/>
+					</td>
+					<td>
+						<input
+							name="system.characteristics.t.advances"
+							type="text"
+							value="{{system.characteristics.t.advances}}"
+							data-dtype="Number"
+							onblur="this.readOnly='true';"
+							readonly="true"
+							ondblclick="this.readOnly='';"
+						/>
+					</td>
+					<td>
+						<input
+							name="system.characteristics.w.advances"
+							type="text"
+							value="{{system.characteristics.w.advances}}"
+							data-dtype="Number"
+							onblur="this.readOnly='true';"
+							readonly="true"
+							ondblclick="this.readOnly='';"
+						/>
+					</td>
+					<td>
+						<input
+							name="system.characteristics.i.advances"
+							type="text"
+							value="{{system.characteristics.i.advances}}"
+							data-dtype="Number"
+							onblur="this.readOnly='true';"
+							readonly="true"
+							ondblclick="this.readOnly='';"
+						/>
+					</td>
+					<td>
+						<input
+							name="system.characteristics.a.advances"
+							type="text"
+							value="{{system.characteristics.a.advances}}"
+							data-dtype="Number"
+							onblur="this.readOnly='true';"
+							readonly="true"
+							ondblclick="this.readOnly='';"
+						/>
+					</td>
+					<td>
+						<input
+							name="system.characteristics.dex.advances"
+							type="text"
+							value="{{system.characteristics.dex.advances}}"
+							data-dtype="Number"
+							onblur="this.readOnly='true';"
+							readonly="true"
+							ondblclick="this.readOnly='';"
+						/>
+					</td>
+					<td>
+						<input
+							name="system.characteristics.ld.advances"
+							type="text"
+							value="{{system.characteristics.ld.advances}}"
+							data-dtype="Number"
+							onblur="this.readOnly='true';"
+							readonly="true"
+							ondblclick="this.readOnly='';"
+						/>
+					</td>
+					<td>
+						<input
+							name="system.characteristics.int.advances"
+							type="text"
+							value="{{system.characteristics.int.advances}}"
+							data-dtype="Number"
+							onblur="this.readOnly='true';"
+							readonly="true"
+							ondblclick="this.readOnly='';"
+						/>
+					</td>
+					<td>
+						<input
+							name="system.characteristics.cl.advances"
+							type="text"
+							value="{{system.characteristics.cl.advances}}"
+							data-dtype="Number"
+							onblur="this.readOnly='true';"
+							readonly="true"
+							ondblclick="this.readOnly='';"
+						/>
+					</td>
+					<td>
+						<input
+							name="system.characteristics.wp.advances"
+							type="text"
+							value="{{system.characteristics.wp.advances}}"
+							data-dtype="Number"
+							onblur="this.readOnly='true';"
+							readonly="true"
+							ondblclick="this.readOnly='';"
+						/>
+					</td>
+					<td>
+						<input
+							name="system.characteristics.fel.advances"
+							type="text"
+							value="{{system.characteristics.fel.advances}}"
+							data-dtype="Number"
+							onblur="this.readOnly='true';"
+							readonly="true"
+							ondblclick="this.readOnly='';"
+						/>
+					</td>
+				</tr>
+				<tr>
+					<td class="cell-label">{{localize "WFRP1ed.CHAR.CharActual"}}</td>
+					<td class="first-cell">
+						<div
+							class="characterisitcs-table"
+						>{{system.characteristics.sp.actual}}</div>
+					</td>
+					<td>
+						<div
+							class="rollable"
+							data-roll="d100 - @ws.actual"
+							data-label="{{localize 'WFRP1ed.CHAR.WS'}}"
+						>{{system.characteristics.ws.actual}}</div>
+					</td>
+					<td>
+						<div
+							class="rollable"
+							data-roll="d100 - @bs.actual"
+							data-label="{{localize 'WFRP1ed.CHAR.BS'}}"
+						>{{system.characteristics.bs.actual}}</div>
+					</td>
+					<td>
+						<div
+							class="rollable"
+							data-roll="d100 - @s.actual * 10"
+							data-label="{{localize 'WFRP1ed.CHAR.S'}}"
+						>{{system.characteristics.s.actual}}</div>
+					</td>
+					<td>
+						<div
+							class="rollable"
+							data-roll="d100 - @t.actual * 10"
+							data-label="{{localize 'WFRP1ed.CHAR.T'}}"
+						>{{system.characteristics.t.actual}}</div>
+					</td>
+					<td>
+						<div>{{system.characteristics.w.actual}}</div>
+					</td>
+					<td>
+						<div
+							class="rollable"
+							data-roll="d100 - @i.actual"
+							data-label="{{localize 'WFRP1ed.CHAR.I'}}"
+						>{{system.characteristics.i.actual}}</div>
+					</td>
+					<td>
+						<div>{{system.characteristics.a.actual}}</div>
+					</td>
+					<td>
+						<div
+							class="rollable"
+							data-roll="d100 - @dex.actual"
+							data-label="{{localize 'WFRP1ed.CHAR.Dex'}}"
+						>{{system.characteristics.dex.actual}}</div>
+					</td>
+					<td>
+						<div
+							class="rollable"
+							data-roll="d100 - @ld.actual"
+							data-label="{{localize 'WFRP1ed.CHAR.Ld'}}"
+						>{{system.characteristics.ld.actual}}</div>
+					</td>
+					<td>
+						<div
+							class="rollable"
+							data-roll="d100 - @int.actual"
+							data-label="{{localize 'WFRP1ed.CHAR.Int'}}"
+						>{{system.characteristics.int.actual}}</div>
+					</td>
+					<td>
+						<div
+							class="rollable"
+							data-roll="d100 - @cl.actual"
+							data-label="{{localize 'WFRP1ed.CHAR.Cl'}}"
+						>{{system.characteristics.cl.actual}}</div>
+					</td>
+					<td>
+						<div
+							class="rollable"
+							data-roll="d100 - @wp.actual"
+							data-label="{{localize 'WFRP1ed.CHAR.WP'}}"
+						>{{system.characteristics.wp.actual}}</div>
+					</td>
+					<td>
+						<div
+							class="rollable"
+							data-roll="d100 - @fel.actual"
+							data-label="{{localize 'WFRP1ed.CHAR.Fel'}}"
+						>{{system.characteristics.fel.actual}}</div>
+					</td>
+				</tr>
+			</table>
+		</div>
+	</header>
+
+	{{! Sheet Tab Navigation }}
+	<nav class="sheet-tabs tabs" data-group="primary">
+		<a class="item" data-tab="general">General</a>
+		<a class="item" data-tab="weapons">Weapons</a>
+		<a class="item" data-tab="items">Items</a>
+		<a class="item" data-tab="magic">Magic</a>
+		<a class="item" data-tab="notes">Notes</a>
+	</nav>
+
+	{{! Sheet Body }}
+	<section class="sheet-body">
+		<div class="tab biography" data-group="primary" data-tab="notes">
+			{{editor
+				system.details.notes
+				target="system.details.notes"
+				button=false
+				engine="tinymce"
+				editable=editable
+			}}
+		</div>
+		<div class="tab items" data-group="primary" data-tab="items">
+			<ol class="items-list">
+				<li class="item flexrow item-header">
+					<div class="item-image"></div>
+					<div class="item-name">Name</div>
+					<div class="item-controls">
+						<a
+							class="item-control item-create"
+							title="Create item"
+							data-type="item"
+						><i class="fas fa-plus"></i> Add item</a>
+					</div>
+				</li>
+				{{#each items as |item id|}}
+					<li class="item flexrow" data-item-id="{{item._id}}">
+						<div class="item-image"><img
+								src="{{item.img}}"
+								title="{{item.name}}"
+								width="24"
+								height="24"
+							/></div>
+						<h4 class="item-name">{{item.name}}</h4>
+						<div class="item-controls">
+							<a class="item-control item-edit" title="Edit Item"><i
+									class="fas fa-edit"
+								></i></a>
+							<a class="item-control item-delete" title="Delete Item"><i
+									class="fas fa-trash"
+								></i></a>
+						</div>
+					</li>
+				{{/each}}
+			</ol>
+		</div>
+	</section>
+</form>

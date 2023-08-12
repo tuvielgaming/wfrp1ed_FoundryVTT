@@ -1,0 +1,48 @@
+{
+	"WFRP1ed.CHAR.Characteristic": "CHARAKTERYSTYKA",
+	"WFRP1ed.CHAR.CharInitial": "POCZĄTKOWA",
+	"WFRP1ed.CHAR.Advances": "Schemat Rozwoju",
+	"WFRP1ed.CHAR.CharActual": "AKTUALNA",
+	"WFRP1ed.CHAR.SP": "Szybkość",
+	"WFRP1ed.CHAR.WS": "Walka Wręcz",
+	"WFRP1ed.CHAR.BS": "Umiejętności Strzeleckie",
+	"WFRP1ed.CHAR.S": "Siła",
+	"WFRP1ed.CHAR.T": "Wytrzymałość",
+	"WFRP1ed.CHAR.W": "Żywotność",
+	"WFRP1ed.CHAR.I": "Inicjatywa",
+	"WFRP1ed.CHAR.A": "Ataki",
+	"WFRP1ed.CHAR.Dex": "Zręczność",
+	"WFRP1ed.CHAR.Ld": "Cechy Przywódcze",
+	"WFRP1ed.CHAR.Int": "Inteligencja",
+	"WFRP1ed.CHAR.Cl": "Opanowanie",
+	"WFRP1ed.CHAR.Wp": "Siła Woli",
+	"WFRP1ed.CHAR.Fel": "Ogłada",
+
+	"WFRP1ed.CHAR.Dmg": "Obrażenia",
+	"WFRP1ed.CHAR.Parry": "Parowanie",
+
+	"WFRP1ed.CHARAbbrev.SP": "SZ",
+	"WFRP1ed.CHARAbbrev.WS": "WW",
+	"WFRP1ed.CHARAbbrev.BS": "US",
+	"WFRP1ed.CHARAbbrev.S": "S",
+	"WFRP1ed.CHARAbbrev.T": "Wt",
+	"WFRP1ed.CHARAbbrev.W": "Żw",
+	"WFRP1ed.CHARAbbrev.I": "I",
+	"WFRP1ed.CHARAbbrev.A": "A",
+	"WFRP1ed.CHARAbbrev.Dex": "Zr",
+	"WFRP1ed.CHARAbbrev.Ld": "CP",
+	"WFRP1ed.CHARAbbrev.Int": "Int",
+	"WFRP1ed.CHARAbbrev.Cl": "Op",
+	"WFRP1ed.CHARAbbrev.Wp": "SW",
+	"WFRP1ed.CHARAbbrev.Fel": "Ogd",
+
+	"WFRP1ed.CHARAbbrev.Dmg": "O",
+	"WFRP1ed.CHARAbbrev.Parry": "P",
+
+	"WFRP1ed.Races.Elf": "Elf",
+	"WFRP1ed.Races.Dwarf": "Krasnolud",
+	"WFRP1ed.Races.Halfling": "Niziołek",
+	"WFRP1ed.Races.Human": "Człowiek",
+
+	"WFRP1ed.Chat.Rolling": "Rzut vs"
+}

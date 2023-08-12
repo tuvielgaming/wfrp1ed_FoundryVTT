@@ -1,0 +1,299 @@
+{
+	"Actor": {
+		"types": ["character", "npc", "creature", "vehicle"],
+		"templates": {
+			"characteristics": {
+				"characteristics": {
+					"sp": {
+						"type": "Number",
+						"label": "WFRP1ed.CHAR.SP",
+						"abrev": "WFRP1ed.CHARAbbrev.SP",
+						"initial": 3,
+						"purchasedAdvances": 0,
+						"advances": 0,
+						"oneDigit": true
+					},
+					"ws": {
+						"type": "Number",
+						"label": "WFRP1ed.CHAR.WS",
+						"abrev": "WFRP1ed.CHARAbbrev.WS",
+						"initial": 20,
+						"purchasedAdvances": 0,
+						"advances": 0,
+						"oneDigit": false
+					},
+					"bs": {
+						"type": "Number",
+						"label": "WFRP1ed.CHAR.BS",
+						"abrev": "WFRP1ed.CHARAbbrev.BS",
+						"initial": 20,
+						"purchasedAdvances": 0,
+						"advances": 0,
+						"oneDigit": false
+					},
+					"s": {
+						"type": "Number",
+						"label": "WFRP1ed.CHAR.S",
+						"abrev": "WFRP1ed.CHARAbbrev.S",
+						"initial": 3,
+						"purchasedAdvances": 0,
+						"advances": 0,
+						"oneDigit": true
+					},
+					"t": {
+						"type": "Number",
+						"label": "WFRP1ed.CHAR.T",
+						"abrev": "WFRP1ed.CHARAbbrev.T",
+						"initial": 3,
+						"purchasedAdvances": 0,
+						"advances": 0,
+						"oneDigit": true
+					},
+					"w": {
+						"type": "Number",
+						"label": "WFRP1ed.CHAR.W",
+						"abrev": "WFRP1ed.CHARAbbrev.W",
+						"initial": 6,
+						"purchasedAdvances": 0,
+						"advances": 0,
+						"oneDigit": true
+					},
+					"i": {
+						"type": "Number",
+						"label": "WFRP1ed.CHAR.I",
+						"abrev": "WFRP1ed.CHARAbbrev.I",
+						"initial": 20,
+						"purchasedAdvances": 0,
+						"advances": 0,
+						"oneDigit": false
+					},
+					"a": {
+						"type": "Number",
+						"label": "WFRP1ed.CHAR.A",
+						"abrev": "WFRP1ed.CHARAbbrev.A",
+						"initial": 1,
+						"purchasedAdvances": 0,
+						"advances": 0,
+						"oneDigit": true
+					},
+					"dex": {
+						"type": "Number",
+						"label": "WFRP1ed.CHAR.Dex",
+						"abrev": "WFRP1ed.CHARAbbrev.Dex",
+						"initial": 20,
+						"purchasedAdvances": 0,
+						"advances": 0,
+						"oneDigit": false
+					},
+					"ld": {
+						"type": "Number",
+						"label": "WFRP1ed.CHAR.Ld",
+						"abrev": "WFRP1ed.CHARAbbrev.Ld",
+						"initial": 20,
+						"purchasedAdvances": 0,
+						"advances": 0,
+						"oneDigit": false
+					},
+					"int": {
+						"type": "Number",
+						"label": "WFRP1ed.CHAR.Int",
+						"abrev": "WFRP1ed.CHARAbbrev.Int",
+						"initial": 20,
+						"purchasedAdvances": 0,
+						"advances": 0,
+						"oneDigit": false
+					},
+					"cl": {
+						"type": "Number",
+						"label": "WFRP1ed.CHAR.Cl",
+						"abrev": "WFRP1ed.CHARAbbrev.Cl",
+						"initial": 20,
+						"purchasedAdvances": 0,
+						"advances": 0,
+						"oneDigit": false
+					},
+					"wp": {
+						"type": "Number",
+						"label": "WFRP1ed.CHAR.Wp",
+						"abrev": "WFRP1ed.CHARAbbrev.Wp",
+						"initial": 20,
+						"purchasedAdvances": 0,
+						"advances": 0,
+						"oneDigit": false
+					},
+					"fel": {
+						"type": "Number",
+						"label": "WFRP1ed.CHAR.Fel",
+						"abrev": "WFRP1ed.CHARAbbrev.Fel",
+						"initial": 20,
+						"purchasedAdvances": 0,
+						"advances": 0,
+						"oneDigit": false
+					}
+				}
+			},
+			"info": {
+				"details": {
+					"race": {
+						"type": "String",
+						"label": "Race",
+						"value": ""
+					},
+					"age": {
+						"type": "String",
+						"label": "Age",
+						"value": ""
+					},
+					"height": {
+						"type": "String",
+						"label": "Height",
+						"value": ""
+					},
+					"weight": {
+						"type": "String",
+						"label": "Weight",
+						"value": ""
+					},
+					"haircolour": {
+						"type": "String",
+						"label": "Hair Colour",
+						"value": ""
+					},
+					"eyecolour": {
+						"type": "String",
+						"label": "Eye Colour",
+						"value": ""
+					},
+					"gender": {
+						"type": "String",
+						"label": "Gender",
+						"value": ""
+					},
+					"notes": {
+						"type": "String",
+						"label": "Notes",
+						"value": ""
+					}
+				}
+			}
+		},
+		"character": {
+			"templates": ["characteristics", "info"],
+			"status": {
+				"fate": {
+					"type": "Number",
+					"label": "Fate",
+					"value": 0
+				},
+				"fortune": {
+					"type": "Number",
+					"label": "Fortune",
+					"value": 0
+				}
+			},
+			"details": {
+				"experienceWh4": {
+					"type": "Number",
+					"label": "Experience",
+					"total": 0,
+					"spent": 0,
+					"log": []
+				},
+				"experience": {
+					"type": "Number",
+					"label": "Experience",
+					"value": 0,
+					"total": 0,
+					"spent": 0,
+					"log": []
+				},
+				"personal-ambitions": {
+					"short-term": "",
+					"long-term": ""
+				},
+				"party-ambitions": {
+					"name": "",
+					"short-term": "",
+					"long-term": ""
+				},
+				"motivation": {
+					"type": "String",
+					"label": "Motivation",
+					"value": ""
+				},
+				"class": {
+					"type": "String",
+					"label": "Class",
+					"value": ""
+				},
+				"career": {
+					"type": "String",
+					"label": "Career",
+					"value": ""
+				},
+				"careerTrack": {
+					"type": "Array",
+					"label": "Career Track",
+					"value": []
+				},
+				"distinguishingmark": {
+					"type": "String",
+					"label": "Distinguishing Mark",
+					"value": ""
+				},
+				"starsign": {
+					"type": "String",
+					"label": "Star Sign",
+					"value": ""
+				}
+			}
+		},
+		"npc": {
+			"templates": ["base"],
+			"cr": 0
+		}
+	},
+	"Item": {
+		"types": ["meleeWeapon", "rangeWeapon", "item", "feature", "spell"],
+		"templates": {
+			"base": {
+				"characteristics": {
+					"damage": 0
+				},
+				"description": ""
+			}
+		},
+		"meleeWeapon": {
+			"templates": ["base"],
+			"characteristics": {
+				"initiative": 0,
+				"weaponSkill": 0,
+				"parry": 0
+			}
+		},
+		"rangeWeapon": {
+			"templates": ["base"],
+			"characteristics": {
+				"range": {
+					"short": 0,
+					"long": 0,
+					"max": 0
+				},
+				"reload": 0
+			}
+		},
+		"item": {
+			"templates": ["base"],
+			"quantity": 1,
+			"weight": 0,
+			"formula": "d20 + @str.mod + ceil(@lvl / 2)"
+		},
+		"feature": {
+			"templates": ["base"]
+		},
+		"spell": {
+			"templates": ["base"],
+			"spellLevel": 1
+		}
+	}
+}
