@@ -1,0 +1,49 @@
+<section class="sheet-block armour">
+	<div
+		class="armour-table"
+		role="table"
+		aria-label="{{localize 'WFRP1ED.Armour'}}"
+	>
+		<div class="armour-table-body" role="rowgroup">
+			{{#each display.armour as |armour|}}
+				<div
+					class="
+						armour-row
+						{{#if armour.equipped}}is-equipped{{/if}}
+					"
+					data-item-id="{{armour.id}}"
+					role="row"
+				>
+					<span
+						class="armour-cell armour-cell--name"
+						role="cell"
+						title="{{armour.name}}"
+					>
+						{{armour.name}}
+					</span>
+
+					<span
+						class="armour-cell armour-cell--location"
+						role="cell"
+						title="{{armour.location}}"
+						aria-label="{{localize 'WFRP1ED.ArmourLocation'}}"
+					>
+						{{armour.location}}
+					</span>
+
+					<span
+						class="armour-cell armour-cell--encumbrance"
+						role="cell"
+						aria-label="{{localize 'WFRP1ED.Encumbrance'}}"
+					>
+						{{armour.encumbrance}}
+					</span>
+				</div>
+			{{else}}
+				<span class="visually-hidden">
+					{{localize "WFRP1ED.NoArmour"}}
+				</span>
+			{{/each}}
+		</div>
+	</div>
+</section>

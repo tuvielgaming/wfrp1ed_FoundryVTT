@@ -1,0 +1,430 @@
+# FOUNDRY_V14_GUIDELINES.md
+
+Version: 1.0
+Status: ACTIVE
+Last Updated: 2026-07-25
+
+===============================================================================
+PURPOSE
+===============================================================================
+
+This document defines the coding standards for the WFRP1ED system when using
+Foundry Virtual Tabletop Version 14.
+
+It complements PROJECT_STATE.md.
+
+PROJECT_STATE defines WHAT the project is.
+
+FOUNDRY_V14_GUIDELINES defines HOW the code should be written.
+
+Whenever possible, prefer native Foundry V14 APIs and design patterns.
+
+Avoid carrying legacy ActorSheet architecture into new code.
+
+===============================================================================
+GENERAL PRINCIPLES
+===============================================================================
+
+✔ Use native V14 APIs
+
+✔ Keep Documents as the source of truth
+
+✔ Separate game logic from presentation
+
+✔ Keep Applications lightweight
+
+✔ Never calculate inside templates
+
+✔ Never manipulate DOM directly unless absolutely necessary
+
+===============================================================================
+DOCUMENT MODEL
+===============================================================================
+
+Documents own game data.
+
+Examples:
+
+Actor
+
+Item
+
+JournalEntry
+
+Scene
+
+Applications display Documents.
+
+Applications do not own game state.
+
+Prefer
+
+this.document
+
+instead of
+
+this.actor
+
+unless compatibility requires otherwise.
+
+===============================================================================
+APPLICATION LIFECYCLE
+===============================================================================
+
+Rendering flow
+
+Document
+
+↓
+
+prepareDerivedData()
+
+↓
+
+DisplayBuilder
+
+↓
+
+_prepareContext()
+
+↓
+
+HandlebarsApplication
+
+↓
+
+Templates
+
+↓
+
+CSS
+
+Applications assemble context.
+
+Applications should not perform game calculations.
+
+===============================================================================
+PREPAREDERIVEDDATA
+===============================================================================
+
+prepareDerivedData() is responsible for derived game values.
+
+Examples:
+
+current characteristics
+
+movement
+
+encumbrance
+
+combat modifiers
+
+derived statistics
+
+Never format values.
+
+Never localize text.
+
+Never prepare UI.
+
+===============================================================================
+DISPLAYBUILDER
+===============================================================================
+
+DisplayBuilder converts game data into presentation data.
+
+Examples:
+
++30
+
+●●●○○
+
+localized labels
+
+formatted text
+
+grouped collections
+
+DisplayBuilder never changes the Actor.
+
+DisplayBuilder never performs game calculations.
+
+DisplayBuilder returns read-only display data.
+
+===============================================================================
+PREPARECONTEXT
+===============================================================================
+
+_prepareContext() assembles template context.
+
+Typical responsibilities:
+
+Expose actor.system
+
+Expose display.*
+
+Expose CONFIG
+
+Expose theme assets
+
+Expose application state
+
+_prepareContext() should contain little or no business logic.
+
+===============================================================================
+HANDLEBARS TEMPLATES
+===============================================================================
+
+Templates render data.
+
+Templates should contain minimal logic.
+
+Avoid:
+
+mathematics
+
+condition chains
+
+sorting
+
+formatting
+
+data manipulation
+
+If a template requires complicated logic,
+move it into DisplayBuilder.
+
+===============================================================================
+DATA ORGANIZATION
+===============================================================================
+
+Editable values
+
+↓
+
+system.*
+
+Presentation values
+
+↓
+
+display.*
+
+Configuration
+
+↓
+
+CONFIG.*
+
+Theme assets
+
+↓
+
+ThemeManager
+
+Never mix presentation into system.*
+
+===============================================================================
+THEMEMANAGER
+===============================================================================
+
+ThemeManager owns visual assets.
+
+Examples:
+
+background images
+
+logos
+
+localized artwork
+
+theme metadata
+
+Templates should never reference image files directly.
+
+Applications request assets from ThemeManager.
+
+===============================================================================
+EVENTS
+===============================================================================
+
+Use V14 actions.
+
+Example
+
+data-action="rollCharacteristic"
+
+↓
+
+DEFAULT_OPTIONS.actions
+
+Avoid legacy activateListeners()
+for new functionality.
+
+===============================================================================
+PARTS
+===============================================================================
+
+Use PARTS to organize complex applications.
+
+Typical examples:
+
+header
+
+characteristics
+
+combat
+
+skills
+
+equipment
+
+notes
+
+footer
+
+PARTS improve maintainability.
+
+===============================================================================
+CSS
+===============================================================================
+
+Applications define structure.
+
+CSS defines appearance.
+
+Avoid using JavaScript for positioning.
+
+For the Classic Character Sheet:
+
+Fixed dimensions
+
+Pixel-perfect positioning
+
+Original paper sheet proportions
+
+No responsive redesign
+
+===============================================================================
+LEGACY CODE
+===============================================================================
+
+Avoid introducing:
+
+getData()
+
+activateListeners()
+
+manual render pipelines
+
+legacy ActorSheet patterns
+
+Remove compatibility code once migration is complete.
+
+===============================================================================
+PROJECT ARCHITECTURE
+===============================================================================
+
+Game Rules
+
+↓
+
+Actor
+
+↓
+
+prepareDerivedData()
+
+↓
+
+DisplayBuilder
+
+↓
+
+_prepareContext()
+
+↓
+
+HandlebarsApplication
+
+↓
+
+Templates
+
+↓
+
+CSS
+
+===============================================================================
+CHECKLIST FOR NEW FEATURES
+===============================================================================
+
+For every feature ask:
+
+□ Does the Actor own the game logic?
+
+□ Are derived values calculated in prepareDerivedData()?
+
+□ Is presentation created by DisplayBuilder?
+
+□ Does _prepareContext() only assemble data?
+
+□ Are templates rendering only?
+
+□ Is CSS responsible for appearance?
+
+If any answer is NO,
+
+the implementation should be reconsidered.
+
+===============================================================================
+CODE REVIEW CATEGORIES
+===============================================================================
+
+Every review should classify changes as:
+
+KEEP
+
+Code follows architecture.
+
+REFACTOR
+
+Improve structure without changing behaviour.
+
+REMOVE
+
+Delete obsolete or legacy code.
+
+QUESTION
+
+Insufficient context.
+Ask before changing.
+
+===============================================================================
+LONG-TERM GOAL
+===============================================================================
+
+The WFRP1ED system should feel like a native Foundry V14 system.
+
+Code should be understandable to any Foundry V14 developer without knowledge of
+legacy ActorSheet architecture.
+
+Whenever multiple valid implementations exist,
+
+prefer the one that best matches modern Foundry V14 practices.
+
+===============================================================================
+LEARNING PRINCIPLE
+===============================================================================
+
+This project is also a learning exercise for Foundry V14.
+
+When choosing between a quick compatibility solution and a native V14 solution,
+
+prefer the native V14 solution,
+
+provided it does not compromise WFRP 1st Edition authenticity or the MVP-first
+development philosophy.
+
+Understanding the framework is considered part of the project's success.
+===============================================================================

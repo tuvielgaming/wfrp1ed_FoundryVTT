@@ -1,0 +1,38 @@
+.wfrp1ed-classic-sheet .characteristics-grid {
+	display: grid;
+
+	grid-template-columns:
+		140px
+		45px
+		55px
+		80px
+		45px;
+
+	row-gap: 4px;
+
+	align-items: center;
+
+	font-size: 14px;
+}
+
+.characteristic-name {
+	font-weight: bold;
+}
+
+.characteristic-current {
+	text-align: center;
+
+	font-weight: bold;
+
+	cursor: pointer;
+}
+
+.characteristic-current:hover {
+	color: darkred;
+}
+
+.characteristic-initial,
+.characteristic-career,
+.characteristic-advances {
+	text-align: center;
+}

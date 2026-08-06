@@ -1,0 +1,61 @@
+.modern-sheet {
+
+    width:1200px;
+    height:1697px;
+
+    overflow:auto;
+}
+
+.modern-sheet .sheet-background {
+
+    position:relative;
+
+    width:1200px;
+    height:1697px;
+
+    background:url("../images/charSheet-1.jpg");
+    background-size:100% 100%;
+}
+
+.modern-sheet .sheet-header{
+
+    position:absolute;
+
+    left:40px;
+    top:35px;
+
+    width:1120px;
+    height:165px;
+}
+
+.modern-sheet .characteristics{
+
+    position:absolute;
+
+    left:35px;
+    top:250px;
+
+    width:1130px;
+    height:180px;
+
+    display:grid;
+
+    grid-template-columns:repeat(14,1fr);
+
+    gap:4px;
+}
+
+.modern-sheet .characteristic{
+
+    display:grid;
+
+    grid-template-rows:
+
+        25px
+        25px
+        25px
+        25px
+        30px;
+
+    justify-items:center;
+}

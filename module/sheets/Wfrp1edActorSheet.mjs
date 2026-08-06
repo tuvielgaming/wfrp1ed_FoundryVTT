@@ -1,20 +1,23 @@
-export class Wfrp1edActorSheet extends ActorSheet {
+const { ActorSheetV2 } = foundry.applications.sheets;
+const { HandlebarsApplicationMixin } = foundry.applications.api;
+
+export class Wfrp1edActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) {
 	static get defaultOptions() {
-		return mergeObject(super.defaultOptions, {
+		return foundry.utils.mergeObject(super.defaultOptions, {
 			template:
 				"systems/wfrp1ed/templates/actors/character/character-sheet.html",
-			width: 900,
-			height: 1264,
-			// resizable: false,
+			width: 1200,
+			height: 1697,
+			resizable: false,
 		});
 	}
 
 	get template() {
-		return `systems/wfrp1ed/templates/actor/actor-${this.actor.type}-sheet.html`;
+		return `systems/wfrp1ed/templates/actor/actor-${this.actor.type}-sheet.hbs`;
 	}
 
-	getData() {
-		const context = super.getData();
+	async getData(options) {
+		const context = await super.getData(options);
 		const actorData = this.actor.toObject(false);
 		// const actorData = context.actor.data;
 		context.system = actorData.system;
@@ -37,26 +40,35 @@ export class Wfrp1edActorSheet extends ActorSheet {
 	_prepareItems(context) {}
 
 	_prepareCharacterData(context) {
-		// const systemData = context.system;
-		// for (let [key, atr] of Object.entries(systemData.characteristics)) {
-		// 	if (atr.oneDigit) {
-		// 		atr.actual = atr.initial + atr.modifier * 1;
+		console.log("context", context);
+		context.system.details.careerTrackString = context.system.details.careerTrack.value.join(", ");
+		// const careerTrack = context.system.details.careerTrack.value.join(", ");
+		// let careerTrackString = "";
+		// for (let i = 0; i < careerTrack.length; i++) {
+		// 	if (i == careerTrack.length - 1) {
+		// 		careerTrackString += `${careerTrack[i]} `;
 		// 	} else {
-		// 		atr.actual = atr.initial + atr.modifier * 10;
-		// 	}
-		// 	if (atr.advances) {
-		// 		atr.advances = "+" + atr.advances;
-		// 	} else {
-		// 		atr.advances = "";
+		// 		careerTrackString += `${careerTrack[i]}, `;
 		// 	}
 		// }
+		// careerTrack.forEach((career) => {
+		// 	careerTrackString += `${career}, `;
+		// });
+		// context.system.details.careerTrackString = careerTrackString;
 	}
 
 	activateListeners(html) {
 		super.activateListeners(html);
 
 		html.find(".rollable").dblclick(this._onRoll.bind(this));
+		html.find(".advance-box").click(this._onAdvanceClick.bind(this));
 	}
+
+	// activateListeners(html) {
+	// 	super.activateListeners(html);
+
+	// 	html.find(".advance-box").click(this._onAdvanceClick.bind(this));
+	// }
 
 	_onRoll(event) {
 		event.preventDefault();
@@ -69,10 +81,23 @@ export class Wfrp1edActorSheet extends ActorSheet {
 				? `${game.i18n.localize("WFRP1ed.Chat.Rolling")} ${dataset.label}`
 				: "";
 			roll.toMessage({
-				spealer: ChatMessage.getSpeaker({ actor: this.actor }),
+				speaker: ChatMessage.getSpeaker({ actor: this.actor }),
 				flavor: label,
 			});
 			return roll;
 		}
+	}
+
+	async _onAdvanceClick(event) {
+		event.preventDefault();
+
+		const box = event.currentTarget;
+
+		const characteristic = box.dataset.characteristic;
+		const value = Number(box.dataset.value);
+
+		await this.actor.update({
+			[`system.characteristics.${characteristic}.purchased`]: value,
+		});
 	}
 }

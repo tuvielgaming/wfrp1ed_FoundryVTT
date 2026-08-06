@@ -1,0 +1,20 @@
+/* module/styles/card.css */
+
+.wfrp1e-chat-card {
+	border: 2px solid #3b2f1e;
+	padding: 8px;
+	background: rgba(255, 245, 230, 0.9);
+}
+
+.wfrp1e-chat-card .success {
+	color: darkgreen;
+	font-weight: bold;
+}
+.wfrp1e-chat-card .fail {
+	color: darkred;
+	font-weight: bold;
+}
+.wfrp1e-chat-card .miscast {
+	color: purple;
+	font-weight: bold;
+}

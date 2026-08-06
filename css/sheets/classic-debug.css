@@ -1,0 +1,70 @@
+/******************************************************************/
+/*                 WFRP Classic Debug Overlay                     */
+/******************************************************************/
+
+.wfrp1ed-classic-sheet.debug .sheet-block {
+	border: 1px dashed rgba(255, 0, 0, 0.6);
+
+	background: rgba(255, 0, 0, 0.05);
+}
+
+/******************************************************************/
+/* Labels                                                         */
+/******************************************************************/
+
+.wfrp1ed-classic-sheet.debug .sheet-block::before {
+	position: absolute;
+
+	top: 0;
+	left: 0;
+
+	padding: 2px 6px;
+
+	background: rgba(255, 0, 0, 0.85);
+
+	color: white;
+
+	font-size: 11px;
+
+	font-weight: bold;
+
+	pointer-events: none;
+
+	z-index: 999;
+}
+
+.sheet-header::before {
+	content: "HEADER";
+}
+
+.characteristics::before {
+	content: "CHARACTERISTICS";
+}
+
+.melee::before {
+	content: "MELEE";
+}
+
+.ranged::before {
+	content: "RANGED";
+}
+
+.armour::before {
+	content: "ARMOUR";
+}
+
+.skills::before {
+	content: "SKILLS";
+}
+
+.equipment::before {
+	content: "EQUIPMENT";
+}
+
+.notes::before {
+	content: "NOTES";
+}
+
+.footer::before {
+	content: "FOOTER";
+}

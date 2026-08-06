@@ -8,6 +8,120 @@ td input {
 	background-color: transparent;
 }
 
+section.charMetrics {
+	width: 980px;
+	height: 18%;
+	display: inline-block;
+}
+
+.charMetricsRow,
+.charMetricsLastRow {
+	padding: 29px 5px 5px 35px;
+	display: flex;
+	height: 33.4%;
+}
+
+.charMetricsLastRow {
+	padding: 22px 5px 5px 35px;
+}
+
+.charMetricsName {
+	width: 220px;
+}
+
+.charMetricsRace {
+	margin-left: 10px;
+	margin-top: 2px;
+	width: 148px;
+}
+
+.charMetricsGender {
+	margin-left: 10px;
+	width: 70px;
+}
+
+.charMetricsClass {
+	margin-left: 10px;
+	margin-top: 4px;
+	width: 260px;
+}
+
+.charMetricsAlignment {
+	margin-left: 10px;
+	margin-top: 7px;
+	width: 165px;
+}
+
+.charMetricsAge {
+	width: 85px;
+}
+
+.charMetricsHeight {
+	margin-left: 10px;
+	width: 115px;
+}
+
+.charMetricsWeight {
+	margin-left: 10px;
+	width: 110px;
+}
+
+.charMetricsHaircolour {
+	margin-left: 10px;
+	width: 105px;
+}
+
+.charMetricsEyecolour {
+	margin-left: 10px;
+	width: 92px;
+}
+
+.charMetricsNotes {
+	margin-left: 10px;
+	width: 350px;
+}
+
+.charMetricsCareer {
+	width: 245px;
+}
+
+.charMetricsCareerTrack {
+	width: 380px;
+	margin-left: 12px;
+	margin-top: 5px;
+}
+
+.charMetricsOutgoingCareers {
+	width: 260px;
+	margin-left: 10px;
+}
+
+ol.charMetricsRowList {
+	padding-top: 0;
+}
+
+div.scrorllable.charMetricsCareerTrack .charMetricsTextArea {
+	min-height: 20px;
+	font: inherit;
+	font-size: 1.5rem;
+	background: none;
+	border: none;
+	white-space: normal;
+	overflow-y: hidden;
+	resize: none;
+}
+
+.charMetricsCareerTrackLabel {
+	font: inherit;
+	font-size: 1.5rem;
+}
+
+input[type="text"].actorHeadersInputs {
+	height: 100%;
+	text-align: center;
+	font-size: 1.4rem;
+}
+
 td label {
 	text-align: center;
 	font-weight: bold;
@@ -44,7 +158,7 @@ td div {
 	text-align: center;
 }
 
-td {
+header#FoundryStyle td {
 	border: 1px solid;
 }
 
@@ -82,10 +196,14 @@ table td:first-child {
 	padding-left: 0.5em;
 }
 
+table tr:nth-child(even) {
+	background-color: transparent;
+}
+
 form.mySheetForm div#player-characteristics {
 	box-sizing: border-box;
-	padding-top: 0.75%;
-	padding-bottom: 0.75%;
+	padding-top: 1.2%;
+	padding-bottom: 1.2%;
 	padding-left: 0.75%;
 	background-image: url("../images/paneBorders.jpg");
 	background-repeat: no-repeat;
@@ -164,11 +282,12 @@ div.app.window-app {
 .sheet-header,
 .sheet-tabs,
 .sheet-body {
+	padding-top: 5px;
 	padding-left: 5%;
 	padding-right: 5%;
 }
 
-.sheet-header {
+.sheet-header#FoundryStyle {
 	padding-top: 5%;
 }
 
@@ -266,4 +385,60 @@ div.scrorllable {
 	max-height: 82px;
 	min-height: 34px;
 	overflow-y: auto;
+}
+/* From WFRP 4 ed */
+.app.window-app.sheet.item-sheet .window-content .wfrp4e.item-sheet {
+	display: inline-block;
+	flex-direction: row;
+	flex-wrap: wrap;
+	color: #111;
+	overflow-y: hidden;
+	overflow-x: hidden;
+	width: 100%;
+	height: 100%;
+}
+
+.app.window-app.sheet.item-sheet img.no-image-border {
+	border: 1px dotted black;
+}
+
+.app.window-app.sheet.item-sheet .item-details.row2 .input-text {
+	flex-grow: 2;
+	width: 100%;
+}
+
+.app.window-app.sheet.item-sheet .item-details .input-box.category {
+	padding-top: 5px !important;
+}
+
+/* For the newest version */
+.advance-row {
+	display: flex;
+	gap: 2px;
+	justify-content: center;
+}
+
+.advance-box {
+	width: 10px;
+	height: 10px;
+	border: 1px solid #060606;
+	cursor: pointer;
+}
+
+.advance-box.filled {
+	background: #222;
+}
+
+.advance-box:hover {
+	outline: 1px solid gold;
+}
+
+.current-value {
+	font-weight: bold;
+	text-align: center;
+}
+
+.characteristic-table input {
+	width: 40px;
+	text-align: center;
 }

@@ -1,19 +1,25 @@
 {
 	"id": "wfrp1ed",
 	"title": "My WFRP 1ed",
-	"description": "WFRP 1ed by me",
+	"description": "WFRP 1st Edition system for Foundry Virtual Tabletop.",
 	"version": "1.0.1",
 	"compatibility": {
-		"minimum": 10,
-		"verified": 11
+		"minimum": 14,
+		"verified": 14
 	},
 	"authors": [
 		{
-			"name": "Tomzamg"
+			"name": "Tuviel"
 		}
 	],
-	"esmodules": ["module/wfrp1ed.mjs"],
-	"styles": ["css/myOwn.css"],
+	"esmodules": [
+		"module/wfrp1ed.mjs"
+	],
+	"styles": [
+		"css/myOwn.css",
+		"css/sheets/classic.css",
+		"css/sheets/modern.css"
+	],
 	"scripts": [],
 	"packs": [],
 	"languages": [
@@ -28,13 +34,24 @@
 			"path": "lang/pl.json"
 		}
 	],
-	"gridDistance": 5,
-	"gridUnits": "ft",
-	"primaryTokenAttribute": "health",
-	"secondaryTokenAttribute": "power",
-	"url": "",
-	"manifest": "",
-	"download": "",
-	"license": "LICENSE.txt",
-	"changelog": "CHANGELOG.md"
+	"documentTypes": {
+		"Actor": {
+			"character": {},
+			"npc": {},
+			"creature": {},
+			"vehicle": {}
+		},
+		"Item": {
+			"career": {},
+			"weapon": {},
+			"equipment": {},
+			"trait": {},
+			"spell": {}
+		}
+	},
+	"background": "systems/wfrp1ed/WFRP1ed.jpg",
+	"grid": {
+		"distance": 5,
+		"units": "ft"
+	}
 }

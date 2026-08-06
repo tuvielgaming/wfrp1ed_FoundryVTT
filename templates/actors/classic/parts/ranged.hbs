@@ -1,0 +1,73 @@
+<section class="sheet-block ranged">
+	<div
+		class="ranged-table"
+		role="table"
+		aria-label="{{localize 'WFRP1ED.RangedWeapons'}}"
+	>
+		<div class="ranged-table-body" role="rowgroup">
+			{{#each display.rangedWeapons as |weapon|}}
+				<div
+					class="
+						ranged-row
+						{{#if weapon.equipped}}is-equipped{{/if}}
+						{{#if weapon.broken}}is-broken{{/if}}
+					"
+					data-item-id="{{weapon.id}}"
+					role="row"
+				>
+					<span
+						class="ranged-cell ranged-cell--name"
+						role="cell"
+						title="{{weapon.name}}"
+					>
+						{{weapon.name}}
+					</span>
+
+					<span
+						class="ranged-cell ranged-cell--short-range"
+						role="cell"
+						aria-label="{{localize 'WFRP1ED.Range.Short'}}"
+					>
+						{{weapon.range.short}}
+					</span>
+
+					<span
+						class="ranged-cell ranged-cell--long-range"
+						role="cell"
+						aria-label="{{localize 'WFRP1ED.Range.Long'}}"
+					>
+						{{weapon.range.long}}
+					</span>
+
+					<span
+						class="ranged-cell ranged-cell--maximum-range"
+						role="cell"
+						aria-label="{{localize 'WFRP1ED.Range.Maximum'}}"
+					>
+						{{weapon.range.max}}
+					</span>
+
+					<span
+						class="ranged-cell ranged-cell--effective-strength"
+						role="cell"
+						aria-label="{{localize 'WFRP1ED.EffectiveStrength'}}"
+					>
+						{{weapon.effectiveStrength}}
+					</span>
+
+					<span
+						class="ranged-cell ranged-cell--reload"
+						role="cell"
+						aria-label="{{localize 'WFRP1ED.Reload'}}"
+					>
+						{{weapon.reload}}
+					</span>
+				</div>
+			{{else}}
+				<span class="visually-hidden">
+					{{localize "WFRP1ED.NoRangedWeapons"}}
+				</span>
+			{{/each}}
+		</div>
+	</div>
+</section>

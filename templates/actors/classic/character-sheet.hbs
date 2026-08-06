@@ -1,0 +1,153 @@
+<section class="wfrp1ed-sheet wfrp1ed-classic-sheet">
+	<div class="classic-sheet-pages">
+		{{#each pages as |page|}}
+			<section
+				class="sheet-page classic-sheet-page"
+				data-page="{{page.number}}"
+				style="
+					{{page.cssVariables}};
+					position: relative;
+					width: var(--page-width);
+					height: var(--page-height);
+					background-image: var(--page-background);
+					background-repeat: no-repeat;
+					background-position: top left;
+					background-size: 100% 100%;
+				"
+			>
+				{{#if page.sections.header}}
+					<section
+						class="sheet-overlay sheet-overlay--header"
+						data-section="header"
+						style="
+							{{page.sections.header.cssVariables}};
+							position: absolute;
+							left: var(--section-x);
+							top: var(--section-y);
+							width: var(--section-width);
+							height: var(--section-height);
+						"
+					>
+						{{>
+							"systems/wfrp1ed/templates/actors/classic/parts/header.hbs"
+						}}
+					</section>
+				{{/if}}
+
+				{{#if page.sections.characteristics}}
+					<section
+						class="sheet-overlay sheet-overlay--characteristics"
+						data-section="characteristics"
+						style="
+							{{page.sections.characteristics.cssVariables}};
+							position: absolute;
+							left: var(--section-x);
+							top: var(--section-y);
+							width: var(--section-width);
+							height: var(--section-height);
+						"
+					>
+						{{>
+							"systems/wfrp1ed/templates/actors/classic/parts/characteristics.hbs"
+						}}
+					</section>
+				{{/if}}
+
+				{{#if page.sections.melee}}
+					<section
+						class="sheet-overlay sheet-overlay--melee"
+						data-section="melee"
+						style="
+							{{page.sections.melee.cssVariables}};
+							position: absolute;
+							left: var(--section-x);
+							top: var(--section-y);
+							width: var(--section-width);
+							height: var(--section-height);
+						"
+					>
+						{{>
+							"systems/wfrp1ed/templates/actors/classic/parts/melee.hbs"
+						}}
+					</section>
+				{{/if}}
+
+				{{#if page.sections.ranged}}
+					<section
+						class="sheet-overlay sheet-overlay--ranged"
+						data-section="ranged"
+						style="
+							{{page.sections.ranged.cssVariables}};
+							position: absolute;
+							left: var(--section-x);
+							top: var(--section-y);
+							width: var(--section-width);
+							height: var(--section-height);
+						"
+					>
+						{{>
+							"systems/wfrp1ed/templates/actors/classic/parts/ranged.hbs"
+						}}
+					</section>
+				{{/if}}
+
+				{{#if page.sections.armour}}
+					<section
+						class="sheet-overlay sheet-overlay--armour"
+						data-section="armour"
+						style="
+							{{page.sections.armour.cssVariables}};
+							position: absolute;
+							left: var(--section-x);
+							top: var(--section-y);
+							width: var(--section-width);
+							height: var(--section-height);
+						"
+					>
+						{{>
+							"systems/wfrp1ed/templates/actors/classic/parts/armour.hbs"
+						}}
+					</section>
+				{{/if}}
+
+				{{#if page.sections.armourPoints}}
+					<section
+						class="sheet-overlay sheet-overlay--armour-points"
+						data-section="armourPoints"
+						style="
+							{{page.sections.armourPoints.cssVariables}};
+							position: absolute;
+							left: var(--section-x);
+							top: var(--section-y);
+							width: var(--section-width);
+							height: var(--section-height);
+						"
+					>
+						{{>
+							"systems/wfrp1ed/templates/actors/classic/parts/armour-points.hbs"
+						}}
+					</section>
+				{{/if}}
+
+				{{#if page.sections.movement}}
+					<section
+						class="sheet-overlay sheet-overlay--movement"
+						data-section="movement"
+						style="
+							{{page.sections.movement.cssVariables}};
+							position: absolute;
+							left: var(--section-x);
+							top: var(--section-y);
+							width: var(--section-width);
+							height: var(--section-height);
+						"
+					>
+						{{>
+							"systems/wfrp1ed/templates/actors/classic/parts/movement.hbs"
+						}}
+					</section>
+				{{/if}}
+			</section>
+		{{/each}}
+	</div>
+</section>

@@ -1,0 +1,50 @@
+<div class="wfrp1e-test-card">
+
+    <header>
+
+        <h2>{{result.test.name}}</h2>
+
+    </header>
+
+    <table>
+
+        <tr>
+            <td>Target</td>
+            <td>{{result.target}}</td>
+        </tr>
+
+        <tr>
+            <td>Roll</td>
+            <td>{{result.roll}}</td>
+        </tr>
+
+        <tr>
+            <td>Result</td>
+
+            <td>
+
+                {{#if result.success}}
+
+                    Success
+
+                {{else}}
+
+                    Failure
+
+                {{/if}}
+
+            </td>
+
+        </tr>
+
+        <tr>
+
+            <td>Margin</td>
+
+            <td>{{result.margin}}</td>
+
+        </tr>
+
+    </table>
+
+</div>

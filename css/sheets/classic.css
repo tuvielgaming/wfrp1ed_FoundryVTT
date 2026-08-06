@@ -1,0 +1,1322 @@
+/******************************************************************/
+/*                     WFRP 1e Classic Sheet                      */
+/******************************************************************/
+
+.wfrp1ed-classic-sheet {
+	--page-width: 1000px;
+	--page-height: 1367px;
+
+	--page-gap: 24px;
+	--page-shadow:
+		0 2px 6px rgb(0 0 0 / 25%),
+		0 12px 32px rgb(0 0 0 / 18%);
+
+	--font-main: "Book Antiqua", "Times New Roman", serif;
+	--font-small: 11px;
+	--font-normal: 13px;
+	--font-large: 16px;
+
+	--line-height: 1.2;
+
+	--text-color: #1b1b1b;
+	--focus-color: #7a0019;
+	--rollable-hover-background: rgb(125 0 25 / 7%);
+	--rollable-active-background: rgb(125 0 25 / 10%);
+
+	box-sizing: border-box;
+	width: 100%;
+	height: 100%;
+	overflow: auto;
+
+	font-family: var(--font-main);
+	font-size: var(--font-normal);
+	line-height: var(--line-height);
+	color: var(--text-color);
+}
+
+.wfrp1ed-classic-sheet *,
+.wfrp1ed-classic-sheet *::before,
+.wfrp1ed-classic-sheet *::after {
+	box-sizing: border-box;
+}
+
+/******************************************************************/
+/* Accessibility                                                  */
+/******************************************************************/
+
+.wfrp1ed-classic-sheet .visually-hidden {
+	position: absolute !important;
+
+	width: 1px !important;
+	height: 1px !important;
+	margin: -1px !important;
+	padding: 0 !important;
+
+	overflow: hidden !important;
+
+	border: 0 !important;
+
+	clip: rect(0 0 0 0) !important;
+	clip-path: inset(50%) !important;
+
+	white-space: nowrap !important;
+}
+
+/******************************************************************/
+/* Page collection                                                */
+/******************************************************************/
+
+.wfrp1ed-classic-sheet .classic-sheet-pages {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--page-gap);
+
+	min-width: max-content;
+	padding: 16px;
+}
+
+/******************************************************************/
+/* Individual page                                                */
+/******************************************************************/
+
+.wfrp1ed-classic-sheet .classic-sheet-page {
+	position: relative;
+	flex: 0 0 auto;
+
+	width: var(--page-width);
+	height: var(--page-height);
+
+	overflow: hidden;
+
+	background-color: #fff;
+	background-repeat: no-repeat;
+	background-position: top left;
+	background-size: 100% 100%;
+
+	box-shadow: var(--page-shadow);
+}
+
+/******************************************************************/
+/* Overlay geometry                                               */
+/******************************************************************/
+
+.wfrp1ed-classic-sheet .sheet-overlay {
+	position: absolute;
+
+	left: var(--section-x);
+	top: var(--section-y);
+	width: var(--section-width);
+	height: var(--section-height);
+
+	overflow: hidden;
+}
+
+/*
+ * Major overlay geometry is supplied through inline CSS variables generated
+ * from ClassicLayout. No major section position belongs in this stylesheet.
+ */
+
+/******************************************************************/
+/* Generic blocks                                                 */
+/******************************************************************/
+
+.wfrp1ed-classic-sheet .sheet-block {
+	position: relative;
+
+	width: 100%;
+	height: 100%;
+
+	overflow: hidden;
+
+	font-family: inherit;
+	color: inherit;
+}
+
+/******************************************************************/
+/* Section titles                                                 */
+/******************************************************************/
+
+.wfrp1ed-classic-sheet .section-title {
+	margin: 0 0 8px;
+
+	font-size: var(--font-large);
+	font-weight: 700;
+	line-height: 1.1;
+}
+
+/******************************************************************/
+/* Labels                                                         */
+/******************************************************************/
+
+.wfrp1ed-classic-sheet label {
+	user-select: none;
+}
+
+/******************************************************************/
+/* Form controls                                                  */
+/******************************************************************/
+
+.wfrp1ed-classic-sheet input,
+.wfrp1ed-classic-sheet select,
+.wfrp1ed-classic-sheet textarea,
+.wfrp1ed-classic-sheet button {
+	font: inherit;
+	color: inherit;
+}
+
+.wfrp1ed-classic-sheet input,
+.wfrp1ed-classic-sheet select,
+.wfrp1ed-classic-sheet textarea {
+	width: 100%;
+	min-width: 0;
+
+	border: 0;
+	border-radius: 0;
+
+	background: transparent;
+	box-shadow: none;
+}
+
+.wfrp1ed-classic-sheet input {
+	height: auto;
+	padding: 1px 3px;
+}
+
+.wfrp1ed-classic-sheet textarea {
+	padding: 3px;
+
+	resize: none;
+}
+
+.wfrp1ed-classic-sheet input:focus,
+.wfrp1ed-classic-sheet select:focus,
+.wfrp1ed-classic-sheet textarea:focus {
+	outline: 1px solid var(--focus-color);
+	outline-offset: -1px;
+
+	background: rgb(255 255 255 / 72%);
+}
+
+.wfrp1ed-classic-sheet input:disabled,
+.wfrp1ed-classic-sheet select:disabled,
+.wfrp1ed-classic-sheet textarea:disabled {
+	cursor: default;
+	opacity: 0.7;
+}
+
+/******************************************************************/
+/* Buttons and rollable controls                                  */
+/******************************************************************/
+
+.wfrp1ed-classic-sheet button {
+	border: 0;
+	border-radius: 0;
+	padding: 0;
+
+	background: transparent;
+	box-shadow: none;
+}
+
+.wfrp1ed-classic-sheet button:hover,
+.wfrp1ed-classic-sheet button:focus {
+	box-shadow: none;
+}
+
+.wfrp1ed-classic-sheet button:disabled {
+	cursor: default;
+	opacity: 0.7;
+}
+
+.wfrp1ed-classic-sheet .rollable,
+.wfrp1ed-classic-sheet [data-action="rollCharacteristic"] {
+	cursor: pointer;
+
+	transition:
+		background-color 0.15s ease,
+		outline-color 0.15s ease;
+}
+
+.wfrp1ed-classic-sheet .rollable:focus-visible,
+.wfrp1ed-classic-sheet [data-action="rollCharacteristic"]:focus-visible {
+	outline: 1px solid var(--focus-color);
+	outline-offset: -2px;
+}
+
+/******************************************************************/
+/* Header                                                         */
+/******************************************************************/
+
+.wfrp1ed-classic-sheet .sheet-header {
+	position: relative;
+
+	width: 100%;
+	height: 100%;
+}
+
+/*
+ * Header positions are relative to the normalized header overlay:
+ *
+ * Page section:
+ *   x: 28
+ *   y: 0
+ *   width: 944
+ *   height: 242
+ *
+ * The fields cover only the white writing areas. The Polish labels remain
+ * visible as part of the HD background image.
+ */
+
+.wfrp1ed-classic-sheet .header-field {
+	position: absolute;
+
+	display: block;
+
+	min-width: 0;
+	margin: 0;
+	padding: 0;
+
+	overflow: hidden;
+}
+
+.wfrp1ed-classic-sheet .header-field > input,
+.wfrp1ed-classic-sheet .header-field > textarea {
+	display: block;
+
+	width: 100%;
+	height: 100%;
+	margin: 0;
+	padding: 2px 6px;
+
+	border: 0;
+
+	background: transparent;
+
+	font-size: 17px;
+	font-weight: 700;
+	line-height: 1.1;
+	text-align: center;
+}
+
+.wfrp1ed-classic-sheet .header-field > textarea {
+	padding-top: 4px;
+
+	font-size: 15px;
+	font-weight: 600;
+	text-align: left;
+}
+
+.wfrp1ed-classic-sheet .header-field > input:focus,
+.wfrp1ed-classic-sheet .header-field > textarea:focus {
+	background: rgb(255 255 255 / 66%);
+}
+
+/******************************************************************/
+/* Header: identity row                                           */
+/******************************************************************/
+
+.wfrp1ed-classic-sheet .header-field--name {
+	left: 6.3px;
+	top: 37.9px;
+
+	width: 229.1px;
+	height: 34.7px;
+}
+
+.wfrp1ed-classic-sheet .header-field--race {
+	left: 248.6px;
+	top: 37.9px;
+
+	width: 145.8px;
+	height: 34.7px;
+}
+
+.wfrp1ed-classic-sheet .header-field--gender {
+	left: 405.2px;
+	top: 37.9px;
+
+	width: 74.7px;
+	height: 34.7px;
+}
+
+.wfrp1ed-classic-sheet .header-field--career-class {
+	left: 491.3px;
+	top: 37.9px;
+
+	width: 259.1px;
+	height: 34.7px;
+}
+
+.wfrp1ed-classic-sheet .header-field--alignment {
+	left: 766.1px;
+	top: 37.9px;
+
+	width: 169px;
+	height: 34.7px;
+}
+
+/******************************************************************/
+/* Header: physical-description row                               */
+/******************************************************************/
+
+.wfrp1ed-classic-sheet .header-field--age {
+	left: 6.7px;
+	top: 121.5px;
+
+	width: 87.6px;
+	height: 31.8px;
+}
+
+.wfrp1ed-classic-sheet .header-field--height {
+	left: 111.4px;
+	top: 121.5px;
+
+	width: 110.8px;
+	height: 31.8px;
+}
+
+.wfrp1ed-classic-sheet .header-field--weight {
+	left: 239.7px;
+	top: 121.5px;
+
+	width: 99.7px;
+	height: 31.8px;
+}
+
+.wfrp1ed-classic-sheet .header-field--hair-colour {
+	left: 357.3px;
+	top: 121.5px;
+
+	width: 100.4px;
+	height: 31.8px;
+}
+
+.wfrp1ed-classic-sheet .header-field--eye-colour {
+	left: 473.8px;
+	top: 121.5px;
+
+	width: 89.7px;
+	height: 31.8px;
+}
+
+.wfrp1ed-classic-sheet .header-field--description {
+	left: 582.4px;
+	top: 121.5px;
+
+	width: 347px;
+	height: 31.8px;
+}
+
+/******************************************************************/
+/* Header: career row                                             */
+/******************************************************************/
+
+.wfrp1ed-classic-sheet .header-field--current-career {
+	left: 7.4px;
+	top: 196.5px;
+
+	width: 247px;
+	height: 35.7px;
+}
+
+.wfrp1ed-classic-sheet .header-field--career-history {
+	left: 267.2px;
+	top: 196.5px;
+
+	width: 379.6px;
+	height: 35.7px;
+}
+
+.wfrp1ed-classic-sheet .header-field--career-exits {
+	left: 664.3px;
+	top: 196.5px;
+
+	width: 266.3px;
+	height: 35.7px;
+}
+
+/******************************************************************/
+/* Header: editable career lists                                  */
+/******************************************************************/
+
+.wfrp1ed-classic-sheet .header-list {
+	display: flex;
+	align-items: stretch;
+	gap: 3px;
+
+	width: 100%;
+	height: 100%;
+	min-width: 0;
+	padding-right: 22px;
+
+	overflow: hidden;
+}
+
+.wfrp1ed-classic-sheet .header-list-entry {
+	position: relative;
+
+	display: flex;
+	flex: 1 1 0;
+	align-items: stretch;
+
+	min-width: 42px;
+	height: 100%;
+
+	overflow: hidden;
+}
+
+.wfrp1ed-classic-sheet .header-list-entry input {
+	width: 100%;
+	height: 100%;
+	min-width: 0;
+	margin: 0;
+	padding: 2px 17px 2px 4px;
+
+	font-size: 14px;
+	font-weight: 700;
+	line-height: 1;
+	text-align: center;
+}
+
+.wfrp1ed-classic-sheet .header-list-entry input:focus {
+	background: rgb(255 255 255 / 66%);
+}
+
+.wfrp1ed-classic-sheet .header-list-add,
+.wfrp1ed-classic-sheet .header-list-remove {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+
+	border: 1px solid rgb(0 0 0 / 38%);
+	border-radius: 50%;
+
+	background: rgb(255 255 255 / 70%);
+	color: #1b1b1b;
+
+	font-family: Arial, Helvetica, sans-serif;
+	font-weight: 700;
+	line-height: 1;
+
+	opacity: 0.42;
+
+	transition:
+		background-color 0.15s ease,
+		opacity 0.15s ease;
+}
+
+.wfrp1ed-classic-sheet .header-list-add {
+	position: absolute;
+	z-index: 2;
+
+	right: 2px;
+	top: 50%;
+	transform: translateY(-50%);
+
+	width: 18px;
+	height: 18px;
+
+	font-size: 14px;
+}
+
+.wfrp1ed-classic-sheet .header-list-remove {
+	position: absolute;
+	z-index: 2;
+
+	right: 1px;
+	top: 50%;
+	transform: translateY(-50%);
+
+	width: 14px;
+	height: 14px;
+
+	font-size: 11px;
+}
+
+.wfrp1ed-classic-sheet .header-list-add:hover,
+.wfrp1ed-classic-sheet .header-list-add:focus-visible,
+.wfrp1ed-classic-sheet .header-list-remove:hover,
+.wfrp1ed-classic-sheet .header-list-remove:focus-visible {
+	background: rgb(255 255 255 / 96%);
+	opacity: 1;
+}
+
+.wfrp1ed-classic-sheet .header-list-add:focus-visible,
+.wfrp1ed-classic-sheet .header-list-remove:focus-visible {
+	outline: 1px solid var(--focus-color);
+	outline-offset: 1px;
+}
+
+/******************************************************************/
+/* Characteristics                                                */
+/******************************************************************/
+
+.wfrp1ed-classic-sheet .sheet-overlay--characteristics {
+	/*
+	 * Internal positions are calibrated against the Polish HD page-one scan.
+	 * The printed characteristic abbreviations remain part of the background.
+	 * HTML begins at the first editable profile row.
+	 */
+	--characteristics-profile-top: 51px;
+	--characteristics-label-width: 255px;
+
+	--characteristics-initial-height: 48px;
+	--characteristics-advances-height: 59px;
+	--characteristics-current-height: 60px;
+
+	--characteristics-value-font-size: 18px;
+	--characteristics-current-font-size: 20px;
+	--characteristics-advance-font-size: 13px;
+}
+
+.wfrp1ed-classic-sheet .characteristics-profile {
+	position: absolute;
+	left: 0;
+	top: var(--characteristics-profile-top);
+
+	width: 100%;
+
+	display: grid;
+	grid-template-rows:
+		var(--characteristics-initial-height)
+		var(--characteristics-advances-height)
+		var(--characteristics-current-height);
+
+	font-variant-numeric: tabular-nums;
+}
+
+.wfrp1ed-classic-sheet .characteristics-row {
+	display: grid;
+	grid-template-columns:
+		var(--characteristics-label-width)
+		repeat(14, minmax(0, 1fr));
+
+	width: 100%;
+	min-width: 0;
+}
+
+.wfrp1ed-classic-sheet .characteristics-row-label {
+	position: relative;
+
+	width: 100%;
+	height: 100%;
+	min-width: 0;
+
+	pointer-events: none;
+}
+
+.wfrp1ed-classic-sheet .characteristic-cell {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+
+	width: 100%;
+	height: 100%;
+	min-width: 0;
+	margin: 0;
+	padding: 0 2px;
+
+	overflow: hidden;
+
+	text-align: center;
+	line-height: 1;
+}
+
+/******************************************************************/
+/* Initial characteristic values                                  */
+/******************************************************************/
+
+.wfrp1ed-classic-sheet .characteristic-cell--initial {
+	cursor: text;
+}
+
+.wfrp1ed-classic-sheet .characteristic-cell--initial input {
+	width: 100%;
+	height: 100%;
+	margin: 0;
+	padding: 0 2px;
+
+	border: 0;
+	border-radius: 0;
+
+	background: transparent;
+	box-shadow: none;
+
+	font-size: var(--characteristics-value-font-size);
+	font-weight: 700;
+	line-height: 1;
+	text-align: center;
+
+	appearance: textfield;
+	-moz-appearance: textfield;
+}
+
+.wfrp1ed-classic-sheet
+	.characteristic-cell--initial
+	input::-webkit-inner-spin-button,
+.wfrp1ed-classic-sheet
+	.characteristic-cell--initial
+	input::-webkit-outer-spin-button {
+	margin: 0;
+
+	appearance: none;
+	-webkit-appearance: none;
+}
+
+.wfrp1ed-classic-sheet .characteristic-cell--initial input:focus {
+	background: rgb(255 255 255 / 58%);
+}
+
+/******************************************************************/
+/* Characteristic advancement cells                               */
+/******************************************************************/
+
+.wfrp1ed-classic-sheet .characteristic-cell--advances {
+	cursor: default;
+
+	font-size: var(--characteristics-advance-font-size);
+	font-weight: 700;
+	letter-spacing: 0.35px;
+	white-space: nowrap;
+}
+
+.wfrp1ed-classic-sheet .characteristic-cell--advances:hover {
+	background: transparent;
+}
+
+.wfrp1ed-classic-sheet .characteristic-advance-value {
+	display: block;
+
+	max-width: 100%;
+	overflow: hidden;
+
+	text-overflow: clip;
+	white-space: nowrap;
+}
+
+/******************************************************************/
+/* Current characteristic values                                  */
+/******************************************************************/
+
+.wfrp1ed-classic-sheet .characteristic-cell--current {
+	font-size: var(--characteristics-current-font-size);
+	font-weight: 700;
+
+	background-color: transparent;
+}
+
+.wfrp1ed-classic-sheet .characteristic-cell--rollable {
+	cursor: pointer;
+}
+
+.wfrp1ed-classic-sheet .characteristic-cell--rollable:hover {
+	color: inherit;
+	background-color: var(--rollable-hover-background);
+}
+
+.wfrp1ed-classic-sheet .characteristic-cell--rollable:active {
+	background-color: var(--rollable-active-background);
+}
+
+.wfrp1ed-classic-sheet .characteristic-cell--static {
+	cursor: default;
+}
+
+.wfrp1ed-classic-sheet .characteristic-cell--static:hover,
+.wfrp1ed-classic-sheet .characteristic-cell--static:active {
+	background-color: transparent;
+}
+
+/******************************************************************/
+/* Characteristic row help indicators                             */
+/******************************************************************/
+
+.wfrp1ed-classic-sheet .characteristics-help {
+	position: absolute;
+	z-index: 2;
+
+	right: 10px;
+	top: 50%;
+	transform: translateY(-50%);
+
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+
+	width: 18px;
+	height: 18px;
+
+	border: 1px solid rgb(255 255 255 / 82%);
+	border-radius: 50%;
+
+	background: rgb(255 255 255 / 78%);
+	color: #1b1b1b;
+
+	font-family: Arial, Helvetica, sans-serif;
+	font-size: 12px;
+	font-weight: 700;
+	line-height: 1;
+
+	box-shadow: 0 0 0 1px rgb(0 0 0 / 32%);
+
+	cursor: help;
+	opacity: 0.72;
+	pointer-events: auto;
+	user-select: none;
+
+	transition:
+		background-color 0.15s ease,
+		opacity 0.15s ease;
+}
+
+.wfrp1ed-classic-sheet .characteristics-help:hover,
+.wfrp1ed-classic-sheet .characteristics-help:focus-visible {
+	background: rgb(255 255 255 / 96%);
+	opacity: 1;
+}
+
+/******************************************************************/
+/* Melee weapons                                                  */
+/******************************************************************/
+
+.wfrp1ed-classic-sheet .sheet-overlay--melee {
+	/*
+	 * Internal geometry is calibrated against the Polish HD first page.
+	 * The printed header occupies the upper part of the section.
+	 */
+	--melee-table-left: 20px;
+	--melee-table-top: 76px;
+	--melee-table-width: 442px;
+	--melee-table-height: 164px;
+
+	--melee-name-width: 211px;
+	--melee-initiative-width: 59px;
+	--melee-weapon-skill-width: 58px;
+	--melee-damage-width: 55px;
+	--melee-parry-width: 59px;
+
+	--melee-row-height: 32px;
+	--melee-font-size: 14px;
+	--melee-name-font-size: 15px;
+}
+
+.wfrp1ed-classic-sheet .melee {
+	position: relative;
+
+	width: 100%;
+	height: 100%;
+}
+
+.wfrp1ed-classic-sheet .melee-table {
+	position: absolute;
+
+	left: var(--melee-table-left);
+	top: var(--melee-table-top);
+
+	width: var(--melee-table-width);
+	height: var(--melee-table-height);
+
+	overflow: hidden;
+
+	font-variant-numeric: tabular-nums;
+}
+
+.wfrp1ed-classic-sheet .melee-table-body {
+	display: grid;
+	grid-auto-flow: row;
+	grid-auto-rows: var(--melee-row-height);
+
+	width: 100%;
+	height: 100%;
+
+	overflow: hidden;
+}
+
+.wfrp1ed-classic-sheet .melee-row {
+	display: grid;
+	grid-template-columns:
+		var(--melee-name-width)
+		var(--melee-initiative-width)
+		var(--melee-weapon-skill-width)
+		var(--melee-damage-width)
+		var(--melee-parry-width);
+
+	width: 100%;
+	height: var(--melee-row-height);
+	min-width: 0;
+
+	overflow: hidden;
+}
+
+.wfrp1ed-classic-sheet .melee-cell {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+
+	min-width: 0;
+	height: 100%;
+	padding: 1px 4px;
+
+	overflow: hidden;
+
+	font-size: var(--melee-font-size);
+	font-weight: 700;
+	line-height: 1;
+	text-align: center;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.wfrp1ed-classic-sheet .melee-cell--name {
+	justify-content: flex-start;
+
+	padding-left: 7px;
+	padding-right: 7px;
+
+	font-size: var(--melee-name-font-size);
+	text-align: left;
+}
+
+.wfrp1ed-classic-sheet .melee-row.is-equipped .melee-cell--name {
+	font-weight: 800;
+}
+
+.wfrp1ed-classic-sheet .melee-row.is-broken {
+	opacity: 0.56;
+}
+
+.wfrp1ed-classic-sheet .melee-row.is-broken .melee-cell--name {
+	text-decoration: line-through;
+}
+
+.wfrp1ed-classic-sheet .melee-row:nth-child(n + 6) {
+	display: none;
+}
+
+/******************************************************************/
+/* Ranged weapons                                                 */
+/******************************************************************/
+
+.wfrp1ed-classic-sheet .sheet-overlay--ranged {
+	/*
+	 * Internal geometry is calibrated against the Polish HD first page.
+	 * The printed ranged-weapon heading occupies the top of the section.
+	 *
+	 * Printed columns:
+	 * BROŃ STRZELECKA | K | D | M | SE | Ład.
+	 */
+	--ranged-table-left: 5px;
+	--ranged-table-top: 57px;
+	--ranged-table-width: 458px;
+	--ranged-table-height: 192px;
+
+	--ranged-name-width: 232px;
+	--ranged-short-range-width: 42px;
+	--ranged-long-range-width: 41px;
+	--ranged-maximum-range-width: 42px;
+	--ranged-effective-strength-width: 41px;
+	--ranged-reload-width: 60px;
+
+	--ranged-row-height: 32px;
+	--ranged-font-size: 14px;
+	--ranged-name-font-size: 15px;
+}
+
+.wfrp1ed-classic-sheet .ranged {
+	position: relative;
+
+	width: 100%;
+	height: 100%;
+}
+
+.wfrp1ed-classic-sheet .ranged-table {
+	position: absolute;
+
+	left: var(--ranged-table-left);
+	top: var(--ranged-table-top);
+
+	width: var(--ranged-table-width);
+	height: var(--ranged-table-height);
+
+	overflow: hidden;
+
+	font-variant-numeric: tabular-nums;
+}
+
+.wfrp1ed-classic-sheet .ranged-table-body {
+	display: grid;
+	grid-auto-flow: row;
+	grid-auto-rows: var(--ranged-row-height);
+
+	width: 100%;
+	height: 100%;
+
+	overflow: hidden;
+}
+
+.wfrp1ed-classic-sheet .ranged-row {
+	display: grid;
+	grid-template-columns:
+		var(--ranged-name-width)
+		var(--ranged-short-range-width)
+		var(--ranged-long-range-width)
+		var(--ranged-maximum-range-width)
+		var(--ranged-effective-strength-width)
+		var(--ranged-reload-width);
+
+	width: 100%;
+	height: var(--ranged-row-height);
+	min-width: 0;
+
+	overflow: hidden;
+}
+
+.wfrp1ed-classic-sheet .ranged-cell {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+
+	min-width: 0;
+	height: 100%;
+	padding: 1px 3px;
+
+	overflow: hidden;
+
+	font-size: var(--ranged-font-size);
+	font-weight: 700;
+	line-height: 1;
+	text-align: center;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.wfrp1ed-classic-sheet .ranged-cell--name {
+	justify-content: flex-start;
+
+	padding-left: 7px;
+	padding-right: 7px;
+
+	font-size: var(--ranged-name-font-size);
+	text-align: left;
+}
+
+.wfrp1ed-classic-sheet .ranged-row.is-equipped .ranged-cell--name {
+	font-weight: 800;
+}
+
+.wfrp1ed-classic-sheet .ranged-row.is-broken {
+	opacity: 0.56;
+}
+
+.wfrp1ed-classic-sheet .ranged-row.is-broken .ranged-cell--name {
+	text-decoration: line-through;
+}
+
+.wfrp1ed-classic-sheet .ranged-row:nth-child(n + 7) {
+	display: none;
+}
+
+/******************************************************************/
+/* Armour                                                         */
+/******************************************************************/
+
+.wfrp1ed-classic-sheet .sheet-overlay--armour {
+	/*
+	 * Internal geometry is measured against the Polish HD first page.
+	 *
+	 * Printed columns:
+	 * ZBROJA | UMIEJSCOWIENIE | WO
+	 *
+	 * The ClassicLayout armour section begins inside the lower edge of the
+	 * printed heading, so the data table starts close to the overlay top.
+	 */
+	--armour-table-left: 9px;
+	--armour-table-top: 18px;
+	--armour-table-width: 458px;
+	--armour-table-height: 238px;
+
+	--armour-name-width: 168px;
+	--armour-location-width: 228px;
+	--armour-encumbrance-width: 62px;
+
+	--armour-row-height: 34px;
+	--armour-font-size: 14px;
+	--armour-name-font-size: 15px;
+}
+
+.wfrp1ed-classic-sheet .armour {
+	position: relative;
+
+	width: 100%;
+	height: 100%;
+}
+
+.wfrp1ed-classic-sheet .armour-table {
+	position: absolute;
+
+	left: var(--armour-table-left);
+	top: var(--armour-table-top);
+
+	width: var(--armour-table-width);
+	height: var(--armour-table-height);
+
+	overflow: hidden;
+
+	font-variant-numeric: tabular-nums;
+}
+
+.wfrp1ed-classic-sheet .armour-table-body {
+	display: grid;
+	grid-auto-flow: row;
+	grid-auto-rows: var(--armour-row-height);
+
+	width: 100%;
+	height: 100%;
+
+	overflow: hidden;
+}
+
+.wfrp1ed-classic-sheet .armour-row {
+	display: grid;
+	grid-template-columns:
+		var(--armour-name-width)
+		var(--armour-location-width)
+		var(--armour-encumbrance-width);
+
+	width: 100%;
+	height: var(--armour-row-height);
+	min-width: 0;
+
+	overflow: hidden;
+}
+
+.wfrp1ed-classic-sheet .armour-cell {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+
+	min-width: 0;
+	height: 100%;
+	padding: 1px 5px;
+
+	overflow: hidden;
+
+	font-size: var(--armour-font-size);
+	font-weight: 700;
+	line-height: 1;
+	text-align: center;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.wfrp1ed-classic-sheet .armour-cell--name {
+	justify-content: flex-start;
+
+	padding-left: 7px;
+	padding-right: 7px;
+
+	font-size: var(--armour-name-font-size);
+	text-align: left;
+}
+
+.wfrp1ed-classic-sheet .armour-cell--location {
+	padding-left: 7px;
+	padding-right: 7px;
+}
+
+.wfrp1ed-classic-sheet .armour-row.is-equipped .armour-cell--name {
+	font-weight: 800;
+}
+
+.wfrp1ed-classic-sheet .armour-row:nth-child(n + 8) {
+	display: none;
+}
+
+/******************************************************************/
+/* Armour Points                                                  */
+/******************************************************************/
+
+.wfrp1ed-classic-sheet .sheet-overlay--armour-points {
+	/*
+	 * The overlay is the complete printed Armour Points panel:
+	 *
+	 *   width: 239
+	 *   height: 406
+	 *
+	 * Positions below are normalized from the supplied 669 × 1136 crop.
+	 * Each input remains inside its printed rectangular writing area.
+	 */
+	--armour-points-font-size: 22px;
+}
+
+.wfrp1ed-classic-sheet .armour-points {
+	position: relative;
+
+	width: 100%;
+	height: 100%;
+
+	font-variant-numeric: tabular-nums;
+}
+
+.wfrp1ed-classic-sheet .armour-points-field {
+	position: absolute;
+
+	display: block;
+
+	margin: 0;
+	padding: 0;
+
+	overflow: hidden;
+}
+
+.wfrp1ed-classic-sheet .armour-points-field--head {
+	left: 19.3px;
+	top: 125.4px;
+
+	width: 39.3px;
+	height: 38.6px;
+}
+
+.wfrp1ed-classic-sheet .armour-points-field--right-arm {
+	left: 19.3px;
+	top: 206.6px;
+
+	width: 39.3px;
+	height: 38.6px;
+}
+
+.wfrp1ed-classic-sheet .armour-points-field--left-arm {
+	left: 176.1px;
+	top: 197.6px;
+
+	width: 38.9px;
+	height: 37.9px;
+}
+
+.wfrp1ed-classic-sheet .armour-points-field--body {
+	left: 176.1px;
+	top: 269.1px;
+
+	width: 38.9px;
+	height: 38.2px;
+}
+
+.wfrp1ed-classic-sheet .armour-points-field--right-leg {
+	left: 19.3px;
+	top: 341.7px;
+
+	width: 39.3px;
+	height: 37.9px;
+}
+
+.wfrp1ed-classic-sheet .armour-points-field--left-leg {
+	left: 176.1px;
+	top: 342.4px;
+
+	width: 38.9px;
+	height: 37.9px;
+}
+
+.wfrp1ed-classic-sheet .armour-points-field input {
+	display: block;
+
+	width: 100%;
+	height: 100%;
+	margin: 0;
+	padding: 0 2px;
+
+	border: 0;
+	border-radius: 0;
+
+	background: transparent;
+	box-shadow: none;
+
+	font-size: var(--armour-points-font-size);
+	font-weight: 700;
+	line-height: 1;
+	text-align: center;
+
+	appearance: textfield;
+	-moz-appearance: textfield;
+}
+
+.wfrp1ed-classic-sheet
+	.armour-points-field
+	input::-webkit-inner-spin-button,
+.wfrp1ed-classic-sheet
+	.armour-points-field
+	input::-webkit-outer-spin-button {
+	margin: 0;
+
+	appearance: none;
+	-webkit-appearance: none;
+}
+
+.wfrp1ed-classic-sheet .armour-points-field input:focus {
+	outline: 1px solid var(--focus-color);
+	outline-offset: -2px;
+
+	background: rgb(255 255 255 / 68%);
+}
+
+/******************************************************************/
+/* Lists                                                          */
+/******************************************************************/
+
+.wfrp1ed-classic-sheet ul,
+.wfrp1ed-classic-sheet ol {
+	margin: 0;
+	padding: 0;
+
+	list-style: none;
+}
+
+.wfrp1ed-classic-sheet .empty-list {
+	opacity: 0.45;
+	font-style: italic;
+}
+
+/******************************************************************/
+/* Utility states                                                 */
+/******************************************************************/
+
+.wfrp1ed-classic-sheet [hidden] {
+	display: none !important;
+}
+
+.wfrp1ed-classic-sheet .is-readonly {
+	pointer-events: none;
+}
+
+/******************************************************************/
+/* Print                                                          */
+/******************************************************************/
+
+@media print {
+	.wfrp1ed-classic-sheet {
+		overflow: visible;
+	}
+
+	.wfrp1ed-classic-sheet .classic-sheet-pages {
+		display: block;
+
+		min-width: 0;
+		padding: 0;
+	}
+
+	.wfrp1ed-classic-sheet .classic-sheet-page {
+		margin: 0;
+		box-shadow: none;
+		page-break-after: always;
+	}
+
+	.wfrp1ed-classic-sheet .classic-sheet-page:last-child {
+		page-break-after: auto;
+	}
+
+	.wfrp1ed-classic-sheet .characteristics-help,
+	.wfrp1ed-classic-sheet .header-list-add,
+	.wfrp1ed-classic-sheet .header-list-remove {
+		display: none;
+	}
+}

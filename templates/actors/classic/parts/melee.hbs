@@ -1,0 +1,65 @@
+<section class="sheet-block melee">
+	<div
+		class="melee-table"
+		role="table"
+		aria-label="{{localize 'WFRP1ED.MeleeWeapons'}}"
+	>
+		<div class="melee-table-body" role="rowgroup">
+			{{#each display.meleeWeapons as |weapon|}}
+				<div
+					class="
+						melee-row
+						{{#if weapon.equipped}}is-equipped{{/if}}
+						{{#if weapon.broken}}is-broken{{/if}}
+					"
+					data-item-id="{{weapon.id}}"
+					role="row"
+				>
+					<span
+						class="melee-cell melee-cell--name"
+						role="cell"
+						title="{{weapon.name}}"
+					>
+						{{weapon.name}}
+					</span>
+
+					<span
+						class="melee-cell melee-cell--initiative"
+						role="cell"
+						aria-label="{{localize 'WFRP1ed.CHAR.i'}}"
+					>
+						{{weapon.initiative}}
+					</span>
+
+					<span
+						class="melee-cell melee-cell--weapon-skill"
+						role="cell"
+						aria-label="{{localize 'WFRP1ed.CHAR.ws'}}"
+					>
+						{{weapon.weaponSkill}}
+					</span>
+
+					<span
+						class="melee-cell melee-cell--damage"
+						role="cell"
+						aria-label="{{localize 'WFRP1ed.CHAR.dmg'}}"
+					>
+						{{weapon.damage}}
+					</span>
+
+					<span
+						class="melee-cell melee-cell--parry"
+						role="cell"
+						aria-label="{{localize 'WFRP1ed.CHAR.parry'}}"
+					>
+						{{weapon.parry}}
+					</span>
+				</div>
+			{{else}}
+				<span class="visually-hidden">
+					{{localize "WFRP1ED.NoMeleeWeapons"}}
+				</span>
+			{{/each}}
+		</div>
+	</div>
+</section>

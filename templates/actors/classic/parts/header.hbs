@@ -1,0 +1,283 @@
+<section class="sheet-block sheet-header">
+	{{!-- ===================================================== --}}
+	{{!-- Identity row                                          --}}
+	{{!-- ===================================================== --}}
+
+	<label class="header-field header-field--name">
+		<span class="visually-hidden">
+			{{localize "WFRP1ED.Header.Name"}}
+		</span>
+
+		<input
+			type="text"
+			name="name"
+			value="{{display.actor.name}}"
+			autocomplete="off"
+			aria-label="{{localize 'WFRP1ED.Header.Name'}}"
+			{{#unless editable}}disabled{{/unless}}
+		/>
+	</label>
+
+	<label class="header-field header-field--race">
+		<span class="visually-hidden">
+			{{localize "WFRP1ED.Header.Race"}}
+		</span>
+
+		<input
+			type="text"
+			name="system.details.race"
+			value="{{display.details.race}}"
+			autocomplete="off"
+			aria-label="{{localize 'WFRP1ED.Header.Race'}}"
+			{{#unless editable}}disabled{{/unless}}
+		/>
+	</label>
+
+	<label class="header-field header-field--gender">
+		<span class="visually-hidden">
+			{{localize "WFRP1ED.Header.Gender"}}
+		</span>
+
+		<input
+			type="text"
+			name="system.details.gender"
+			value="{{display.details.gender}}"
+			autocomplete="off"
+			aria-label="{{localize 'WFRP1ED.Header.Gender'}}"
+			{{#unless editable}}disabled{{/unless}}
+		/>
+	</label>
+
+	<label class="header-field header-field--career-class">
+		<span class="visually-hidden">
+			{{localize "WFRP1ED.Header.CareerClass"}}
+		</span>
+
+		<input
+			type="text"
+			name="system.details.careerClass"
+			value="{{display.details.careerClass}}"
+			autocomplete="off"
+			aria-label="{{localize 'WFRP1ED.Header.CareerClass'}}"
+			{{#unless editable}}disabled{{/unless}}
+		/>
+	</label>
+
+	<label class="header-field header-field--alignment">
+		<span class="visually-hidden">
+			{{localize "WFRP1ED.Header.Alignment"}}
+		</span>
+
+		<input
+			type="text"
+			name="system.details.alignment"
+			value="{{display.details.alignment}}"
+			autocomplete="off"
+			aria-label="{{localize 'WFRP1ED.Header.Alignment'}}"
+			{{#unless editable}}disabled{{/unless}}
+		/>
+	</label>
+
+	{{!-- ===================================================== --}}
+	{{!-- Physical-description row                              --}}
+	{{!-- ===================================================== --}}
+
+	<label class="header-field header-field--age">
+		<span class="visually-hidden">
+			{{localize "WFRP1ED.Header.Age"}}
+		</span>
+
+		<input
+			type="text"
+			name="system.details.age"
+			value="{{display.details.age}}"
+			autocomplete="off"
+			aria-label="{{localize 'WFRP1ED.Header.Age'}}"
+			{{#unless editable}}disabled{{/unless}}
+		/>
+	</label>
+
+	<label class="header-field header-field--height">
+		<span class="visually-hidden">
+			{{localize "WFRP1ED.Header.Height"}}
+		</span>
+
+		<input
+			type="text"
+			name="system.details.height"
+			value="{{display.details.height}}"
+			autocomplete="off"
+			aria-label="{{localize 'WFRP1ED.Header.Height'}}"
+			{{#unless editable}}disabled{{/unless}}
+		/>
+	</label>
+
+	<label class="header-field header-field--weight">
+		<span class="visually-hidden">
+			{{localize "WFRP1ED.Header.Weight"}}
+		</span>
+
+		<input
+			type="text"
+			name="system.details.weight"
+			value="{{display.details.weight}}"
+			autocomplete="off"
+			aria-label="{{localize 'WFRP1ED.Header.Weight'}}"
+			{{#unless editable}}disabled{{/unless}}
+		/>
+	</label>
+
+	<label class="header-field header-field--hair-colour">
+		<span class="visually-hidden">
+			{{localize "WFRP1ED.Header.HairColour"}}
+		</span>
+
+		<input
+			type="text"
+			name="system.details.hairColour"
+			value="{{display.details.hairColour}}"
+			autocomplete="off"
+			aria-label="{{localize 'WFRP1ED.Header.HairColour'}}"
+			{{#unless editable}}disabled{{/unless}}
+		/>
+	</label>
+
+	<label class="header-field header-field--eye-colour">
+		<span class="visually-hidden">
+			{{localize "WFRP1ED.Header.EyeColour"}}
+		</span>
+
+		<input
+			type="text"
+			name="system.details.eyeColour"
+			value="{{display.details.eyeColour}}"
+			autocomplete="off"
+			aria-label="{{localize 'WFRP1ED.Header.EyeColour'}}"
+			{{#unless editable}}disabled{{/unless}}
+		/>
+	</label>
+
+	<label class="header-field header-field--description">
+		<span class="visually-hidden">
+			{{localize "WFRP1ED.Header.Description"}}
+		</span>
+
+		<textarea
+			name="system.details.description"
+			autocomplete="off"
+			aria-label="{{localize 'WFRP1ED.Header.Description'}}"
+			{{#unless editable}}disabled{{/unless}}
+		>{{display.details.description}}</textarea>
+	</label>
+
+	{{!-- ===================================================== --}}
+	{{!-- Career row                                            --}}
+	{{!-- ===================================================== --}}
+
+	<label class="header-field header-field--current-career">
+		<span class="visually-hidden">
+			{{localize "WFRP1ED.Header.CurrentCareer"}}
+		</span>
+
+		<input
+			type="text"
+			name="system.details.currentCareer"
+			value="{{display.details.currentCareer}}"
+			autocomplete="off"
+			aria-label="{{localize 'WFRP1ED.Header.CurrentCareer'}}"
+			{{#unless editable}}disabled{{/unless}}
+		/>
+	</label>
+
+	<section
+		class="header-field header-field--career-history"
+		aria-label="{{localize 'WFRP1ED.Header.CareerHistory'}}"
+	>
+		<div class="header-list">
+			{{#each display.details.careerHistory as |entry|}}
+				<div
+					class="header-list-entry"
+					data-entry-index="{{@index}}"
+				>
+					<input
+						type="text"
+						name="system.details.careerHistory.{{@index}}.name"
+						value="{{entry.name}}"
+						autocomplete="off"
+						aria-label="{{localize 'WFRP1ED.Header.CareerHistoryEntry'}}"
+						{{#unless @root.editable}}disabled{{/unless}}
+					/>
+
+					{{#if @root.editable}}
+						<button
+							type="button"
+							class="header-list-remove"
+							data-action="removeCareerHistoryEntry"
+							data-index="{{@index}}"
+							aria-label="{{localize 'WFRP1ED.Header.RemoveCareerHistoryEntry'}}"
+						>
+							×
+						</button>
+					{{/if}}
+				</div>
+			{{/each}}
+		</div>
+
+		{{#if editable}}
+			<button
+				type="button"
+				class="header-list-add"
+				data-action="addCareerHistoryEntry"
+				aria-label="{{localize 'WFRP1ED.Header.AddCareerHistoryEntry'}}"
+			>
+				+
+			</button>
+		{{/if}}
+	</section>
+
+	<section
+		class="header-field header-field--career-exits"
+		aria-label="{{localize 'WFRP1ED.Header.CareerExits'}}"
+	>
+		<div class="header-list">
+			{{#each display.details.careerExits as |careerExit|}}
+				<div
+					class="header-list-entry"
+					data-entry-index="{{@index}}"
+				>
+					<input
+						type="text"
+						name="system.details.careerExits.{{@index}}"
+						value="{{careerExit}}"
+						autocomplete="off"
+						aria-label="{{localize 'WFRP1ED.Header.CareerExitEntry'}}"
+						{{#unless @root.editable}}disabled{{/unless}}
+					/>
+
+					{{#if @root.editable}}
+						<button
+							type="button"
+							class="header-list-remove"
+							data-action="removeCareerExit"
+							data-index="{{@index}}"
+							aria-label="{{localize 'WFRP1ED.Header.RemoveCareerExit'}}"
+						>
+							×
+						</button>
+					{{/if}}
+				</div>
+			{{/each}}
+		</div>
+
+		{{#if editable}}
+			<button
+				type="button"
+				class="header-list-add"
+				data-action="addCareerExit"
+				aria-label="{{localize 'WFRP1ED.Header.AddCareerExit'}}"
+			>
+				+
+			</button>
+		{{/if}}
+	</section>
+</section>

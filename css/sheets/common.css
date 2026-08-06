@@ -1,0 +1,64 @@
+/*****************************************************************/
+/*                 Common WFRP Sheet Styles                      */
+/*****************************************************************/
+
+.wfrp1ed-sheet {
+	--sheet-width: 1080px;
+	--sheet-height: 1530px;
+
+	--font-main: "Book Antiqua", "Times New Roman", serif;
+
+	--text-color: #221d17;
+
+	--border-color: #3a2c18;
+}
+
+/* Foundry window */
+
+.wfrp1ed-sheet.window-content {
+	padding: 0;
+	overflow: auto;
+}
+
+/* Root form */
+
+.wfrp1ed-sheet form {
+	width: var(--sheet-width);
+	margin: 0 auto;
+}
+
+/* Every sheet has a page */
+
+.wfrp1ed-sheet .sheet-page {
+	position: relative;
+
+	width: var(--sheet-width);
+	height: var(--sheet-height);
+
+	font-family: var(--font-main);
+
+	background-repeat: no-repeat;
+	background-size: contain;
+}
+
+/* Generic interactive fields */
+
+.wfrp1ed-sheet input {
+	border: none;
+	background: transparent;
+
+	font-family: inherit;
+	font-size: inherit;
+}
+
+.wfrp1ed-sheet input:focus {
+	outline: none;
+}
+
+.wfrp1ed-sheet .rollable {
+	cursor: pointer;
+}
+
+.wfrp1ed-sheet .rollable:hover {
+	color: darkred;
+}

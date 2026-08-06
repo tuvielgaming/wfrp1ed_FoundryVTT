@@ -1,0 +1,169 @@
+<section class="sheet-block movement-status">
+
+	<!-- ===================================================== -->
+	<!-- MOVEMENT -->
+	<!-- ===================================================== -->
+
+	<div class="status-panel movement">
+
+		<h3>{{localize "WFRP1ED.Movement"}}</h3>
+
+		<div class="status-row">
+
+			<label>{{localize "WFRP1ED.M"}}
+
+			</label>
+
+			<input
+				type="number"
+				name="system.movement.m"
+				value="{{system.movement.m}}"
+			/>
+
+		</div>
+
+		<div class="status-row">
+
+			<label>{{localize "WFRP1ED.Walk"}}</label>
+
+			<label class="calculated">
+
+				{{system.display.movement.walk}}
+
+			</label>
+
+		</div>
+
+		<div class="status-row">
+
+			<label>{{localize "WFRP1ED.Run"}}</label>
+
+			<label class="calculated">
+
+				{{system.display.movement.run}}
+
+			</label>
+
+		</div>
+
+	</div>
+
+	<!-- ===================================================== -->
+	<!-- WOUNDS -->
+	<!-- ===================================================== -->
+
+	<div class="status-panel wounds">
+
+		<h3>{{localize "WFRP1ED.Wounds"}}</h3>
+
+		<div class="status-row">
+
+			<label>{{localize "WFRP1ED.Current"}}</label>
+
+			<input
+				type="number"
+				name="system.status.wounds.value"
+				value="{{system.status.wounds.value}}"
+			/>
+
+		</div>
+
+		<div class="status-row">
+
+			<label>{{localize "WFRP1ED.Maximum"}}</label>
+
+			<label class="calculated">
+
+				{{system.display.wounds.max}}
+
+			</label>
+
+		</div>
+
+	</div>
+
+	<!-- ===================================================== -->
+	<!-- FATE -->
+	<!-- ===================================================== -->
+
+	<div class="status-panel fate">
+
+		<h3>{{localize "WFRP1ED.Fate"}}</h3>
+
+		<div class="status-row">
+
+			<label>{{localize "WFRP1ED.Current"}}</label>
+
+			<input
+				type="number"
+				name="system.status.fate.value"
+				value="{{system.status.fate.value}}"
+			/>
+
+		</div>
+
+		<div class="status-row">
+
+			<label>{{localize "WFRP1ED.Maximum"}}</label>
+
+			<input
+				type="number"
+				name="system.status.fate.max"
+				value="{{system.status.fate.max}}"
+			/>
+
+		</div>
+
+	</div>
+
+	<!-- ===================================================== -->
+	<!-- FORTUNE -->
+	<!-- ===================================================== -->
+
+	<div class="status-panel fortune">
+
+		<h3>{{localize "WFRP1ED.Fortune"}}</h3>
+
+		<div class="status-row">
+
+			<label>{{localize "WFRP1ED.Current"}}</label>
+
+			<input
+				type="number"
+				name="system.status.fortune.value"
+				value="{{system.status.fortune.value}}"
+			/>
+
+		</div>
+
+		<div class="status-row">
+
+			<label>{{localize "WFRP1ED.Maximum"}}</label>
+
+			<label class="calculated">
+
+				{{system.status.fate.max}}
+
+			</label>
+
+		</div>
+
+	</div>
+
+	<!-- ===================================================== -->
+	<!-- INSANITY -->
+	<!-- ===================================================== -->
+
+	<div class="status-panel insanity">
+
+		<h3>{{localize "WFRP1ED.InsanityPoints"}}</h3>
+
+		<input
+			type="number"
+			name="system.status.insanity"
+			value="{{system.status.insanity}}"
+		/>
+
+	</div>
+
+</section>

@@ -1,0 +1,121 @@
+<section class="sheet-block characteristics">
+	<div
+		class="characteristics-profile"
+		role="group"
+		aria-label="{{localize 'WFRP1ED.Characteristics'}}"
+	>
+		{{!-- Initial profile --}}
+
+		<div
+			class="characteristics-row characteristics-row--initial"
+			data-characteristic-row="initial"
+		>
+			<div
+				class="characteristics-row-label"
+				aria-hidden="true"
+			></div>
+
+			{{#each display.characteristics as |characteristic|}}
+				<label
+					class="characteristic-cell characteristic-cell--initial"
+					data-characteristic="{{characteristic.key}}"
+				>
+					<input
+						type="number"
+						name="system.characteristics.{{characteristic.key}}.initial"
+						value="{{characteristic.initial}}"
+						step="1"
+						inputmode="numeric"
+						autocomplete="off"
+						aria-label="{{characteristic.label}}"
+						{{#unless @root.editable}}disabled{{/unless}}
+					/>
+				</label>
+			{{/each}}
+		</div>
+
+		{{!-- Career advancement scheme --}}
+
+		<div
+			class="characteristics-row characteristics-row--advances"
+			data-characteristic-row="advances"
+		>
+			<div class="characteristics-row-label">
+				<span
+					class="characteristics-help"
+					data-tooltip="{{localize 'WFRP1ED.Tooltip.CharacteristicAdvances'}}"
+					aria-label="{{localize 'WFRP1ED.Tooltip.CharacteristicAdvances'}}"
+				>
+					?
+				</span>
+			</div>
+
+			{{#each display.characteristics as |characteristic|}}
+				<button
+					type="button"
+					class="characteristic-cell characteristic-cell--advances"
+					data-action="advanceCharacteristic"
+					data-characteristic="{{characteristic.key}}"
+					aria-label="{{characteristic.label}}"
+					{{#unless @root.editable}}disabled{{/unless}}
+				>
+					<span class="characteristic-advance-value">
+						{{characteristic.displayPurchased}}
+					</span>
+				</button>
+			{{/each}}
+		</div>
+
+		{{!-- Current profile --}}
+
+		<div
+			class="characteristics-row characteristics-row--current"
+			data-characteristic-row="current"
+		>
+			<div class="characteristics-row-label">
+				<span
+					class="characteristics-help"
+					data-tooltip="{{localize 'WFRP1ED.Tooltip.CurrentCharacteristic'}}"
+					aria-label="{{localize 'WFRP1ED.Tooltip.CurrentCharacteristic'}}"
+				>
+					?
+				</span>
+			</div>
+
+			{{#each display.characteristics as |characteristic|}}
+				{{#if characteristic.rollable}}
+					<button
+						type="button"
+						class="
+							characteristic-cell
+							characteristic-cell--current
+							characteristic-cell--rollable
+							rollable
+							{{#if characteristic.improved}}is-improved{{/if}}
+							{{#if characteristic.reduced}}is-reduced{{/if}}
+						"
+						data-action="rollCharacteristic"
+						data-characteristic="{{characteristic.key}}"
+						aria-label="{{characteristic.label}}"
+					>
+						{{characteristic.current}}
+					</button>
+				{{else}}
+					<span
+						class="
+							characteristic-cell
+							characteristic-cell--current
+							characteristic-cell--static
+							{{#if characteristic.improved}}is-improved{{/if}}
+							{{#if characteristic.reduced}}is-reduced{{/if}}
+						"
+						data-characteristic="{{characteristic.key}}"
+						aria-label="{{characteristic.label}}"
+					>
+						{{characteristic.current}}
+					</span>
+				{{/if}}
+			{{/each}}
+		</div>
+	</div>
+</section>

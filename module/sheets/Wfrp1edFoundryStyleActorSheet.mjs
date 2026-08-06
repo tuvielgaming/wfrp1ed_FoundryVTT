@@ -1,6 +1,9 @@
-export class Wfrp1edFoundryStyleActorSheet extends ActorSheet {
+const { ActorSheetV2 } = foundry.applications.sheets;
+const { HandlebarsApplicationMixin } = foundry.applications.api;
+
+export class Wfrp1edFoundryStyleActorSheet extends HandlebarsApplicationMixin(ActorSheetV2) {
 	static get defaultOptions() {
-		return mergeObject(super.defaultOptions, {
+		return foundry.utils.mergeObject(super.defaultOptions, {
 			template:
 				"systems/wfrp1ed/templates/actor/actor-FoundryStyleCharacter-sheet.hbs",
 			width: 820,
@@ -32,8 +35,7 @@ export class Wfrp1edFoundryStyleActorSheet extends ActorSheet {
 			this._prepareItems(context);
 			this._prepareCharacterData(context);
 		}
-		console.log("Karta Postaci kontekst");
-		console.log(context);
+		console.log("Karta Postaci kontekst", context);
 		// console.log(this.actor.toObject(false));
 
 		context.rollData = context.actor.getRollData();
@@ -45,6 +47,8 @@ export class Wfrp1edFoundryStyleActorSheet extends ActorSheet {
 		const gear = [];
 		const features = [];
 		const spells = [];
+		const weapons = [];
+		let career = null;
 		for (let i of context.items) {
 			i.img = i.img || DEFAULT_TOKEN;
 			// Append to gear.
@@ -61,10 +65,20 @@ export class Wfrp1edFoundryStyleActorSheet extends ActorSheet {
 					spells.push(i);
 				}
 			}
+			// Append to weapons.
+			else if (i.type === "weapon") {
+				weapons.push(i);
+			}
+			// Set career.
+			else if (i.type === "career") {
+				career = i;
+			}
 		}
 		context.gear = gear;
 		context.features = features;
 		context.spells = spells;
+		context.weapons = weapons;
+		context.career = career;
 	}
 
 	_prepareCharacterData(context) {
@@ -75,10 +89,10 @@ export class Wfrp1edFoundryStyleActorSheet extends ActorSheet {
 		// 	} else {
 		// 		atr.actual = atr.initial + atr.modifier * 10;
 		// 	}
-		// 	if (atr.advances) {
-		// 		atr.advances = "+" + atr.advances;
+		// 	if (atr.career) {
+		// 		atr.career = "+" + atr.career;
 		// 	} else {
-		// 		atr.advances = "";
+		// 		atr.career = "";
 		// 	}
 		// }
 	}
@@ -100,7 +114,7 @@ export class Wfrp1edFoundryStyleActorSheet extends ActorSheet {
 				? `${game.i18n.localize("WFRP1ed.Chat.Rolling")} ${dataset.label}`
 				: "";
 			roll.toMessage({
-				spealer: ChatMessage.getSpeaker({ actor: this.actor }),
+				speaker: ChatMessage.getSpeaker({ actor: this.actor }),
 				flavor: label,
 			});
 			return roll;
