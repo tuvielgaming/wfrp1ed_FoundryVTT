@@ -1,0 +1,150 @@
+/******************************************************************/
+/*                    WFRP 1e Skill Item Sheet                    */
+/******************************************************************/
+
+.skill-item-sheet {
+	--skill-sheet-gap: 14px;
+	--skill-sheet-label-width: 130px;
+
+	--skill-sheet-border-color: rgb(0 0 0 / 32%);
+	--skill-sheet-field-background: rgb(255 255 255 / 38%);
+	--skill-sheet-focus-background: rgb(255 255 255 / 72%);
+	--skill-sheet-focus-color: #7a0019;
+
+	font-family:
+		"Book Antiqua",
+		"Times New Roman",
+		serif;
+}
+
+/******************************************************************/
+/* Content                                                        */
+/******************************************************************/
+
+.skill-item-sheet .skill-sheet-content {
+	display: grid;
+	grid-template-rows:
+		auto
+		auto
+		minmax(0, 1fr);
+	gap: var(--skill-sheet-gap);
+
+	width: 100%;
+	height: 100%;
+	min-height: 0;
+	padding: 16px;
+}
+
+/******************************************************************/
+/* Fields                                                         */
+/******************************************************************/
+
+.skill-item-sheet .skill-sheet-field {
+	display: grid;
+	grid-template-columns:
+		var(--skill-sheet-label-width)
+		minmax(0, 1fr);
+	align-items: center;
+	gap: 10px;
+
+	width: 100%;
+	min-width: 0;
+}
+
+.skill-item-sheet .skill-sheet-field > label {
+	font-size: 14px;
+	font-weight: 700;
+	line-height: 1.2;
+
+	user-select: none;
+}
+
+.skill-item-sheet .skill-sheet-field > input,
+.skill-item-sheet .skill-sheet-field > textarea {
+	width: 100%;
+	min-width: 0;
+	margin: 0;
+
+	border: 1px solid var(--skill-sheet-border-color);
+	border-radius: 3px;
+
+	background: var(--skill-sheet-field-background);
+	box-shadow: none;
+
+	font: inherit;
+	color: inherit;
+}
+
+.skill-item-sheet .skill-sheet-field > input {
+	height: 34px;
+	padding: 4px 8px;
+
+	font-size: 15px;
+	line-height: 1.2;
+}
+
+.skill-item-sheet .skill-sheet-field > textarea {
+	height: 100%;
+	min-height: 220px;
+	padding: 8px;
+
+	font-size: 14px;
+	line-height: 1.35;
+
+	resize: vertical;
+}
+
+/******************************************************************/
+/* Description                                                    */
+/******************************************************************/
+
+.skill-item-sheet .skill-sheet-field--description {
+	grid-template-columns: 1fr;
+	grid-template-rows:
+		auto
+		minmax(0, 1fr);
+	align-items: stretch;
+
+	min-height: 0;
+}
+
+.skill-item-sheet .skill-sheet-field--description > textarea {
+	min-height: 0;
+}
+
+/******************************************************************/
+/* Focus                                                          */
+/******************************************************************/
+
+.skill-item-sheet .skill-sheet-field > input:focus,
+.skill-item-sheet .skill-sheet-field > textarea:focus {
+	outline: 1px solid var(--skill-sheet-focus-color);
+	outline-offset: -1px;
+
+	background: var(--skill-sheet-focus-background);
+}
+
+/******************************************************************/
+/* Read-only state                                                */
+/******************************************************************/
+
+.skill-item-sheet .skill-sheet-field > input:disabled,
+.skill-item-sheet .skill-sheet-field > textarea:disabled {
+	cursor: default;
+	opacity: 0.72;
+}
+
+/******************************************************************/
+/* Narrow layout                                                  */
+/******************************************************************/
+
+@media (max-width: 500px) {
+	.skill-item-sheet .skill-sheet-field {
+		grid-template-columns: 1fr;
+		gap: 5px;
+	}
+
+	.skill-item-sheet .skill-sheet-content {
+		padding: 12px;
+	}
+}
