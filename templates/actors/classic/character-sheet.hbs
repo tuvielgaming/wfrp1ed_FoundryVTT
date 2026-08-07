@@ -174,26 +174,6 @@
 						}}
 					</section>
 				{{/if}}
-
-				{{#if page.sections.movement}}
-					<section
-						class="sheet-overlay sheet-overlay--movement"
-						data-section="movement"
-						style="
-							{{page.sections.movement.cssVariables}};
-							position: absolute;
-							left: var(--section-x);
-							top: var(--section-y);
-							width: var(--section-width);
-							height: var(--section-height);
-						"
-					>
-						{{>
-							"systems/wfrp1ed/templates/actors/classic/parts/movement.hbs"
-							@root
-						}}
-					</section>
-				{{/if}}
 			</section>
 		{{/each}}
 	</div>
