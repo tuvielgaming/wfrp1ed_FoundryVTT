@@ -1,0 +1,18 @@
+<section class="sheet-block skills skills--primary">
+	<ol
+		class="skills-list skills-list--primary"
+		role="list"
+	>
+		{{#each display.skills as |skill|}}
+			<li
+				class="skill-row"
+				data-item-id="{{skill.id}}"
+				data-item-uuid="{{skill.uuid}}"
+			>
+				<span class="skill-name">
+					{{skill.displayName}}
+				</span>
+			</li>
+		{{/each}}
+	</ol>
+</section>
