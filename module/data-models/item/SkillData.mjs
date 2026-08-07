@@ -14,15 +14,18 @@ const { TypeDataModel } = foundry.abstract;
  * skill-specific procedure.
  *
  * Some skills require a chosen specialisation. Examples from the core rules
- * include language skills and Specialist Weapon. The model deliberately does
- * not hard-code which skill names require a specialisation because Item names
- * are localized content rather than mechanical identifiers.
+ * include language skills and Specialist Weapon.
  */
 export class SkillData extends TypeDataModel {
 	/**
 	 * Define persistent WFRP 1e Skill data.
 	 *
-	 * The Item's root `name` owns the skill name.
+	 * The Item's root `name` owns the displayed skill name.
+	 *
+	 * `rulesId` is a stable, language-neutral identifier for an audited core
+	 * skill rule. It is deliberately independent of Item.name so localization,
+	 * user-visible renaming and specialisations cannot break mechanical lookup.
+	 * Custom or not-yet-mapped skills leave it blank.
 	 *
 	 * `description` stores the rules/content description of the skill.
 	 *
@@ -31,12 +34,15 @@ export class SkillData extends TypeDataModel {
 	 * It remains blank for skills which do not require a qualification.
 	 *
 	 * No generic characteristic, target number, or modifier is stored here.
-	 * Those concepts are not universal properties of WFRP 1e skills.
+	 * Those concepts are not universal properties of WFRP 1e skills. Audited
+	 * mechanics are resolved from `rulesId` by the subsystem which owns the
+	 * relevant procedure, such as Standard Tests.
 	 *
 	 * @returns {Object}
 	 */
 	static defineSchema() {
 		return {
+			rulesId: textField(),
 			description: textField(),
 			specialisation: textField(),
 		};
@@ -53,6 +59,10 @@ export class SkillData extends TypeDataModel {
 	 * Legacy `{ value }` text records are also unwrapped without preserving
 	 * their presentation wrapper.
 	 *
+	 * Existing Skill Items predate the stable rules identity contract. Their
+	 * `rulesId` therefore migrates safely to an empty string rather than being
+	 * guessed from a localized or user-editable Item name.
+	 *
 	 * @param {Object} source
 	 * @param {Object} options
 	 * @returns {Object}
@@ -60,6 +70,10 @@ export class SkillData extends TypeDataModel {
 	static migrateData(source, options = {}) {
 		const migrated = foundry.utils.deepClone(
 			source ?? {},
+		);
+
+		migrated.rulesId = normalizeText(
+			migrated.rulesId,
 		);
 
 		migrated.description = unwrapText(
