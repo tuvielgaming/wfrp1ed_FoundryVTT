@@ -1,4 +1,5 @@
 import { CharacterData } from "./data-models/actor/CharacterData.mjs";
+import { SkillData } from "./data-models/item/SkillData.mjs";
 import { Wfrp1edActor } from "./documents/Wfrp1edActor.mjs";
 import { Wfrp1edItem } from "./documents/Wfrp1edItem.mjs";
 import { WFRP1ED } from "./helpers/config.mjs";
@@ -25,9 +26,9 @@ Hooks.once("init", async () => {
 /**
  * Configure the system's custom Documents and native Foundry v14 data models.
  *
- * Only the Character Actor model is registered at this stage. Other Actor and
- * Item subtypes must remain on their temporary data contracts until dedicated
- * TypeDataModels have been implemented and audited.
+ * The Character Actor and Skill Item models are currently registered.
+ * Other Actor and Item subtypes must remain on their temporary data contracts
+ * until dedicated TypeDataModels have been implemented and audited.
  *
  * @returns {void}
  */
@@ -38,6 +39,7 @@ function configureSystem() {
 	CONFIG.Item.documentClass = Wfrp1edItem;
 
 	CONFIG.Actor.dataModels.character = CharacterData;
+	CONFIG.Item.dataModels.skill = SkillData;
 }
 
 /**
@@ -85,6 +87,7 @@ function exposeSystemApi() {
 
 		dataModels: Object.freeze({
 			Character: CharacterData,
+			Skill: SkillData,
 		}),
 
 		documents: Object.freeze({
