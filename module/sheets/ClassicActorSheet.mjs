@@ -3,7 +3,10 @@ import { LayoutManager } from "./LayoutManager.mjs";
 import { ThemeManager } from "./ThemeManager.mjs";
 
 const { ActorSheetV2 } = foundry.applications.sheets;
-const { HandlebarsApplicationMixin } = foundry.applications.api;
+const {
+	DialogV2,
+	HandlebarsApplicationMixin,
+} = foundry.applications.api;
 
 export class ClassicActorSheet extends HandlebarsApplicationMixin(
 	ActorSheetV2,
@@ -46,6 +49,15 @@ export class ClassicActorSheet extends HandlebarsApplicationMixin(
 
 			removeCareerExit:
 				ClassicActorSheet.#onRemoveCareerExit,
+
+			addSkill:
+				ClassicActorSheet.#onAddSkill,
+
+			openSkill:
+				ClassicActorSheet.#onOpenSkill,
+
+			removeSkill:
+				ClassicActorSheet.#onRemoveSkill,
 		},
 	};
 
@@ -512,6 +524,160 @@ export class ClassicActorSheet extends HandlebarsApplicationMixin(
 				});
 			},
 		);
+	}
+
+	/**
+	 * Create one embedded Skill Item and open its registered Item sheet.
+	 *
+	 * @this {ClassicActorSheet}
+	 * @param {PointerEvent} event
+	 * @returns {Promise<void>}
+	 */
+	static async #onAddSkill(event) {
+		event.preventDefault();
+
+		await ClassicActorSheet.#runEditableAction(
+			this,
+			"add a skill",
+			async () => {
+				const created =
+					await this.document.createEmbeddedDocuments(
+						"Item",
+						[
+							{
+								name: game.i18n.localize(
+									"WFRP1ED.SkillSheet.NewSkill",
+								),
+								type: "skill",
+							},
+						],
+					);
+
+				const skill = created[0];
+
+				if (!skill) {
+					throw new Error(
+						"Foundry did not return the created Skill Item.",
+					);
+				}
+
+				await skill.sheet.render({
+					force: true,
+				});
+			},
+		);
+	}
+
+	/**
+	 * Open one embedded Skill Item in its registered Item sheet.
+	 *
+	 * Opening an Item is allowed on a read-only Actor sheet; the Item sheet
+	 * itself is responsible for enforcing edit permissions.
+	 *
+	 * @this {ClassicActorSheet}
+	 * @param {PointerEvent} event
+	 * @param {HTMLElement} target
+	 * @returns {Promise<void>}
+	 */
+	static async #onOpenSkill(event, target) {
+		event.preventDefault();
+
+		try {
+			const skill = ClassicActorSheet.#skillFromTarget(
+				this,
+				target,
+			);
+
+			await skill.sheet.render({
+				force: true,
+			});
+		} catch (error) {
+			console.error(
+				"WFRP1ED | Unable to open skill.",
+				error,
+			);
+
+			ui.notifications.error(
+				error.message ?? "Unable to open the skill.",
+			);
+		}
+	}
+
+	/**
+	 * Confirm and remove one embedded Skill Item.
+	 *
+	 * @this {ClassicActorSheet}
+	 * @param {PointerEvent} event
+	 * @param {HTMLElement} target
+	 * @returns {Promise<void>}
+	 */
+	static async #onRemoveSkill(event, target) {
+		event.preventDefault();
+
+		await ClassicActorSheet.#runEditableAction(
+			this,
+			"remove a skill",
+			async () => {
+				const skill = ClassicActorSheet.#skillFromTarget(
+					this,
+					target,
+				);
+
+				const confirmed = await DialogV2.confirm({
+					window: {
+						title: game.i18n.localize(
+							"WFRP1ED.SkillSheet.RemoveSkill",
+						),
+					},
+
+					content: game.i18n.localize(
+						"WFRP1ED.SkillSheet.ConfirmRemoveSkill",
+					),
+
+					rejectClose: false,
+					modal: true,
+				});
+
+				if (!confirmed) {
+					return;
+				}
+
+				await this.document.deleteEmbeddedDocuments(
+					"Item",
+					[skill.id],
+				);
+			},
+		);
+	}
+
+	/**
+	 * Resolve and validate one rendered embedded Skill Item.
+	 *
+	 * @param {ClassicActorSheet} sheet
+	 * @param {HTMLElement} target
+	 * @returns {Item}
+	 * @protected
+	 */
+	static #skillFromTarget(sheet, target) {
+		const itemId = String(
+			target.dataset.itemId ?? "",
+		).trim();
+
+		if (!itemId) {
+			throw new Error(
+				"Skill action has no embedded Item id.",
+			);
+		}
+
+		const item = sheet.document.items.get(itemId);
+
+		if (!item || item.type !== "skill") {
+			throw new Error(
+				`Embedded Skill Item '${itemId}' was not found.`,
+			);
+		}
+
+		return item;
 	}
 
 	/**
