@@ -95,12 +95,15 @@ export class TestDialog {
 	/**
 	 * Build trusted dialog content.
 	 *
+	 * Foundry v14 requires an HTMLElement supplied as DialogV2 `content` to
+	 * use a plain outermost DIV with no attributes. Styling and form metadata
+	 * therefore belong on descendants rather than on this wrapper.
+	 *
 	 * @returns {HTMLDivElement}
 	 * @protected
 	 */
 	static _buildContent() {
 		const content = document.createElement("div");
-		content.classList.add("wfrp1ed-test-dialog");
 
 		const formGroup = document.createElement("div");
 		formGroup.classList.add("form-group");
