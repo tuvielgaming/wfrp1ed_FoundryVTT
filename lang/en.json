@@ -100,5 +100,10 @@
 
 	"WFRP1ED.SkillSheet.Name": "Name",
 	"WFRP1ED.SkillSheet.Specialisation": "Specialisation",
-	"WFRP1ED.SkillSheet.Description": "Description"
+	"WFRP1ED.SkillSheet.Description": "Description",
+	"WFRP1ED.SkillSheet.NewSkill": "New skill",
+	"WFRP1ED.SkillSheet.AddSkill": "Add skill",
+	"WFRP1ED.SkillSheet.OpenSkill": "Open skill",
+	"WFRP1ED.SkillSheet.RemoveSkill": "Remove skill",
+	"WFRP1ED.SkillSheet.ConfirmRemoveSkill": "Are you sure you want to remove this skill?"
 }
