@@ -98,6 +98,13 @@
 	"WFRP1ED.ArmourPoints.RightLeg": "Punkty zbroi: prawa noga",
 	"WFRP1ED.ArmourPoints.LeftLeg": "Punkty zbroi: lewa noga",
 
+	"WFRP1ED.TestResult.Target": "Próg",
+	"WFRP1ED.TestResult.Roll": "Rzut",
+	"WFRP1ED.TestResult.Result": "Wynik",
+	"WFRP1ED.TestResult.Success": "Sukces",
+	"WFRP1ED.TestResult.Failure": "Porażka",
+	"WFRP1ED.TestResult.Margin": "Margines",
+
 	"WFRP1ED.SkillSheet.Name": "Nazwa",
 	"WFRP1ED.SkillSheet.Specialisation": "Specjalizacja",
 	"WFRP1ED.SkillSheet.Description": "Opis",
