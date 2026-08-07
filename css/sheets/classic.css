@@ -399,12 +399,32 @@
 	height: 31.8px;
 }
 
+/*
+ * OPIS is not a conventional labelled rectangle on the original sheet: the
+ * black title occupies the upper-left corner of one large writing area. A
+ * normal textarea cannot wrap around that irregular shape, so the editable
+ * control deliberately uses the clean rectangular area to the right of the
+ * printed title. This keeps user text off the artwork while providing several
+ * visible lines and native vertical scrolling for longer descriptions.
+ */
 .wfrp1ed-classic-sheet .header-field--description {
-	left: 582.4px;
-	top: 121.5px;
+	left: 666px;
+	top: 92px;
 
-	width: 347px;
-	height: 31.8px;
+	width: 264px;
+	height: 68px;
+}
+
+.wfrp1ed-classic-sheet .header-field--description > textarea {
+	padding: 4px 5px;
+	overflow-x: hidden;
+	overflow-y: auto;
+
+	font-size: 13px;
+	font-weight: 600;
+	line-height: 1.08;
+
+	scrollbar-width: thin;
 }
 
 /******************************************************************/
@@ -556,9 +576,28 @@
 	 * Internal positions are calibrated against the Polish HD page-one scan.
 	 * The printed characteristic abbreviations remain part of the background.
 	 * HTML begins at the first editable profile row.
+	 *
+	 * The original hand-drawn table does not use fourteen equal columns. The
+	 * widths below are normalized from the vertical separators in the supplied
+	 * 2798 px source scan to the 1000 px logical sheet canvas.
 	 */
 	--characteristics-profile-top: 51px;
-	--characteristics-label-width: 255px;
+	--characteristics-label-width: 254.5px;
+
+	--characteristics-movement-width: 51.6px;
+	--characteristics-weapon-skill-width: 52.4px;
+	--characteristics-ballistic-skill-width: 52.4px;
+	--characteristics-strength-width: 51.5px;
+	--characteristics-toughness-width: 51.6px;
+	--characteristics-wounds-width: 52px;
+	--characteristics-initiative-width: 51.1px;
+	--characteristics-attacks-width: 52.2px;
+	--characteristics-dexterity-width: 51.5px;
+	--characteristics-leadership-width: 51.5px;
+	--characteristics-intelligence-width: 51.5px;
+	--characteristics-cool-width: 51.1px;
+	--characteristics-will-power-width: 51.8px;
+	--characteristics-fellowship-width: 60.6px;
 
 	--characteristics-initial-height: 48px;
 	--characteristics-advances-height: 59px;
@@ -589,7 +628,20 @@
 	display: grid;
 	grid-template-columns:
 		var(--characteristics-label-width)
-		repeat(14, minmax(0, 1fr));
+		var(--characteristics-movement-width)
+		var(--characteristics-weapon-skill-width)
+		var(--characteristics-ballistic-skill-width)
+		var(--characteristics-strength-width)
+		var(--characteristics-toughness-width)
+		var(--characteristics-wounds-width)
+		var(--characteristics-initiative-width)
+		var(--characteristics-attacks-width)
+		var(--characteristics-dexterity-width)
+		var(--characteristics-leadership-width)
+		var(--characteristics-intelligence-width)
+		var(--characteristics-cool-width)
+		var(--characteristics-will-power-width)
+		var(--characteristics-fellowship-width);
 
 	width: 100%;
 	min-width: 0;
