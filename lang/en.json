@@ -98,6 +98,13 @@
 	"WFRP1ED.ArmourPoints.RightLeg": "Armour Points: right leg",
 	"WFRP1ED.ArmourPoints.LeftLeg": "Armour Points: left leg",
 
+	"WFRP1ED.TestResult.Target": "Target",
+	"WFRP1ED.TestResult.Roll": "Roll",
+	"WFRP1ED.TestResult.Result": "Result",
+	"WFRP1ED.TestResult.Success": "Success",
+	"WFRP1ED.TestResult.Failure": "Failure",
+	"WFRP1ED.TestResult.Margin": "Margin",
+
 	"WFRP1ED.SkillSheet.Name": "Name",
 	"WFRP1ED.SkillSheet.Specialisation": "Specialisation",
 	"WFRP1ED.SkillSheet.Description": "Description",
