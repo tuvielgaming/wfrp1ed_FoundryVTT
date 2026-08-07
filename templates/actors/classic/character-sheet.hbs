@@ -110,6 +110,25 @@
 					</section>
 				{{/if}}
 
+				{{#if page.sections.skillsPrimary}}
+					<section
+						class="sheet-overlay sheet-overlay--skills-primary"
+						data-section="skillsPrimary"
+						style="
+							{{page.sections.skillsPrimary.cssVariables}};
+							position: absolute;
+							left: var(--section-x);
+							top: var(--section-y);
+							width: var(--section-width);
+							height: var(--section-height);
+						"
+					>
+						{{>
+							"systems/wfrp1ed/templates/actors/classic/parts/skills-primary.hbs"
+						}}
+					</section>
+				{{/if}}
+
 				{{#if page.sections.armourPoints}}
 					<section
 						class="sheet-overlay sheet-overlay--armour-points"
@@ -125,6 +144,25 @@
 					>
 						{{>
 							"systems/wfrp1ed/templates/actors/classic/parts/armour-points.hbs"
+						}}
+					</section>
+				{{/if}}
+
+				{{#if page.sections.skillsSecondary}}
+					<section
+						class="sheet-overlay sheet-overlay--skills-secondary"
+						data-section="skillsSecondary"
+						style="
+							{{page.sections.skillsSecondary.cssVariables}};
+							position: absolute;
+							left: var(--section-x);
+							top: var(--section-y);
+							width: var(--section-width);
+							height: var(--section-height);
+						"
+					>
+						{{>
+							"systems/wfrp1ed/templates/actors/classic/parts/skills-secondary.hbs"
 						}}
 					</section>
 				{{/if}}
