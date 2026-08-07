@@ -90,7 +90,7 @@
 	"WFRP1ED.ArmourLocation": "Umiejscowienie",
 	"WFRP1ED.Encumbrance": "Obciążenie",
 
-	"WFRP1ED.ArmourPoints": "Punkty zbroi",
+	"WFRP1ED.ArmourPointsLabel": "Punkty zbroi",
 	"WFRP1ED.ArmourPoints.Head": "Punkty zbroi: głowa",
 	"WFRP1ED.ArmourPoints.RightArm": "Punkty zbroi: prawa ręka",
 	"WFRP1ED.ArmourPoints.LeftArm": "Punkty zbroi: lewa ręka",
