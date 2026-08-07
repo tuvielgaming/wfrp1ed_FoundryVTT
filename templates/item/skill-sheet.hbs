@@ -1,0 +1,45 @@
+<section class="skill-sheet-content">
+	<div class="skill-sheet-field skill-sheet-field--name">
+		<label for="skill-name-{{item.id}}">
+			{{localize "WFRP1ED.SkillSheet.Name"}}
+		</label>
+
+		<input
+			id="skill-name-{{item.id}}"
+			type="text"
+			name="name"
+			value="{{item.name}}"
+			autocomplete="off"
+			required
+			{{#unless editable}}disabled{{/unless}}
+		>
+	</div>
+
+	<div class="skill-sheet-field skill-sheet-field--specialisation">
+		<label for="skill-specialisation-{{item.id}}">
+			{{localize "WFRP1ED.SkillSheet.Specialisation"}}
+		</label>
+
+		<input
+			id="skill-specialisation-{{item.id}}"
+			type="text"
+			name="system.specialisation"
+			value="{{system.specialisation}}"
+			autocomplete="off"
+			{{#unless editable}}disabled{{/unless}}
+		>
+	</div>
+
+	<div class="skill-sheet-field skill-sheet-field--description">
+		<label for="skill-description-{{item.id}}">
+			{{localize "WFRP1ED.SkillSheet.Description"}}
+		</label>
+
+		<textarea
+			id="skill-description-{{item.id}}"
+			name="system.description"
+			spellcheck="true"
+			{{#unless editable}}disabled{{/unless}}
+		>{{system.description}}</textarea>
+	</div>
+</section>
