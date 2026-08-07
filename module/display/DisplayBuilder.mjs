@@ -98,6 +98,9 @@ export class DisplayBuilder {
 					"career",
 				),
 
+			skills:
+				this.skills(document),
+
 			equipment:
 				this.equipment(document),
 
@@ -702,6 +705,60 @@ export class DisplayBuilder {
 					system.equipped,
 				),
 			),
+		};
+	}
+
+	/**
+	 * Present embedded WFRP 1e Skill Items.
+	 *
+	 * Possession of the embedded Item represents possession of the skill.
+	 * This presentation record exposes only the Skill Item's stored content.
+	 * It deliberately does not invent a universal roll target, characteristic,
+	 * or modifier because WFRP 1e skill procedures are skill-specific.
+	 *
+	 * @param {Actor} document
+	 * @returns {Object[]}
+	 */
+	static skills(document) {
+		return this._items(document)
+			.filter((item) =>
+				item.type === "skill",
+			)
+			.map((item) =>
+				this.skill(item),
+			);
+	}
+
+	/**
+	 * Build one Skill Item presentation record.
+	 *
+	 * @param {Item} item
+	 * @returns {Object}
+	 */
+	static skill(item) {
+		const system =
+			item.system ?? {};
+
+		const specialisation =
+			this._text(
+				system.specialisation ??
+					system.specialization,
+			);
+
+		return {
+			...this.item(item),
+
+			description:
+				this._text(
+					system.description,
+				),
+
+			specialisation,
+
+			displayName:
+				specialisation
+					? `${item.name ?? ""} (${specialisation})`
+					: item.name ?? "",
 		};
 	}
 
