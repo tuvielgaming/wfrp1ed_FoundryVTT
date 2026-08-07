@@ -90,7 +90,7 @@
 	"WFRP1ED.ArmourLocation": "Location",
 	"WFRP1ED.Encumbrance": "Encumbrance",
 
-	"WFRP1ED.ArmourPoints": "Armour Points",
+	"WFRP1ED.ArmourPointsLabel": "Armour Points",
 	"WFRP1ED.ArmourPoints.Head": "Armour Points: head",
 	"WFRP1ED.ArmourPoints.RightArm": "Armour Points: right arm",
 	"WFRP1ED.ArmourPoints.LeftArm": "Armour Points: left arm",
