@@ -1,4 +1,16 @@
 <section class="sheet-block skills skills--primary">
+	{{#if editable}}
+		<button
+			type="button"
+			class="skill-control skill-control--add"
+			data-action="addSkill"
+			aria-label="{{localize 'WFRP1ED.SkillSheet.AddSkill'}}"
+			data-tooltip="{{localize 'WFRP1ED.SkillSheet.AddSkill'}}"
+		>
+			<i class="fa-solid fa-plus" aria-hidden="true"></i>
+		</button>
+	{{/if}}
+
 	<ol
 		class="skills-list skills-list--primary"
 		role="list"
@@ -9,9 +21,28 @@
 				data-item-id="{{skill.id}}"
 				data-item-uuid="{{skill.uuid}}"
 			>
-				<span class="skill-name">
+				<button
+					type="button"
+					class="skill-name skill-name--open"
+					data-action="openSkill"
+					data-item-id="{{skill.id}}"
+					aria-label="{{localize 'WFRP1ED.SkillSheet.OpenSkill'}}: {{skill.displayName}}"
+				>
 					{{skill.displayName}}
-				</span>
+				</button>
+
+				{{#if @root.editable}}
+					<button
+						type="button"
+						class="skill-control skill-control--remove"
+						data-action="removeSkill"
+						data-item-id="{{skill.id}}"
+						aria-label="{{localize 'WFRP1ED.SkillSheet.RemoveSkill'}}: {{skill.displayName}}"
+						data-tooltip="{{localize 'WFRP1ED.SkillSheet.RemoveSkill'}}"
+					>
+						<i class="fa-solid fa-trash" aria-hidden="true"></i>
+					</button>
+				{{/if}}
 			</li>
 		{{/each}}
 	</ol>
