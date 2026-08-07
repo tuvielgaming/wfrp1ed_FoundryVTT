@@ -168,7 +168,7 @@ export const STANDARD_TEST_SKILL_RULES = deepFreeze({
 		],
 	},
 
-	etiqUette: {
+	etiquette: {
 		effects: [
 			procedureEffect("standardTests", "high-society-plus-10"),
 		],
@@ -293,7 +293,7 @@ export const STANDARD_TEST_SKILL_RULES = deepFreeze({
 	ride: {
 		effects: [
 			fixedModifier("risk", 10, {
-				condition: "mounted-risk-covered-by-ride",
+				condition: "mount-moving-horse-or-jump-on",
 			}),
 		],
 	},
