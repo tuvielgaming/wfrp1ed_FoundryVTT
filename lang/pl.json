@@ -96,5 +96,9 @@
 	"WFRP1ED.ArmourPoints.LeftArm": "Punkty zbroi: lewa ręka",
 	"WFRP1ED.ArmourPoints.Body": "Punkty zbroi: korpus",
 	"WFRP1ED.ArmourPoints.RightLeg": "Punkty zbroi: prawa noga",
-	"WFRP1ED.ArmourPoints.LeftLeg": "Punkty zbroi: lewa noga"
+	"WFRP1ED.ArmourPoints.LeftLeg": "Punkty zbroi: lewa noga",
+
+	"WFRP1ED.SkillSheet.Name": "Nazwa",
+	"WFRP1ED.SkillSheet.Specialisation": "Specjalizacja",
+	"WFRP1ED.SkillSheet.Description": "Opis"
 }
