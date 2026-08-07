@@ -5,7 +5,12 @@ import { Wfrp1edItem } from "./documents/Wfrp1edItem.mjs";
 import { WFRP1ED } from "./helpers/config.mjs";
 import { ClassicActorSheet } from "./sheets/ClassicActorSheet.mjs";
 import { SkillItemSheet } from "./sheets/SkillItemSheet.mjs";
+import { NAMED_STANDARD_TESTS } from "./tests/named-standard-tests.mjs";
+import { StandardTestSkillResolver } from "./tests/StandardTestSkillResolver.mjs";
 import { TestManager } from "./tests/TestManager.mjs";
+import {
+	STANDARD_TEST_SKILL_RULES,
+} from "./tests/standard-test-skill-rules.mjs";
 import { STANDARD_TESTS } from "./tests/standard-tests.mjs";
 
 const { DocumentSheetConfig } = foundry.applications.apps;
@@ -77,14 +82,25 @@ function registerDocumentSheets() {
 }
 
 /**
- * Register all currently available test definitions.
+ * Register all currently executable test definitions.
  *
- * Definition mechanics are validated separately in standard-tests.mjs.
+ * `STANDARD_TESTS` contains the direct characteristic tests used by clicks on
+ * the current profile row. `NAMED_STANDARD_TESTS` contains the audited named
+ * Standard Tests whose targets can be expressed by the current TestContext and
+ * FormulaResolver contracts.
+ *
+ * Special procedures such as Gambling, Employment, Busking and Movement are
+ * deliberately not registered until their complete execution contracts exist.
  *
  * @returns {void}
  */
 function registerStandardTests() {
-	for (const definition of Object.values(STANDARD_TESTS)) {
+	const definitions = [
+		...Object.values(STANDARD_TESTS),
+		...Object.values(NAMED_STANDARD_TESTS),
+	];
+
+	for (const definition of definitions) {
 		TestManager.register(definition);
 	}
 }
@@ -111,7 +127,16 @@ function exposeSystemApi() {
 
 		tests: Object.freeze({
 			manager: TestManager,
+
+			/*
+			 * `definitions` is preserved for compatibility with callers which
+			 * already use it for direct characteristic tests.
+			 */
 			definitions: STANDARD_TESTS,
+			characteristicDefinitions: STANDARD_TESTS,
+			standardDefinitions: NAMED_STANDARD_TESTS,
+			standardSkillRules: STANDARD_TEST_SKILL_RULES,
+			standardSkillResolver: StandardTestSkillResolver,
 		}),
 	});
 }
