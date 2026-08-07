@@ -30,7 +30,8 @@ export class Test {
 		}
 
 		this.id = data.id;
-		this.name = data.label;
+		this.label = data.label;
+		this.labelKey = data.labelKey ?? null;
 		this.characteristic = data.characteristic ?? null;
 		this.formula = data.formula ?? null;
 		this.skills = Array.isArray(data.skills) ? [...data.skills] : [];
@@ -40,6 +41,27 @@ export class Test {
 			"defaultModifier",
 		);
 		this.tags = Array.isArray(data.tags) ? [...data.tags] : [];
+	}
+
+	/**
+	 * Localized display name with the audited English label as fallback.
+	 *
+	 * Localization is resolved lazily because Test definitions can be created
+	 * before Foundry has finished initializing the active language.
+	 *
+	 * @returns {string}
+	 */
+	get name() {
+		if (this.labelKey) {
+			const localized =
+				globalThis.game?.i18n?.localize?.(this.labelKey);
+
+			if (localized && localized !== this.labelKey) {
+				return localized;
+			}
+		}
+
+		return this.label;
 	}
 
 	/**
@@ -96,7 +118,7 @@ export class Test {
 			actor: context.actor,
 			test: this,
 			target,
-			roll: roll.total,
+			roll,
 			context,
 		});
 	}
