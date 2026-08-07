@@ -100,5 +100,10 @@
 
 	"WFRP1ED.SkillSheet.Name": "Nazwa",
 	"WFRP1ED.SkillSheet.Specialisation": "Specjalizacja",
-	"WFRP1ED.SkillSheet.Description": "Opis"
+	"WFRP1ED.SkillSheet.Description": "Opis",
+	"WFRP1ED.SkillSheet.NewSkill": "Nowa umiejętność",
+	"WFRP1ED.SkillSheet.AddSkill": "Dodaj umiejętność",
+	"WFRP1ED.SkillSheet.OpenSkill": "Otwórz umiejętność",
+	"WFRP1ED.SkillSheet.RemoveSkill": "Usuń umiejętność",
+	"WFRP1ED.SkillSheet.ConfirmRemoveSkill": "Czy na pewno chcesz usunąć tę umiejętność?"
 }
