@@ -18,7 +18,8 @@
 	"styles": [
 		"css/myOwn.css",
 		"css/sheets/classic.css",
-		"css/sheets/modern.css"
+		"css/sheets/modern.css",
+		"css/sheets/skill-item.css"
 	],
 	"scripts": [],
 	"packs": [],
