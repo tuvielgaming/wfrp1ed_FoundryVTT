@@ -41,6 +41,11 @@ export class Wfrp1edActor extends Actor {
 	 * legacy fallback remains temporarily for Actor types that still use
 	 * template.json during the staged Foundry v14 migration.
 	 *
+	 * Foundry may invoke this method from the base Document constructor before
+	 * subclass private fields and methods are branded on the instance. Helpers
+	 * used by this lifecycle path therefore deliberately use normal protected
+	 * methods rather than JavaScript private methods.
+	 *
 	 * @returns {void}
 	 */
 	prepareDerivedData() {
@@ -50,11 +55,11 @@ export class Wfrp1edActor extends Actor {
 			return;
 		}
 
-		if (this.#usesNativeCharacterModel()) {
+		if (this._usesNativeCharacterModel()) {
 			return;
 		}
 
-		this.#prepareLegacyCharacteristics();
+		this._prepareLegacyCharacteristics();
 	}
 
 	/**
@@ -84,7 +89,7 @@ export class Wfrp1edActor extends Actor {
 		const characteristic =
 			this.getCharacteristic(id);
 
-		return this.#finiteNumber(
+		return this._finiteNumber(
 			characteristic.current,
 			`characteristics.${String(id)}.current`,
 		);
@@ -416,10 +421,14 @@ export class Wfrp1edActor extends Actor {
 	/**
 	 * Determine whether this Character uses the native v14 model.
 	 *
+	 * This method participates in prepareDerivedData(), which Foundry can call
+	 * while the base constructor is still running. It must therefore not use
+	 * JavaScript private-method branding.
+	 *
 	 * @returns {boolean}
 	 * @protected
 	 */
-	#usesNativeCharacterModel() {
+	_usesNativeCharacterModel() {
 		return (
 			this.type === "character" &&
 			this.system instanceof CharacterData
@@ -429,10 +438,14 @@ export class Wfrp1edActor extends Actor {
 	/**
 	 * Prepare current characteristic values for legacy template.json Actors.
 	 *
+	 * This method participates in prepareDerivedData(), which Foundry can call
+	 * while the base constructor is still running. It and its numeric helper
+	 * must therefore remain callable before subclass private branding occurs.
+	 *
 	 * @returns {void}
 	 * @protected
 	 */
-	#prepareLegacyCharacteristics() {
+	_prepareLegacyCharacteristics() {
 		const characteristics =
 			this.system?.characteristics;
 
@@ -458,17 +471,17 @@ export class Wfrp1edActor extends Actor {
 				);
 			}
 
-			const initial = this.#finiteNumber(
+			const initial = this._finiteNumber(
 				characteristic.initial,
 				`characteristics.${id}.initial`,
 			);
 
-			const purchased = this.#finiteNumber(
+			const purchased = this._finiteNumber(
 				characteristic.purchased,
 				`characteristics.${id}.purchased`,
 			);
 
-			const advanceStep = this.#finiteNumber(
+			const advanceStep = this._finiteNumber(
 				characteristic.advanceStep,
 				`characteristics.${id}.advanceStep`,
 			);
@@ -864,12 +877,15 @@ export class Wfrp1edActor extends Actor {
 	/**
 	 * Convert Actor data into a finite number.
 	 *
+	 * This helper is also used during prepareDerivedData(), which Foundry may
+	 * invoke before subclass private branding is complete.
+	 *
 	 * @param {*} value
 	 * @param {string} path
 	 * @returns {number}
 	 * @protected
 	 */
-	#finiteNumber(value, path) {
+	_finiteNumber(value, path) {
 		const number = Number(value);
 
 		if (!Number.isFinite(number)) {
@@ -893,7 +909,7 @@ export class Wfrp1edActor extends Actor {
 	 */
 	#nonNegativeInteger(value, path) {
 		const number =
-			this.#finiteNumber(value, path);
+			this._finiteNumber(value, path);
 
 		if (
 			!Number.isInteger(number) ||
