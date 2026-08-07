@@ -10,7 +10,7 @@ export class TestResult {
 	 * @param {Actor} data.actor
 	 * @param {Test} data.test
 	 * @param {number} data.target
-	 * @param {number} data.roll
+	 * @param {Roll|number} data.roll
 	 * @param {TestContext} data.context
 	 */
 	constructor({
@@ -31,7 +31,10 @@ export class TestResult {
 		this.actor = actor;
 		this.test = test;
 		this.target = this._finiteNumber(target, "target");
-		this.roll = this._d100Result(roll);
+		this.rollObject = roll instanceof Roll ? roll : null;
+		this.roll = this._d100Result(
+			this.rollObject?.total ?? roll,
+		);
 		this.context = context ?? null;
 	}
 
@@ -111,7 +114,7 @@ export class TestResult {
 	 * @returns {Promise<string>}
 	 */
 	async render() {
-		return renderTemplate(
+		return foundry.applications.handlebars.renderTemplate(
 			"systems/wfrp1ed/templates/chat/test-result.hbs",
 			{
 				result: this,
@@ -122,17 +125,27 @@ export class TestResult {
 	/**
 	 * Publish the result to Foundry chat.
 	 *
+	 * The evaluated Roll is attached to the ChatMessage when available. This
+	 * keeps the native roll data accessible to Foundry and lets compatible
+	 * dice-visualization modules observe the real roll rather than only a
+	 * pre-rendered HTML result card.
+	 *
 	 * @returns {Promise<ChatMessage>}
 	 */
 	async toChat() {
 		const content = await this.render();
-
-		return ChatMessage.create({
+		const messageData = {
 			speaker: ChatMessage.getSpeaker({
 				actor: this.actor,
 			}),
 			content,
-		});
+		};
+
+		if (this.rollObject) {
+			messageData.rolls = [this.rollObject];
+		}
+
+		return ChatMessage.create(messageData);
 	}
 
 	/**
