@@ -26,6 +26,7 @@
 	grid-template-rows:
 		auto
 		auto
+		auto
 		minmax(0, 1fr);
 	gap: var(--skill-sheet-gap);
 
@@ -60,6 +61,7 @@
 }
 
 .skill-item-sheet .skill-sheet-field > input,
+.skill-item-sheet .skill-sheet-field > select,
 .skill-item-sheet .skill-sheet-field > textarea {
 	width: 100%;
 	min-width: 0;
@@ -75,7 +77,8 @@
 	color: inherit;
 }
 
-.skill-item-sheet .skill-sheet-field > input {
+.skill-item-sheet .skill-sheet-field > input,
+.skill-item-sheet .skill-sheet-field > select {
 	height: 34px;
 	padding: 4px 8px;
 
@@ -85,7 +88,7 @@
 
 .skill-item-sheet .skill-sheet-field > textarea {
 	height: 100%;
-	min-height: 220px;
+	min-height: 180px;
 	padding: 8px;
 
 	font-size: 14px;
@@ -117,6 +120,7 @@
 /******************************************************************/
 
 .skill-item-sheet .skill-sheet-field > input:focus,
+.skill-item-sheet .skill-sheet-field > select:focus,
 .skill-item-sheet .skill-sheet-field > textarea:focus {
 	outline: 1px solid var(--skill-sheet-focus-color);
 	outline-offset: -1px;
@@ -129,6 +133,7 @@
 /******************************************************************/
 
 .skill-item-sheet .skill-sheet-field > input:disabled,
+.skill-item-sheet .skill-sheet-field > select:disabled,
 .skill-item-sheet .skill-sheet-field > textarea:disabled {
 	cursor: default;
 	opacity: 0.72;
