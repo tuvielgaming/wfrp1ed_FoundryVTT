@@ -4,12 +4,13 @@ import { Wfrp1edActor } from "./documents/Wfrp1edActor.mjs";
 import { Wfrp1edItem } from "./documents/Wfrp1edItem.mjs";
 import { WFRP1ED } from "./helpers/config.mjs";
 import { ClassicActorSheet } from "./sheets/ClassicActorSheet.mjs";
+import { SkillItemSheet } from "./sheets/SkillItemSheet.mjs";
 import { TestManager } from "./tests/TestManager.mjs";
 import { STANDARD_TESTS } from "./tests/standard-tests.mjs";
 
 const { DocumentSheetConfig } = foundry.applications.apps;
 const { loadTemplates } = foundry.applications.handlebars;
-const { Actor } = foundry.documents;
+const { Actor, Item } = foundry.documents;
 
 Hooks.once("init", async () => {
 	console.info("WFRP1ED | Initializing WFRP 1st Edition");
@@ -43,7 +44,10 @@ function configureSystem() {
 }
 
 /**
- * Register the audited Classic Character sheet.
+ * Register audited WFRP1ED Document sheets.
+ *
+ * The Classic sheet owns Character Actors.
+ * SkillItemSheet owns Skill Items.
  *
  * Core Foundry sheets remain registered for document subtypes which do not yet
  * have an audited WFRP1ED sheet implementation.
@@ -57,6 +61,16 @@ function registerDocumentSheets() {
 		ClassicActorSheet,
 		{
 			types: ["character"],
+			makeDefault: true,
+		},
+	);
+
+	DocumentSheetConfig.registerSheet(
+		Item,
+		game.system.id,
+		SkillItemSheet,
+		{
+			types: ["skill"],
 			makeDefault: true,
 		},
 	);
