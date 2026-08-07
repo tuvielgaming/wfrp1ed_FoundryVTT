@@ -29,10 +29,15 @@ WFRP1ED.partialTemplates = [
 	"systems/wfrp1ed/templates/actors/classic/parts/header.hbs",
 	"systems/wfrp1ed/templates/actors/classic/parts/characteristics.hbs",
 	"systems/wfrp1ed/templates/actors/classic/parts/melee.hbs",
+	"systems/wfrp1ed/templates/actors/classic/parts/ranged.hbs",
+	"systems/wfrp1ed/templates/actors/classic/parts/armour.hbs",
+	"systems/wfrp1ed/templates/actors/classic/parts/armour-points.hbs",
+	"systems/wfrp1ed/templates/actors/classic/parts/skills-primary.hbs",
+	"systems/wfrp1ed/templates/actors/classic/parts/skills-secondary.hbs",
 	"systems/wfrp1ed/templates/actors/classic/parts/movement.hbs",
-	// "systems/wfrp1ed/templates/actors/classic/parts/ranged.hbs",
-	// "systems/wfrp1ed/templates/actors/classic/parts/armour.hbs",
-	// "systems/wfrp1ed/templates/actors/classic/parts/skills.hbs",
+
+	// Future Classic-sheet sections are added here only after their
+	// corresponding partial exists and its data contract has been audited.
 	// "systems/wfrp1ed/templates/actors/classic/parts/equipment.hbs",
 	// "systems/wfrp1ed/templates/actors/classic/parts/notes.hbs",
 	// "systems/wfrp1ed/templates/actors/classic/parts/footer.hbs",
