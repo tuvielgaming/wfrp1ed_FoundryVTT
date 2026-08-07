@@ -43,6 +43,7 @@
 		},
 		"Item": {
 			"career": {},
+			"skill": {},
 			"weapon": {},
 			"equipment": {},
 			"trait": {},
