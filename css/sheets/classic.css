@@ -404,15 +404,15 @@
  * black title occupies the upper-left corner of one large writing area. A
  * normal textarea cannot wrap around that irregular shape, so the editable
  * control deliberately uses the clean rectangular area to the right of the
- * printed title. This keeps user text off the artwork while providing several
- * visible lines and native vertical scrolling for longer descriptions.
+ * printed title. The viewport is sized to exactly four 14px text rows so the
+ * first and last visible lines remain complete when scrolled to an edge.
  */
 .wfrp1ed-classic-sheet .header-field--description {
 	left: 666px;
-	top: 92px;
+	top: 94px;
 
 	width: 264px;
-	height: 68px;
+	height: 64px;
 }
 
 .wfrp1ed-classic-sheet .header-field--description > textarea {
@@ -422,7 +422,7 @@
 
 	font-size: 13px;
 	font-weight: 600;
-	line-height: 1.08;
+	line-height: 14px;
 
 	scrollbar-width: thin;
 }
