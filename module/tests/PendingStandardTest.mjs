@@ -1,4 +1,5 @@
 import { TestManager } from "./TestManager.mjs";
+import { normalizeTestResultVisibility } from "./TestResultVisibility.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 
@@ -694,6 +695,10 @@ export class PendingStandardTest {
 
 			serialized[key] = value;
 		}
+
+		serialized.resultVisibility = normalizeTestResultVisibility(
+			options?.resultVisibility,
+		);
 
 		if (
 			options?.targetValues &&
