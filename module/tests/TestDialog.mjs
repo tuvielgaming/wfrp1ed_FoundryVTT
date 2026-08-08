@@ -1,3 +1,9 @@
+import {
+	normalizeTestResultVisibility,
+	testResultVisibilityLabel,
+	testResultVisibilityOptions,
+} from "./TestResultVisibility.mjs";
+
 const { DialogV2 } = foundry.applications.api;
 
 const GENERAL_MODIFIER_ID = "general";
@@ -48,6 +54,8 @@ export class TestDialog {
 					callback: (_event, button) => ({
 						confirmed: true,
 						modifier: this.readModifier(button.form),
+						resultVisibility:
+							this.readResultVisibility(button.form),
 					}),
 				},
 				{
@@ -69,6 +77,8 @@ export class TestDialog {
 		if (!response?.confirmed) {
 			return null;
 		}
+
+		context.options.resultVisibility = response.resultVisibility;
 
 		return this.applyModifier(
 			context,
@@ -98,6 +108,31 @@ export class TestDialog {
 		}
 
 		return modifier;
+	}
+
+	/**
+	 * Read GM-selected visibility for the detailed result calculation.
+	 *
+	 * Non-GM users do not receive this control and therefore use the safe
+	 * default: detailed calculation visible only to the GM.
+	 *
+	 * @param {HTMLFormElement|undefined|null} form
+	 * @returns {"gm-only"|"public"}
+	 */
+	static readResultVisibility(form) {
+		return normalizeTestResultVisibility(
+			form?.elements?.resultVisibility?.value,
+		);
+	}
+
+	/** @returns {string} */
+	static resultVisibilityLabel() {
+		return testResultVisibilityLabel();
+	}
+
+	/** @returns {Array<{value:string,label:string}>} */
+	static resultVisibilityOptions() {
+		return testResultVisibilityOptions();
 	}
 
 	/**
@@ -198,6 +233,32 @@ export class TestDialog {
 
 		formGroup.append(label, input);
 		content.append(formGroup);
+
+		if (game.user?.isGM) {
+			const visibilityGroup = document.createElement("div");
+			visibilityGroup.classList.add("form-group");
+
+			const visibilityLabel = document.createElement("label");
+			visibilityLabel.htmlFor = "wfrp1ed-test-result-visibility";
+			visibilityLabel.textContent = this.resultVisibilityLabel();
+
+			const visibilitySelect = document.createElement("select");
+			visibilitySelect.id = "wfrp1ed-test-result-visibility";
+			visibilitySelect.name = "resultVisibility";
+
+			for (const entry of this.resultVisibilityOptions()) {
+				const option = document.createElement("option");
+				option.value = entry.value;
+				option.textContent = entry.label;
+				visibilitySelect.append(option);
+			}
+
+			visibilityGroup.append(
+				visibilityLabel,
+				visibilitySelect,
+			);
+			content.append(visibilityGroup);
+		}
 
 		return content;
 	}
