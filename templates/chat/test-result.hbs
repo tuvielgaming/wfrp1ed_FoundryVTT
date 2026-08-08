@@ -1,101 +1,109 @@
-<div class="wfrp1e-test-card">
-	<header>
+<article class="wfrp1e-test-card {{#if result.success}}is-success{{else}}is-failure{{/if}}">
+	<header class="wfrp1e-test-card__header">
 		<h2>{{result.test.name}}</h2>
+		<span class="wfrp1e-test-card__status">
+			{{#if result.success}}
+				{{localize "WFRP1ED.TestResult.Success"}}
+			{{else}}
+				{{localize "WFRP1ED.TestResult.Failure"}}
+			{{/if}}
+		</span>
 	</header>
 
-	<table>
-		<tr>
-			<td>{{localize "WFRP1ED.TestResult.Target"}}</td>
-			<td>
-				<details class="wfrp1e-test-target-breakdown">
-					<summary title="{{breakdown.expandHint}}">
-						{{result.target}}
-					</summary>
+	<details class="wfrp1e-test-card__target">
+		<summary title="{{breakdown.expandHint}}">
+			<span class="wfrp1e-test-card__target-label">
+				{{localize "WFRP1ED.TestResult.Target"}}
+			</span>
+			<strong class="wfrp1e-test-card__target-value">
+				{{result.target}}
+			</strong>
+			<span class="wfrp1e-test-card__target-toggle" aria-hidden="true">⌄</span>
+		</summary>
 
-					<div class="wfrp1e-test-target-breakdown-body">
-						{{#if breakdown.characteristic}}
-							<div>
-								<strong>{{breakdown.baseTargetLabel}}:</strong>
-								{{breakdown.characteristic.label}}
-								=
-								{{breakdown.characteristic.value}}
-							</div>
-						{{/if}}
-
-						{{#if breakdown.formula}}
-							<div>
-								<strong>{{breakdown.formulaLabel}}:</strong>
-								<code>{{breakdown.formula}}</code>
-							</div>
-
-							{{#if breakdown.variables}}
-								<div>
-									<strong>{{breakdown.inputsLabel}}:</strong>
-								</div>
-
-								<ul>
-									{{#each breakdown.variables}}
-										<li>{{label}} = {{value}}</li>
-									{{/each}}
-								</ul>
-							{{/if}}
-
-							<div>
-								<strong>{{breakdown.baseTargetLabel}}:</strong>
-								{{breakdown.baseTarget}}
-							</div>
-						{{/if}}
-
-						{{#if breakdown.modifiers}}
-							<div>
-								<strong>{{breakdown.modifiersLabel}}:</strong>
-							</div>
-
-							<ul>
-								{{#each breakdown.modifiers}}
-									<li>
-										{{source}}: {{signed}}
-										{{#unless enabled}}
-											({{../breakdown.disabledLabel}})
-										{{/unless}}
-									</li>
-								{{/each}}
-							</ul>
-						{{/if}}
-
-						<div>
-							<strong>{{breakdown.totalModifierLabel}}:</strong>
-							{{breakdown.totalModifierSigned}}
-						</div>
-
-						<div>
-							<strong>{{breakdown.finalTargetLabel}}:</strong>
-							{{breakdown.finalTarget}}
-						</div>
+		<div class="wfrp1e-test-card__breakdown">
+			{{#if breakdown.characteristic}}
+				<section class="wfrp1e-test-card__breakdown-section">
+					<div class="wfrp1e-test-card__section-title">
+						{{breakdown.baseTargetLabel}}
 					</div>
-				</details>
-			</td>
-		</tr>
+					<div class="wfrp1e-test-card__breakdown-row">
+						<span>{{breakdown.characteristic.label}}</span>
+						<strong>{{breakdown.characteristic.value}}</strong>
+					</div>
+				</section>
+			{{/if}}
 
-		<tr>
-			<td>{{localize "WFRP1ED.TestResult.Roll"}}</td>
-			<td>{{result.roll}}</td>
-		</tr>
+			{{#if breakdown.formula}}
+				<section class="wfrp1e-test-card__breakdown-section">
+					<div class="wfrp1e-test-card__section-title">
+						{{breakdown.formulaLabel}}
+					</div>
+					<code class="wfrp1e-test-card__formula">{{breakdown.formula}}</code>
 
-		<tr>
-			<td>{{localize "WFRP1ED.TestResult.Result"}}</td>
-			<td>
-				{{#if result.success}}
-					{{localize "WFRP1ED.TestResult.Success"}}
-				{{else}}
-					{{localize "WFRP1ED.TestResult.Failure"}}
-				{{/if}}
-			</td>
-		</tr>
+					{{#if breakdown.variables}}
+						<div class="wfrp1e-test-card__section-subtitle">
+							{{breakdown.inputsLabel}}
+						</div>
+						<div class="wfrp1e-test-card__breakdown-rows">
+							{{#each breakdown.variables}}
+								<div class="wfrp1e-test-card__breakdown-row">
+									<span>{{label}}</span>
+									<strong>{{value}}</strong>
+								</div>
+							{{/each}}
+						</div>
+					{{/if}}
 
-		<tr>
-			<td>{{localize "WFRP1ED.TestResult.Margin"}}</td>
-			<td>{{result.margin}}</td>
-		</tr>
-	</table>
-</div>
+					<div class="wfrp1e-test-card__breakdown-row is-subtotal">
+						<span>{{breakdown.baseTargetLabel}}</span>
+						<strong>{{breakdown.baseTarget}}</strong>
+					</div>
+				</section>
+			{{/if}}
+
+			{{#if breakdown.modifiers}}
+				<section class="wfrp1e-test-card__breakdown-section">
+					<div class="wfrp1e-test-card__section-title">
+						{{breakdown.modifiersLabel}}
+					</div>
+					<div class="wfrp1e-test-card__breakdown-rows">
+						{{#each breakdown.modifiers}}
+							<div class="wfrp1e-test-card__breakdown-row {{#unless enabled}}is-disabled{{/unless}}">
+								<span>
+									{{source}}
+									{{#unless enabled}}
+										<em>({{../breakdown.disabledLabel}})</em>
+									{{/unless}}
+								</span>
+								<strong>{{signed}}</strong>
+							</div>
+						{{/each}}
+					</div>
+				</section>
+			{{/if}}
+
+			<div class="wfrp1e-test-card__breakdown-summary">
+				<div class="wfrp1e-test-card__breakdown-row">
+					<span>{{breakdown.totalModifierLabel}}</span>
+					<strong>{{breakdown.totalModifierSigned}}</strong>
+				</div>
+				<div class="wfrp1e-test-card__breakdown-row is-final">
+					<span>{{breakdown.finalTargetLabel}}</span>
+					<strong>{{breakdown.finalTarget}}</strong>
+				</div>
+			</div>
+		</div>
+	</details>
+
+	<div class="wfrp1e-test-card__metrics">
+		<div class="wfrp1e-test-card__metric">
+			<span>{{localize "WFRP1ED.TestResult.Roll"}}</span>
+			<strong>{{result.roll}}</strong>
+		</div>
+		<div class="wfrp1e-test-card__metric">
+			<span>{{localize "WFRP1ED.TestResult.Margin"}}</span>
+			<strong>{{result.margin}}</strong>
+		</div>
+	</div>
+</article>
