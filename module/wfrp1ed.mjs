@@ -6,6 +6,7 @@ import { WFRP1ED } from "./helpers/config.mjs";
 import { ClassicActorSheet } from "./sheets/ClassicActorSheet.mjs";
 import { SkillItemSheet } from "./sheets/SkillItemSheet.mjs";
 import { NAMED_STANDARD_TESTS } from "./tests/named-standard-tests.mjs";
+import { PendingStandardTest } from "./tests/PendingStandardTest.mjs";
 import { StandardTestSkillResolver } from "./tests/StandardTestSkillResolver.mjs";
 import { TestManager } from "./tests/TestManager.mjs";
 import {
@@ -24,6 +25,7 @@ Hooks.once("init", async () => {
 	registerHandlebarsHelpers();
 	registerStandardTests();
 	registerDocumentSheets();
+	registerChatHooks();
 	exposeSystemApi();
 
 	await loadTemplates(WFRP1ED.partialTemplates);
@@ -106,6 +108,25 @@ function registerStandardTests() {
 }
 
 /**
+ * Attach interaction to pending Standard Test ChatMessages after Foundry has
+ * rendered their HTML. ChatMessage content is shared, while the active client
+ * decides whether GM controls should be exposed.
+ *
+ * @returns {void}
+ */
+function registerChatHooks() {
+	Hooks.on(
+		"renderChatMessageHTML",
+		(message, html) => {
+			PendingStandardTest.activateListeners(
+				message,
+				html,
+			);
+		},
+	);
+}
+
+/**
  * Expose the supported public API for macros, modules, and future optional
  * rules packages.
  *
@@ -137,6 +158,7 @@ function exposeSystemApi() {
 			standardDefinitions: NAMED_STANDARD_TESTS,
 			standardSkillRules: STANDARD_TEST_SKILL_RULES,
 			standardSkillResolver: StandardTestSkillResolver,
+			pendingStandardTest: PendingStandardTest,
 		}),
 	});
 }
