@@ -9,6 +9,7 @@ import { NAMED_STANDARD_TESTS } from "./tests/named-standard-tests.mjs";
 import { PendingStandardTest } from "./tests/PendingStandardTest.mjs";
 import { StandardTestSkillResolver } from "./tests/StandardTestSkillResolver.mjs";
 import { TestManager } from "./tests/TestManager.mjs";
+import { TestResultChat } from "./tests/TestResultChat.mjs";
 import {
 	STANDARD_TEST_SKILL_RULES,
 } from "./tests/standard-test-skill-rules.mjs";
@@ -108,9 +109,11 @@ function registerStandardTests() {
 }
 
 /**
- * Attach interaction to pending Standard Test ChatMessages after Foundry has
- * rendered their HTML. ChatMessage content is shared, while the active client
- * decides whether GM controls should be exposed.
+ * Attach interaction to rendered WFRP1ED ChatMessages.
+ *
+ * Pending Standard Tests expose GM target-resolution controls. Completed test
+ * results expose the general adjudication modifier as a GM-editable value while
+ * all clients share the same persisted message content and result snapshot.
  *
  * @returns {void}
  */
@@ -119,6 +122,11 @@ function registerChatHooks() {
 		"renderChatMessageHTML",
 		(message, html) => {
 			PendingStandardTest.activateListeners(
+				message,
+				html,
+			);
+
+			TestResultChat.activateListeners(
 				message,
 				html,
 			);
@@ -159,6 +167,7 @@ function exposeSystemApi() {
 			standardSkillRules: STANDARD_TEST_SKILL_RULES,
 			standardSkillResolver: StandardTestSkillResolver,
 			pendingStandardTest: PendingStandardTest,
+			resultChat: TestResultChat,
 		}),
 	});
 }
