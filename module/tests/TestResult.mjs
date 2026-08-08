@@ -154,12 +154,15 @@ export class TestResult {
 			})
 			: [];
 
-		const formula = this.test.formula
+		const rawFormula = this.test.formula
 			? String(this.test.formula)
 			: null;
-		const variables = formula
-			? this._formulaVariables(formula)
+		const variables = rawFormula
+			? this._formulaVariables(rawFormula)
 			: [];
+		const formula = rawFormula
+			? this._displayFormula(rawFormula, variables)
+			: null;
 		const characteristic = this.test.characteristic
 			? {
 				id: String(this.test.characteristic),
@@ -320,6 +323,106 @@ export class TestResult {
 	}
 
 	/**
+	 * Render a formula with localized characteristic abbreviations while
+	 * preserving the original mechanics expression on the Test definition.
+	 *
+	 * Example (Polish): `i + cl - target.i` -> `I + Op - Cel.I`.
+	 *
+	 * @param {string} formula
+	 * @param {Array<{key:string}>} variables
+	 * @returns {string}
+	 * @protected
+	 */
+	_displayFormula(formula, variables = []) {
+		let display = String(formula ?? "");
+		const keys = [...new Set(
+			variables.map((entry) => String(entry?.key ?? "").trim()),
+		)]
+			.filter(Boolean)
+			.sort((first, second) => second.length - first.length);
+
+		for (const key of keys) {
+			display = this._replaceFormulaVariable(
+				display,
+				key,
+				this._formulaVariableDisplayToken(key),
+			);
+		}
+
+		return display;
+	}
+
+	/**
+	 * Replace one complete mechanics variable in a presentation formula.
+	 *
+	 * @param {string} formula
+	 * @param {string} key
+	 * @param {string} replacement
+	 * @returns {string}
+	 * @protected
+	 */
+	_replaceFormulaVariable(formula, key, replacement) {
+		const escapedKey = String(key).replace(
+			/[.*+?^${}()|[\]\\]/g,
+			"\\$&",
+		);
+		const pattern = new RegExp(
+			`(^|[^A-Za-z0-9_.])${escapedKey}` +
+				`(?=$|[^A-Za-z0-9_.])`,
+			"g",
+		);
+
+		return String(formula).replace(
+			pattern,
+			(_match, prefix) => `${prefix}${replacement}`,
+		);
+	}
+
+	/**
+	 * Localized compact token used inside a displayed formula.
+	 *
+	 * @param {string} key
+	 * @returns {string}
+	 * @protected
+	 */
+	_formulaVariableDisplayToken(key) {
+		const normalized = String(key ?? "").trim();
+
+		if (normalized.startsWith("target.")) {
+			const characteristicId = normalized.slice("target.".length);
+			const targetLabel = this._localize(
+				"WFRP1ED.StandardTest.Target",
+				"Target",
+				"Cel",
+			);
+
+			return `${targetLabel}.${this._characteristicAbbreviation(characteristicId)}`;
+		}
+
+		if (normalized === "noise") {
+			return this._localize(
+				"WFRP1ED.StandardTest.NoiseChance",
+				"Base Listen chance",
+				"Bazowa szansa Słuchania",
+			);
+		}
+
+		if (normalized === "lockDifficulty") {
+			return this._localize(
+				"WFRP1ED.StandardTest.LockDifficulty",
+				"Lock rating",
+				"Stopień trudności zamka",
+			);
+		}
+
+		if (normalized === "movement") {
+			return this._characteristicAbbreviation("m");
+		}
+
+		return this._characteristicAbbreviation(normalized);
+	}
+
+	/**
 	 * Human-readable formula variable label.
 	 *
 	 * @param {string} key
@@ -382,6 +485,25 @@ export class TestResult {
 		const localizationId =
 			CHARACTERISTIC_LABEL_ALIASES[normalized] ?? normalized;
 		const key = `WFRP1ed.CHAR.${localizationId}`;
+		const localized = game.i18n.localize(key);
+
+		return localized !== key
+			? localized
+			: normalized.toUpperCase();
+	}
+
+	/**
+	 * Localized characteristic abbreviation matching the Actor sheet header.
+	 *
+	 * @param {string} id
+	 * @returns {string}
+	 * @protected
+	 */
+	_characteristicAbbreviation(id) {
+		const normalized = String(id ?? "").trim().toLowerCase();
+		const localizationId =
+			CHARACTERISTIC_LABEL_ALIASES[normalized] ?? normalized;
+		const key = `WFRP1ed.CHARAbbrev.${localizationId}`;
 		const localized = game.i18n.localize(key);
 
 		return localized !== key
