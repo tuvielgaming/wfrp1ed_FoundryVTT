@@ -1,4 +1,5 @@
 import { DisplayBuilder } from "../display/DisplayBuilder.mjs";
+import { StandardTestDialog } from "../tests/StandardTestDialog.mjs";
 import { LayoutManager } from "./LayoutManager.mjs";
 import { ThemeManager } from "./ThemeManager.mjs";
 
@@ -34,6 +35,9 @@ export class ClassicActorSheet extends HandlebarsApplicationMixin(
 		actions: {
 			rollCharacteristic:
 				ClassicActorSheet.#onCharacteristicRoll,
+
+			standardTest:
+				ClassicActorSheet.#onStandardTest,
 
 			advanceCharacteristic:
 				ClassicActorSheet.#onCharacteristicAdvance,
@@ -292,6 +296,46 @@ export class ClassicActorSheet extends HandlebarsApplicationMixin(
 			ui.notifications.error(
 				error.message ??
 					"Unable to roll the characteristic.",
+			);
+		}
+	}
+
+	/**
+	 * Open the named Standard Test launcher and execute the selected Test.
+	 *
+	 * StandardTestDialog owns only test selection and definition-specific
+	 * context such as a targeted Actor, Listen base chance, or lock rating.
+	 * The existing Actor.rollTest pipeline still owns generic test
+	 * configuration, rolling and chat publication.
+	 *
+	 * @this {ClassicActorSheet}
+	 * @param {PointerEvent} event
+	 * @returns {Promise<void>}
+	 */
+	static async #onStandardTest(event) {
+		event.preventDefault();
+
+		try {
+			const configured = await StandardTestDialog.configure(
+				this.document,
+			);
+
+			if (!configured) {
+				return;
+			}
+
+			await this.document.rollTest(
+				configured.testId,
+				configured.options,
+			);
+		} catch (error) {
+			console.error(
+				"WFRP1ED | Unable to run Standard Test launcher.",
+				error,
+			);
+
+			ui.notifications.error(
+				error.message ?? "Unable to run the Standard Test.",
 			);
 		}
 	}
