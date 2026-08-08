@@ -127,12 +127,12 @@ function registerStandardTests() {
 }
 
 /**
- * Attach interaction to rendered WFRP1ED ChatMessages.
+ * Attach interaction and context-menu controls to WFRP1ED ChatMessages.
  *
  * Pending Standard Tests expose GM target-resolution controls. Completed test
- * results expose the full calculation breakdown and general adjudication
- * modifier only to GMs. Players receive the compact resolved result card and
- * cannot expand its target calculation.
+ * results expose the GM-editable general modifier and apply their own persisted
+ * detail-visibility setting per client. The GM can also change that visibility
+ * later from the ChatLog right-click menu.
  *
  * @returns {void}
  */
@@ -150,85 +150,19 @@ function registerChatHooks() {
 				html,
 			);
 
-			restrictPlayerChatDetails(html);
+			TestResultChat.applyClientVisibility(
+				message,
+				html,
+			);
 		},
 	);
-}
 
-/**
- * Restrict completed test diagnostics to the GM on non-GM clients.
- *
- * The shared ChatMessage still stores the resolved card and its snapshot; this
- * function controls only what the current client can interact with in the
- * rendered chat UI. For players, GM-only nodes are removed and the entire
- * target breakdown is removed so derived values such as the base target cannot
- * be used to infer an opponent characteristic.
- *
- * @param {HTMLElement|Object} html
- * @returns {void}
- */
-function restrictPlayerChatDetails(html) {
-	if (game.user?.isGM) {
-		return;
-	}
-
-	const rendered = html instanceof HTMLElement
-		? html
-		: html?.[0] instanceof HTMLElement
-			? html[0]
-			: null;
-
-	if (!rendered) {
-		return;
-	}
-
-	for (
-		const element of rendered.querySelectorAll(
-			"[data-wfrp-gm-only]",
-		)
-	) {
-		element.remove();
-	}
-
-	const targetDetails = rendered.querySelector(
-		".wfrp1e-test-card__target",
+	Hooks.on(
+		"getChatLogEntryContext",
+		(_html, menuItems) => {
+			TestResultChat.addContextMenuOptions(menuItems);
+		},
 	);
-
-	if (!(targetDetails instanceof HTMLDetailsElement)) {
-		return;
-	}
-
-	targetDetails.open = false;
-	targetDetails.classList.add("is-player-locked");
-
-	targetDetails.querySelector(
-		".wfrp1e-test-card__breakdown",
-	)?.remove();
-	targetDetails.querySelector(
-		".wfrp1e-test-card__target-toggle",
-	)?.remove();
-
-	const summary = targetDetails.querySelector(":scope > summary");
-
-	if (summary) {
-		summary.removeAttribute("title");
-		summary.tabIndex = -1;
-		summary.setAttribute("aria-expanded", "false");
-		summary.addEventListener("click", (event) => {
-			event.preventDefault();
-		});
-		summary.addEventListener("keydown", (event) => {
-			if (event.key === "Enter" || event.key === " ") {
-				event.preventDefault();
-			}
-		});
-	}
-
-	targetDetails.addEventListener("toggle", () => {
-		if (targetDetails.open) {
-			targetDetails.open = false;
-		}
-	});
 }
 
 /**
