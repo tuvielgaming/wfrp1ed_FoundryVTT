@@ -16,7 +16,7 @@
 				{{localize "WFRP1ED.TestResult.Target"}}
 			</span>
 			<strong class="wfrp1e-test-card__target-value">
-				{{result.target}}
+				{{wfrpTargetDisplay result.target breakdown.characteristic breakdown.variables}}
 			</strong>
 			<span class="wfrp1e-test-card__target-toggle" aria-hidden="true">⌄</span>
 		</summary>
@@ -36,10 +36,12 @@
 
 			{{#if breakdown.formula}}
 				<section class="wfrp1e-test-card__breakdown-section">
-					<div class="wfrp1e-test-card__section-title">
-						{{breakdown.formulaLabel}}
+					<div data-wfrp-gm-only>
+						<div class="wfrp1e-test-card__section-title">
+							{{breakdown.formulaLabel}}
+						</div>
+						<code class="wfrp1e-test-card__formula">{{breakdown.formula}}</code>
 					</div>
-					<code class="wfrp1e-test-card__formula">{{breakdown.formula}}</code>
 
 					{{#if breakdown.variables}}
 						<div class="wfrp1e-test-card__section-subtitle">
@@ -47,17 +49,24 @@
 						</div>
 						<div class="wfrp1e-test-card__breakdown-rows">
 							{{#each breakdown.variables}}
-								<div class="wfrp1e-test-card__breakdown-row">
-									<span>{{label}}</span>
-									<strong>{{value}}</strong>
-								</div>
+								{{#if (wfrpIsTargetVariable key)}}
+									<div class="wfrp1e-test-card__breakdown-row" data-wfrp-gm-only>
+										<span>{{label}}</span>
+										<strong>{{value}}</strong>
+									</div>
+								{{else}}
+									<div class="wfrp1e-test-card__breakdown-row">
+										<span>{{label}}</span>
+										<strong>{{value}}</strong>
+									</div>
+								{{/if}}
 							{{/each}}
 						</div>
 					{{/if}}
 
 					<div class="wfrp1e-test-card__breakdown-row is-subtotal">
 						<span>{{breakdown.baseTargetLabel}}</span>
-						<strong>{{breakdown.baseTarget}}</strong>
+						<strong>{{wfrpTargetDisplay breakdown.baseTarget breakdown.characteristic breakdown.variables}}</strong>
 					</div>
 				</section>
 			{{/if}}
@@ -102,7 +111,7 @@
 				</div>
 				<div class="wfrp1e-test-card__breakdown-row is-final">
 					<span>{{breakdown.finalTargetLabel}}</span>
-					<strong>{{breakdown.finalTarget}}</strong>
+					<strong>{{wfrpTargetDisplay breakdown.finalTarget breakdown.characteristic breakdown.variables}}</strong>
 				</div>
 			</div>
 		</div>
