@@ -1,5 +1,6 @@
 import { TestContext } from "../tests/TestContext.mjs";
 import { TestDialog } from "../tests/TestDialog.mjs";
+import { TestResultChat } from "../tests/TestResultChat.mjs";
 
 export class RollTestAction {
 	/**
@@ -52,7 +53,8 @@ export class RollTestAction {
 	 * Execute and publish an already-configured TestContext.
 	 *
 	 * This is the reusable execution half of the test pipeline. UI composers
-	 * can prepare a context independently without duplicating roll or chat logic.
+	 * can prepare a context independently without duplicating roll logic.
+	 * TestResultChat owns only the persistent interactive chat presentation.
 	 *
 	 * @param {TestContext} context
 	 * @returns {Promise<TestResult>}
@@ -72,7 +74,7 @@ export class RollTestAction {
 
 		const result = await context.test.roll(context);
 
-		await result.toChat();
+		await TestResultChat.publish(result);
 
 		return result;
 	}
