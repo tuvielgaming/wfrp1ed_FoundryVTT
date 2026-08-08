@@ -215,6 +215,25 @@ export class StandardTestDialog {
 			lockGroup.root,
 			modifierGroup.root,
 		);
+
+		if (game.user?.isGM) {
+			const visibilityGroup = this._formGroup(
+				TestDialog.resultVisibilityLabel(),
+			);
+			const visibilitySelect = document.createElement("select");
+			visibilitySelect.name = "resultVisibility";
+
+			for (const entry of TestDialog.resultVisibilityOptions()) {
+				const option = document.createElement("option");
+				option.value = entry.value;
+				option.textContent = entry.label;
+				visibilitySelect.append(option);
+			}
+
+			visibilityGroup.control.append(visibilitySelect);
+			body.append(visibilityGroup.root);
+		}
+
 		content.append(body);
 
 		this._refreshContextFields(body, tests[0]);
@@ -268,6 +287,9 @@ export class StandardTestDialog {
 	 * the returned options tells RollTestAction that the generic configuration
 	 * step was already completed in this composed dialog.
 	 *
+	 * Result-detail visibility is GM-configurable. Player-initiated tests use
+	 * the safe default and expose detailed calculation only to the GM.
+	 *
 	 * @param {Actor} actor
 	 * @param {HTMLFormElement} form
 	 * @param {Test[]} tests
@@ -287,6 +309,7 @@ export class StandardTestDialog {
 
 		const options = {
 			modifier: TestDialog.readModifier(form),
+			resultVisibility: TestDialog.readResultVisibility(form),
 		};
 
 		if (test.tags.includes("requires-target")) {
@@ -329,8 +352,8 @@ export class StandardTestDialog {
 	/**
 	 * Show only context controls required by the selected definition.
 	 *
-	 * The generic modifier row is intentionally not tagged with
-	 * `data-standard-field`, so it remains visible for every Standard Test.
+	 * Generic modifier and result-visibility rows are intentionally not tagged
+	 * with `data-standard-field`, so they remain visible for every Standard Test.
 	 *
 	 * @param {HTMLElement} body
 	 * @param {Test|undefined} test
