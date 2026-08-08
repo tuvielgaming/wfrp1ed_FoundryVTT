@@ -1,3 +1,4 @@
+import { PendingStandardTest } from "./PendingStandardTest.mjs";
 import { TestManager } from "./TestManager.mjs";
 
 const { DialogV2 } = foundry.applications.api;
@@ -15,9 +16,9 @@ export class StandardTestDialog {
 	 * Open the Standard Test selector for one Actor.
 	 *
 	 * The returned payload is suitable for Actor.rollTest(testId, options) when
-	 * all required context is already available. Target-dependent Tests may
-	 * deliberately return without a target so the caller can defer target
-	 * resolution to the shared pending-chat workflow.
+	 * all required context is already available. If a target-dependent Test has
+	 * no unique canvas target, a pending chat card is published and null is
+	 * returned so the caller does not start the roll prematurely.
 	 * Closing or cancelling returns null.
 	 *
 	 * @param {Actor} actor
@@ -83,9 +84,26 @@ export class StandardTestDialog {
 			rejectClose: false,
 		});
 
-		return response?.confirmed
-			? response
-			: null;
+		if (!response?.confirmed) {
+			return null;
+		}
+
+		if (
+			PendingStandardTest.needsResolution(
+				response.testId,
+				response.options,
+			)
+		) {
+			await PendingStandardTest.create(
+				actor,
+				response.testId,
+				response.options,
+			);
+
+			return null;
+		}
+
+		return response;
 	}
 
 	/**
@@ -232,7 +250,7 @@ export class StandardTestDialog {
 	 *
 	 * A target-dependent Test uses a unique already-targeted Token when one is
 	 * available. Missing or ambiguous canvas targeting is not an error here;
-	 * the caller may defer it to PendingStandardTest instead.
+	 * configure() may defer it to PendingStandardTest instead.
 	 *
 	 * @param {Actor} actor
 	 * @param {HTMLFormElement} form
