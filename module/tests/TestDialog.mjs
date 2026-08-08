@@ -43,25 +43,10 @@ export class TestDialog {
 					icon: "fa-solid fa-dice-d100",
 					default: true,
 
-					callback: (_event, button) => {
-						const modifierInput =
-							button.form?.elements?.modifier;
-
-						const modifier = Number(
-							modifierInput?.value ?? 0,
-						);
-
-						if (!Number.isFinite(modifier)) {
-							throw new Error(
-								"Test modifier must be a finite number.",
-							);
-						}
-
-						return {
-							confirmed: true,
-							modifier,
-						};
-					},
+					callback: (_event, button) => ({
+						confirmed: true,
+						modifier: this.readModifier(button.form),
+					}),
 				},
 				{
 					action: "cancel",
@@ -83,9 +68,61 @@ export class TestDialog {
 			return null;
 		}
 
-		if (response.modifier !== 0) {
+		return this.applyModifier(
+			context,
+			response.modifier,
+		);
+	}
+
+	/**
+	 * Read the shared situational modifier field from any test form.
+	 *
+	 * StandardTestDialog reuses this parser so generic modifier semantics stay
+	 * in one place even when the control is composed into a larger dialog.
+	 *
+	 * @param {HTMLFormElement|undefined|null} form
+	 * @returns {number}
+	 */
+	static readModifier(form) {
+		const modifierInput = form?.elements?.modifier;
+		const modifier = Number(
+			modifierInput?.value ?? 0,
+		);
+
+		if (!Number.isFinite(modifier)) {
+			throw new Error(
+				"Test modifier must be a finite number.",
+			);
+		}
+
+		return modifier;
+	}
+
+	/**
+	 * Apply one shared dialog modifier to an existing TestContext.
+	 *
+	 * @param {TestContext} context
+	 * @param {number} modifier
+	 * @returns {TestContext}
+	 */
+	static applyModifier(context, modifier) {
+		if (!context?.actor || !context?.test) {
+			throw new Error(
+				"TestDialog modifier application requires a valid TestContext.",
+			);
+		}
+
+		const value = Number(modifier ?? 0);
+
+		if (!Number.isFinite(value)) {
+			throw new Error(
+				"Test modifier must be a finite number.",
+			);
+		}
+
+		if (value !== 0) {
 			context.add(
-				response.modifier,
+				value,
 				this._localize(
 					"WFRP1ed.TestModifier.Dialog",
 					"Dialog modifier",
@@ -96,6 +133,19 @@ export class TestDialog {
 		}
 
 		return context;
+	}
+
+	/**
+	 * Shared localized label for a generic situational test modifier.
+	 *
+	 * @returns {string}
+	 */
+	static modifierLabel() {
+		return this._localize(
+			"WFRP1ed.TestDialog.Modifier",
+			"Modifier",
+			"Modyfikator",
+		);
 	}
 
 	/**
@@ -116,11 +166,7 @@ export class TestDialog {
 
 		const label = document.createElement("label");
 		label.htmlFor = "wfrp1ed-test-modifier";
-		label.textContent = this._localize(
-			"WFRP1ed.TestDialog.Modifier",
-			"Modifier",
-			"Modyfikator",
-		);
+		label.textContent = this.modifierLabel();
 
 		const input = document.createElement("input");
 		input.id = "wfrp1ed-test-modifier";
