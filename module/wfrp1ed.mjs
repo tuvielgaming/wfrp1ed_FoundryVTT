@@ -19,6 +19,24 @@ const { DocumentSheetConfig } = foundry.applications.apps;
 const { loadTemplates } = foundry.applications.handlebars;
 const { Actor, Item } = foundry.documents;
 
+const PROFILE_FORMULA_VARIABLES = new Set([
+	"m",
+	"sp",
+	"ws",
+	"bs",
+	"s",
+	"t",
+	"w",
+	"i",
+	"a",
+	"dex",
+	"ld",
+	"int",
+	"cl",
+	"wp",
+	"fel",
+]);
+
 Hooks.once("init", async () => {
 	console.info("WFRP1ED | Initializing WFRP 1st Edition");
 
@@ -114,6 +132,8 @@ function registerStandardTests() {
  * Pending Standard Tests expose GM target-resolution controls. Completed test
  * results expose the general adjudication modifier as a GM-editable value while
  * all clients share the same persisted message content and result snapshot.
+ * Formula diagnostics and opponent characteristic rows are removed from the
+ * rendered card for non-GM clients.
  *
  * @returns {void}
  */
@@ -130,8 +150,43 @@ function registerChatHooks() {
 				message,
 				html,
 			);
+
+			removeGmOnlyChatDetails(html);
 		},
 	);
+}
+
+/**
+ * Remove presentation-only GM diagnostics from a non-GM rendered chat card.
+ *
+ * ChatMessage content itself is shared by Foundry, so this is a UI visibility
+ * boundary rather than a document-level secrecy mechanism.
+ *
+ * @param {HTMLElement|Object} html
+ * @returns {void}
+ */
+function removeGmOnlyChatDetails(html) {
+	if (game.user?.isGM) {
+		return;
+	}
+
+	const rendered = html instanceof HTMLElement
+		? html
+		: html?.[0] instanceof HTMLElement
+			? html[0]
+			: null;
+
+	if (!rendered) {
+		return;
+	}
+
+	for (
+		const element of rendered.querySelectorAll(
+			"[data-wfrp-gm-only]",
+		)
+	) {
+		element.remove();
+	}
 }
 
 /**
@@ -226,4 +281,70 @@ function registerHandlebarsHelpers() {
 			return firstNumber + secondNumber;
 		},
 	);
+
+	Handlebars.registerHelper(
+		"wfrpIsTargetVariable",
+		(key) => String(key ?? "")
+			.trim()
+			.toLowerCase()
+			.startsWith("target."),
+	);
+
+	Handlebars.registerHelper(
+		"wfrpTargetDisplay",
+		(value, characteristic, variables) => {
+			const numeric = Number(value);
+			const display = Number.isFinite(numeric)
+				? String(numeric)
+				: String(value ?? "");
+
+			return isPureChanceTarget(
+				characteristic,
+				variables,
+			)
+				? `${display}%`
+				: display;
+		},
+	);
+}
+
+/**
+ * Identify a target expressed directly as a percentage chance rather than as
+ * a profile-characteristic calculation.
+ *
+ * Constant formulas such as Risk and chance inputs such as Listen qualify.
+ * Any formula which references the acting profile, Movement, or an opponent
+ * profile remains a normal characteristic-derived target display.
+ *
+ * @param {Object|null|undefined} characteristic
+ * @param {Array<Object>|null|undefined} variables
+ * @returns {boolean}
+ */
+function isPureChanceTarget(characteristic, variables) {
+	if (characteristic) {
+		return false;
+	}
+
+	const entries = Array.isArray(variables)
+		? variables
+		: [];
+
+	return !entries.some((entry) => {
+		const key = String(entry?.key ?? "")
+			.trim()
+			.toLowerCase();
+
+		if (!key) {
+			return false;
+		}
+
+		if (key.startsWith("target.")) {
+			return true;
+		}
+
+		return (
+			PROFILE_FORMULA_VARIABLES.has(key) ||
+			key === "movement"
+		);
+	});
 }
