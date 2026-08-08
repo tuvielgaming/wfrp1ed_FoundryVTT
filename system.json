@@ -21,7 +21,8 @@
 		"css/sheets/modern.css",
 		"css/sheets/parchment-window.css",
 		"css/sheets/skill-item.css",
-		"css/sheets/standard-test.css"
+		"css/sheets/standard-test.css",
+		"css/chat/test-result.css"
 	],
 	"scripts": [],
 	"packs": [],
