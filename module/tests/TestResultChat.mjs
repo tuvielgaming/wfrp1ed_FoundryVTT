@@ -427,6 +427,9 @@ export class TestResultChat {
 		const otherModifiers = renderedModifiers
 			.filter((_modifier, index) => index !== generalIndex)
 			.map((modifier) => this._copyModifier(modifier));
+		const requestedVisibility = normalizeTestResultVisibility(
+			result.context?.options?.resultVisibility,
+		);
 
 		return {
 			version: 2,
@@ -436,9 +439,9 @@ export class TestResultChat {
 				breakdown?.baseTarget,
 				"baseTarget",
 			),
-			resultVisibility: normalizeTestResultVisibility(
-				result.context?.options?.resultVisibility,
-			),
+			resultVisibility: game.user?.isGM
+				? requestedVisibility
+				: TEST_RESULT_VISIBILITY.GM_ONLY,
 			characteristic: breakdown?.characteristic
 				? {
 					id: String(breakdown.characteristic.id ?? ""),
