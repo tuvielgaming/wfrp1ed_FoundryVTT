@@ -11,6 +11,7 @@ const SERIALIZED_OPTION_KEYS = Object.freeze([
 	"movement",
 	"noise",
 	"lockDifficulty",
+	"modifier",
 ]);
 
 /**
