@@ -65,9 +65,7 @@ export class PendingStandardTest {
 				: testOrId;
 
 		if (!test) {
-			throw new Error(
-				"Pending Standard Test requires a registered Test.",
-			);
+			throw new Error("Pending Standard Test requires a registered Test.");
 		}
 
 		const formula = String(test.formula ?? "");
@@ -87,11 +85,6 @@ export class PendingStandardTest {
 
 	/**
 	 * Publish one unresolved Standard Test request to chat.
-	 *
-	 * Foundry Document schemas clean and reconstruct data by assigning cleaned
-	 * values back into the supplied object graph. Therefore data passed through
-	 * ChatMessage flags must remain mutable even though internal rule contracts
-	 * may be immutable.
 	 *
 	 * @param {Actor} actor
 	 * @param {string} testId
@@ -119,23 +112,16 @@ export class PendingStandardTest {
 			);
 		}
 
-		/*
-		 * IMPORTANT: do not Object.freeze this payload or anything nested inside
-		 * it. ChatMessage's DataModel cleaning contract is allowed to mutate the
-		 * supplied flags object while reconstructing ObjectField values.
-		 */
-		const request = {
+		const request = Object.freeze({
 			version: 1,
 			status: "pending",
 			actorUuid: actor.uuid,
 			testId: test.id,
 			options: this._serializeOptions(options),
-			targetRequirements: [
-				...this.targetRequirements(test),
-			],
+			targetRequirements: this.targetRequirements(test),
 			createdBy: game.user?.id ?? "",
 			createdAt: Date.now(),
-		};
+		});
 
 		const content =
 			await foundry.applications.handlebars.renderTemplate(
@@ -482,6 +468,7 @@ export class PendingStandardTest {
 					String(second.name ?? ""),
 					game.i18n.lang,
 					{ sensitivity: "base" },
+				),
 			);
 
 		if (actors.length === 0) {
@@ -632,9 +619,7 @@ export class PendingStandardTest {
 	 */
 	static async _fromUuid(uuid) {
 		if (typeof globalThis.fromUuid !== "function") {
-			throw new Error(
-				"Foundry fromUuid API is unavailable.",
-			);
+			throw new Error("Foundry fromUuid API is unavailable.");
 		}
 
 		return globalThis.fromUuid(uuid);
@@ -661,11 +646,8 @@ export class PendingStandardTest {
 	 * Actor Documents are deliberately excluded; deferred target resolution
 	 * stores Actor UUIDs only when the GM chooses one.
 	 *
-	 * The returned object must stay mutable because it is inserted into Foundry
-	 * Document source data and will be cleaned by the DataModel schema.
-	 *
 	 * @param {Object} options
-	 * @returns {Object}
+	 * @returns {Readonly<Object>}
 	 * @protected
 	 */
 	static _serializeOptions(options) {
@@ -674,11 +656,7 @@ export class PendingStandardTest {
 		for (const key of SERIALIZED_OPTION_KEYS) {
 			const raw = options?.[key];
 
-			if (
-				raw === undefined ||
-				raw === null ||
-				raw === ""
-			) {
+			if (raw === undefined || raw === null || raw === "") {
 				continue;
 			}
 
@@ -717,7 +695,7 @@ export class PendingStandardTest {
 			}
 		}
 
-		return serialized;
+		return Object.freeze(serialized);
 	}
 
 	/**
