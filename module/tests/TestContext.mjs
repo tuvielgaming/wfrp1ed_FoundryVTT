@@ -21,17 +21,31 @@ export class TestContext {
 		this.test = test;
 
 		/*
-		 * `target` is the canonical runtime property.
+		 * `target` is the canonical runtime Actor property.
 		 * `targetActor` is accepted as an input because existing callers may
 		 * still use that option name during the current migration.
 		 */
 		this.target = options.target ?? options.targetActor ?? null;
 
+		/*
+		 * Some Standard Tests require only one characteristic from another
+		 * creature rather than a persistent target Actor. `targetValues` lets a
+		 * GM provide those audited formula inputs directly without manufacturing
+		 * a Token or Actor. FormulaResolver owns how these values become
+		 * `target.<characteristic>` variables.
+		 */
+		this.targetValues = Object.freeze(
+			this._normalizeTargetValues(options.targetValues),
+		);
+
 		this.movement = options.movement ?? null;
 		this.noise = options.noise ?? null;
 		this.lockDifficulty = options.lockDifficulty ?? null;
 
-		this.options = { ...options };
+		this.options = {
+			...options,
+			targetValues: this.targetValues,
+		};
 		this.modifiers = [];
 
 		if (Number(test.defaultModifier) !== 0) {
@@ -108,6 +122,52 @@ export class TestContext {
 					),
 				0,
 			);
+	}
+
+	/**
+	 * Normalize optional manually supplied target-characteristic values.
+	 *
+	 * Keys remain mechanics identifiers such as `i` or `wp`; presentation
+	 * labels are deliberately not stored in TestContext.
+	 *
+	 * @param {Object|null|undefined} values
+	 * @returns {Record<string, number>}
+	 * @protected
+	 */
+	_normalizeTargetValues(values) {
+		if (values === undefined || values === null) {
+			return {};
+		}
+
+		if (
+			typeof values !== "object" ||
+			Array.isArray(values)
+		) {
+			throw new Error(
+				"TestContext targetValues must be an object.",
+			);
+		}
+
+		const normalized = {};
+
+		for (const [rawKey, rawValue] of Object.entries(values)) {
+			const key = String(rawKey ?? "")
+				.trim()
+				.toLowerCase();
+
+			if (!/^[a-z][a-z0-9]*$/.test(key)) {
+				throw new Error(
+					`TestContext targetValues key is invalid: ${String(rawKey)}.`,
+				);
+			}
+
+			normalized[key] = this._finiteNumber(
+				rawValue,
+				`targetValues.${key}`,
+			);
+		}
+
+		return normalized;
 	}
 
 	/**
