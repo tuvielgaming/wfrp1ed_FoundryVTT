@@ -6,9 +6,11 @@
 	--skill-sheet-gap: 14px;
 	--skill-sheet-label-width: 130px;
 
-	--skill-sheet-border-color: rgb(0 0 0 / 32%);
-	--skill-sheet-field-background: rgb(255 255 255 / 38%);
-	--skill-sheet-focus-background: rgb(255 255 255 / 72%);
+	--skill-sheet-border-color: rgb(0 0 0 / 48%);
+	--skill-sheet-field-background: #e8dfcc;
+	--skill-sheet-field-color: #1c1812;
+	--skill-sheet-option-background: #f4eddd;
+	--skill-sheet-focus-background: #f8f1e2;
 	--skill-sheet-focus-color: #7a0019;
 
 	font-family:
@@ -74,7 +76,7 @@
 	box-shadow: none;
 
 	font: inherit;
-	color: inherit;
+	color: var(--skill-sheet-field-color);
 }
 
 .skill-item-sheet .skill-sheet-field > input,
@@ -84,6 +86,23 @@
 
 	font-size: 15px;
 	line-height: 1.2;
+}
+
+/*
+ * Foundry runs in Chromium, but the expanded native select is still partly
+ * rendered by the platform. Give it an explicit light color scheme plus
+ * high-contrast option colors so it remains readable instead of inheriting
+ * Foundry's dark-window foreground onto a light native option list.
+ */
+.skill-item-sheet .skill-sheet-field > select {
+	color-scheme: light;
+	background-color: var(--skill-sheet-field-background);
+	color: var(--skill-sheet-field-color);
+}
+
+.skill-item-sheet .skill-sheet-field > select > option {
+	background-color: var(--skill-sheet-option-background);
+	color: var(--skill-sheet-field-color);
 }
 
 .skill-item-sheet .skill-sheet-field > textarea {
@@ -126,6 +145,7 @@
 	outline-offset: -1px;
 
 	background: var(--skill-sheet-focus-background);
+	color: var(--skill-sheet-field-color);
 }
 
 /******************************************************************/
