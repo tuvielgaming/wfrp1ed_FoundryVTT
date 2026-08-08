@@ -4,30 +4,40 @@
 
 /*
  * Standard Test is an intrinsic Actor action, not an owned Skill Item.
- * Present it as the first row of the primary UMIEJĘTNOŚCI list so every
- * Classic Actor exposes the same entry without consuming or mutating Items.
+ * It occupies the first real writable row of the primary UMIEJĘTNOŚCI panel.
  *
- * The original thirteen owned-skill rows begin at 55px. Extending the list
- * upward by one 27px row preserves those exact positions:
+ * The printed primary panel has thirteen 27px writing rows. Standard Test
+ * consumes row one, so twelve owned Skills remain in this panel. The secondary
+ * panel therefore continues with owned Skill 13.
  *
- *   row 1     Standard Test   28px-55px
- *   rows 2-14 owned Skills    55px-406px
+ * We deliberately keep the original Classic-sheet list geometry from
+ * classic.css (top 55px, height 351px). Nothing is drawn over the printed
+ * UMIEJĘTNOŚCI heading.
  */
-.wfrp1ed-classic-sheet .sheet-overlay--skills-primary {
-	--skills-list-top: 28px;
-	--skills-list-height: 378px;
-}
 
 /*
- * classic.css hides primary skill rows from child 14 onward because the
- * original list contained owned Skills only. Standard Test is now child 1,
- * so child 14 is the thirteenth owned Skill and must remain visible. Children
- * 15+ continue to be hidden by the base Classic rule.
+ * The primary list contains Standard Test as child 1 followed by owned Skills.
+ * classic.css already hides child 14+, which now means:
+ *
+ *   child 1      Standard Test
+ *   children 2-13 owned Skills 1-12
+ *   child 14+    hidden in the primary panel
+ *
+ * The secondary list contains owned Skills only. Its base Classic rule hides
+ * Skills 1-13; reveal Skill 13 so continuation begins immediately after the
+ * twelve owned Skills shown in the primary panel. The panel has 28 rows, so
+ * owned Skill 41+ must remain hidden.
  */
 .wfrp1ed-classic-sheet
-	.skills--primary
-	.skill-row:nth-child(14) {
+	.skills--secondary
+	.skill-row:nth-child(13) {
 	display: flex;
+}
+
+.wfrp1ed-classic-sheet
+	.skills--secondary
+	.skill-row:nth-child(n + 41) {
+	display: none;
 }
 
 .wfrp1ed-classic-sheet .standard-test-row {
