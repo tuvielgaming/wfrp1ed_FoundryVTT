@@ -110,6 +110,15 @@
 	background: rgb(94 62 35 / 7%);
 }
 
+.wfrp1e-test-card__target.is-player-locked > summary {
+	grid-template-columns: minmax(0, 1fr) auto;
+	cursor: default;
+}
+
+.wfrp1e-test-card__target.is-player-locked > summary:hover {
+	background: transparent;
+}
+
 .wfrp1e-test-card__target-label,
 .wfrp1e-test-card__metric span {
 	color: rgb(42 33 23 / 72%);
