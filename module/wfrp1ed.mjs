@@ -132,7 +132,7 @@ function registerStandardTests() {
  * Pending Standard Tests expose GM target-resolution controls. Completed test
  * results expose the GM-editable general modifier and apply their own persisted
  * detail-visibility setting per client. The GM can also change that visibility
- * later from the ChatLog right-click menu.
+ * later from the ChatMessage right-click menu.
  *
  * @returns {void}
  */
@@ -158,8 +158,8 @@ function registerChatHooks() {
 	);
 
 	Hooks.on(
-		"getChatLogEntryContext",
-		(_html, menuItems) => {
+		"getChatMessageContextOptions",
+		(_application, menuItems) => {
 			TestResultChat.addContextMenuOptions(menuItems);
 		},
 	);
