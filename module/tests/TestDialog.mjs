@@ -20,6 +20,12 @@ export class TestDialog {
 		}
 
 		const response = await DialogV2.wait({
+			classes: [
+				"wfrp1ed",
+				"wfrp1ed-parchment-window",
+				"wfrp1ed-test-dialog",
+			],
+
 			window: {
 				title: context.test.name,
 			},
