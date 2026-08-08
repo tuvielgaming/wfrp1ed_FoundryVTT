@@ -29,6 +29,7 @@ export class SkillItemSheet extends HandlebarsApplicationMixin(
 			"sheet",
 			"item",
 			"skill-item-sheet",
+			"wfrp1ed-parchment-window",
 		],
 
 		position: {
