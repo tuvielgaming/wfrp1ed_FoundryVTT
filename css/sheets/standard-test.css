@@ -3,56 +3,89 @@
 /******************************************************************/
 
 /*
- * The launcher lives in the clear strip directly beneath the printed first
- * UMIEJĘTNOŚCI heading. It deliberately does not consume one of the 13 skill
- * writing rows, whose list begins at 55px in the primary Skills overlay.
+ * Standard Test is an intrinsic Actor action, not an owned Skill Item.
+ * Present it as the first row of the primary UMIEJĘTNOŚCI list so every
+ * Classic Actor exposes the same entry without consuming or mutating Items.
+ *
+ * The original thirteen owned-skill rows begin at 55px. Extending the list
+ * upward by one 27px row preserves those exact positions:
+ *
+ *   row 1     Standard Test   28px-55px
+ *   rows 2-14 owned Skills    55px-406px
  */
+.wfrp1ed-classic-sheet .sheet-overlay--skills-primary {
+	--skills-list-top: 28px;
+	--skills-list-height: 378px;
+}
+
+/*
+ * classic.css hides primary skill rows from child 14 onward because the
+ * original list contained owned Skills only. Standard Test is now child 1,
+ * so child 14 is the thirteenth owned Skill and must remain visible. Children
+ * 15+ continue to be hidden by the base Classic rule.
+ */
+.wfrp1ed-classic-sheet
+	.skills--primary
+	.skill-row:nth-child(14) {
+	display: flex;
+}
+
+.wfrp1ed-classic-sheet .standard-test-row {
+	font-weight: 800;
+}
+
 .wfrp1ed-classic-sheet .standard-test-launcher {
-	position: absolute;
-	z-index: 3;
+	display: flex;
+	align-items: center;
+	justify-content: flex-start;
+	gap: 6px;
 
-	left: 10px;
-	top: 27px;
-
-	width: 218px;
-	height: 24px;
+	width: 100%;
+	height: 100%;
 	margin: 0;
-	padding: 1px 6px;
+	padding: 1px 5px;
 
-	border: 1px solid rgb(27 27 27 / 48%);
-	border-radius: 2px;
+	border: 0;
+	border-radius: 0;
 
-	background: rgb(255 255 255 / 58%);
-	box-shadow:
-		inset 0 1px 0 rgb(255 255 255 / 55%),
-		0 1px 1px rgb(0 0 0 / 12%);
+	background: transparent;
+	box-shadow: none;
 
-	font-family: "Book Antiqua", "Times New Roman", serif;
-	font-size: 11px;
+	font-family: inherit;
+	font-size: var(--skills-font-size);
 	font-weight: 800;
 	line-height: 1;
-	letter-spacing: 0.015em;
-	text-align: center;
+	text-align: left;
 
 	cursor: pointer;
-	opacity: 0.82;
 
-	transition:
-		background-color 0.15s ease,
-		border-color 0.15s ease,
-		opacity 0.15s ease;
+	transition: background-color 0.15s ease;
+}
+
+.wfrp1ed-classic-sheet .standard-test-launcher > i {
+	flex: 0 0 14px;
+
+	width: 14px;
+	font-size: 12px;
+	text-align: center;
+}
+
+.wfrp1ed-classic-sheet .standard-test-launcher > span {
+	min-width: 0;
+	overflow: hidden;
+
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .wfrp1ed-classic-sheet .standard-test-launcher:hover,
 .wfrp1ed-classic-sheet .standard-test-launcher:focus-visible {
-	border-color: var(--focus-color);
-	background: rgb(255 255 255 / 90%);
-	opacity: 1;
+	background: var(--rollable-hover-background);
 }
 
 .wfrp1ed-classic-sheet .standard-test-launcher:focus-visible {
 	outline: 1px solid var(--focus-color);
-	outline-offset: 1px;
+	outline-offset: -2px;
 }
 
 /******************************************************************/
