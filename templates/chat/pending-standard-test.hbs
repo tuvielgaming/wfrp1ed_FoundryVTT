@@ -1,0 +1,78 @@
+<section
+	class="wfrp1ed-pending-standard-test"
+	data-wfrp-pending-standard-test
+>
+	<header class="pending-standard-test-header">
+		<h3>{{testName}}</h3>
+		<div class="pending-standard-test-actor">{{actorName}}</div>
+	</header>
+
+	<div class="pending-standard-test-target-status">
+		<strong>{{targetLabel}}:</strong>
+		<span>{{pendingLabel}}</span>
+	</div>
+
+	<div
+		class="pending-standard-test-gm-controls"
+		data-pending-gm-controls
+		hidden
+	>
+		<div
+			class="pending-standard-test-drop"
+			data-pending-target-drop
+			tabindex="0"
+		>
+			<i class="fa-solid fa-arrow-down-to-bracket" aria-hidden="true"></i>
+			<span>{{dropPrompt}}</span>
+		</div>
+
+		<div class="pending-standard-test-actions">
+			<button
+				type="button"
+				data-pending-action="current-target"
+			>
+				<i class="fa-solid fa-bullseye" aria-hidden="true"></i>
+				{{useCurrentTargetLabel}}
+			</button>
+
+			<button
+				type="button"
+				data-pending-action="choose-actor"
+			>
+				<i class="fa-solid fa-user" aria-hidden="true"></i>
+				{{chooseActorLabel}}
+			</button>
+		</div>
+
+		{{#if manualAllowed}}
+			<div class="pending-standard-test-manual">
+				<label>
+					{{manualLabel}} — {{requirementLabel}}
+				</label>
+
+				<div class="pending-standard-test-manual-fields">
+					<input
+						type="number"
+						step="1"
+						autocomplete="off"
+						data-pending-manual-value
+					>
+
+					<button
+						type="button"
+						data-pending-action="manual"
+					>
+						{{useValueLabel}}
+					</button>
+				</div>
+			</div>
+		{{/if}}
+	</div>
+
+	<p
+		class="pending-standard-test-waiting"
+		data-pending-player-status
+	>
+		{{waitingGmLabel}}
+	</p>
+</section>
