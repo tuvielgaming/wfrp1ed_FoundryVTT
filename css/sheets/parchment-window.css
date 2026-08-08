@@ -1,0 +1,173 @@
+/******************************************************************/
+/*                WFRP 1e Parchment Application Theme            */
+/******************************************************************/
+
+/*
+ * Reusable visual treatment for small WFRP application windows such as Skill
+ * Items and test dialogs. The class is opt-in: ApplicationV2 windows must add
+ * `wfrp1ed-parchment-window` to DEFAULT_OPTIONS.classes.
+ *
+ * Keep this file presentation-only. Individual sheets/dialogs own their layout
+ * and mechanics; this theme supplies only common window, field and button
+ * styling.
+ */
+
+.wfrp1ed-parchment-window {
+	--wfrp-parchment-ink: #211d17;
+	--wfrp-parchment-ink-soft: #4c4336;
+	--wfrp-parchment-paper: #e7dcc0;
+	--wfrp-parchment-paper-light: #f2ead6;
+	--wfrp-parchment-paper-dark: #c4b38d;
+	--wfrp-parchment-border: #5e503c;
+	--wfrp-parchment-border-soft: rgb(58 47 33 / 42%);
+	--wfrp-parchment-focus: #7a0019;
+	--wfrp-parchment-header-text: #eee4ca;
+
+	font-family:
+		"Book Antiqua",
+		"Times New Roman",
+		serif;
+	color: var(--wfrp-parchment-ink);
+}
+
+/******************************************************************/
+/* Window chrome                                                  */
+/******************************************************************/
+
+.wfrp1ed-parchment-window .window-header {
+	border-bottom: 1px solid #0b0a08;
+	background:
+		linear-gradient(
+			180deg,
+			#37322a 0%,
+			#231f1a 52%,
+			#151310 100%
+		);
+	box-shadow:
+		inset 0 -1px 0 rgb(255 255 255 / 8%),
+		0 1px 2px rgb(0 0 0 / 45%);
+	color: var(--wfrp-parchment-header-text);
+	text-shadow: 0 1px 1px #000;
+}
+
+.wfrp1ed-parchment-window .window-header .window-title {
+	font-weight: 700;
+	letter-spacing: 0.02em;
+}
+
+.wfrp1ed-parchment-window .window-header button,
+.wfrp1ed-parchment-window .window-header a {
+	color: var(--wfrp-parchment-header-text);
+}
+
+.wfrp1ed-parchment-window .window-content {
+	background:
+		radial-gradient(
+			circle at 18% 12%,
+			rgb(255 255 255 / 30%) 0,
+			transparent 34%
+		),
+		radial-gradient(
+			circle at 82% 82%,
+			rgb(84 63 32 / 10%) 0,
+			transparent 42%
+		),
+		repeating-linear-gradient(
+			0deg,
+			rgb(67 50 28 / 025%) 0,
+			rgb(67 50 28 / 025%) 1px,
+			transparent 1px,
+			transparent 4px
+		),
+		linear-gradient(
+			135deg,
+			var(--wfrp-parchment-paper-light),
+			var(--wfrp-parchment-paper) 48%,
+			#d8c9a7
+		);
+	box-shadow:
+		inset 0 0 22px rgb(71 50 23 / 20%),
+		inset 0 0 0 1px rgb(255 255 255 / 18%);
+	color: var(--wfrp-parchment-ink);
+}
+
+/******************************************************************/
+/* Common form controls                                           */
+/******************************************************************/
+
+.wfrp1ed-parchment-window input,
+.wfrp1ed-parchment-window select,
+.wfrp1ed-parchment-window textarea {
+	border: 1px solid var(--wfrp-parchment-border-soft);
+	background: rgb(247 239 218 / 92%);
+	color: var(--wfrp-parchment-ink);
+	box-shadow:
+		inset 0 1px 2px rgb(61 43 19 / 13%),
+		0 1px 0 rgb(255 255 255 / 24%);
+}
+
+.wfrp1ed-parchment-window select {
+	color-scheme: light;
+}
+
+.wfrp1ed-parchment-window select option {
+	background: #f2ead6;
+	color: #211d17;
+}
+
+.wfrp1ed-parchment-window input:focus,
+.wfrp1ed-parchment-window select:focus,
+.wfrp1ed-parchment-window textarea:focus {
+	outline: 1px solid var(--wfrp-parchment-focus);
+	outline-offset: -1px;
+	border-color: var(--wfrp-parchment-focus);
+	background: #fbf4e2;
+}
+
+.wfrp1ed-parchment-window label {
+	color: var(--wfrp-parchment-ink);
+	text-shadow: 0 1px 0 rgb(255 255 255 / 32%);
+}
+
+/******************************************************************/
+/* Common buttons                                                 */
+/******************************************************************/
+
+.wfrp1ed-parchment-window .window-content button {
+	border: 1px solid var(--wfrp-parchment-border);
+	background:
+		linear-gradient(
+			180deg,
+			#eee4cc,
+			#d3c09a
+		);
+	box-shadow:
+		inset 0 1px 0 rgb(255 255 255 / 46%),
+		0 1px 1px rgb(61 44 22 / 18%);
+	color: var(--wfrp-parchment-ink);
+	text-shadow: 0 1px 0 rgb(255 255 255 / 40%);
+}
+
+.wfrp1ed-parchment-window .window-content button:hover,
+.wfrp1ed-parchment-window .window-content button:focus-visible {
+	border-color: var(--wfrp-parchment-focus);
+	background:
+		linear-gradient(
+			180deg,
+			#f7eed9,
+			#ddc9a2
+		);
+	box-shadow:
+		inset 0 0 0 1px rgb(122 0 25 / 16%),
+		0 0 5px rgb(122 0 25 / 24%);
+}
+
+/******************************************************************/
+/* Scrollbars                                                     */
+/******************************************************************/
+
+.wfrp1ed-parchment-window * {
+	scrollbar-color:
+		var(--wfrp-parchment-border)
+		var(--wfrp-parchment-paper-dark);
+}
