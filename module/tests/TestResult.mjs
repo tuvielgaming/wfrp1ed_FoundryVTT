@@ -1,3 +1,9 @@
+import { FormulaResolver } from "./FormulaResolver.mjs";
+
+const CHARACTERISTIC_LABEL_ALIASES = Object.freeze({
+	m: "sp",
+});
+
 export class TestResult {
 	/**
 	 * Result of one generic WFRP 1e test.
@@ -109,6 +115,115 @@ export class TestResult {
 	}
 
 	/**
+	 * Read-only presentation model explaining how the final target was built.
+	 *
+	 * The final target has already been resolved by TestResolver. The base value
+	 * is therefore reconstructed from the invariant used by that resolver:
+	 *
+	 * base target + enabled context modifiers = final target.
+	 *
+	 * Formula variables are presentation-only diagnostics taken from the same
+	 * FormulaResolver variable table used during resolution. No roll mechanics
+	 * are recalculated or changed here.
+	 *
+	 * @returns {Object}
+	 */
+	get targetBreakdown() {
+		const totalModifier = this._finiteNumber(
+			this.context?.totalModifier ?? 0,
+			"context.totalModifier",
+		);
+		const baseTarget = this._finiteNumber(
+			this.target - totalModifier,
+			"baseTarget",
+		);
+		const modifiers = Array.isArray(this.context?.modifiers)
+			? this.context.modifiers.map((modifier) => {
+				const value = this._finiteNumber(
+					modifier?.value ?? 0,
+					"modifier.value",
+				);
+
+				return {
+					source: this._modifierSource(modifier?.source),
+					type: String(modifier?.type ?? "untyped"),
+					value,
+					signed: this._signed(value),
+					enabled: modifier?.enabled !== false,
+				};
+			})
+			: [];
+
+		const formula = this.test.formula
+			? String(this.test.formula)
+			: null;
+		const variables = formula
+			? this._formulaVariables(formula)
+			: [];
+		const characteristic = this.test.characteristic
+			? {
+				id: String(this.test.characteristic),
+				label: this._characteristicLabel(
+					this.test.characteristic,
+				),
+				value: baseTarget,
+			}
+			: null;
+
+		return {
+			baseTarget,
+			characteristic,
+			formula,
+			variables,
+			modifiers,
+			totalModifier,
+			totalModifierSigned: this._signed(totalModifier),
+			finalTarget: this.target,
+
+			expandHint: this._localize(
+				"WFRP1ED.TestResult.TargetBreakdownHint",
+				"Click to show target calculation",
+				"Kliknij, aby pokazać obliczenie progu",
+			),
+			baseTargetLabel: this._localize(
+				"WFRP1ED.TestResult.BaseTarget",
+				"Base target",
+				"Próg bazowy",
+			),
+			formulaLabel: this._localize(
+				"WFRP1ED.TestResult.Formula",
+				"Formula",
+				"Wzór",
+			),
+			inputsLabel: this._localize(
+				"WFRP1ED.TestResult.Inputs",
+				"Inputs",
+				"Dane wejściowe",
+			),
+			modifiersLabel: this._localize(
+				"WFRP1ED.TestResult.Modifiers",
+				"Modifiers",
+				"Modyfikatory",
+			),
+			totalModifierLabel: this._localize(
+				"WFRP1ED.TestResult.TotalModifier",
+				"Total modifier",
+				"Łączny modyfikator",
+			),
+			finalTargetLabel: this._localize(
+				"WFRP1ED.TestResult.FinalTarget",
+				"Final target",
+				"Próg końcowy",
+			),
+			disabledLabel: this._localize(
+				"WFRP1ED.TestResult.DisabledModifier",
+				"disabled",
+				"wyłączony",
+			),
+		};
+	}
+
+	/**
 	 * Render the generic test-result chat card.
 	 *
 	 * @returns {Promise<string>}
@@ -118,6 +233,7 @@ export class TestResult {
 			"systems/wfrp1ed/templates/chat/test-result.hbs",
 			{
 				result: this,
+				breakdown: this.targetBreakdown,
 			},
 		);
 	}
@@ -146,6 +262,162 @@ export class TestResult {
 		}
 
 		return ChatMessage.create(messageData);
+	}
+
+	/**
+	 * Return only variables actually referenced by a formula, in formula order.
+	 *
+	 * @param {string} formula
+	 * @returns {Array<{key:string,label:string,value:number}>}
+	 * @protected
+	 */
+	_formulaVariables(formula) {
+		const variables = FormulaResolver.variables(
+			this.actor,
+			this.context ?? {},
+		);
+
+		return Object.entries(variables)
+			.map(([key, value]) => ({
+				key,
+				value: this._finiteNumber(value, `formula.${key}`),
+				index: this._formulaVariableIndex(formula, key),
+			}))
+			.filter((entry) => entry.index >= 0)
+			.sort((first, second) => first.index - second.index)
+			.map((entry) => ({
+				key: entry.key,
+				label: this._variableLabel(entry.key),
+				value: entry.value,
+			}));
+	}
+
+	/**
+	 * Find one complete variable reference without matching `wp` inside
+	 * `target.wp`.
+	 *
+	 * @param {string} formula
+	 * @param {string} key
+	 * @returns {number}
+	 * @protected
+	 */
+	_formulaVariableIndex(formula, key) {
+		const escapedKey = String(key).replace(
+			/[.*+?^${}()|[\]\\]/g,
+			"\\$&",
+		);
+		const pattern = new RegExp(
+			`(^|[^A-Za-z0-9_.])(${escapedKey})` +
+				`(?=$|[^A-Za-z0-9_.])`,
+		);
+		const match = pattern.exec(formula);
+
+		if (!match) {
+			return -1;
+		}
+
+		return match.index + String(match[1] ?? "").length;
+	}
+
+	/**
+	 * Human-readable formula variable label.
+	 *
+	 * @param {string} key
+	 * @returns {string}
+	 * @protected
+	 */
+	_variableLabel(key) {
+		const normalized = String(key ?? "").trim();
+
+		if (normalized.startsWith("target.")) {
+			const characteristicId = normalized.slice("target.".length);
+			const targetName = String(this.context?.target?.name ?? "").trim();
+			const targetLabel = targetName
+				? `${this._localize(
+					"WFRP1ED.StandardTest.Target",
+					"Target",
+					"Cel",
+				)} (${targetName})`
+				: this._localize(
+					"WFRP1ED.StandardTest.Target",
+					"Target",
+					"Cel",
+				);
+
+			return `${targetLabel} — ${this._characteristicLabel(characteristicId)}`;
+		}
+
+		if (normalized === "noise") {
+			return this._localize(
+				"WFRP1ED.StandardTest.NoiseChance",
+				"Base Listen chance",
+				"Bazowa szansa Słuchania",
+			);
+		}
+
+		if (normalized === "lockDifficulty") {
+			return this._localize(
+				"WFRP1ED.StandardTest.LockDifficulty",
+				"Lock rating",
+				"Stopień trudności zamka",
+			);
+		}
+
+		if (normalized === "movement") {
+			return this._characteristicLabel("m");
+		}
+
+		return this._characteristicLabel(normalized);
+	}
+
+	/**
+	 * Localized full characteristic label with id fallback.
+	 *
+	 * @param {string} id
+	 * @returns {string}
+	 * @protected
+	 */
+	_characteristicLabel(id) {
+		const normalized = String(id ?? "").trim().toLowerCase();
+		const localizationId =
+			CHARACTERISTIC_LABEL_ALIASES[normalized] ?? normalized;
+		const key = `WFRP1ed.CHAR.${localizationId}`;
+		const localized = game.i18n.localize(key);
+
+		return localized !== key
+			? localized
+			: normalized.toUpperCase();
+	}
+
+	/**
+	 * Resolve a modifier source which may itself be a localization key.
+	 *
+	 * @param {*} source
+	 * @returns {string}
+	 * @protected
+	 */
+	_modifierSource(source) {
+		const text = String(source ?? "").trim();
+
+		if (!text) {
+			return this._localize(
+				"WFRP1ED.TestResult.Modifier",
+				"Modifier",
+				"Modyfikator",
+			);
+		}
+
+		const localized = game.i18n.localize(text);
+		return localized !== text ? localized : text;
+	}
+
+	/**
+	 * @param {number} value
+	 * @returns {string}
+	 * @protected
+	 */
+	_signed(value) {
+		return value >= 0 ? `+${value}` : String(value);
 	}
 
 	/**
@@ -189,5 +461,27 @@ export class TestResult {
 		}
 
 		return roll;
+	}
+
+	/**
+	 * Localize a label while providing language-aware fallbacks until the
+	 * corresponding localization files are audited.
+	 *
+	 * @param {string} key
+	 * @param {string} englishFallback
+	 * @param {string} polishFallback
+	 * @returns {string}
+	 * @protected
+	 */
+	_localize(key, englishFallback, polishFallback) {
+		const localized = game.i18n.localize(key);
+
+		if (localized !== key) {
+			return localized;
+		}
+
+		return game.i18n.lang === "pl"
+			? polishFallback
+			: englishFallback;
 	}
 }
