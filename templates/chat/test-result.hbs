@@ -67,17 +67,19 @@
 					{{breakdown.modifiersLabel}}
 				</div>
 				<div class="wfrp1e-test-card__breakdown-rows">
-					<div class="wfrp1e-test-card__breakdown-row is-general-modifier">
-						<span>{{breakdown.generalModifier.source}}</span>
-						<input
-							class="wfrp1e-test-card__modifier-input"
-							data-wfrp-test-general-modifier
-							type="number"
-							step="1"
-							value="{{breakdown.generalModifier.value}}"
-							autocomplete="off"
-						/>
-					</div>
+					{{#if breakdown.generalModifier}}
+						<div class="wfrp1e-test-card__breakdown-row is-general-modifier">
+							<span>{{breakdown.generalModifier.source}}</span>
+							<input
+								class="wfrp1e-test-card__modifier-input"
+								data-wfrp-test-general-modifier
+								type="number"
+								step="1"
+								value="{{breakdown.generalModifier.value}}"
+								autocomplete="off"
+							/>
+						</div>
+					{{/if}}
 
 					{{#each breakdown.modifiers}}
 						<div class="wfrp1e-test-card__breakdown-row {{#unless enabled}}is-disabled{{/unless}}">
