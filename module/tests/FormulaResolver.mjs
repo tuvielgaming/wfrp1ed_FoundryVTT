@@ -28,8 +28,10 @@ export class FormulaResolver {
 	 * `m` while stored Actors and existing formulas complete their migration.
 	 *
 	 * Target-dependent and situational variables are included only when the
-	 * required context is available. Missing data therefore causes formula
-	 * resolution to fail instead of silently becoming zero.
+	 * required context is available. A complete target Actor supplies its full
+	 * profile; an audited manually supplied target value may supply one required
+	 * `target.<characteristic>` variable instead. Missing data therefore still
+	 * causes formula resolution to fail instead of silently becoming zero.
 	 *
 	 * @param {Actor} actor
 	 * @param {TestContext|Object} context
@@ -56,6 +58,12 @@ export class FormulaResolver {
 				variables[`target.${key}`] = value;
 			}
 		}
+
+		this._applyTargetValues(
+			variables,
+			context?.targetValues ??
+				context?.options?.targetValues,
+		);
 
 		variables.movement = this._hasValue(
 			context?.movement,
@@ -202,6 +210,64 @@ export class FormulaResolver {
 		}
 
 		return variables;
+	}
+
+	/**
+	 * Add manually supplied target-characteristic values to the variable table.
+	 *
+	 * Manual input is restricted to known profile characteristics. It can
+	 * override the equivalent value from a target Actor deliberately, although
+	 * current callers provide either an Actor or manual values, not both.
+	 *
+	 * @param {Record<string, number>} variables
+	 * @param {Object|null|undefined} targetValues
+	 * @returns {void}
+	 * @protected
+	 */
+	static _applyTargetValues(variables, targetValues) {
+		if (targetValues === undefined || targetValues === null) {
+			return;
+		}
+
+		if (
+			typeof targetValues !== "object" ||
+			Array.isArray(targetValues)
+		) {
+			throw new Error(
+				"Formula targetValues must be an object.",
+			);
+		}
+
+		for (const [rawKey, rawValue] of Object.entries(targetValues)) {
+			const requestedId = String(rawKey ?? "")
+				.trim()
+				.toLowerCase();
+			const canonicalId =
+				CHARACTERISTIC_ALIASES[requestedId] ??
+				requestedId;
+
+			if (!CHARACTERISTIC_IDS.includes(canonicalId)) {
+				throw new Error(
+					`Unknown target characteristic '${requestedId}'.`,
+				);
+			}
+
+			const value = this._finiteNumber(
+				rawValue,
+				`context.targetValues.${requestedId}`,
+			);
+
+			variables[`target.${canonicalId}`] = value;
+
+			for (
+				const [alias, aliasCanonicalId]
+				of Object.entries(CHARACTERISTIC_ALIASES)
+			) {
+				if (aliasCanonicalId === canonicalId) {
+					variables[`target.${alias}`] = value;
+				}
+			}
+		}
 	}
 
 	/**
