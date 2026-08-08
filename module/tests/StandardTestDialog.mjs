@@ -1,24 +1,28 @@
 import { PendingStandardTest } from "./PendingStandardTest.mjs";
+import { TestDialog } from "./TestDialog.mjs";
 import { TestManager } from "./TestManager.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 
 /**
- * Select one audited named Standard Test and gather the minimum runtime
- * context required by its registered definition.
+ * Select one audited named Standard Test and gather its complete interactive
+ * configuration in one composed dialog.
  *
- * This dialog does not resolve Skill applicability yet. That remains a
- * separate Standard Tests step because the core rules leave applicability of
- * potentially relevant Skills to the GM.
+ * Definition-specific context and the generic situational modifier share one
+ * UI, while TestDialog still owns modifier parsing/semantics and RollTestAction
+ * remains the sole roll/chat execution pipeline.
  */
 export class StandardTestDialog {
 	/**
 	 * Open the Standard Test selector for one Actor.
 	 *
-	 * The returned payload is suitable for Actor.rollTest(testId, options) when
-	 * all required context is already available. If a target-dependent Test has
-	 * no unique canvas target, a pending chat card is published and null is
-	 * returned so the caller does not start the roll prematurely.
+	 * The returned payload is suitable for Actor.rollTest(testId, options).
+	 * Supplying `options.modifier` marks the generic modifier step as already
+	 * configured, so RollTestAction does not open a second TestDialog.
+	 *
+	 * If a target-dependent Test has no unique canvas target, a pending chat
+	 * card is published and null is returned so the roll does not start before
+	 * the missing opponent context is resolved.
 	 * Closing or cancelling returns null.
 	 *
 	 * @param {Actor} actor
@@ -57,11 +61,11 @@ export class StandardTestDialog {
 
 			buttons: [
 				{
-					action: "continue",
+					action: "roll",
 					label: this._localize(
-						"WFRP1ED.StandardTest.Continue",
-						"Continue",
-						"Dalej",
+						"WFRP1ed.TestDialog.Roll",
+						"Roll",
+						"Rzuć",
 					),
 					icon: "fa-solid fa-dice-d100",
 					default: true,
@@ -197,11 +201,19 @@ export class StandardTestDialog {
 		);
 		lockGroup.root.dataset.standardField = "lockDifficulty";
 
+		const modifierGroup = this._numberGroup(
+			"modifier",
+			TestDialog.modifierLabel(),
+		);
+		modifierGroup.input.value = "0";
+		modifierGroup.input.placeholder = "0";
+
 		body.append(
 			testGroup.root,
 			targetGroup.root,
 			noiseGroup.root,
 			lockGroup.root,
+			modifierGroup.root,
 		);
 		content.append(body);
 
@@ -246,11 +258,15 @@ export class StandardTestDialog {
 	}
 
 	/**
-	 * Read and validate launcher form values.
+	 * Read and validate the complete composed Standard Test form.
 	 *
 	 * A target-dependent Test uses a unique already-targeted Token when one is
 	 * available. Missing or ambiguous canvas targeting is not an error here;
 	 * configure() may defer it to PendingStandardTest instead.
+	 *
+	 * The generic modifier is always present, including zero. Its presence in
+	 * the returned options tells RollTestAction that the generic configuration
+	 * step was already completed in this composed dialog.
 	 *
 	 * @param {Actor} actor
 	 * @param {HTMLFormElement} form
@@ -269,7 +285,9 @@ export class StandardTestDialog {
 			throw new Error("Select a valid WFRP 1e Standard Test.");
 		}
 
-		const options = {};
+		const options = {
+			modifier: TestDialog.readModifier(form),
+		};
 
 		if (test.tags.includes("requires-target")) {
 			const target = this._singleTargetActor(actor);
@@ -311,6 +329,9 @@ export class StandardTestDialog {
 	/**
 	 * Show only context controls required by the selected definition.
 	 *
+	 * The generic modifier row is intentionally not tagged with
+	 * `data-standard-field`, so it remains visible for every Standard Test.
+	 *
 	 * @param {HTMLElement} body
 	 * @param {Test|undefined} test
 	 * @returns {void}
@@ -348,8 +369,8 @@ export class StandardTestDialog {
 				? targets[0].actor?.name ?? targets[0].name ?? "—"
 				: this._localize(
 					"WFRP1ED.StandardTest.TargetDeferred",
-					"No single canvas target. Continue to resolve it in chat.",
-					"Brak jednego celu na mapie. Kliknij Dalej, aby wybrać go w czacie.",
+					"No single canvas target. Roll to resolve it in chat.",
+					"Brak jednego celu na mapie. Kliknij Rzuć, aby wybrać go w czacie.",
 				);
 		}
 	}
@@ -395,7 +416,10 @@ export class StandardTestDialog {
 		input.placeholder = "—";
 		group.control.append(input);
 
-		return group;
+		return {
+			...group,
+			input,
+		};
 	}
 
 	static _requiredNumber(input, label) {
