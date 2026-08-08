@@ -1,0 +1,126 @@
+/******************************************************************/
+/*                   WFRP 1e Standard Tests                       */
+/******************************************************************/
+
+/*
+ * The launcher lives in the clear strip directly beneath the printed first
+ * UMIEJĘTNOŚCI heading. It deliberately does not consume one of the 13 skill
+ * writing rows, whose list begins at 55px in the primary Skills overlay.
+ */
+.wfrp1ed-classic-sheet .standard-test-launcher {
+	position: absolute;
+	z-index: 3;
+
+	left: 10px;
+	top: 27px;
+
+	width: 218px;
+	height: 24px;
+	margin: 0;
+	padding: 1px 6px;
+
+	border: 1px solid rgb(27 27 27 / 48%);
+	border-radius: 2px;
+
+	background: rgb(255 255 255 / 58%);
+	box-shadow:
+		inset 0 1px 0 rgb(255 255 255 / 55%),
+		0 1px 1px rgb(0 0 0 / 12%);
+
+	font-family: "Book Antiqua", "Times New Roman", serif;
+	font-size: 11px;
+	font-weight: 800;
+	line-height: 1;
+	letter-spacing: 0.015em;
+	text-align: center;
+
+	cursor: pointer;
+	opacity: 0.82;
+
+	transition:
+		background-color 0.15s ease,
+		border-color 0.15s ease,
+		opacity 0.15s ease;
+}
+
+.wfrp1ed-classic-sheet .standard-test-launcher:hover,
+.wfrp1ed-classic-sheet .standard-test-launcher:focus-visible {
+	border-color: var(--focus-color);
+	background: rgb(255 255 255 / 90%);
+	opacity: 1;
+}
+
+.wfrp1ed-classic-sheet .standard-test-launcher:focus-visible {
+	outline: 1px solid var(--focus-color);
+	outline-offset: 1px;
+}
+
+/******************************************************************/
+/* Standard Test selector dialog                                  */
+/******************************************************************/
+
+.wfrp1ed-standard-test-dialog .standard-test-dialog-body {
+	display: grid;
+	gap: 12px;
+
+	min-width: 360px;
+	padding: 6px 4px 2px;
+}
+
+.wfrp1ed-standard-test-dialog .standard-test-form-group {
+	display: grid;
+	grid-template-columns: 145px minmax(0, 1fr);
+	align-items: center;
+	gap: 10px;
+
+	margin: 0;
+}
+
+.wfrp1ed-standard-test-dialog .standard-test-form-group > label {
+	font-weight: 700;
+	line-height: 1.2;
+}
+
+.wfrp1ed-standard-test-dialog .standard-test-form-group .form-fields {
+	min-width: 0;
+}
+
+.wfrp1ed-standard-test-dialog .standard-test-form-group select,
+.wfrp1ed-standard-test-dialog .standard-test-form-group input {
+	width: 100%;
+	min-width: 0;
+	height: 34px;
+	margin: 0;
+	padding: 4px 8px;
+
+	font-size: 14px;
+}
+
+.wfrp1ed-standard-test-dialog .standard-test-context-value {
+	min-height: 34px;
+	padding: 7px 8px;
+
+	border: 1px solid var(--wfrp-parchment-border-soft);
+	border-radius: 3px;
+
+	background: rgb(247 239 218 / 74%);
+	color: var(--wfrp-parchment-ink-soft);
+
+	font-size: 13px;
+	line-height: 1.25;
+}
+
+.wfrp1ed-standard-test-dialog [hidden] {
+	display: none !important;
+}
+
+@media (max-width: 500px) {
+	.wfrp1ed-standard-test-dialog .standard-test-dialog-body {
+		min-width: 0;
+	}
+
+	.wfrp1ed-standard-test-dialog .standard-test-form-group {
+		grid-template-columns: 1fr;
+		gap: 5px;
+	}
+}
