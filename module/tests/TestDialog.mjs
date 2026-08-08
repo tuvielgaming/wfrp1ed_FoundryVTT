@@ -1,5 +1,7 @@
 const { DialogV2 } = foundry.applications.api;
 
+const GENERAL_MODIFIER_ID = "general";
+
 export class TestDialog {
 	/**
 	 * Allow the user to configure an existing TestContext.
@@ -99,7 +101,12 @@ export class TestDialog {
 	}
 
 	/**
-	 * Apply one shared dialog modifier to an existing TestContext.
+	 * Apply the shared general test modifier to an existing TestContext.
+	 *
+	 * The modifier is always present, including at zero, and carries a stable
+	 * identifier so the result chat card can expose exactly this adjudication
+	 * value to the GM without confusing it with rule, Skill, or extension
+	 * modifiers.
 	 *
 	 * @param {TestContext} context
 	 * @param {number} modifier
@@ -120,17 +127,29 @@ export class TestDialog {
 			);
 		}
 
-		if (value !== 0) {
-			context.add(
-				value,
-				this._localize(
-					"WFRP1ed.TestModifier.Dialog",
-					"Dialog modifier",
-					"Modyfikator testu",
-				),
-				"situational",
-			);
+		const existing = Array.isArray(context.modifiers)
+			? context.modifiers.find(
+				(entry) => entry?.id === GENERAL_MODIFIER_ID,
+			)
+			: null;
+
+		if (existing) {
+			existing.value = value;
+			existing.enabled = true;
+			return context;
 		}
+
+		context.addModifier({
+			id: GENERAL_MODIFIER_ID,
+			value,
+			source: this._localize(
+				"WFRP1ed.TestModifier.Dialog",
+				"Dialog modifier",
+				"Modyfikator testu",
+			),
+			type: "situational",
+			enabled: true,
+		});
 
 		return context;
 	}
