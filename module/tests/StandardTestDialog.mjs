@@ -48,6 +48,9 @@ export class StandardTestDialog {
 
 			content: this._buildContent(tests),
 
+			render: (_event, dialog) =>
+				this._activateDialog(dialog, tests),
+
 			buttons: [
 				{
 					action: "continue",
@@ -105,9 +108,10 @@ export class StandardTestDialog {
 	/**
 	 * Build trusted DialogV2 content.
 	 *
-	 * Foundry v14 requires an HTMLElement supplied as DialogV2 `content` to
-	 * have a plain outermost DIV without attributes. Styling therefore belongs
-	 * on descendants.
+	 * Foundry v14 stringifies HTMLElement dialog content before rendering it.
+	 * Therefore interactive listeners are attached later in `_activateDialog`.
+	 * Initial field visibility is still resolved here so the serialized markup
+	 * starts in a correct state before the dialog reaches the DOM.
 	 *
 	 * @param {Test[]} tests
 	 * @returns {HTMLDivElement}
@@ -180,6 +184,36 @@ export class StandardTestDialog {
 		);
 		content.append(body);
 
+		this._refreshContextFields(body, tests[0]);
+
+		return content;
+	}
+
+	/**
+	 * Attach interaction to the rendered DialogV2 DOM.
+	 *
+	 * DialogV2 stringifies HTMLElement content, so listeners added to the
+	 * detached element returned by `_buildContent` do not survive rendering.
+	 * Foundry v14 provides the `render` callback specifically for this stage.
+	 *
+	 * @param {DialogV2} dialog
+	 * @param {Test[]} tests
+	 * @returns {void}
+	 * @protected
+	 */
+	static _activateDialog(dialog, tests) {
+		const root = dialog?.element;
+		const body = root?.querySelector?.(
+			".standard-test-dialog-body",
+		);
+		const select = root?.querySelector?.(
+			'select[name="testId"]',
+		);
+
+		if (!body || !select) {
+			return;
+		}
+
 		const refresh = () =>
 			this._refreshContextFields(
 				body,
@@ -187,10 +221,7 @@ export class StandardTestDialog {
 			);
 
 		select.addEventListener("change", refresh);
-
-		queueMicrotask(refresh);
-
-		return content;
+		refresh();
 	}
 
 	/**
