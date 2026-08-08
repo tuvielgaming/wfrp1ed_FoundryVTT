@@ -1,3 +1,8 @@
+import {
+	TEST_RESULT_VISIBILITY,
+	normalizeTestResultVisibility,
+} from "./TestResultVisibility.mjs";
+
 const FLAG_SCOPE = "wfrp1ed";
 const FLAG_KEY = "testResultState";
 const TEMPLATE_PATH =
@@ -12,6 +17,10 @@ const GENERAL_MODIFIER_ID = "general";
  * roll and modifier contributions. A later GM edit changes only the general
  * adjudication modifier and re-evaluates target/success/margin against that
  * original snapshot; Actor data and formula inputs are never re-read.
+ *
+ * Each result also stores whether non-GM users may expand the detailed target
+ * calculation. That visibility can be changed by the GM after the roll without
+ * changing any mechanical result data.
  */
 export class TestResultChat {
 	/**
@@ -115,7 +124,219 @@ export class TestResultChat {
 	}
 
 	/**
-	 * Persist a GM edit and replace the card content with the re-evaluated view.
+	 * Apply the persisted result-detail visibility for the current client.
+	 *
+	 * GMs always retain the complete diagnostic card. A public result remains
+	 * fully expandable for players. A GM-only result keeps only the compact
+	 * resolved summary for players and removes the detailed calculation from
+	 * their rendered DOM so base values cannot be used to infer NPC statistics.
+	 *
+	 * @param {ChatMessage} message
+	 * @param {HTMLElement|Object} html
+	 * @returns {void}
+	 */
+	static applyClientVisibility(message, html) {
+		if (game.user?.isGM) {
+			return;
+		}
+
+		const state = message?.getFlag?.(
+			FLAG_SCOPE,
+			FLAG_KEY,
+		);
+
+		if (!state) {
+			return;
+		}
+
+		if (
+			normalizeTestResultVisibility(state.resultVisibility) ===
+			TEST_RESULT_VISIBILITY.PUBLIC
+		) {
+			return;
+		}
+
+		const rendered = this._asElement(html);
+		const card = rendered?.matches?.(".wfrp1e-test-card")
+			? rendered
+			: rendered?.querySelector?.(".wfrp1e-test-card");
+		const details = card?.querySelector?.(
+			".wfrp1e-test-card__target",
+		);
+
+		if (!(details instanceof HTMLDetailsElement)) {
+			return;
+		}
+
+		details.open = false;
+		details.classList.add("is-player-locked");
+
+		details.querySelector(
+			".wfrp1e-test-card__breakdown",
+		)?.remove();
+		details.querySelector(
+			".wfrp1e-test-card__target-toggle",
+		)?.remove();
+
+		const summary = details.querySelector(":scope > summary");
+
+		if (summary) {
+			summary.removeAttribute("title");
+			summary.tabIndex = -1;
+			summary.setAttribute("aria-expanded", "false");
+			summary.addEventListener("click", (event) => {
+				event.preventDefault();
+			});
+			summary.addEventListener("keydown", (event) => {
+				if (event.key === "Enter" || event.key === " ") {
+					event.preventDefault();
+				}
+			});
+		}
+
+		details.addEventListener("toggle", () => {
+			if (details.open) {
+				details.open = false;
+			}
+		});
+	}
+
+	/**
+	 * Add GM-only right-click ChatLog actions for changing result details.
+	 *
+	 * Foundry's ChatLog context hook passes the prepared menu entries by
+	 * reference. The two entries are mutually exclusive, so the GM sees only
+	 * the action which changes the current result state.
+	 *
+	 * @param {Array<Object>} menuItems
+	 * @returns {void}
+	 */
+	static addContextMenuOptions(menuItems) {
+		if (!game.user?.isGM || !Array.isArray(menuItems)) {
+			return;
+		}
+
+		menuItems.push(
+			{
+				name: this._localize(
+					"WFRP1ED.TestResult.Visibility.MakePublic",
+					"Test details: make public",
+					"Szczegóły testu: udostępnij graczom",
+				),
+				icon: '<i class="fa-solid fa-eye"></i>',
+				condition: (target) => {
+					const message = this._messageFromContextTarget(target);
+					const state = message?.getFlag?.(
+						FLAG_SCOPE,
+						FLAG_KEY,
+					);
+
+					return Boolean(state) &&
+						normalizeTestResultVisibility(
+							state.resultVisibility,
+						) !== TEST_RESULT_VISIBILITY.PUBLIC;
+				},
+				callback: (target) => {
+					const message = this._messageFromContextTarget(target);
+
+					if (message) {
+						void this.setResultVisibility(
+							message,
+							TEST_RESULT_VISIBILITY.PUBLIC,
+						);
+					}
+				},
+			},
+			{
+				name: this._localize(
+					"WFRP1ED.TestResult.Visibility.MakeGMOnly",
+					"Test details: GM only",
+					"Szczegóły testu: tylko MG",
+				),
+				icon: '<i class="fa-solid fa-eye-slash"></i>',
+				condition: (target) => {
+					const message = this._messageFromContextTarget(target);
+					const state = message?.getFlag?.(
+						FLAG_SCOPE,
+						FLAG_KEY,
+					);
+
+					return Boolean(state) &&
+						normalizeTestResultVisibility(
+							state.resultVisibility,
+						) === TEST_RESULT_VISIBILITY.PUBLIC;
+				},
+				callback: (target) => {
+					const message = this._messageFromContextTarget(target);
+
+					if (message) {
+						void this.setResultVisibility(
+							message,
+							TEST_RESULT_VISIBILITY.GM_ONLY,
+						);
+					}
+				},
+			},
+		);
+	}
+
+	/**
+	 * Persist one GM result-detail visibility change.
+	 *
+	 * This updates only presentation metadata and regenerated card content. The
+	 * original roll, base target, modifiers and adjudicated result stay intact.
+	 *
+	 * @param {ChatMessage} message
+	 * @param {string} visibility
+	 * @returns {Promise<void>}
+	 */
+	static async setResultVisibility(message, visibility) {
+		try {
+			if (!game.user?.isGM) {
+				throw new Error(
+					"Only a GM can change test-result detail visibility.",
+				);
+			}
+
+			const state = message?.getFlag?.(
+				FLAG_SCOPE,
+				FLAG_KEY,
+			);
+
+			if (!state) {
+				throw new Error(
+					"This chat message has no editable test snapshot.",
+				);
+			}
+
+			const updated = this._copyState(state);
+			updated.resultVisibility =
+				normalizeTestResultVisibility(visibility);
+			updated.updatedBy = game.user?.id ?? "";
+			updated.updatedAt = Date.now();
+
+			const content = await this._render(updated);
+
+			await message.update({
+				content,
+				[`flags.${FLAG_SCOPE}.${FLAG_KEY}`]: updated,
+			});
+		} catch (error) {
+			console.error(
+				"WFRP1ED | Unable to update test-result visibility.",
+				error,
+			);
+
+			ui.notifications.error(
+				error?.message ??
+					"Unable to update test-result visibility.",
+			);
+		}
+	}
+
+	/**
+	 * Persist a GM modifier edit and replace the card content with the
+	 * re-evaluated view.
 	 *
 	 * @param {ChatMessage} message
 	 * @param {HTMLInputElement} input
@@ -208,12 +429,15 @@ export class TestResultChat {
 			.map((modifier) => this._copyModifier(modifier));
 
 		return {
-			version: 1,
+			version: 2,
 			testName: String(result.test.name ?? result.test.id ?? "Test"),
 			roll: this._finiteNumber(result.roll, "roll"),
 			baseTarget: this._finiteNumber(
 				breakdown?.baseTarget,
 				"baseTarget",
+			),
+			resultVisibility: normalizeTestResultVisibility(
+				result.context?.options?.resultVisibility,
 			),
 			characteristic: breakdown?.characteristic
 				? {
@@ -382,6 +606,35 @@ export class TestResultChat {
 				),
 			},
 		};
+	}
+
+	/**
+	 * Resolve a ChatMessage from Foundry's ChatLog context-menu target.
+	 *
+	 * Foundry v14 uses native HTMLElements, while compatibility layers may
+	 * still pass a jQuery-like wrapper. Both forms are accepted here.
+	 *
+	 * @param {*} target
+	 * @returns {ChatMessage|null}
+	 * @protected
+	 */
+	static _messageFromContextTarget(target) {
+		const element = target instanceof HTMLElement
+			? target
+			: target?.[0] instanceof HTMLElement
+				? target[0]
+				: null;
+		const entry = element?.closest?.("[data-message-id]") ?? element;
+		const messageId = String(
+			entry?.dataset?.messageId ??
+				target?.attr?.("data-message-id") ??
+				target?.data?.("message-id") ??
+				"",
+		).trim();
+
+		return messageId
+			? game.messages?.get(messageId) ?? null
+			: null;
 	}
 
 	/**
