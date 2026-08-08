@@ -6,7 +6,75 @@
 	<table>
 		<tr>
 			<td>{{localize "WFRP1ED.TestResult.Target"}}</td>
-			<td>{{result.target}}</td>
+			<td>
+				<details class="wfrp1e-test-target-breakdown">
+					<summary title="{{breakdown.expandHint}}">
+						{{result.target}}
+					</summary>
+
+					<div class="wfrp1e-test-target-breakdown-body">
+						{{#if breakdown.characteristic}}
+							<div>
+								<strong>{{breakdown.baseTargetLabel}}:</strong>
+								{{breakdown.characteristic.label}}
+								=
+								{{breakdown.characteristic.value}}
+							</div>
+						{{/if}}
+
+						{{#if breakdown.formula}}
+							<div>
+								<strong>{{breakdown.formulaLabel}}:</strong>
+								<code>{{breakdown.formula}}</code>
+							</div>
+
+							{{#if breakdown.variables}}
+								<div>
+									<strong>{{breakdown.inputsLabel}}:</strong>
+								</div>
+
+								<ul>
+									{{#each breakdown.variables}}
+										<li>{{label}} = {{value}}</li>
+									{{/each}}
+								</ul>
+							{{/if}}
+
+							<div>
+								<strong>{{breakdown.baseTargetLabel}}:</strong>
+								{{breakdown.baseTarget}}
+							</div>
+						{{/if}}
+
+						{{#if breakdown.modifiers}}
+							<div>
+								<strong>{{breakdown.modifiersLabel}}:</strong>
+							</div>
+
+							<ul>
+								{{#each breakdown.modifiers}}
+									<li>
+										{{source}}: {{signed}}
+										{{#unless enabled}}
+											({{../breakdown.disabledLabel}})
+										{{/unless}}
+									</li>
+								{{/each}}
+							</ul>
+						{{/if}}
+
+						<div>
+							<strong>{{breakdown.totalModifierLabel}}:</strong>
+							{{breakdown.totalModifierSigned}}
+						</div>
+
+						<div>
+							<strong>{{breakdown.finalTargetLabel}}:</strong>
+							{{breakdown.finalTarget}}
+						</div>
+					</div>
+				</details>
+			</td>
 		</tr>
 
 		<tr>
