@@ -14,7 +14,10 @@ export class StandardTestDialog {
 	/**
 	 * Open the Standard Test selector for one Actor.
 	 *
-	 * The returned payload is suitable for Actor.rollTest(testId, options).
+	 * The returned payload is suitable for Actor.rollTest(testId, options) when
+	 * all required context is already available. Target-dependent Tests may
+	 * deliberately return without a target so the caller can defer target
+	 * resolution to the shared pending-chat workflow.
 	 * Closing or cancelling returns null.
 	 *
 	 * @param {Actor} actor
@@ -227,6 +230,10 @@ export class StandardTestDialog {
 	/**
 	 * Read and validate launcher form values.
 	 *
+	 * A target-dependent Test uses a unique already-targeted Token when one is
+	 * available. Missing or ambiguous canvas targeting is not an error here;
+	 * the caller may defer it to PendingStandardTest instead.
+	 *
 	 * @param {Actor} actor
 	 * @param {HTMLFormElement} form
 	 * @param {Test[]} tests
@@ -249,17 +256,9 @@ export class StandardTestDialog {
 		if (test.tags.includes("requires-target")) {
 			const target = this._singleTargetActor(actor);
 
-			if (!target) {
-				throw new Error(
-					this._localize(
-						"WFRP1ED.StandardTest.TargetRequired",
-						"This test requires exactly one targeted token.",
-						"Ten test wymaga dokładnie jednego wskazanego tokenu.",
-					),
-				);
+			if (target) {
+				options.target = target;
 			}
-
-			options.target = target;
 		}
 
 		if (test.tags.includes("requires-noise-level")) {
@@ -330,9 +329,9 @@ export class StandardTestDialog {
 			targetStatus.textContent = targets.length === 1
 				? targets[0].actor?.name ?? targets[0].name ?? "—"
 				: this._localize(
-					"WFRP1ED.StandardTest.TargetOneToken",
-					"Target exactly one token on the canvas.",
-					"Wskaż dokładnie jeden token na mapie.",
+					"WFRP1ED.StandardTest.TargetDeferred",
+					"No single canvas target. Continue to resolve it in chat.",
+					"Brak jednego celu na mapie. Kliknij Dalej, aby wybrać go w czacie.",
 				);
 		}
 	}
