@@ -1,4 +1,5 @@
 import { DamageApplication } from "./DamageApplication.mjs";
+import { DamageChat } from "./DamageChat.mjs";
 import {
 	DAMAGE_MITIGATION_POLICY,
 	DamagePacket,
@@ -20,7 +21,29 @@ Hooks.once("init", () => {
 			Resolution: DamageResolution,
 			Resolver: DamageResolver,
 			Application: DamageApplication,
+			Chat: DamageChat,
 			mitigationPolicy: DAMAGE_MITIGATION_POLICY,
 		}),
 	});
+
+	Hooks.on(
+		"renderChatMessageHTML",
+		(message, html) => {
+			DamageChat.applyClientState(message, html);
+		},
+	);
+
+	Hooks.on(
+		"getChatMessageContextOptions",
+		(_application, menuItems) => {
+			DamageChat.addContextMenuOptions(menuItems);
+		},
+	);
+
+	Hooks.on(
+		"updateActor",
+		(actor) => {
+			DamageChat.refreshActorCards(actor);
+		},
+	);
 });
