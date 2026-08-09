@@ -1,0 +1,48 @@
+<article class="wfrp1e-damage-card{{#if applied}} is-applied{{/if}}" data-wfrp-damage-card data-packet-id="{{packet.id}}">
+	<header class="wfrp1e-damage-card__header">
+		<strong>{{labels.title}}</strong>
+		<span class="wfrp1e-damage-card__amount">{{resolution.finalAmount}}</span>
+	</header>
+
+	<div class="wfrp1e-damage-card__row">
+		<span>{{labels.target}}</span>
+		<strong>{{targetName}}</strong>
+	</div>
+
+	<div class="wfrp1e-damage-card__row">
+		<span>{{labels.source}}</span>
+		<span>{{sourceLabel}}</span>
+	</div>
+
+	{{#if showRawAmount}}
+		<div class="wfrp1e-damage-card__row">
+			<span>{{labels.raw}}</span>
+			<span>{{packet.rawAmount}}</span>
+		</div>
+	{{/if}}
+
+	<div class="wfrp1e-damage-card__row">
+		<span>{{labels.final}}</span>
+		<strong>{{resolution.finalAmount}}</strong>
+	</div>
+
+	<div class="wfrp1e-damage-card__mitigation">
+		<span>{{labels.armour}}: {{labels.armourPolicy}}</span>
+		<span>{{labels.toughness}}: {{labels.toughnessPolicy}}</span>
+	</div>
+
+	{{#if hitLocation}}
+		<div class="wfrp1e-damage-card__row">
+			<span>{{labels.hitLocation}}</span>
+			<span>{{hitLocation}}</span>
+		</div>
+	{{/if}}
+
+	<div class="wfrp1e-damage-card__status" data-wfrp-damage-status>
+		{{statusLabel}}
+	</div>
+
+	{{#unless applied}}
+		<div class="wfrp1e-damage-card__hint">{{labels.contextHint}}</div>
+	{{/unless}}
+</article>
