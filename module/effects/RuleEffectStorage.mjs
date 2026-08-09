@@ -32,7 +32,7 @@ export class RuleEffectStorage {
 			return clone(flagged);
 		}
 
-		return this.nativeChanges(effect)
+		return systemChanges(effect)
 			.filter((change) => Boolean(decodeRuleEffectChange(change)))
 			.map((change) => clone(change));
 	}
@@ -44,14 +44,7 @@ export class RuleEffectStorage {
 	 * @returns {Object[]}
 	 */
 	static nativeChanges(effect) {
-		const system = effect?.system?.toObject?.() ??
-			clone(effect?.system) ??
-			{};
-		const changes = Array.isArray(system?.changes)
-			? system.changes
-			: [];
-
-		return changes
+		return systemChanges(effect)
 			.filter((change) => !decodeRuleEffectChange(change))
 			.map((change) => clone(change));
 	}
@@ -100,6 +93,16 @@ export class RuleEffectStorage {
 
 		return stored;
 	}
+}
+
+function systemChanges(effect) {
+	const system = effect?.system?.toObject?.() ??
+		clone(effect?.system) ??
+		{};
+
+	return Array.isArray(system?.changes)
+		? system.changes
+		: [];
 }
 
 function clone(value) {
