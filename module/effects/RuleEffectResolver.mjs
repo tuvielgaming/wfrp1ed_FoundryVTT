@@ -2,7 +2,6 @@ import {
 	decodeRuleEffectChange,
 	RULE_EFFECT_APPLICABILITY,
 } from "./RuleEffectRegistry.mjs";
-import { RuleEffectStorage } from "./RuleEffectStorage.mjs";
 
 /**
  * Discover declarative WFRP rule effects from an Actor and its owned Items.
@@ -137,11 +136,13 @@ export class RuleEffectResolver {
 		}
 
 		/*
-		 * WFRP-specific rule descriptors are package-owned ActiveEffect flags.
-		 * RuleEffectStorage also provides a temporary legacy fallback for rules
-		 * authored in system.changes before the durable flag contract existed.
+		 * Foundry v14 stores effect changes on the ActiveEffect type data model:
+		 * `effect.system.changes`. The former top-level `effect.changes` path is
+		 * legacy/shim territory and must not be used as the WFRP source of truth.
 		 */
-		const changes = RuleEffectStorage.rules(effect);
+		const changes = Array.isArray(effect.system?.changes)
+			? effect.system.changes
+			: Array.from(effect.system?.changes ?? []);
 
 		for (let index = 0; index < changes.length; index += 1) {
 			const decoded = decodeRuleEffectChange(changes[index]);
