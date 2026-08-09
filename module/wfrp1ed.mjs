@@ -160,7 +160,8 @@ function registerRuleEffectTargets() {
 			category: isCharacteristic
 				? "test-characteristic"
 				: "test-standard",
-			label: test.name,
+			label: test.label,
+			labelKey: test.labelKey,
 			sides: [
 				RULE_EFFECT_SIDES.SELF,
 				RULE_EFFECT_SIDES.TARGET,
@@ -184,11 +185,10 @@ function registerRuleEffectTargets() {
 	RuleEffectRegistry.registerTarget({
 		id: "procedure.movement.jump.reductionDie",
 		category: "procedure-movement",
-		label: localizeWithFallback(
-			"WFRP1ED.RuleEffect.MovementJumpReductionDie",
-			"Jumping: damage-reduction d6",
-			"Zeskok: K6 redukcji obrażeń",
-		),
+		label: "Jumping: damage-reduction d6",
+		labels: {
+			pl: "Zeskok: K6 redukcji obrażeń",
+		},
 		sides: [RULE_EFFECT_SIDES.SELF],
 		operations: [
 			RULE_EFFECT_OPERATIONS.ADD,
@@ -204,11 +204,10 @@ function registerRuleEffectTargets() {
 	RuleEffectRegistry.registerTarget({
 		id: "procedure.movement.leap.distance",
 		category: "procedure-movement",
-		label: localizeWithFallback(
-			"WFRP1ED.RuleEffect.MovementLeapDistance",
-			"Leaping: achieved distance",
-			"Skok: osiągnięty dystans",
-		),
+		label: "Leaping: achieved distance",
+		labels: {
+			pl: "Skok: osiągnięty dystans",
+		},
 		sides: [RULE_EFFECT_SIDES.SELF],
 		operations: [
 			RULE_EFFECT_OPERATIONS.ADD,
@@ -424,16 +423,4 @@ function isPureChanceTarget(characteristic, variables) {
 			key === "movement"
 		);
 	});
-}
-
-function localizeWithFallback(key, englishFallback, polishFallback) {
-	const localized = game.i18n.localize(key);
-
-	if (localized !== key) {
-		return localized;
-	}
-
-	return game.i18n.lang === "pl"
-		? polishFallback
-		: englishFallback;
 }
