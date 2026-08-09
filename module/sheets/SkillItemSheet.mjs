@@ -7,6 +7,11 @@ import {
 	RuleEffectRegistry,
 } from "../effects/RuleEffectRegistry.mjs";
 import {
+	RULE_EFFECT_FLAG_KEY,
+	RULE_EFFECT_FLAG_SCOPE,
+	RuleEffectStorage,
+} from "../effects/RuleEffectStorage.mjs";
+import {
 	STANDARD_TEST_SKILL_IDENTITIES,
 } from "../tests/standard-test-skill-identities.mjs";
 
@@ -17,8 +22,9 @@ const { DialogV2, HandlebarsApplicationMixin } =
 /**
  * Native Foundry v14 sheet for WFRP 1e Skill Items.
  *
- * Skill content remains in SkillData. Mechanical rules are authored as normal
- * embedded Foundry ActiveEffects and their v14 `system.changes` records.
+ * Skill content remains in SkillData. Mechanical rules are authored on normal
+ * embedded Foundry ActiveEffects. Foundry owns effect lifecycle/state while
+ * WFRP-specific rule descriptors are persisted in package-owned effect flags.
  */
 export class SkillItemSheet extends HandlebarsApplicationMixin(
 	ItemSheetV2,
@@ -97,8 +103,10 @@ export class SkillItemSheet extends HandlebarsApplicationMixin(
 						foundry.documents.ActiveEffect.DEFAULT_ICON,
 					disabled: false,
 					transfer: true,
-					system: {
-						changes: [],
+					flags: {
+						[RULE_EFFECT_FLAG_SCOPE]: {
+							[RULE_EFFECT_FLAG_KEY]: [],
+						},
 					},
 				},
 			],
@@ -176,10 +184,10 @@ export class SkillItemSheet extends HandlebarsApplicationMixin(
 			return;
 		}
 
-		const changes = effectSystemChanges(effect);
+		const changes = RuleEffectStorage.rules(effect);
 		changes.push(change);
 
-		await persistEffectChanges(
+		await persistEffectRules(
 			this,
 			effect,
 			changes,
@@ -201,7 +209,7 @@ export class SkillItemSheet extends HandlebarsApplicationMixin(
 			return;
 		}
 
-		const changes = effectSystemChanges(effect);
+		const changes = RuleEffectStorage.rules(effect);
 		const existing = changes[index];
 
 		if (!decodeRuleEffectChange(existing)) {
@@ -216,7 +224,7 @@ export class SkillItemSheet extends HandlebarsApplicationMixin(
 
 		changes[index] = updated;
 
-		await persistEffectChanges(
+		await persistEffectRules(
 			this,
 			effect,
 			changes,
@@ -238,7 +246,7 @@ export class SkillItemSheet extends HandlebarsApplicationMixin(
 			return;
 		}
 
-		const changes = effectSystemChanges(effect);
+		const changes = RuleEffectStorage.rules(effect);
 
 		if (!decodeRuleEffectChange(changes[index])) {
 			return;
@@ -259,7 +267,7 @@ export class SkillItemSheet extends HandlebarsApplicationMixin(
 		}
 
 		changes.splice(index, 1);
-		await persistEffectChanges(this, effect, changes);
+		await persistEffectRules(this, effect, changes);
 	}
 }
 
@@ -273,15 +281,13 @@ function buildEffectPresentation(item) {
 			),
 		)
 		.map((effect) => {
-			const changes = effectSystemChanges(effect);
+			const changes = RuleEffectStorage.rules(effect);
 			const rules = [];
-			let otherChangeCount = 0;
 
 			for (let index = 0; index < changes.length; index += 1) {
 				const decoded = decodeRuleEffectChange(changes[index]);
 
 				if (!decoded) {
-					otherChangeCount += 1;
 					continue;
 				}
 
@@ -328,7 +334,8 @@ function buildEffectPresentation(item) {
 						"Wyłącz efekt",
 					),
 				rules,
-				otherChangeCount,
+				otherChangeCount:
+					RuleEffectStorage.nativeChanges(effect).length,
 			};
 		});
 }
@@ -413,18 +420,12 @@ function changeIndexFromTarget(target) {
 }
 
 /**
- * Return a mutable clone of the v14 ActiveEffect type-data changes array.
+ * Persist package-owned WFRP rules in ActiveEffect flags and verify the actual
+ * flag payload returned by Foundry. Verification deliberately does not use the
+ * legacy system.changes fallback, otherwise a failed flag write could be
+ * hidden by the previous in-memory representation.
  */
-function effectSystemChanges(effect) {
-	const system = effect?.system?.toObject?.() ?? {};
-	return foundry.utils.deepClone(system.changes ?? []);
-}
-
-/**
- * Persist WFRP rule changes through the parent Item using Foundry v14's
- * `ActiveEffect.system.changes` path.
- */
-async function persistEffectChanges(
+async function persistEffectRules(
 	application,
 	effect,
 	changes,
@@ -432,38 +433,20 @@ async function persistEffectChanges(
 	expectedIndex = null,
 ) {
 	const item = application?.document;
-
-	if (!item || !effect?.id) {
-		throw new Error(
-			"WFRP rule effect persistence requires an Item and ActiveEffect id.",
-		);
-	}
-
-	const [updated] = await item.updateEmbeddedDocuments(
-		"ActiveEffect",
-		[
-			{
-				_id: effect.id,
-				"system.changes": foundry.utils.deepClone(changes),
-			},
-		],
+	const stored = await RuleEffectStorage.persist(
+		item,
+		effect,
+		changes,
 	);
 
-	/*
-	 * Prefer the Document returned by the update. Synthetic Token Actors can
-	 * briefly retain stale nested collection references on an already-rendered
-	 * Item sheet, while the returned Document represents the committed update.
-	 */
-	const stored = updated ?? item.effects?.get(effect.id) ?? null;
-
-	if (!stored) {
-		throw new Error(
-			`Updated ActiveEffect '${effect.id}' is missing from its parent Item.`,
-		);
-	}
-
 	if (expectedChange) {
-		const storedChanges = effectSystemChanges(stored);
+		const flagged = stored.getFlag?.(
+			RULE_EFFECT_FLAG_SCOPE,
+			RULE_EFFECT_FLAG_KEY,
+		);
+		const storedChanges = Array.isArray(flagged)
+			? foundry.utils.deepClone(flagged)
+			: [];
 		const index = Number.isInteger(expectedIndex)
 			? expectedIndex
 			: storedChanges.length - 1;
@@ -471,9 +454,9 @@ async function persistEffectChanges(
 
 		if (!sameRuleChange(actual, expectedChange)) {
 			console.error(
-				"WFRP1ED | ActiveEffect rule persistence mismatch.",
+				"WFRP1ED | ActiveEffect flag rule persistence mismatch.",
 				{
-					item: item.uuid,
+					item: item?.uuid,
 					effect: stored.uuid,
 					expected: expectedChange,
 					actual,
