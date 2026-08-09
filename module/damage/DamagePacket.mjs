@@ -42,7 +42,7 @@ export class DamagePacket {
 			"Target Actor UUID",
 		);
 		this.source = normalizeSource(source);
-		this.mitigation = Object.freeze({
+		this.mitigation = foundry.utils.deepFreeze({
 			armour: normalizeMitigationPolicy(
 				armour,
 				"Armour mitigation policy",
@@ -51,11 +51,9 @@ export class DamagePacket {
 				toughness,
 				"Toughness mitigation policy",
 			),
-			special: Object.freeze(
-				cloneJsonObject(
-					specialMitigation,
-					"Special mitigation flags",
-				),
+			special: cloneJsonObject(
+				specialMitigation,
+				"Special mitigation flags",
 			),
 		});
 		this.hitLocation = normalizeOptionalText(hitLocation);
