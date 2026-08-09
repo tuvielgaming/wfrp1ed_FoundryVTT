@@ -27,6 +27,7 @@
 		"css/sheets/standard-test.css",
 		"css/chat/test-result.css",
 		"css/chat/test-result-effects.css",
+		"css/chat/damage-result.css",
 		"css/effects/rule-effects.css"
 	],
 	"scripts": [],
