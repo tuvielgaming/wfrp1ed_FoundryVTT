@@ -1,3 +1,4 @@
+import { RuleEffectRollSelection } from "../effects/RuleEffectRollSelection.mjs";
 import {
 	normalizeTestResultVisibility,
 	testResultVisibilityLabel,
@@ -27,6 +28,9 @@ export class TestDialog {
 			throw new Error("TestDialog requires a context with a Test.");
 		}
 
+		const targetId = RuleEffectRollSelection.targetIdForTest(
+			context.test,
+		);
 		const response = await DialogV2.wait({
 			classes: [
 				"wfrp1ed",
@@ -38,7 +42,7 @@ export class TestDialog {
 				title: context.test.name,
 			},
 
-			content: this._buildContent(),
+			content: this._buildContent(context),
 
 			buttons: [
 				{
@@ -56,6 +60,11 @@ export class TestDialog {
 						modifier: this.readModifier(button.form),
 						resultVisibility:
 							this.readResultVisibility(button.form),
+						ruleEffects: RuleEffectRollSelection.snapshotFromForm(
+							context.actor,
+							targetId,
+							button.form,
+						),
 					}),
 				},
 				{
@@ -79,6 +88,7 @@ export class TestDialog {
 		}
 
 		context.options.resultVisibility = response.resultVisibility;
+		context.options.ruleEffects = response.ruleEffects;
 
 		return this.applyModifier(
 			context,
@@ -209,10 +219,11 @@ export class TestDialog {
 	 * use a plain outermost DIV with no attributes. Styling and form metadata
 	 * therefore belong on descendants rather than on this wrapper.
 	 *
+	 * @param {TestContext} context
 	 * @returns {HTMLDivElement}
 	 * @protected
 	 */
-	static _buildContent() {
+	static _buildContent(context) {
 		const content = document.createElement("div");
 
 		const formGroup = document.createElement("div");
@@ -233,6 +244,16 @@ export class TestDialog {
 
 		formGroup.append(label, input);
 		content.append(formGroup);
+
+		const targetId = RuleEffectRollSelection.targetIdForTest(
+			context?.test,
+		);
+		content.append(
+			RuleEffectRollSelection.buildSection(
+				context?.actor,
+				targetId,
+			),
+		);
 
 		if (game.user?.isGM) {
 			const visibilityGroup = document.createElement("div");
