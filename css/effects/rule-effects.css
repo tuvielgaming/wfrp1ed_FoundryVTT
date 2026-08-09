@@ -45,43 +45,70 @@
 /******************************************************************/
 
 /*
- * Scope this replacement checkbox only to rule-effect candidates. Other
- * Standard Test checkboxes (for example the Leap run-up control) retain their
- * normal Foundry appearance.
+ * Do not rely on Foundry/browser checkbox artwork here. The real checkbox
+ * remains inside the label for normal form semantics, but is visually hidden.
+ * The label draws a stable WFRP square and a plain check mark from :checked.
+ * This is intentionally scoped to per-roll rule-effect candidates only.
  */
-.wfrp-rule-effect-selection input[type="checkbox"] {
-	appearance: none;
-	-webkit-appearance: none;
-
-	width: 18px;
-	height: 18px;
-	min-width: 18px;
-	margin: 0 6px 0 0;
-	padding: 0;
-
-	border: 1px solid rgb(71 49 29 / 82%);
-	border-radius: 2px;
-
-	background-color: rgb(255 250 232 / 65%);
-	background-position: center;
-	background-repeat: no-repeat;
-	background-size: 13px 13px;
-
-	box-shadow: inset 0 0 0 1px rgb(255 255 255 / 28%);
+.wfrp-rule-effect-selection__row {
+	position: relative;
+	display: flex;
+	align-items: flex-start;
+	gap: 6px;
 	cursor: pointer;
 }
 
-.wfrp-rule-effect-selection input[type="checkbox"]:checked {
-	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8.5 6.4 12 13 4.5' fill='none' stroke='%232b2115' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+.wfrp-rule-effect-selection__row > input[type="checkbox"] {
+	position: absolute !important;
+	width: 1px !important;
+	height: 1px !important;
+	min-width: 1px !important;
+	margin: 0 !important;
+	padding: 0 !important;
+
+	opacity: 0 !important;
+	appearance: none !important;
+	-webkit-appearance: none !important;
+
+	pointer-events: none;
 }
 
-.wfrp-rule-effect-selection input[type="checkbox"]:focus-visible {
+.wfrp-rule-effect-selection__row::before {
+	content: "";
+	display: inline-grid;
+	place-items: center;
+	flex: 0 0 16px;
+
+	width: 16px;
+	height: 16px;
+	margin-top: 1px;
+
+	border: 1px solid rgb(71 49 29 / 82%);
+	border-radius: 1px;
+	background: transparent;
+	box-shadow: none;
+
+	color: #2b2115;
+	font-family: Arial, sans-serif;
+	font-size: 14px;
+	font-weight: 700;
+	line-height: 1;
+}
+
+.wfrp-rule-effect-selection__row:has(> input[type="checkbox"]:checked)::before {
+	content: "✓";
+}
+
+.wfrp-rule-effect-selection__row:has(> input[type="checkbox"]:focus-visible)::before {
 	outline: 2px solid currentColor;
 	outline-offset: 2px;
 }
 
-.wfrp-rule-effect-selection input[type="checkbox"]:disabled {
+.wfrp-rule-effect-selection__row:has(> input[type="checkbox"]:disabled) {
 	cursor: default;
+}
+
+.wfrp-rule-effect-selection__row:has(> input[type="checkbox"]:disabled)::before {
 	opacity: 0.65;
 }
 
