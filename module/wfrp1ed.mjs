@@ -2,6 +2,13 @@ import { CharacterData } from "./data-models/actor/CharacterData.mjs";
 import { SkillData } from "./data-models/item/SkillData.mjs";
 import { Wfrp1edActor } from "./documents/Wfrp1edActor.mjs";
 import { Wfrp1edItem } from "./documents/Wfrp1edItem.mjs";
+import {
+	configureWfrpRuleEffectType,
+	RULE_EFFECT_OPERATIONS,
+	RULE_EFFECT_SIDES,
+	RuleEffectRegistry,
+} from "./effects/RuleEffectRegistry.mjs";
+import { RuleEffectResolver } from "./effects/RuleEffectResolver.mjs";
 import { WFRP1ED } from "./helpers/config.mjs";
 import { ClassicActorSheet } from "./sheets/ClassicActorSheet.mjs";
 import { SkillItemSheet } from "./sheets/SkillItemSheet.mjs";
@@ -41,8 +48,10 @@ Hooks.once("init", async () => {
 	console.info("WFRP1ED | Initializing WFRP 1st Edition");
 
 	configureSystem();
+	configureWfrpRuleEffectType();
 	registerHandlebarsHelpers();
 	registerStandardTests();
+	registerRuleEffectTargets();
 	registerDocumentSheets();
 	registerChatHooks();
 	exposeSystemApi();
@@ -103,15 +112,14 @@ function registerDocumentSheets() {
 }
 
 /**
- * Register all currently executable test definitions.
+ * Register all currently executable percentile test definitions.
  *
- * `STANDARD_TESTS` contains the direct characteristic tests used by clicks on
- * the current profile row. `NAMED_STANDARD_TESTS` contains the audited named
- * Standard Tests whose targets can be expressed by the current TestContext and
- * FormulaResolver contracts.
+ * `STANDARD_TESTS` contains direct characteristic tests used by clicks on the
+ * current profile row. `NAMED_STANDARD_TESTS` contains audited named Standard
+ * Tests whose targets can be expressed by TestContext/FormulaResolver.
  *
- * Special procedures such as Gambling, Employment, Busking and Movement are
- * deliberately not registered until their complete execution contracts exist.
+ * Non-d100 procedures such as movement remain outside TestManager even though
+ * they can share the Standard Test launcher.
  *
  * @returns {void}
  */
@@ -124,6 +132,94 @@ function registerStandardTests() {
 	for (const definition of definitions) {
 		TestManager.register(definition);
 	}
+}
+
+/**
+ * Register stable rule parameters which current subsystems can consume from
+ * declarative Active Effects.
+ *
+ * Item authors select these localized targets rather than typing arbitrary data
+ * paths. Future combat/damage/healing/magic subsystems extend this same registry
+ * when their contracts exist.
+ *
+ * @returns {void}
+ */
+function registerRuleEffectTargets() {
+	for (const test of TestManager.all()) {
+		const isCharacteristic = test.tags.includes("characteristic");
+		const isStandard = test.tags.includes("standard");
+
+		if (!isCharacteristic && !isStandard) {
+			continue;
+		}
+
+		RuleEffectRegistry.registerTarget({
+			id: isCharacteristic
+				? `test.characteristic.${test.id}.target`
+				: `test.standard.${test.id}.target`,
+			category: isCharacteristic
+				? "test-characteristic"
+				: "test-standard",
+			label: test.name,
+			sides: [
+				RULE_EFFECT_SIDES.SELF,
+				RULE_EFFECT_SIDES.TARGET,
+				RULE_EFFECT_SIDES.OPPONENT,
+			],
+			operations: [
+				RULE_EFFECT_OPERATIONS.ADD,
+				RULE_EFFECT_OPERATIONS.SUBTRACT,
+				RULE_EFFECT_OPERATIONS.OVERRIDE,
+			],
+			metadata: {
+				consumer: "test",
+				testId: test.id,
+				testKind: isCharacteristic
+					? "characteristic"
+					: "standard",
+			},
+		});
+	}
+
+	RuleEffectRegistry.registerTarget({
+		id: "procedure.movement.jump.reductionDie",
+		category: "procedure-movement",
+		label: localizeWithFallback(
+			"WFRP1ED.RuleEffect.MovementJumpReductionDie",
+			"Jumping: damage-reduction d6",
+			"Zeskok: K6 redukcji obrażeń",
+		),
+		sides: [RULE_EFFECT_SIDES.SELF],
+		operations: [
+			RULE_EFFECT_OPERATIONS.ADD,
+			RULE_EFFECT_OPERATIONS.SUBTRACT,
+		],
+		metadata: {
+			consumer: "movement",
+			procedureId: "jump",
+			parameter: "reductionDie",
+		},
+	});
+
+	RuleEffectRegistry.registerTarget({
+		id: "procedure.movement.leap.distance",
+		category: "procedure-movement",
+		label: localizeWithFallback(
+			"WFRP1ED.RuleEffect.MovementLeapDistance",
+			"Leaping: achieved distance",
+			"Skok: osiągnięty dystans",
+		),
+		sides: [RULE_EFFECT_SIDES.SELF],
+		operations: [
+			RULE_EFFECT_OPERATIONS.ADD,
+			RULE_EFFECT_OPERATIONS.SUBTRACT,
+		],
+		metadata: {
+			consumer: "movement",
+			procedureId: "leap",
+			parameter: "distance",
+		},
+	});
 }
 
 /**
@@ -183,6 +279,11 @@ function exposeSystemApi() {
 		documents: Object.freeze({
 			Actor: Wfrp1edActor,
 			Item: Wfrp1edItem,
+		}),
+
+		effects: Object.freeze({
+			registry: RuleEffectRegistry,
+			resolver: RuleEffectResolver,
 		}),
 
 		tests: Object.freeze({
@@ -323,4 +424,16 @@ function isPureChanceTarget(characteristic, variables) {
 			key === "movement"
 		);
 	});
+}
+
+function localizeWithFallback(key, englishFallback, polishFallback) {
+	const localized = game.i18n.localize(key);
+
+	if (localized !== key) {
+		return localized;
+	}
+
+	return game.i18n.lang === "pl"
+		? polishFallback
+		: englishFallback;
 }
