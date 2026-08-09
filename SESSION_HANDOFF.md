@@ -1,295 +1,266 @@
 # Session Handoff
 
 **Date:** 2026-08-09  
-**Purpose:** Current implementation/architecture checkpoint. Replace/update this file instead of creating overlapping progress documents.
+**Purpose:** Current implementation/architecture checkpoint. Update this file instead of creating overlapping progress documents.
 
 ## Current working source
 
 Repository: `tuvielgaming/wfrp1ed_FoundryVTT`  
 Branch: `master`
 
-GitHub `master` is the implementation source of truth. Fetch the latest exact files before every code change.
+GitHub `master` is the implementation source of truth. Fetch the latest exact file before every code change.
 
-## Latest checkpoint — STOPPED BEFORE RUNTIME TEST
+## Current confirmed checkpoint
 
-The session ended immediately after adding a proper Foundry v14 WFRP ActiveEffect subtype to address reload/copy persistence.
+The Skill + Active Effect foundation is now live-tested and working in Foundry v14.
 
-Latest persistence commits:
+### Confirmed persistence
 
-- `8568ccf5c7254b9a6b4b344fbfffde85bdd0dc38` — add persisted WFRP Active Effect subtype;
-- `e6a1febe1357556e1d7f7104da50059d30b5a4a3` — register WFRP Active Effect subtype in the system/manifest.
+User explicitly confirmed all of the following:
 
-**These two persistence commits have NOT yet been runtime-tested.**
+- WFRP rules authored on a world Skill persist after a full Foundry restart;
+- dragging that world Skill onto a Character preserves the Active Effect rule setup;
+- the Actor-embedded Skill rules also persist after a full Foundry restart;
+- Standard Test dialogs discover the copied/persisted effects correctly.
 
-Because `system.json` changed, the next session must begin with:
+Durable WFRP rule descriptors are mirrored into:
 
 ```text
-git pull
+ActiveEffect.flags.wfrp1ed.ruleChanges
 ```
 
-then a **full Foundry restart**, not only a browser hard refresh.
+The existing `system.changes` representation remains as a compatibility/runtime mirror. Skill authoring and the rule resolver prefer the persisted flag copy after reload/drop.
 
-### Exact first test next session
+Key commits:
 
-Use a world Skill Item and test in this order:
+- `8a86af4893b5a0da54669ebb73f2c741de39fe8a` — resolve WFRP rules from persisted Active Effect flags;
+- `d1cbfc7b702fff2fd25fc0fc427a0cc42e8edf0e` — persist Skill WFRP rules in Active Effect flags.
 
-1. Open a world Skill Item.
-2. Reuse/create an Active Effect.
-3. Add a new WFRP rule, e.g. `Ukrywanie się +10`.
-4. Close and reopen the Skill — rule should still be visible.
-5. Fully restart Foundry again.
-6. Reopen the same world Skill — the rule must still exist after restart.
-7. Drag that Skill onto an Actor which does not already own it.
-8. Open the Actor-embedded Skill — its Active Effect and WFRP rule must be present.
+### Duplicate Skill prevention — CONFIRMED
 
-Do not claim persistence is fixed until these steps pass.
+The Actor no longer accepts the same Skill identity more than once through normal creation/drop flow.
 
-## Persistence bug history / diagnosis
+Identity rule:
 
-Observed before the latest subtype fix:
+- mapped/core Skill: same `system.rulesId` + same `system.specialisation` = duplicate;
+- custom/unmapped Skill: same normalized Item name + same `system.specialisation` = duplicate;
+- different specialisations remain legal.
 
-- WFRP Active Effect rule edits appeared correctly in the live Skill sheet.
-- They could be edited/reopened during the same Foundry session.
-- After Foundry reload/restart, rules reverted/disappeared.
-- Dragging a world Skill to an Actor produced an embedded Skill without the authored WFRP rule data.
+The first per-Item `_preCreate` attempt was insufficient during drag/drop because Actor ownership context was not reliable at that lifecycle point.
 
-Earlier investigation established Foundry v14 stores Active Effect changes in `ActiveEffect.system.changes`, not legacy top-level `changes`.
+Final implementation uses batch-wise `Wfrp1edItem._preCreateOperation`, where pending embedded Items already have their Actor parent and the pending document array can be filtered before database creation.
 
-The editor/resolver was migrated accordingly:
+Update-side protection remains so an embedded Skill cannot later be edited into another Skill's identity.
 
-- Skill authoring writes `system.changes`;
-- resolver reads `effect.system.changes`;
-- creation/edit/delete use the parent Item embedded-document update path.
+Existing historical duplicates are not auto-deleted; manual cleanup is required because copies may contain different authored effects.
 
-However, live-session-only persistence remained. The current hypothesis/fix is that WFRP-authored effects need a declared system-owned ActiveEffect subtype backed by Foundry v14 `ActiveEffectTypeDataModel` rather than relying on generic `type: "base"`.
+Key commits:
 
-Current implementation:
+- `370967af7dc819dadd1cd566e43c87e5e4ef5ee6` — initial duplicate guard;
+- `df261fe53307860aebc0e2b3be1d3e2343585d03` — enforce uniqueness at Item creation operation; user confirmed this works.
 
-- `module/effects/WfrpActiveEffectSetup.mjs` defines `WFRP_ACTIVE_EFFECT_TYPE = "wfrp"`;
-- `WfrpActiveEffectData extends foundry.data.ActiveEffectTypeDataModel` unchanged;
-- it registers `CONFIG.ActiveEffect.dataModels.wfrp`;
-- it sets `CONFIG.ActiveEffect.defaultType = "wfrp"`;
-- older/base effects containing WFRP rule changes are migrated to type `wfrp` on the next relevant update;
-- `system.json` declares the ActiveEffect subtype.
+## Startup regression history — IMPORTANT
 
-Again: this is **implemented but not yet runtime-validated**.
+A persistence experiment temporarily broke clean Foundry startup and caused both Character and Skill documents to open with Foundry `BaseSheet` fallback.
 
-## Duplicate Skill bug — OPEN
+Runtime diagnostic showed:
 
-The Actor currently allows the same Skill to be embedded multiple times.
+```text
+game.WFRP1ED: undefined
+Actor character sheets: {}
+Skill sheets: {}
+```
 
-User explicitly reported this is wrong for the normal Skill workflow.
+A temporary bootstrap probe exposed the exact syntax failure:
 
-Do **not** implement duplicate blocking until the persistence/copy test above is confirmed, so these two concerns stay isolated.
+```text
+RuleEffectResolver.mjs
+Private field '#collectEffect' must be declared in an enclosing class
+```
 
-After persistence passes, audit the canonical Skill identity rule before blocking duplicates. Stable `system.rulesId` exists for mapped core Skill identity, but specialised/custom Skills may require identity rules that include specialisation and/or source UUID rather than display name alone.
+Cause: one missing closing brace in the nested Item/effect loop left private class methods parsed outside the class.
 
-## Active Effect authoring — live-tested working before restart
+Fix:
 
-The Skill Item WFRP effect UI has been live-tested successfully for the following within a running Foundry session:
+- `e527d61b4702f32a093d8ef9c6fe3a2cb88140d1` — restore correct `RuleEffectResolver` class structure.
 
-- add native Active Effect;
-- persistent enable/disable toggle during the live session;
-- add WFRP rule change;
-- localized target dropdown;
-- edit existing WFRP rule and reopen with saved values;
-- multiple WFRP rule changes inside one Active Effect;
-- operations/value/formula/side/applicability/stacking/condition persisted in the live Document;
-- effect target IDs remain stable and language-neutral.
+The temporary bootstrap probe was subsequently removed.
 
-The rule editor presentation uses localized target labels. Internal mechanics use stable IDs.
+**Rule:** startup/import-critical files must be read back after replacement. A hot refresh is not sufficient proof that a clean Foundry boot works.
 
-## Active Effect architecture — approved
+A small ActiveEffect `wfrp` compatibility declaration may still exist because some world documents were created during the earlier subtype experiment. Do not remove compatibility support casually while existing worlds may still contain those documents. Do not reintroduce the old automatic type-migration hook.
 
-Active Effects are a **system-wide WFRP rule mechanism**, not Skill-only.
+## Active Effect architecture — APPROVED
 
-Skills are the first authoring surface, but the common resolver/editor must also support rule-bearing Items such as weapons, armour, equipment, spells, diseases, traits/talents, conditions, etc. Future dedicated Item types such as armour/disease should use the same infrastructure.
+Active Effects are a system-wide WFRP rule mechanism, not Skill-only.
 
-Subsystems must ask for effects targeting stable rule parameters rather than checking Item names or specific Skill identities.
+Skills are the first authoring surface. The common effect infrastructure must later be usable by weapons, armour, equipment, spells, diseases, traits/talents, conditions, and other rule-bearing Items.
 
-Examples:
+Subsystems consume stable rule parameters instead of checking Skill/Item names.
+
+Current examples:
 
 - `test.standard.hide.target`
 - `test.characteristic.int.target`
 - `procedure.movement.jump.reductionDie`
 - `procedure.movement.leap.distance`
-- future combat/damage/healing/magic parameters.
 
-Owning an Item does not automatically mean every effect applies: future weapon/equipment/spell/disease state (equipped, worn, active, duration, stage, etc.) must participate in availability.
+Future combat/damage/healing/magic parameters should extend the same vocabulary.
 
-## Per-roll Active Effect selection — live-tested working
+Persistent ActiveEffect enabled/disabled state is separate from per-roll choices.
 
-Relevant effects are shown directly in the Standard Test window.
+## Per-roll Active Effect selection — CONFIRMED
 
-User-approved compact presentation direction:
+Relevant effects are shown directly in the Standard Test dialog.
+
+Approved compact presentation:
 
 ```text
 ☐ Cichy Chód w mieście: +10 (sytuacyjny)
 ```
 
-Do not repeat the selected Standard Test name inside the effect label; the dialog already identifies the test.
-
-Checkbox visuals were explicitly corrected and user approved them:
+Checkbox visuals are confirmed:
 
 - unchecked = simple empty square;
 - checked = plain check mark;
-- no native Foundry black rectangle/stylized checkbox artwork.
+- no native Foundry black rectangle/stylized artwork.
 
-Important behavior:
+Behavior:
 
-- persistent ActiveEffect enabled/disabled state is not changed by a roll checkbox;
 - contextual/manual effects can be selected per roll;
 - automatic effects are selected by default;
-- non-GM users cannot suppress automatic effects;
-- GM may override them for adjudication;
-- only effects relevant to the selected test/procedure are shown.
+- persistent ActiveEffect state is not mutated by a roll checkbox;
+- GM may adjudicate effect selection;
+- only effects relevant to the current test/procedure are shown.
 
-## Post-roll Active Effect adjudication — live-tested working
+## Post-roll Active Effect adjudication — CONFIRMED
 
-GM can enable/disable Active Effect modifiers in the expanded test-result chat card after the roll.
+GM can enable/disable snapshotted Active Effect modifiers in the expanded test-result chat card after the roll.
 
-The same original d100 remains fixed. Toggling a modifier only recalculates:
+The original d100 remains fixed. Toggling recalculates only:
 
 - total modifier;
 - final target;
 - margin;
 - success/failure.
 
-It does not:
+It does not reroll, reread current Actor/Item/ActiveEffect data, or mutate the persistent ActiveEffect.
 
-- reroll;
-- reread Actor/Skill/ActiveEffect data;
-- mutate the underlying persistent ActiveEffect.
+Unchecked candidates are snapshotted with `enabled: false`, so the GM can enable them after the roll.
 
-Unchecked roll-time candidates are intentionally snapshotted as disabled modifiers so the GM can enable them after the roll.
+The general `Modyfikator testu` remains separately numeric-editable.
 
-The general `Modyfikator testu` remains separately numeric-editable by the GM.
+## Deferred-target selection — CONFIRMED
 
-## Deferred-target Active Effect selection bug — FIXED AND LIVE-TESTED
-
-Bug found and fixed:
-
-For target-dependent Standard Tests such as `Ukrywanie się`, a checked contextual Active Effect was preserved only when the target was already selected before opening the test. If the test created a pending target card and the GM supplied the target later, the effect selection was lost/reset.
-
-Cause: `PendingStandardTest._serializeOptions()` did not serialize `options.ruleEffects`.
+Target-dependent Standard Tests such as `Ukrywanie się` preserve checked/unchecked Active Effect selections when the test first creates a pending target request and the GM resolves the target later.
 
 Fix commit:
 
-- `64c847e0039629df688306f827fdd53677aceda4` — preserve rule effect selections in pending tests.
+- `64c847e0039629df688306f827fdd53677aceda4`.
 
-Pending request version is now 2 and stores a mutable deep-enough copy of the per-roll rule-effect snapshot, including nested source metadata. This deliberately avoids the previous frozen-ChatMessage-flags crash.
-
-User confirmed this fix works.
+Pending request snapshot version 2 stores a mutable copy of `options.ruleEffects` and nested source metadata, avoiding the previous frozen ChatMessage flag problem.
 
 ## Movement procedures / Skills
 
-`Skok` and `Zeskok` were verified against both English and Polish WFRP 1e Core Rulebooks before implementation.
+`Skok` and `Zeskok` mechanics used so far were verified against both English and Polish WFRP 1e Core Rulebooks before implementation.
 
-Verified sources:
-
-- English Core Rulebook printed p.75 — Jumping/Falling/Leaping/Climbing;
-- Polish Core Rulebook printed p.75 — Zeskok/Upadek/Skok/Wspinaczka;
-- English/Polish Skill sections for Acrobatics/Akrobatyka and Clown/Błaznowanie.
-
-Important architecture correction is complete:
-
-`MovementStandardTest` no longer contains hardcoded Acrobatics/Clown Skill identity/bonus tables. Movement consumes the generic Active Effect parameters:
+Movement procedures do not hardcode Skill names. They consume generic Active Effect parameters:
 
 - `procedure.movement.jump.reductionDie`;
 - `procedure.movement.leap.distance`.
 
-This is the approved final direction: procedures consume generic effects and do not ask whether a specific Skill exists.
+Do not reintroduce Acrobatics/Clown identity tables into movement executors.
 
-Movement runtime testing is still secondary to resolving ActiveEffect persistence first.
+## Damage architecture — APPROVED, NOW CURRENT TASK
 
-## Approved damage architecture — SAVE THIS
-
-The user approved a WFRP4e-like chat workflow for applying calculated damage.
-
-A roll/procedure calculates damage but must **not silently mutate Wounds at calculation time**.
+User approved a WFRP4e-like workflow where calculated damage appears in chat and is applied only after an explicit user action.
 
 Target architecture:
 
-`damage-producing action/procedure`
-→ `DamagePacket`
-→ `DamageResolver`
-→ `DamageApplication`
-→ Actor Wounds / later critical handling.
+```text
+damage-producing action/procedure
+→ DamagePacket
+→ DamageResolver
+→ DamageApplication
+→ Actor Wounds / later critical handling
+```
 
-`Apply Damage / Zastosuj obrażenia` from the ChatMessage context menu should be available to:
+A damage-producing action must **not silently mutate Wounds when damage is calculated**.
+
+`Apply Damage / Zastosuj obrażenia` from a ChatMessage should be available to:
 
 - GM; or
-- user who owns the Actor receiving damage.
+- a user who owns the Actor receiving that damage.
 
-Permission is checked against the **damage target**, not necessarily the rolling Actor.
+Permission is checked against the damage target, not necessarily the rolling Actor.
 
 Generic `DamagePacket` must support at least:
 
 - raw amount;
 - target Actor UUID;
 - source kind/id;
-- Armour apply/ignore;
-- Toughness apply/ignore;
+- Armour apply/ignore policy;
+- Toughness apply/ignore policy;
 - optional hit location;
 - future special mitigation flags;
-- application transaction state.
+- transaction/application state stored with the ChatMessage.
 
-`Zeskok` is intended as the first consumer and explicitly ignores Armour and Toughness.
+After application, the ChatMessage should record at least:
 
-After application the ChatMessage should store amount applied, Wounds before/after, user, timestamp/state and prevent accidental double application.
+- amount applied;
+- Wounds before;
+- Wounds after;
+- applying user;
+- timestamp;
+- applied state;
+- enough identity/state to prevent accidental double application.
 
-Possible later GM-only Undo must use the stored transaction; do not blindly add Wounds back.
+Possible later GM-only Undo must validate and use the stored transaction; never blindly add Wounds back.
 
-Do not implement Zeskok-specific Wounds subtraction outside this generic pipeline.
+`Zeskok` is intended as the first consumer and is expected to ignore Armour and Toughness, but its exact damage-producing formula must continue to follow the verified English/Polish rulebook source.
 
-## Effect vocabulary approved
+### Current rulebook boundary for damage
 
-The common WFRP Active Effect system must ultimately support more than fixed Standard Test modifiers:
+Repository rulebook audit already verifies:
 
-1. test target modifier;
-2. self/target/opponent side;
-3. formula-derived modifier;
-4. contextual/manual applicability;
-5. stacking/repeated-acquisition policy;
-6. procedure parameter modifier;
-7. characteristic/profile modification;
-8. combat-rule modifier;
-9. capability/permission effects;
-10. outcome/rule transformations.
+- remaining Wounds are persistent play state;
+- damage reduces remaining Wounds;
+- negative remaining Wounds are allowed because excess damage participates in critical damage.
 
-Use Foundry ActiveEffect Documents as persistent declarative rule records, with a WFRP resolver executing domain semantics at the relevant subsystem boundary.
+The current Character schema stores this at:
 
-## Important current commits from this session
+```text
+system.status.wounds.value
+```
 
-Active Effect/editor/integration history includes:
+and derives maximum Wounds from the `w` characteristic.
 
-- `32d330a` — fix DialogV2 wrapper;
-- `44e647b`, `042f936` — localized effect targets;
-- `bb2349f`, `3db47d1`, `108cf6c` — persistence diagnostics/attempts;
-- `62ff6bc`, `104fc73` — migrate resolver/editor to v14 `system.changes`;
-- `a9f4488` — hydrate rule editor from persisted change;
-- `350e4f4`, `92d9fd0`, `4726c9a` — checkbox/row presentation refinements;
-- `398d12a`, `033e422`, `7bcaf4c`, `c9ebe5c`, `1e4890f`, `af51ca4`, `1c0c5ba` — preserve candidates and add GM post-roll effect toggles;
-- `64c847e` — preserve effect selections through deferred target resolution;
-- `8568ccf`, `e6a1feb` — WFRP ActiveEffect subtype persistence fix, **not yet runtime-tested**.
+However, generic combat Armour/Toughness mitigation has not yet been fully audited in `RULEBOOK_IMPLEMENTATION.md`. Do not invent that calculation from memory. It is safe to build mechanics-neutral packet/application/transaction contracts first and defer actual mitigation calculation until the relevant English + Polish combat sections are verified.
 
-## Next-session order
+## Current next order
 
-1. Pull latest `master` and fully restart Foundry.
-2. Run the exact world Skill → restart → Actor copy persistence test above.
-3. If persistence fails, inspect the WFRP ActiveEffect subtype/source data; do not move on by assumption.
-4. If persistence passes, implement duplicate Skill prevention at the correct Actor/embedded-Item boundary.
-5. Re-test dragging a world Skill with Active Effects onto an Actor.
-6. Continue `Skok/Zeskok` Active Effect runtime testing.
-7. Only after the effect foundation is stable, move to the approved generic DamagePacket/Apply Damage pipeline.
+1. Build immutable/serializable `DamagePacket` contract.
+2. Build resolved-damage/application transaction contract around `system.status.wounds.value`.
+3. Add target-ownership permission checks using Foundry v14 Document permissions.
+4. Add ChatMessage damage flags and `Apply Damage / Zastosuj obrażenia` context action.
+5. Prevent double application and record the completed transaction on the message.
+6. Audit English + Polish combat damage/Armour/Toughness rules before enabling generic mitigation calculations.
+7. Wire verified `Zeskok` damage into the generic pipeline as the first consumer.
+8. Later extend the same pipeline to normal weapon/combat damage.
+
+## Foundry v14 API notes verified during current work
+
+- `foundry.utils.fromUuid(uuid)` resolves a Document from its UUID.
+- `Document.testUserPermission(user, permission)` is the correct capability test; `CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER` is ownership level 3.
+- `Document.update({ "system.status.wounds.value": n })` is the native persistent update path for nested Actor data.
+- ChatMessage and Actor Documents support package flags for serializable system metadata.
 
 ## Important cautions
 
-- Foundry runtime validation is definitive; do not claim untested persistence is fixed.
-- `system.json` changed at the latest checkpoint, so a full restart is required before the next test.
-- Do not create another Skill-specific rules database; Active Effects are the mechanical rule source.
-- Stable `system.rulesId` remains useful for core identity/migration/content mapping, not as a substitute for Active Effect mechanics.
-- Do not mutate persistent ActiveEffect state for per-roll choices.
+- Foundry runtime validation is definitive.
+- Do not claim a damage rule is mechanically complete until relevant English mechanics and Polish terminology are verified.
+- Do not calculate or mutate persistent ActiveEffect state for per-roll choices.
 - Keep non-d100 movement procedures outside generic percentile `Test`.
-- Verify WFRP mechanics against English Core and Polish terminology before implementation.
-- Do not apply calculated damage directly; use the approved damage transaction pipeline.
+- Do not apply damage at roll calculation time; use the explicit DamageApplication transaction pipeline.
+- Do not auto-delete historical duplicate Skills.
+- Avoid touching the now-confirmed Active Effect persistence path unless a concrete defect requires it.
