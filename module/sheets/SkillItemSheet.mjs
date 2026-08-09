@@ -14,11 +14,15 @@ const { ItemSheetV2 } = foundry.applications.sheets;
 const { DialogV2, HandlebarsApplicationMixin } =
 	foundry.applications.api;
 
+const RULE_FLAG_SCOPE = "wfrp1ed";
+const RULE_FLAG_KEY = "ruleChanges";
+
 /**
  * Native Foundry v14 sheet for WFRP 1e Skill Items.
  *
- * Skill content remains in SkillData. Mechanical rules are authored as normal
- * embedded Foundry ActiveEffects and their v14 `system.changes` records.
+ * Skill content remains in SkillData. Mechanical rules are authored on normal
+ * embedded Foundry ActiveEffects. WFRP-specific rule descriptors are mirrored
+ * into package-owned ActiveEffect flags for durable persistence and Item copy.
  */
 export class SkillItemSheet extends HandlebarsApplicationMixin(
 	ItemSheetV2,
@@ -99,6 +103,11 @@ export class SkillItemSheet extends HandlebarsApplicationMixin(
 					transfer: true,
 					system: {
 						changes: [],
+					},
+					flags: {
+						[RULE_FLAG_SCOPE]: {
+							[RULE_FLAG_KEY]: [],
+						},
 					},
 				},
 			],
@@ -413,16 +422,35 @@ function changeIndexFromTarget(target) {
 }
 
 /**
- * Return a mutable clone of the v14 ActiveEffect type-data changes array.
+ * Return a mutable combined view of native Foundry changes and durable WFRP
+ * rule descriptors. Package flags are canonical once they exist; the old
+ * system.changes representation is retained only as a compatibility fallback.
  */
 function effectSystemChanges(effect) {
 	const system = effect?.system?.toObject?.() ?? {};
-	return foundry.utils.deepClone(system.changes ?? []);
+	const systemChanges = Array.isArray(system.changes)
+		? foundry.utils.deepClone(system.changes)
+		: [];
+	const nativeChanges = systemChanges.filter(
+		(change) => !decodeRuleEffectChange(change),
+	);
+	const flaggedRules = effect?.getFlag?.(
+		RULE_FLAG_SCOPE,
+		RULE_FLAG_KEY,
+	);
+	const ruleChanges = Array.isArray(flaggedRules)
+		? foundry.utils.deepClone(flaggedRules)
+		: systemChanges.filter(
+			(change) => Boolean(decodeRuleEffectChange(change)),
+		);
+
+	return [...nativeChanges, ...ruleChanges];
 }
 
 /**
- * Persist WFRP rule changes through the parent Item using Foundry v14's
- * `ActiveEffect.system.changes` path.
+ * Persist WFRP rules through the parent Item. `system.changes` remains a
+ * runtime/compatibility mirror, while package-owned ActiveEffect flags provide
+ * the durable serialized copy which survives restart and Item embedding.
  */
 async function persistEffectChanges(
 	application,
@@ -439,21 +467,23 @@ async function persistEffectChanges(
 		);
 	}
 
+	const serializedChanges = foundry.utils.deepClone(changes);
+	const ruleChanges = serializedChanges.filter(
+		(change) => Boolean(decodeRuleEffectChange(change)),
+	);
+
 	const [updated] = await item.updateEmbeddedDocuments(
 		"ActiveEffect",
 		[
 			{
 				_id: effect.id,
-				"system.changes": foundry.utils.deepClone(changes),
+				"system.changes": serializedChanges,
+				[`flags.${RULE_FLAG_SCOPE}.${RULE_FLAG_KEY}`]:
+					foundry.utils.deepClone(ruleChanges),
 			},
 		],
 	);
 
-	/*
-	 * Prefer the Document returned by the update. Synthetic Token Actors can
-	 * briefly retain stale nested collection references on an already-rendered
-	 * Item sheet, while the returned Document represents the committed update.
-	 */
 	const stored = updated ?? item.effects?.get(effect.id) ?? null;
 
 	if (!stored) {
@@ -463,21 +493,29 @@ async function persistEffectChanges(
 	}
 
 	if (expectedChange) {
-		const storedChanges = effectSystemChanges(stored);
-		const index = Number.isInteger(expectedIndex)
-			? expectedIndex
-			: storedChanges.length - 1;
-		const actual = storedChanges[index];
+		const storedRules = stored.getFlag?.(
+			RULE_FLAG_SCOPE,
+			RULE_FLAG_KEY,
+		);
+		const persistedRules = Array.isArray(storedRules)
+			? foundry.utils.deepClone(storedRules)
+			: [];
+		const expectedRule = decodeRuleEffectChange(expectedChange);
+		const actual = expectedRule
+			? persistedRules.find(
+				(change) => sameRuleChange(change, expectedChange),
+			) ?? null
+			: null;
 
-		if (!sameRuleChange(actual, expectedChange)) {
+		if (!actual) {
 			console.error(
-				"WFRP1ED | ActiveEffect rule persistence mismatch.",
+				"WFRP1ED | ActiveEffect rule flag persistence mismatch.",
 				{
 					item: item.uuid,
 					effect: stored.uuid,
 					expected: expectedChange,
-					actual,
-					storedChanges,
+					expectedIndex,
+					persistedRules,
 				},
 			);
 
