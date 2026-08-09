@@ -1,0 +1,18 @@
+.classic-actor-sheet .characteristic-current-wounds {
+	display: none;
+}
+
+.classic-actor-sheet
+	.characteristic-cell--current[data-characteristic="w"]
+	.characteristic-current-profile {
+	display: none;
+}
+
+.classic-actor-sheet
+	.characteristic-cell--current[data-characteristic="w"]
+	.characteristic-current-wounds {
+	display: inline;
+	font-size: 0.82em;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
