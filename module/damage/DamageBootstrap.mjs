@@ -46,8 +46,12 @@ Hooks.once("init", () => {
 
 	Hooks.on(
 		"updateActor",
-		(actor) => {
+		(actor, changes) => {
 			DamageChat.refreshActorCards(actor);
+
+			if (woundsProfileChanged(changes)) {
+				void synchronizeUndamagedWounds(actor);
+			}
 		},
 	);
 });
@@ -97,43 +101,81 @@ function normalizeContextMenuEntries(menuItems) {
  * Initialize the formerly hidden remaining-Wounds field for existing Character
  * Actors. Before the damage workflow existed the schema default was 0 and the
  * Classic sheet never exposed that value, so it did not represent an actual
- * wounded state. The per-Actor flag makes this migration idempotent.
+ * wounded state.
+ *
+ * The initialization flag deliberately remains false here. It becomes true
+ * only when the Actor receives explicit in-play damage, allowing an undamaged
+ * Actor's remaining Wounds to continue following profile changes beforehand.
  */
 async function initializeExistingCharacterWounds() {
 	for (const actor of game.actors ?? []) {
-		if (
-			actor.type !== "character" ||
-			actor.getFlag?.(FLAG_SCOPE, WOUNDS_INITIALIZED_FLAG_KEY) === true
-		) {
-			continue;
-		}
-
-		const maximum = Number(actor.woundsMaximum);
-
-		if (!Number.isFinite(maximum) || !Number.isInteger(maximum)) {
-			console.warn(
-				"WFRP1ED | Unable to initialize remaining Wounds.",
-				{
-					actor: actor.uuid,
-					woundsMaximum: actor.woundsMaximum,
-				},
-			);
-			continue;
-		}
-
-		try {
-			await actor.update({
-				"system.status.wounds.value": maximum,
-				[`flags.${FLAG_SCOPE}.${WOUNDS_INITIALIZED_FLAG_KEY}`]: true,
-			});
-		} catch (error) {
-			console.error(
-				"WFRP1ED | Unable to initialize Character remaining Wounds.",
-				{
-					actor: actor.uuid,
-					error,
-				},
-			);
-		}
+		await synchronizeUndamagedWounds(actor);
 	}
+}
+
+/**
+ * Keep an Actor which has not yet entered the in-play Wounds lifecycle at its
+ * current Wounds characteristic maximum.
+ *
+ * @param {Actor} actor
+ */
+async function synchronizeUndamagedWounds(actor) {
+	if (
+		actor?.type !== "character" ||
+		actor.getFlag?.(FLAG_SCOPE, WOUNDS_INITIALIZED_FLAG_KEY) === true
+	) {
+		return;
+	}
+
+	const maximum = Number(actor.woundsMaximum);
+
+	if (!Number.isFinite(maximum) || !Number.isInteger(maximum)) {
+		console.warn(
+			"WFRP1ED | Unable to initialize remaining Wounds.",
+			{
+				actor: actor.uuid,
+				woundsMaximum: actor.woundsMaximum,
+			},
+		);
+		return;
+	}
+
+	const stored = Number(actor.system?.status?.wounds?.value);
+
+	if (stored === maximum) {
+		return;
+	}
+
+	try {
+		await actor.update({
+			"system.status.wounds.value": maximum,
+		});
+	} catch (error) {
+		console.error(
+			"WFRP1ED | Unable to synchronize Character remaining Wounds.",
+			{
+				actor: actor.uuid,
+				error,
+			},
+		);
+	}
+}
+
+function woundsProfileChanged(changes) {
+	if (!changes || typeof changes !== "object") {
+		return false;
+	}
+
+	if (
+		foundry.utils.getProperty(
+			changes,
+			"system.characteristics.w",
+		) !== undefined
+	) {
+		return true;
+	}
+
+	return Object.keys(changes).some((key) =>
+		key.startsWith("system.characteristics.w."),
+	);
 }
