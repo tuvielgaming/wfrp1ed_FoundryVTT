@@ -1,0 +1,61 @@
+.wfrp1e-damage-card {
+	border: 1px solid rgba(63, 42, 28, 0.45);
+	border-radius: 4px;
+	padding: 0.55rem 0.65rem;
+	background: rgba(247, 238, 215, 0.72);
+	font-size: 0.9rem;
+}
+
+.wfrp1e-damage-card__header,
+.wfrp1e-damage-card__row,
+.wfrp1e-damage-card__mitigation {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.65rem;
+}
+
+.wfrp1e-damage-card__header {
+	padding-bottom: 0.35rem;
+	margin-bottom: 0.35rem;
+	border-bottom: 1px solid rgba(63, 42, 28, 0.25);
+}
+
+.wfrp1e-damage-card__amount {
+	min-width: 2rem;
+	text-align: center;
+	font-weight: 700;
+	font-size: 1.2rem;
+}
+
+.wfrp1e-damage-card__row + .wfrp1e-damage-card__row {
+	margin-top: 0.2rem;
+}
+
+.wfrp1e-damage-card__mitigation {
+	margin-top: 0.35rem;
+	padding-top: 0.35rem;
+	border-top: 1px solid rgba(63, 42, 28, 0.18);
+	font-size: 0.82rem;
+}
+
+.wfrp1e-damage-card__status {
+	margin-top: 0.45rem;
+	padding: 0.35rem 0.45rem;
+	border: 1px solid rgba(63, 42, 28, 0.22);
+	border-radius: 3px;
+	font-weight: 600;
+	text-align: center;
+}
+
+.wfrp1e-damage-card.is-applied .wfrp1e-damage-card__status {
+	font-weight: 700;
+}
+
+.wfrp1e-damage-card__hint {
+	margin-top: 0.3rem;
+	font-size: 0.78rem;
+	font-style: italic;
+	text-align: center;
+	opacity: 0.78;
+}
