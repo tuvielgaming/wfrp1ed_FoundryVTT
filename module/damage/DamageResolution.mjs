@@ -32,7 +32,7 @@ export class DamageResolution {
 			finalAmount,
 			"Final damage amount",
 		);
-		this.breakdown = Object.freeze(
+		this.breakdown = foundry.utils.deepFreeze(
 			cloneJsonObject(breakdown, "Damage resolution breakdown"),
 		);
 		this.resolvedAt = finiteInteger(
