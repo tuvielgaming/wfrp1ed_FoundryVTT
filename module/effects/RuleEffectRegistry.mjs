@@ -91,7 +91,16 @@ export class RuleEffectRegistry {
 		);
 	}
 
-	/** @returns {string} */
+	/**
+	 * Resolve a target label lazily in the active client language.
+	 *
+	 * Registered Foundry localization keys take precedence. `labels` provides
+	 * a small package-local fallback for targets whose translation keys have not
+	 * yet been promoted into the language JSON files. This keeps registration
+	 * independent from the language state during the `init` hook.
+	 *
+	 * @returns {string}
+	 */
 	static label(targetOrId) {
 		const target = typeof targetOrId === "string"
 			? this.get(targetOrId)
@@ -109,7 +118,10 @@ export class RuleEffectRegistry {
 			}
 		}
 
-		return target.label;
+		const language = String(game.i18n.lang ?? "").trim();
+		const languageLabel = target.labels?.[language];
+
+		return languageLabel || target.label;
 	}
 
 	/** @returns {void} */
@@ -284,6 +296,7 @@ function normalizeTargetDefinition(definition = {}) {
 	const category = String(definition.category ?? "").trim();
 	const label = String(definition.label ?? id).trim();
 	const labelKey = String(definition.labelKey ?? "").trim();
+	const labels = normalizeLabels(definition.labels);
 
 	if (!id || !category || !label) {
 		throw new Error(
@@ -309,6 +322,7 @@ function normalizeTargetDefinition(definition = {}) {
 		category,
 		label,
 		labelKey,
+		labels,
 		sides: Object.freeze(sides),
 		operations: Object.freeze(operations),
 		valueRequired: definition.valueRequired !== false,
@@ -316,6 +330,29 @@ function normalizeTargetDefinition(definition = {}) {
 			...(definition.metadata ?? {}),
 		}),
 	});
+}
+
+function normalizeLabels(value) {
+	if (
+		!value ||
+		typeof value !== "object" ||
+		Array.isArray(value)
+	) {
+		return Object.freeze({});
+	}
+
+	const labels = {};
+
+	for (const [language, label] of Object.entries(value)) {
+		const lang = String(language ?? "").trim();
+		const text = String(label ?? "").trim();
+
+		if (lang && text) {
+			labels[lang] = text;
+		}
+	}
+
+	return Object.freeze(labels);
 }
 
 function normalizeAllowed(value, allowed, fallback, label) {
