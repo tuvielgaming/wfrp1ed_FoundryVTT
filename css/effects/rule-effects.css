@@ -57,13 +57,12 @@
 /*
  * Do not rely on Foundry/browser checkbox artwork here. The real checkbox
  * remains inside the label for normal form semantics, but is visually hidden.
- * The label draws a stable WFRP square and a plain check mark from :checked.
- * This is intentionally scoped to per-roll rule-effect candidates only.
+ * The label draws a stable square and plain check mark from :checked.
  */
 .wfrp-rule-effect-selection__row {
 	position: relative;
 	display: flex;
-	align-items: flex-start;
+	align-items: baseline;
 	gap: 7px;
 	min-width: 0;
 	cursor: pointer;
@@ -76,11 +75,9 @@
 	min-width: 1px !important;
 	margin: 0 !important;
 	padding: 0 !important;
-
 	opacity: 0 !important;
 	appearance: none !important;
 	-webkit-appearance: none !important;
-
 	pointer-events: none;
 }
 
@@ -89,16 +86,12 @@
 	display: inline-grid;
 	place-items: center;
 	flex: 0 0 16px;
-
 	width: 16px;
 	height: 16px;
-	margin-top: 2px;
-
 	border: 1px solid rgb(71 49 29 / 82%);
 	border-radius: 1px;
 	background: transparent;
 	box-shadow: none;
-
 	color: #2b2115;
 	font-family: Arial, sans-serif;
 	font-size: 14px;
@@ -124,38 +117,46 @@
 }
 
 .wfrp-rule-effect-selection__body {
-	display: grid;
-	gap: 2px;
-	min-width: 0;
-	flex: 1 1 auto;
-}
-
-.wfrp-rule-effect-selection__main {
 	display: flex;
 	align-items: baseline;
-	gap: 10px;
+	gap: 6px;
 	min-width: 0;
+	flex: 1 1 auto;
+	flex-wrap: wrap;
+	line-height: 1.2;
 }
 
 .wfrp-rule-effect-selection__source {
 	min-width: 0;
-	line-height: 1.2;
+	font-weight: 400;
+}
+
+.wfrp-rule-effect-selection__source::after {
+	content: ":";
 }
 
 .wfrp-rule-effect-selection__value {
 	flex: 0 0 auto;
-	margin-left: 2px;
 	font-weight: 700;
 	white-space: nowrap;
 }
 
 .wfrp-rule-effect-selection__meta {
-	display: block;
-	margin-top: 1px;
+	display: inline;
+	margin: 0;
 	font-size: 11px;
 	font-style: italic;
-	line-height: 1.15;
+	line-height: inherit;
 	opacity: 0.76;
+	white-space: nowrap;
+}
+
+.wfrp-rule-effect-selection__meta::before {
+	content: "(";
+}
+
+.wfrp-rule-effect-selection__meta::after {
+	content: ")";
 }
 
 @media (max-width: 520px) {
