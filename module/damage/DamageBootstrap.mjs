@@ -61,11 +61,13 @@ Hooks.once("ready", () => {
 });
 
 /**
- * Foundry v14 renamed ContextMenuEntry fields to label/visible/onClick.
+ * Foundry v14 renamed ContextMenuEntry fields to label/visible/onClick and
+ * changed the click callback signature from callback(target) to
+ * onClick(event, target).
  *
- * The test-result controller predates that rename and DamageChat was initially
+ * The test-result controller predates that API and DamageChat was initially
  * implemented using the backwards-compatible aliases. Normalize WFRP entries
- * before the menu renders so v14 does not emit deprecation warnings.
+ * before the menu renders while preserving the legacy callback semantics.
  *
  * @param {Array<Object>} menuItems
  */
@@ -87,8 +89,9 @@ function normalizeContextMenuEntries(menuItems) {
 			entry.visible = entry.condition;
 		}
 
-		if (entry.onClick === undefined && entry.callback !== undefined) {
-			entry.onClick = entry.callback;
+		if (entry.onClick === undefined && typeof entry.callback === "function") {
+			const legacyCallback = entry.callback;
+			entry.onClick = (_event, target) => legacyCallback(target);
 		}
 
 		delete entry.name;
