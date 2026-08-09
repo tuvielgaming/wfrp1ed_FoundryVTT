@@ -1,3 +1,4 @@
+import { RuleEffectRollSelection } from "../effects/RuleEffectRollSelection.mjs";
 import { TestContext } from "../tests/TestContext.mjs";
 import { TestDialog } from "../tests/TestDialog.mjs";
 import { TestResultChat } from "../tests/TestResultChat.mjs";
@@ -56,6 +57,11 @@ export class RollTestAction {
 	 * can prepare a context independently without duplicating roll logic.
 	 * TestResultChat owns only the persistent interactive chat presentation.
 	 *
+	 * Selected declarative Active Effects are normalized into ordinary
+	 * TestModifier entries here, immediately before the test target is resolved.
+	 * This keeps one target/modifier pipeline and makes the existing result
+	 * breakdown automatically audit their source and contribution.
+	 *
 	 * @param {TestContext} context
 	 * @returns {Promise<TestResult>}
 	 */
@@ -71,6 +77,8 @@ export class RollTestAction {
 				"RollTestAction requires a configured context with a Test.",
 			);
 		}
+
+		RuleEffectRollSelection.applyToTestContext(context);
 
 		const result = await context.test.roll(context);
 
