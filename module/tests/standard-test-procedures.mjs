@@ -18,6 +18,9 @@ export const STANDARD_TEST_PROCEDURES = deepFreeze({
 		label: "Jump",
 		labelKey: "WFRP1ED.StandardTest.Jump",
 		polishFallback: "Zeskok",
+		effectTargets: [
+			"procedure.movement.jump.reductionDie",
+		],
 		tags: [
 			"standard",
 			"procedure",
@@ -31,6 +34,9 @@ export const STANDARD_TEST_PROCEDURES = deepFreeze({
 		label: "Leap",
 		labelKey: "WFRP1ED.StandardTest.Leap",
 		polishFallback: "Skok",
+		effectTargets: [
+			"procedure.movement.leap.distance",
+		],
 		tags: [
 			"standard",
 			"procedure",
