@@ -1,28 +1,37 @@
+import { MovementStandardTest } from "./MovementStandardTest.mjs";
 import { PendingStandardTest } from "./PendingStandardTest.mjs";
+import {
+	STANDARD_TEST_PROCEDURES,
+	standardTestProcedureName,
+} from "./standard-test-procedures.mjs";
 import { TestDialog } from "./TestDialog.mjs";
 import { TestManager } from "./TestManager.mjs";
 
 const { DialogV2 } = foundry.applications.api;
 
 /**
- * Select one audited named Standard Test and gather its complete interactive
- * configuration in one composed dialog.
+ * Select one audited named Standard Test or Standard-Test procedure and gather
+ * its complete interactive configuration in one composed dialog.
  *
- * Definition-specific context and the generic situational modifier share one
- * UI, while TestDialog still owns modifier parsing/semantics and RollTestAction
- * remains the sole roll/chat execution pipeline.
+ * Percentile Tests continue through Actor.rollTest/TestDialog/TestResult.
+ * Non-d100 procedures such as Jumping/Leaping are dispatched to their own
+ * audited executor instead of being forced through the generic Test contract.
  */
 export class StandardTestDialog {
 	/**
 	 * Open the Standard Test selector for one Actor.
 	 *
-	 * The returned payload is suitable for Actor.rollTest(testId, options).
+	 * Percentile Test responses are suitable for Actor.rollTest(testId, options).
 	 * Supplying `options.modifier` marks the generic modifier step as already
 	 * configured, so RollTestAction does not open a second TestDialog.
 	 *
-	 * If a target-dependent Test has no unique canvas target, a pending chat
-	 * card is published and null is returned so the roll does not start before
-	 * the missing opponent context is resolved.
+	 * Movement procedure selections execute inside this launcher and return null
+	 * afterward so ClassicActorSheet does not attempt a second d100 execution.
+	 *
+	 * If a target-dependent percentile Test has no unique canvas target, a
+	 * pending chat card is published and null is returned until the missing
+	 * opponent context is resolved.
+	 *
 	 * Closing or cancelling returns null.
 	 *
 	 * @param {Actor} actor
@@ -33,10 +42,10 @@ export class StandardTestDialog {
 			throw new Error("StandardTestDialog requires an Actor.");
 		}
 
-		const tests = this._namedTests();
+		const entries = this._entries();
 
-		if (tests.length === 0) {
-			throw new Error("No named WFRP 1e Standard Tests are registered.");
+		if (entries.length === 0) {
+			throw new Error("No WFRP 1e Standard Tests are registered.");
 		}
 
 		const response = await DialogV2.wait({
@@ -54,10 +63,10 @@ export class StandardTestDialog {
 				),
 			},
 
-			content: this._buildContent(tests),
+			content: this._buildContent(entries),
 
 			render: (_event, dialog) =>
-				this._activateDialog(dialog, tests),
+				this._activateDialog(dialog, entries),
 
 			buttons: [
 				{
@@ -71,7 +80,7 @@ export class StandardTestDialog {
 					default: true,
 
 					callback: (_event, button) =>
-						this._readForm(actor, button.form, tests),
+						this._readForm(actor, button.form, entries),
 				},
 				{
 					action: "cancel",
@@ -89,6 +98,16 @@ export class StandardTestDialog {
 		});
 
 		if (!response?.confirmed) {
+			return null;
+		}
+
+		if (response.kind === "procedure") {
+			await MovementStandardTest.execute(
+				actor,
+				response.procedureId,
+				response.options,
+			);
+
 			return null;
 		}
 
@@ -111,23 +130,43 @@ export class StandardTestDialog {
 	}
 
 	/**
-	 * Return registered named Standard Tests only.
-	 * Characteristic tests are registered in the same TestManager but do not
-	 * carry the `standard` tag used by the named Standard Tests registry.
+	 * Return all entries exposed by the Standard Test launcher.
 	 *
-	 * @returns {Test[]}
+	 * TestManager contributes audited d100 Standard Tests. The procedure registry
+	 * contributes audited non-d100 procedures such as Jumping/Leaping. Keeping
+	 * the kinds explicit prevents movement mechanics from leaking into Test.
+	 *
+	 * @returns {Array<Object>}
 	 * @protected
 	 */
-	static _namedTests() {
-		return TestManager.all()
+	static _entries() {
+		const tests = TestManager.all()
 			.filter((test) => test.tags.includes("standard"))
-			.sort((first, second) =>
-				first.name.localeCompare(
-					second.name,
-					game.i18n.lang,
-					{ sensitivity: "base" },
-				),
-			);
+			.map((test) => ({
+				id: test.id,
+				kind: "test",
+				name: test.name,
+				tags: test.tags,
+				test,
+			}));
+
+		const procedures = Object.values(
+			STANDARD_TEST_PROCEDURES,
+		).map((procedure) => ({
+			id: procedure.id,
+			kind: "procedure",
+			name: standardTestProcedureName(procedure),
+			tags: procedure.tags,
+			procedure,
+		}));
+
+		return [...tests, ...procedures].sort((first, second) =>
+			first.name.localeCompare(
+				second.name,
+				game.i18n.lang,
+				{ sensitivity: "base" },
+			),
+		);
 	}
 
 	/**
@@ -138,11 +177,11 @@ export class StandardTestDialog {
 	 * Initial field visibility is still resolved here so the serialized markup
 	 * starts in a correct state before the dialog reaches the DOM.
 	 *
-	 * @param {Test[]} tests
+	 * @param {Array<Object>} entries
 	 * @returns {HTMLDivElement}
 	 * @protected
 	 */
-	static _buildContent(tests) {
+	static _buildContent(entries) {
 		const content = document.createElement("div");
 		const body = document.createElement("div");
 		body.classList.add("standard-test-dialog-body");
@@ -159,10 +198,10 @@ export class StandardTestDialog {
 		select.name = "testId";
 		select.autofocus = true;
 
-		for (const test of tests) {
+		for (const entry of entries) {
 			const option = document.createElement("option");
-			option.value = test.id;
-			option.textContent = test.name;
+			option.value = entry.id;
+			option.textContent = entry.name;
 			select.append(option);
 		}
 
@@ -201,18 +240,60 @@ export class StandardTestDialog {
 		);
 		lockGroup.root.dataset.standardField = "lockDifficulty";
 
+		const jumpHeightGroup = this._numberGroup(
+			"jumpHeight",
+			this._localize(
+				"WFRP1ED.StandardTest.JumpHeight",
+				"Jump height",
+				"Wysokość zeskoku",
+			),
+		);
+		jumpHeightGroup.root.dataset.standardField = "jumpHeight";
+		jumpHeightGroup.input.step = "any";
+		jumpHeightGroup.input.min = "0.01";
+
+		const leapGapGroup = this._numberGroup(
+			"leapGap",
+			this._localize(
+				"WFRP1ED.StandardTest.LeapGap",
+				"Gap to clear",
+				"Dystans do pokonania",
+			),
+		);
+		leapGapGroup.root.dataset.standardField = "leapGap";
+		leapGapGroup.input.step = "any";
+		leapGapGroup.input.min = "0.01";
+
+		const runUpGroup = this._formGroup(
+			this._localize(
+				"WFRP1ED.StandardTest.RunUp",
+				"Run-up of at least 2 yards",
+				"Rozbieg co najmniej 2 m",
+			),
+		);
+		runUpGroup.root.dataset.standardField = "runUp";
+		const runUpInput = document.createElement("input");
+		runUpInput.type = "checkbox";
+		runUpInput.name = "runUp";
+		runUpInput.checked = true;
+		runUpGroup.control.append(runUpInput);
+
 		const modifierGroup = this._numberGroup(
 			"modifier",
 			TestDialog.modifierLabel(),
 		);
 		modifierGroup.input.value = "0";
 		modifierGroup.input.placeholder = "0";
+		modifierGroup.root.dataset.standardD100Only = "";
 
 		body.append(
 			testGroup.root,
 			targetGroup.root,
 			noiseGroup.root,
 			lockGroup.root,
+			jumpHeightGroup.root,
+			leapGapGroup.root,
+			runUpGroup.root,
 			modifierGroup.root,
 		);
 
@@ -220,6 +301,7 @@ export class StandardTestDialog {
 			const visibilityGroup = this._formGroup(
 				TestDialog.resultVisibilityLabel(),
 			);
+			visibilityGroup.root.dataset.standardD100Only = "";
 			const visibilitySelect = document.createElement("select");
 			visibilitySelect.name = "resultVisibility";
 
@@ -236,7 +318,7 @@ export class StandardTestDialog {
 
 		content.append(body);
 
-		this._refreshContextFields(body, tests[0]);
+		this._refreshContextFields(body, entries[0]);
 
 		return content;
 	}
@@ -249,11 +331,11 @@ export class StandardTestDialog {
 	 * Foundry v14 provides the `render` callback specifically for this stage.
 	 *
 	 * @param {DialogV2} dialog
-	 * @param {Test[]} tests
+	 * @param {Array<Object>} entries
 	 * @returns {void}
 	 * @protected
 	 */
-	static _activateDialog(dialog, tests) {
+	static _activateDialog(dialog, entries) {
 		const root = dialog?.element;
 		const body = root?.querySelector?.(
 			".standard-test-dialog-body",
@@ -269,7 +351,7 @@ export class StandardTestDialog {
 		const refresh = () =>
 			this._refreshContextFields(
 				body,
-				tests.find((test) => test.id === select.value),
+				entries.find((entry) => entry.id === select.value),
 			);
 
 		select.addEventListener("change", refresh);
@@ -279,34 +361,66 @@ export class StandardTestDialog {
 	/**
 	 * Read and validate the complete composed Standard Test form.
 	 *
-	 * A target-dependent Test uses a unique already-targeted Token when one is
-	 * available. Missing or ambiguous canvas targeting is not an error here;
-	 * configure() may defer it to PendingStandardTest instead.
-	 *
-	 * The generic modifier is always present, including zero. Its presence in
-	 * the returned options tells RollTestAction that the generic configuration
-	 * step was already completed in this composed dialog.
-	 *
-	 * Result-detail visibility is GM-configurable. Player-initiated tests use
-	 * the safe default and expose detailed calculation only to the GM.
+	 * Percentile Tests keep the existing target/noise/lock/modifier contracts.
+	 * Movement procedures read only the inputs required by their audited rules.
 	 *
 	 * @param {Actor} actor
 	 * @param {HTMLFormElement} form
-	 * @param {Test[]} tests
+	 * @param {Array<Object>} entries
 	 * @returns {Object}
 	 * @protected
 	 */
-	static _readForm(actor, form, tests) {
-		const testId = String(
+	static _readForm(actor, form, entries) {
+		const id = String(
 			form?.elements?.testId?.value ?? "",
 		).trim();
 
-		const test = tests.find((entry) => entry.id === testId);
+		const entry = entries.find((candidate) => candidate.id === id);
 
-		if (!test) {
+		if (!entry) {
 			throw new Error("Select a valid WFRP 1e Standard Test.");
 		}
 
+		if (entry.kind === "procedure") {
+			const options = {};
+
+			if (entry.tags.includes("requires-jump-height")) {
+				options.jumpHeight = this._requiredPositiveNumber(
+					form?.elements?.jumpHeight,
+					this._localize(
+						"WFRP1ED.StandardTest.JumpHeight",
+						"Jump height",
+						"Wysokość zeskoku",
+					),
+				);
+			}
+
+			if (entry.tags.includes("requires-leap-gap")) {
+				options.leapGap = this._requiredPositiveNumber(
+					form?.elements?.leapGap,
+					this._localize(
+						"WFRP1ED.StandardTest.LeapGap",
+						"Gap to clear",
+						"Dystans do pokonania",
+					),
+				);
+			}
+
+			if (entry.tags.includes("requires-run-up")) {
+				options.runUp = Boolean(
+					form?.elements?.runUp?.checked,
+				);
+			}
+
+			return {
+				confirmed: true,
+				kind: "procedure",
+				procedureId: entry.id,
+				options,
+			};
+		}
+
+		const test = entry.test;
 		const options = {
 			modifier: TestDialog.readModifier(form),
 			resultVisibility: TestDialog.readResultVisibility(form),
@@ -344,41 +458,60 @@ export class StandardTestDialog {
 
 		return {
 			confirmed: true,
-			testId,
+			kind: "test",
+			testId: test.id,
 			options,
 		};
 	}
 
 	/**
-	 * Show only context controls required by the selected definition.
+	 * Show only context controls required by the selected launcher entry.
 	 *
-	 * Generic modifier and result-visibility rows are intentionally not tagged
-	 * with `data-standard-field`, so they remain visible for every Standard Test.
+	 * Generic modifier/result-detail controls apply only to d100 Tests. Movement
+	 * procedures have their own dice semantics and therefore do not expose a
+	 * misleading percentile modifier field.
 	 *
 	 * @param {HTMLElement} body
-	 * @param {Test|undefined} test
+	 * @param {Object|undefined} entry
 	 * @returns {void}
 	 * @protected
 	 */
-	static _refreshContextFields(body, test) {
+	static _refreshContextFields(body, entry) {
 		const requirements = new Set();
+		const tags = entry?.tags ?? [];
 
-		if (test?.tags.includes("requires-target")) {
+		if (tags.includes("requires-target")) {
 			requirements.add("target");
 		}
 
-		if (test?.tags.includes("requires-noise-level")) {
+		if (tags.includes("requires-noise-level")) {
 			requirements.add("noise");
 		}
 
-		if (test?.tags.includes("requires-lock-rating")) {
+		if (tags.includes("requires-lock-rating")) {
 			requirements.add("lockDifficulty");
+		}
+
+		if (tags.includes("requires-jump-height")) {
+			requirements.add("jumpHeight");
+		}
+
+		if (tags.includes("requires-leap-gap")) {
+			requirements.add("leapGap");
+		}
+
+		if (tags.includes("requires-run-up")) {
+			requirements.add("runUp");
 		}
 
 		for (const element of body.querySelectorAll("[data-standard-field]")) {
 			element.hidden = !requirements.has(
 				element.dataset.standardField,
 			);
+		}
+
+		for (const element of body.querySelectorAll("[data-standard-d100-only]")) {
+			element.hidden = entry?.kind !== "test";
 		}
 
 		const targetStatus = body.querySelector(
@@ -456,6 +589,16 @@ export class StandardTestDialog {
 
 		if (!Number.isFinite(value)) {
 			throw new Error(`${label}: value must be a finite number.`);
+		}
+
+		return value;
+	}
+
+	static _requiredPositiveNumber(input, label) {
+		const value = this._requiredNumber(input, label);
+
+		if (value <= 0) {
+			throw new Error(`${label}: value must be greater than zero.`);
 		}
 
 		return value;
