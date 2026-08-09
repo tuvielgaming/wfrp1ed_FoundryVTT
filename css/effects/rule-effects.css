@@ -149,6 +149,7 @@
 	line-height: inherit;
 	opacity: 0.76;
 	white-space: nowrap;
+	text-transform: lowercase;
 }
 
 .wfrp-rule-effect-selection__meta::before {
