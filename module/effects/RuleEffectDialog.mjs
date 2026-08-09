@@ -13,7 +13,8 @@ const { DialogV2 } = foundry.applications.api;
  * WFRP-facing editor for one declarative ActiveEffect change.
  *
  * The parent ActiveEffect remains a normal Foundry embedded document. This
- * dialog edits only one namespaced WFRP rule change inside its `changes` array.
+ * dialog edits only one namespaced WFRP rule change inside its v14
+ * `system.changes` array.
  */
 export class RuleEffectDialog {
 	/**
@@ -32,12 +33,8 @@ export class RuleEffectDialog {
 		}
 
 		const existing = decodeRuleEffectChange(existingChange);
-		const initialTarget = existing?.target ?? targets[0];
-		const content = this.#buildContent(
-			targets,
-			existing,
-			initialTarget,
-		);
+		const initial = initialState(existing, targets);
+		const content = this.#buildContent(targets, initial);
 
 		const response = await DialogV2.wait({
 			classes: [
@@ -54,7 +51,7 @@ export class RuleEffectDialog {
 			},
 			content,
 			render: (_event, dialog) =>
-				this.#activate(dialog, targets),
+				this.#activate(dialog, targets, initial),
 			buttons: [
 				{
 					action: "save",
@@ -85,11 +82,11 @@ export class RuleEffectDialog {
 		return response ?? null;
 	}
 
-	static #buildContent(targets, existing, initialTarget) {
+	static #buildContent(targets, initial) {
 		/*
 		 * Foundry v14 DialogV2 requires an HTMLElement supplied as `content`
-		 * to have no attributes on that outermost node. Keep the required class
-		 * on an inner wrapper so render-time listener lookup remains stable.
+		 * to have no attributes on its outermost node. The inner wrapper owns
+		 * the WFRP class used for styling and live-DOM lookup.
 		 */
 		const content = document.createElement("div");
 		const root = document.createElement("div");
@@ -105,7 +102,7 @@ export class RuleEffectDialog {
 		const targetSelect = document.createElement("select");
 		targetSelect.name = "targetId";
 		targetSelect.autofocus = true;
-		appendGroupedTargets(targetSelect, targets, existing?.targetId);
+		appendGroupedTargets(targetSelect, targets, initial.targetId);
 		target.control.append(targetSelect);
 
 		const operation = formGroup(
@@ -117,7 +114,11 @@ export class RuleEffectDialog {
 		);
 		const operationSelect = document.createElement("select");
 		operationSelect.name = "operation";
-		appendOptions(operationSelect, operationOptions(), existing?.operation);
+		appendOptions(
+			operationSelect,
+			operationOptions(),
+			initial.operation,
+		);
 		operation.control.append(operationSelect);
 
 		const value = formGroup(
@@ -131,7 +132,8 @@ export class RuleEffectDialog {
 		formula.type = "text";
 		formula.name = "formula";
 		formula.autocomplete = "off";
-		formula.value = existing?.formula ?? "";
+		formula.value = initial.formula;
+		formula.defaultValue = initial.formula;
 		formula.placeholder = "10";
 		value.control.append(formula);
 
@@ -144,7 +146,7 @@ export class RuleEffectDialog {
 		);
 		const sideSelect = document.createElement("select");
 		sideSelect.name = "side";
-		appendOptions(sideSelect, sideOptions(), existing?.side);
+		appendOptions(sideSelect, sideOptions(), initial.side);
 		side.control.append(sideSelect);
 
 		const applicability = formGroup(
@@ -159,8 +161,7 @@ export class RuleEffectDialog {
 		appendOptions(
 			applicabilitySelect,
 			applicabilityOptions(),
-			existing?.applicability ??
-				RULE_EFFECT_APPLICABILITY.CONTEXTUAL,
+			initial.applicability,
 		);
 		applicability.control.append(applicabilitySelect);
 
@@ -176,7 +177,7 @@ export class RuleEffectDialog {
 		appendOptions(
 			stackingSelect,
 			stackingOptions(),
-			existing?.stacking ?? "once",
+			initial.stacking,
 		);
 		stacking.control.append(stackingSelect);
 
@@ -191,7 +192,8 @@ export class RuleEffectDialog {
 		conditionInput.type = "text";
 		conditionInput.name = "condition";
 		conditionInput.autocomplete = "off";
-		conditionInput.value = existing?.condition ?? "";
+		conditionInput.value = initial.condition;
+		conditionInput.defaultValue = initial.condition;
 		conditionInput.placeholder = localize(
 			"WFRP1ED.ActiveEffect.ConditionPlaceholder",
 			"Optional situational condition",
@@ -209,32 +211,51 @@ export class RuleEffectDialog {
 			condition.root,
 		);
 
-		this.#refreshForTarget(root, initialTarget);
 		content.append(root);
 		return content;
 	}
 
-	static #activate(dialog, targets) {
+	/**
+	 * Hydrate the live DialogV2 controls after Foundry has rendered content.
+	 *
+	 * DialogV2 may reconstruct HTMLElement content rather than preserving the
+	 * detached node's live form-control properties. Reapplying decoded values
+	 * here guarantees that Edit opens with the persisted rule instead of the
+	 * first option/placeholder defaults.
+	 */
+	static #activate(dialog, targets, initial) {
 		const root = dialog?.element?.querySelector?.(
 			".wfrp-rule-effect-editor",
 		);
-		const select = root?.querySelector?.(
+		const targetSelect = root?.querySelector?.(
 			'select[name="targetId"]',
 		);
 
-		if (!root || !select) {
+		if (!root || !targetSelect) {
 			return;
 		}
 
+		setControlValue(root, 'select[name="targetId"]', initial.targetId);
+		setControlValue(root, 'select[name="operation"]', initial.operation);
+		setControlValue(root, 'input[name="formula"]', initial.formula);
+		setControlValue(root, 'select[name="side"]', initial.side);
+		setControlValue(
+			root,
+			'select[name="applicability"]',
+			initial.applicability,
+		);
+		setControlValue(root, 'select[name="stacking"]', initial.stacking);
+		setControlValue(root, 'input[name="condition"]', initial.condition);
+
 		const refresh = () => {
 			const target = targets.find(
-				(entry) => entry.id === select.value,
+				(entry) => entry.id === targetSelect.value,
 			);
 
 			this.#refreshForTarget(root, target);
 		};
 
-		select.addEventListener("change", refresh);
+		targetSelect.addEventListener("change", refresh);
 		refresh();
 	}
 
@@ -265,7 +286,9 @@ export class RuleEffectDialog {
 		);
 
 		if (!root) {
-			throw new Error("WFRP rule effect dialog content is unavailable.");
+			throw new Error(
+				"WFRP rule effect dialog content is unavailable.",
+			);
 		}
 
 		const valueOf = (selector) =>
@@ -287,6 +310,28 @@ export class RuleEffectDialog {
 			stacking: valueOf('select[name="stacking"]'),
 			condition: valueOf('input[name="condition"]'),
 		});
+	}
+}
+
+function initialState(existing, targets) {
+	return Object.freeze({
+		targetId: existing?.targetId ?? targets[0]?.id ?? "",
+		operation: existing?.operation ?? RULE_EFFECT_OPERATIONS.ADD,
+		formula: existing?.formula ?? "",
+		side: existing?.side ?? RULE_EFFECT_SIDES.SELF,
+		applicability:
+			existing?.applicability ??
+			RULE_EFFECT_APPLICABILITY.CONTEXTUAL,
+		stacking: existing?.stacking ?? "once",
+		condition: existing?.condition ?? "",
+	});
+}
+
+function setControlValue(root, selector, value) {
+	const control = root.querySelector(selector);
+
+	if (control) {
+		control.value = String(value ?? "");
 	}
 }
 
@@ -326,7 +371,9 @@ function appendGroupedTargets(select, targets, selectedValue) {
 			const option = document.createElement("option");
 			option.value = target.id;
 			option.textContent = RuleEffectRegistry.label(target);
-			option.selected = target.id === selectedValue;
+			const selected = target.id === selectedValue;
+			option.selected = selected;
+			option.defaultSelected = selected;
 			optgroup.append(option);
 		}
 
@@ -339,7 +386,9 @@ function appendOptions(select, entries, selectedValue) {
 		const option = document.createElement("option");
 		option.value = entry.value;
 		option.textContent = entry.label;
-		option.selected = entry.value === selectedValue;
+		const selected = entry.value === selectedValue;
+		option.selected = selected;
+		option.defaultSelected = selected;
 		select.append(option);
 	}
 }
@@ -375,23 +424,43 @@ function operationOptions() {
 	return [
 		{
 			value: RULE_EFFECT_OPERATIONS.ADD,
-			label: localize("WFRP1ED.ActiveEffect.Add", "Add", "Dodaj"),
+			label: localize(
+				"WFRP1ED.ActiveEffect.Add",
+				"Add",
+				"Dodaj",
+			),
 		},
 		{
 			value: RULE_EFFECT_OPERATIONS.SUBTRACT,
-			label: localize("WFRP1ED.ActiveEffect.Subtract", "Subtract", "Odejmij"),
+			label: localize(
+				"WFRP1ED.ActiveEffect.Subtract",
+				"Subtract",
+				"Odejmij",
+			),
 		},
 		{
 			value: RULE_EFFECT_OPERATIONS.MULTIPLY,
-			label: localize("WFRP1ED.ActiveEffect.Multiply", "Multiply", "Pomnóż"),
+			label: localize(
+				"WFRP1ED.ActiveEffect.Multiply",
+				"Multiply",
+				"Pomnóż",
+			),
 		},
 		{
 			value: RULE_EFFECT_OPERATIONS.OVERRIDE,
-			label: localize("WFRP1ED.ActiveEffect.Override", "Override", "Zastąp"),
+			label: localize(
+				"WFRP1ED.ActiveEffect.Override",
+				"Override",
+				"Zastąp",
+			),
 		},
 		{
 			value: RULE_EFFECT_OPERATIONS.GRANT,
-			label: localize("WFRP1ED.ActiveEffect.Grant", "Grant", "Przyznaj"),
+			label: localize(
+				"WFRP1ED.ActiveEffect.Grant",
+				"Grant",
+				"Przyznaj",
+			),
 		},
 	];
 }
@@ -400,15 +469,27 @@ function sideOptions() {
 	return [
 		{
 			value: RULE_EFFECT_SIDES.SELF,
-			label: localize("WFRP1ED.ActiveEffect.Self", "Self", "Właściciel"),
+			label: localize(
+				"WFRP1ED.ActiveEffect.Self",
+				"Self",
+				"Właściciel",
+			),
 		},
 		{
 			value: RULE_EFFECT_SIDES.TARGET,
-			label: localize("WFRP1ED.ActiveEffect.TargetSide", "Target", "Cel"),
+			label: localize(
+				"WFRP1ED.ActiveEffect.TargetSide",
+				"Target",
+				"Cel",
+			),
 		},
 		{
 			value: RULE_EFFECT_SIDES.OPPONENT,
-			label: localize("WFRP1ED.ActiveEffect.Opponent", "Opponent", "Przeciwnik"),
+			label: localize(
+				"WFRP1ED.ActiveEffect.Opponent",
+				"Opponent",
+				"Przeciwnik",
+			),
 		},
 	];
 }
@@ -417,15 +498,27 @@ function applicabilityOptions() {
 	return [
 		{
 			value: RULE_EFFECT_APPLICABILITY.AUTOMATIC,
-			label: localize("WFRP1ED.ActiveEffect.Automatic", "Automatic", "Automatyczny"),
+			label: localize(
+				"WFRP1ED.ActiveEffect.Automatic",
+				"Automatic",
+				"Automatyczny",
+			),
 		},
 		{
 			value: RULE_EFFECT_APPLICABILITY.CONTEXTUAL,
-			label: localize("WFRP1ED.ActiveEffect.Contextual", "Contextual", "Sytuacyjny"),
+			label: localize(
+				"WFRP1ED.ActiveEffect.Contextual",
+				"Contextual",
+				"Sytuacyjny",
+			),
 		},
 		{
 			value: RULE_EFFECT_APPLICABILITY.MANUAL,
-			label: localize("WFRP1ED.ActiveEffect.Manual", "Manual", "Ręczny"),
+			label: localize(
+				"WFRP1ED.ActiveEffect.Manual",
+				"Manual",
+				"Ręczny",
+			),
 		},
 	];
 }
@@ -434,11 +527,19 @@ function stackingOptions() {
 	return [
 		{
 			value: "once",
-			label: localize("WFRP1ED.ActiveEffect.Once", "Once", "Jednorazowo"),
+			label: localize(
+				"WFRP1ED.ActiveEffect.Once",
+				"Once",
+				"Jednorazowo",
+			),
 		},
 		{
 			value: "stack",
-			label: localize("WFRP1ED.ActiveEffect.Stack", "Stack", "Kumuluj"),
+			label: localize(
+				"WFRP1ED.ActiveEffect.Stack",
+				"Stack",
+				"Kumuluj",
+			),
 		},
 		{
 			value: "per-acquisition",
