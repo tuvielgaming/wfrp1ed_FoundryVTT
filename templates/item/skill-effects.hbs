@@ -1,0 +1,134 @@
+<section class="skill-effects-panel">
+	<header class="skill-effects-panel__header">
+		<div>
+			<h3>{{effectUi.title}}</h3>
+			<p>{{effectUi.hint}}</p>
+		</div>
+
+		<button
+			type="button"
+			class="skill-effects-panel__add"
+			data-action="createEffect"
+			{{#unless editable}}disabled{{/unless}}
+		>
+			<i class="fa-solid fa-plus"></i>
+			{{effectUi.addEffect}}
+		</button>
+	</header>
+
+	<div class="skill-effects-list">
+		{{#each ruleEffects as |effect|}}
+			<article
+				class="skill-effect-card {{#if effect.disabled}}is-disabled{{/if}}"
+				data-effect-id="{{effect.id}}"
+			>
+				<header class="skill-effect-card__header">
+					<div class="skill-effect-card__identity">
+						<img src="{{effect.img}}" alt="">
+						<div>
+							<strong>{{effect.name}}</strong>
+							<span>{{effect.stateLabel}}</span>
+						</div>
+					</div>
+
+					<div class="skill-effect-card__actions">
+						<button
+							type="button"
+							data-action="toggleEffect"
+							data-tooltip="{{effect.toggleLabel}}"
+							{{#unless ../editable}}disabled{{/unless}}
+						>
+							<i class="fa-solid {{#if effect.disabled}}fa-toggle-off{{else}}fa-toggle-on{{/if}}"></i>
+						</button>
+						<button
+							type="button"
+							data-action="configureEffect"
+							data-tooltip="{{../effectUi.configureEffect}}"
+						>
+							<i class="fa-solid fa-gear"></i>
+						</button>
+						<button
+							type="button"
+							data-action="deleteEffect"
+							data-tooltip="{{../effectUi.deleteEffect}}"
+							{{#unless ../editable}}disabled{{/unless}}
+						>
+							<i class="fa-solid fa-trash"></i>
+						</button>
+					</div>
+				</header>
+
+				<div class="skill-effect-card__rules">
+					{{#each effect.rules as |rule|}}
+						<div
+							class="skill-rule-change"
+							data-change-index="{{rule.changeIndex}}"
+						>
+							<div class="skill-rule-change__content">
+								<div class="skill-rule-change__summary">
+									<strong>{{rule.targetLabel}}</strong>
+									<span>{{rule.valueLabel}}</span>
+								</div>
+
+								<div class="skill-rule-change__meta">
+									<span>{{rule.applicabilityLabel}}</span>
+									<span>{{rule.sideLabel}}</span>
+									<span>{{rule.stackingLabel}}</span>
+								</div>
+
+								{{#if rule.condition}}
+									<small>{{rule.condition}}</small>
+								{{/if}}
+							</div>
+
+							<div class="skill-rule-change__actions">
+								<button
+									type="button"
+									data-action="editRuleChange"
+									data-tooltip="{{../../effectUi.editRule}}"
+									{{#unless ../../editable}}disabled{{/unless}}
+								>
+									<i class="fa-solid fa-pen"></i>
+								</button>
+								<button
+									type="button"
+									data-action="deleteRuleChange"
+									data-tooltip="{{../../effectUi.deleteRule}}"
+									{{#unless ../../editable}}disabled{{/unless}}
+								>
+									<i class="fa-solid fa-xmark"></i>
+								</button>
+							</div>
+						</div>
+					{{else}}
+						<p class="skill-effect-card__empty">
+							{{../effectUi.noRules}}
+						</p>
+					{{/each}}
+				</div>
+
+				<footer class="skill-effect-card__footer">
+					<button
+						type="button"
+						data-action="addRuleChange"
+						{{#unless ../editable}}disabled{{/unless}}
+					>
+						<i class="fa-solid fa-plus"></i>
+						{{../effectUi.addRule}}
+					</button>
+
+					{{#if effect.otherChangeCount}}
+						<span>
+							{{effect.otherChangeCount}}
+							{{../effectUi.otherChanges}}
+						</span>
+					{{/if}}
+				</footer>
+			</article>
+		{{else}}
+			<p class="skill-effects-panel__empty">
+				{{effectUi.noEffects}}
+			</p>
+		{{/each}}
+	</div>
+</section>
