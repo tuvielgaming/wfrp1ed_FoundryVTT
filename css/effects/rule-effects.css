@@ -1,0 +1,52 @@
+/******************************************************************/
+/* WFRP rule Active Effect editor                                 */
+/******************************************************************/
+
+.wfrp1ed-rule-effect-dialog .wfrp-rule-effect-editor {
+	display: grid;
+	gap: 10px;
+	min-width: 430px;
+	padding: 6px 4px 2px;
+}
+
+.wfrp1ed-rule-effect-dialog .wfrp-rule-effect-field {
+	display: grid;
+	grid-template-columns: 150px minmax(0, 1fr);
+	align-items: center;
+	gap: 10px;
+	margin: 0;
+}
+
+.wfrp1ed-rule-effect-dialog .wfrp-rule-effect-field > label {
+	font-weight: 700;
+	line-height: 1.2;
+}
+
+.wfrp1ed-rule-effect-dialog .wfrp-rule-effect-field .form-fields {
+	min-width: 0;
+}
+
+.wfrp1ed-rule-effect-dialog .wfrp-rule-effect-field select,
+.wfrp1ed-rule-effect-dialog .wfrp-rule-effect-field input {
+	width: 100%;
+	min-width: 0;
+	height: 34px;
+	margin: 0;
+	padding: 4px 8px;
+	font-size: 13px;
+}
+
+.wfrp1ed-rule-effect-dialog select {
+	color-scheme: light;
+}
+
+@media (max-width: 520px) {
+	.wfrp1ed-rule-effect-dialog .wfrp-rule-effect-editor {
+		min-width: 0;
+	}
+
+	.wfrp1ed-rule-effect-dialog .wfrp-rule-effect-field {
+		grid-template-columns: 1fr;
+		gap: 4px;
+	}
+}
