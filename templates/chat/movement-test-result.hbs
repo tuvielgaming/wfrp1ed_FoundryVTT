@@ -1,0 +1,48 @@
+<article class="wfrp1e-test-card {{#if success}}is-success{{else}}is-failure{{/if}}">
+  <header class="wfrp1e-test-card__header">
+    <h2>{{procedureName}}</h2>
+    <span class="wfrp1e-test-card__status">{{statusLabel}}</span>
+  </header>
+
+  <details class="wfrp1e-test-card__target">
+    <summary title="{{detailsHint}}">
+      <span class="wfrp1e-test-card__target-label">{{primaryLabel}}</span>
+      <strong class="wfrp1e-test-card__target-value">{{primaryValue}}</strong>
+      <span class="wfrp1e-test-card__target-toggle" aria-hidden="true">⌄</span>
+    </summary>
+
+    <div class="wfrp1e-test-card__breakdown">
+      <section class="wfrp1e-test-card__breakdown-section">
+        <div class="wfrp1e-test-card__section-title">{{fullRoundLabel}}</div>
+        <div class="wfrp1e-test-card__breakdown-rows">
+          {{#each rows}}
+            <div class="wfrp1e-test-card__breakdown-row">
+              <span>{{label}}</span>
+              <strong>{{value}}</strong>
+            </div>
+          {{/each}}
+        </div>
+      </section>
+
+      {{#if note}}
+        <section class="wfrp1e-test-card__breakdown-section">
+          <div class="wfrp1e-test-card__section-subtitle">{{note}}</div>
+          {{#if secondaryNote}}
+            <div class="wfrp1e-test-card__section-subtitle">{{secondaryNote}}</div>
+          {{/if}}
+        </section>
+      {{/if}}
+    </div>
+  </details>
+
+  <div class="wfrp1e-test-card__metrics">
+    <div class="wfrp1e-test-card__metric">
+      <span>{{metricLeftLabel}}</span>
+      <strong>{{metricLeftValue}}</strong>
+    </div>
+    <div class="wfrp1e-test-card__metric">
+      <span>{{metricRightLabel}}</span>
+      <strong>{{metricRightValue}}</strong>
+    </div>
+  </div>
+</article>
