@@ -39,13 +39,7 @@ export class RuleEffectDialog {
 			initialTarget,
 		);
 
-		/*
-		 * DialogV2.input is the v14-native path for returning named form fields.
-		 * Using its processed form data avoids relying on a button.form snapshot,
-		 * which can preserve the initial select value instead of the user's live
-		 * selection in this composed HTMLElement dialog.
-		 */
-		const response = await DialogV2.input({
+		const response = await DialogV2.wait({
 			classes: [
 				"wfrp1ed",
 				"wfrp1ed-parchment-window",
@@ -61,22 +55,34 @@ export class RuleEffectDialog {
 			content,
 			render: (_event, dialog) =>
 				this.#activate(dialog, targets),
-			ok: {
-				label: localize(
-					"WFRP1ED.ActiveEffect.Save",
-					"Save",
-					"Zapisz",
-				),
-				icon: "fa-solid fa-floppy-disk",
-			},
+			buttons: [
+				{
+					action: "save",
+					label: localize(
+						"WFRP1ED.ActiveEffect.Save",
+						"Save",
+						"Zapisz",
+					),
+					icon: "fa-solid fa-floppy-disk",
+					default: true,
+					callback: (_event, _button, dialog) =>
+						this.#readDialog(dialog, targets),
+				},
+				{
+					action: "cancel",
+					label: localize(
+						"WFRP1ED.ActiveEffect.Cancel",
+						"Cancel",
+						"Anuluj",
+					),
+					icon: "fa-solid fa-xmark",
+					callback: () => null,
+				},
+			],
 			rejectClose: false,
 		});
 
-		if (!response) {
-			return null;
-		}
-
-		return this.#readInput(response);
+		return response ?? null;
 	}
 
 	static #buildContent(targets, existing, initialTarget) {
@@ -253,33 +259,35 @@ export class RuleEffectDialog {
 		}
 	}
 
-	static #readInput(data) {
+	static #readDialog(dialog, targets) {
+		const root = dialog?.element?.querySelector?.(
+			".wfrp-rule-effect-editor",
+		);
+
+		if (!root) {
+			throw new Error("WFRP rule effect dialog content is unavailable.");
+		}
+
+		const valueOf = (selector) =>
+			root.querySelector(selector)?.value;
+		const targetId = valueOf('select[name="targetId"]');
+
+		if (!targets.some((target) => target.id === targetId)) {
+			throw new Error(
+				`Invalid WFRP rule effect target '${String(targetId)}'.`,
+			);
+		}
+
 		return encodeRuleEffectChange({
-			targetId: formDataValue(data, "targetId"),
-			operation: formDataValue(data, "operation"),
-			formula: formDataValue(data, "formula"),
-			side: formDataValue(data, "side"),
-			applicability: formDataValue(data, "applicability"),
-			stacking: formDataValue(data, "stacking"),
-			condition: formDataValue(data, "condition"),
+			targetId,
+			operation: valueOf('select[name="operation"]'),
+			formula: valueOf('input[name="formula"]'),
+			side: valueOf('select[name="side"]'),
+			applicability: valueOf('select[name="applicability"]'),
+			stacking: valueOf('select[name="stacking"]'),
+			condition: valueOf('input[name="condition"]'),
 		});
 	}
-}
-
-function formDataValue(data, name) {
-	if (
-		data &&
-		typeof data === "object" &&
-		Object.hasOwn(data, name)
-	) {
-		return data[name];
-	}
-
-	if (typeof data?.get === "function") {
-		return data.get(name);
-	}
-
-	return undefined;
 }
 
 function formGroup(labelText) {
