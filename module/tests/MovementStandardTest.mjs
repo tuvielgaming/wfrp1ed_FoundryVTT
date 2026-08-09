@@ -1,4 +1,4 @@
-import { StandardTestSkillResolver } from "./StandardTestSkillResolver.mjs";
+import { RuleEffectRollSelection } from "../effects/RuleEffectRollSelection.mjs";
 import {
 	STANDARD_TEST_PROCEDURES,
 	standardTestProcedureName,
@@ -6,17 +6,10 @@ import {
 
 const TEMPLATE_PATH =
 	"systems/wfrp1ed/templates/chat/movement-test-result.hbs";
-
-const MOVEMENT_SKILL_BONUSES = Object.freeze({
-	acrobatics: Object.freeze({
-		jumpDie: 2,
-		leapDistance: 2,
-	}),
-	clown: Object.freeze({
-		jumpDie: 1,
-		leapDistance: 0,
-	}),
-});
+const JUMP_EFFECT_TARGET =
+	"procedure.movement.jump.reductionDie";
+const LEAP_EFFECT_TARGET =
+	"procedure.movement.leap.distance";
 
 /**
  * Execute WFRP 1e movement procedures exposed through the Standard Test
@@ -27,6 +20,9 @@ const MOVEMENT_SKILL_BONUSES = Object.freeze({
  * - Polish Core Rulebook, printed p. 75, Zeskok/Upadek/Skok/Wspinaczka.
  * - English Skills, printed pp. 46 and 48, Acrobatics and Clown.
  * - Polish Skills, printed p. 46, Akrobatyka and Błaznowanie.
+ *
+ * Skill/item identities are not hardcoded here. Applicable bonuses arrive as
+ * declarative Active Effect changes targeting stable movement parameters.
  */
 export class MovementStandardTest {
 	/**
@@ -70,11 +66,11 @@ export class MovementStandardTest {
 	/**
 	 * Resolve controlled vertical Jumping / Zeskok.
 	 *
-	 * Distance is rounded up to the next whole yard/metre. Roll 1d6, add the
-	 * applicable Acrobatics/Clown die bonuses, then subtract that effective die
-	 * result from the rounded distance. A positive remainder is Wounds suffered,
-	 * ignoring armour and Toughness. If Wounds are suffered, a separate 50%
-	 * check determines whether held items are dropped.
+	 * Distance is rounded up to the next whole yard/metre. Roll 1d6, add all
+	 * selected effects which modify the jump damage-reduction die, then subtract
+	 * that effective die result from the rounded distance. A positive remainder
+	 * is Wounds suffered, ignoring armour and Toughness. If Wounds are suffered,
+	 * a separate 50% check determines whether held items are dropped.
 	 *
 	 * This procedure reports Wounds but does not mutate Actor Wounds yet because
 	 * the repository does not currently provide one audited common Wounds update
@@ -88,16 +84,16 @@ export class MovementStandardTest {
 			"jumpHeight",
 		);
 		const height = Math.ceil(enteredHeight);
-		const skills = this._movementSkills(actor, "jump");
-		const skillBonus = skills.reduce(
-			(total, skill) =>
-				total + (MOVEMENT_SKILL_BONUSES[skill.rulesId]?.jumpDie ?? 0),
-			0,
+		const effects = RuleEffectRollSelection.resolveNumeric(
+			actor,
+			JUMP_EFFECT_TARGET,
+			options.ruleEffects,
 		);
+		const effectBonus = effects.total;
 
 		const roll = await new Roll("1d6").evaluate();
 		const die = this._finiteNumber(roll.total, "jump roll");
-		const effectiveDie = die + skillBonus;
+		const effectiveDie = die + effectBonus;
 		const wounds = Math.max(0, height - effectiveDie);
 
 		let dropRoll = null;
@@ -152,11 +148,9 @@ export class MovementStandardTest {
 					),
 					value: die,
 				},
-				...skills.map((skill) => ({
-					label: skill.name,
-					value: this._signed(
-						MOVEMENT_SKILL_BONUSES[skill.rulesId]?.jumpDie ?? 0,
-					),
+				...effects.entries.map((effect) => ({
+					label: effect.source,
+					value: this._signed(effect.value),
 				})),
 				{
 					label: this._localize(
@@ -199,8 +193,9 @@ export class MovementStandardTest {
 	 *
 	 * With at least two yards/metres run-up the achieved distance is
 	 * 2 * Movement - 1d6. Without sufficient run-up it is 2 * Movement - 2d6.
-	 * The minimum result is one yard/metre. Acrobatics adds two yards/metres.
-	 * A character who does not reach the required gap falls.
+	 * The minimum result is one yard/metre. Selected effects which target Leap
+	 * distance are added before the one-yard/metre minimum is applied. A
+	 * character who does not reach the required gap falls.
 	 *
 	 * @protected
 	 */
@@ -216,18 +211,17 @@ export class MovementStandardTest {
 				actor.system?.characteristics?.sp?.current,
 			"Movement",
 		);
-		const skills = this._movementSkills(actor, "leap");
-		const skillBonus = skills.reduce(
-			(total, skill) =>
-				total +
-					(MOVEMENT_SKILL_BONUSES[skill.rulesId]?.leapDistance ?? 0),
-			0,
+		const effects = RuleEffectRollSelection.resolveNumeric(
+			actor,
+			LEAP_EFFECT_TARGET,
+			options.ruleEffects,
 		);
+		const effectBonus = effects.total;
 		const diceFormula = runUp ? "1d6" : "2d6";
 		const roll = await new Roll(diceFormula).evaluate();
 		const dice = this._finiteNumber(roll.total, "leap roll");
 		const unboundedDistance =
-			2 * movement - dice + skillBonus;
+			2 * movement - dice + effectBonus;
 		const distance = Math.max(1, unboundedDistance);
 		const success = distance >= gap;
 
@@ -280,11 +274,9 @@ export class MovementStandardTest {
 					),
 					value: `${diceFormula}: ${dice}`,
 				},
-				...skills.map((skill) => ({
-					label: skill.name,
-					value: this._signed(
-						MOVEMENT_SKILL_BONUSES[skill.rulesId]?.leapDistance ?? 0,
-					),
+				...effects.entries.map((effect) => ({
+					label: effect.source,
+					value: this._signed(effect.value),
 				})),
 				{
 					label: this._localize(
@@ -294,7 +286,7 @@ export class MovementStandardTest {
 					),
 					value:
 						`${2 * movement} - ${dice}` +
-						(skillBonus ? ` + ${skillBonus}` : "") +
+						(effectBonus ? ` + ${effectBonus}` : "") +
 						` = ${unboundedDistance}`,
 				},
 				{
@@ -321,21 +313,6 @@ export class MovementStandardTest {
 		fullRound: true,
 		rolls: [roll],
 		});
-	}
-
-	/**
-	 * Return owned movement-relevant Skills through the existing stable
-	 * StandardTestSkillResolver contract.
-	 *
-	 * @protected
-	 */
-	static _movementSkills(actor, procedureId) {
-		return StandardTestSkillResolver.candidates(
-			actor,
-			procedureId,
-		).filter((candidate) =>
-			Object.hasOwn(MOVEMENT_SKILL_BONUSES, candidate.rulesId),
-		);
 	}
 
 	/** @protected */
