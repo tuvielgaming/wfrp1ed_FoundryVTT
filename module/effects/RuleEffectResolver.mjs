@@ -3,6 +3,9 @@ import {
 	RULE_EFFECT_APPLICABILITY,
 } from "./RuleEffectRegistry.mjs";
 
+const RULE_FLAG_SCOPE = "wfrp1ed";
+const RULE_FLAG_KEY = "ruleChanges";
+
 /**
  * Discover declarative WFRP rule effects from an Actor and its owned Items.
  *
@@ -136,14 +139,7 @@ export class RuleEffectResolver {
 			return;
 		}
 
-		/*
-		 * Foundry v14 stores effect changes on the ActiveEffect type data model:
-		 * `effect.system.changes`. The former top-level `effect.changes` path is
-		 * legacy/shim territory and must not be used as the WFRP source of truth.
-		 */
-		const changes = Array.isArray(effect.system?.changes)
-			? effect.system.changes
-			: Array.from(effect.system?.changes ?? []);
+		const changes = ruleChanges(effect);
 
 		for (let index = 0; index < changes.length; index += 1) {
 			const decoded = decodeRuleEffectChange(changes[index]);
@@ -205,6 +201,23 @@ export class RuleEffectResolver {
 
 		return true;
 	}
+}
+
+function ruleChanges(effect) {
+	const flagged = effect?.getFlag?.(RULE_FLAG_SCOPE, RULE_FLAG_KEY);
+
+	if (Array.isArray(flagged)) {
+		return foundry.utils.deepClone(flagged);
+	}
+
+	const system = effect?.system?.toObject?.() ?? {};
+	const changes = Array.isArray(system.changes)
+		? system.changes
+		: [];
+
+	return foundry.utils.deepClone(
+		changes.filter((change) => Boolean(decodeRuleEffectChange(change))),
+	);
 }
 
 function effectCandidateId(effect, index, item) {
