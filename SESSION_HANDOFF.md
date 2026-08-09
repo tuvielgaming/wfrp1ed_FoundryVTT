@@ -12,9 +12,25 @@ GitHub `master` is the implementation source of truth. Fetch the latest exact fi
 
 ## Current confirmed checkpoint
 
-The Skill + Active Effect foundation is now live-tested and working in Foundry v14.
+Two major slices are now live-tested in Foundry v14:
 
-### Confirmed persistence
+1. Skill + Active Effect persistence/adjudication.
+2. Generic damage packet + explicit ChatMessage application for the GM path.
+
+The last user-confirmed runtime state is after commit:
+
+```text
+c0adce4569e39f463b1c9169ed78e8fc94ec66d4
+Fix Foundry v14 context menu callback adapter
+```
+
+At that point the user confirmed that `Zastosuj obrażenia` works again after the v14 callback-signature fix.
+
+---
+
+# Skill + Active Effect subsystem — CONFIRMED
+
+## Persistence
 
 User explicitly confirmed all of the following:
 
@@ -36,7 +52,7 @@ Key commits:
 - `8a86af4893b5a0da54669ebb73f2c741de39fe8a` — resolve WFRP rules from persisted Active Effect flags;
 - `d1cbfc7b702fff2fd25fc0fc427a0cc42e8edf0e` — persist Skill WFRP rules in Active Effect flags.
 
-### Duplicate Skill prevention — CONFIRMED
+## Duplicate Skill prevention — CONFIRMED
 
 The Actor no longer accepts the same Skill identity more than once through normal creation/drop flow.
 
@@ -59,56 +75,6 @@ Key commits:
 - `370967af7dc819dadd1cd566e43c87e5e4ef5ee6` — initial duplicate guard;
 - `df261fe53307860aebc0e2b3be1d3e2343585d03` — enforce uniqueness at Item creation operation; user confirmed this works.
 
-## Startup regression history — IMPORTANT
-
-A persistence experiment temporarily broke clean Foundry startup and caused both Character and Skill documents to open with Foundry `BaseSheet` fallback.
-
-Runtime diagnostic showed:
-
-```text
-game.WFRP1ED: undefined
-Actor character sheets: {}
-Skill sheets: {}
-```
-
-A temporary bootstrap probe exposed the exact syntax failure:
-
-```text
-RuleEffectResolver.mjs
-Private field '#collectEffect' must be declared in an enclosing class
-```
-
-Cause: one missing closing brace in the nested Item/effect loop left private class methods parsed outside the class.
-
-Fix:
-
-- `e527d61b4702f32a093d8ef9c6fe3a2cb88140d1` — restore correct `RuleEffectResolver` class structure.
-
-The temporary bootstrap probe was subsequently removed.
-
-**Rule:** startup/import-critical files must be read back after replacement. A hot refresh is not sufficient proof that a clean Foundry boot works.
-
-A small ActiveEffect `wfrp` compatibility declaration may still exist because some world documents were created during the earlier subtype experiment. Do not remove compatibility support casually while existing worlds may still contain those documents. Do not reintroduce the old automatic type-migration hook.
-
-## Active Effect architecture — APPROVED
-
-Active Effects are a system-wide WFRP rule mechanism, not Skill-only.
-
-Skills are the first authoring surface. The common effect infrastructure must later be usable by weapons, armour, equipment, spells, diseases, traits/talents, conditions, and other rule-bearing Items.
-
-Subsystems consume stable rule parameters instead of checking Skill/Item names.
-
-Current examples:
-
-- `test.standard.hide.target`
-- `test.characteristic.int.target`
-- `procedure.movement.jump.reductionDie`
-- `procedure.movement.leap.distance`
-
-Future combat/damage/healing/magic parameters should extend the same vocabulary.
-
-Persistent ActiveEffect enabled/disabled state is separate from per-roll choices.
-
 ## Per-roll Active Effect selection — CONFIRMED
 
 Relevant effects are shown directly in the Standard Test dialog.
@@ -118,12 +84,6 @@ Approved compact presentation:
 ```text
 ☐ Cichy Chód w mieście: +10 (sytuacyjny)
 ```
-
-Checkbox visuals are confirmed:
-
-- unchecked = simple empty square;
-- checked = plain check mark;
-- no native Foundry black rectangle/stylized artwork.
 
 Behavior:
 
@@ -158,109 +118,337 @@ Fix commit:
 
 - `64c847e0039629df688306f827fdd53677aceda4`.
 
-Pending request snapshot version 2 stores a mutable copy of `options.ruleEffects` and nested source metadata, avoiding the previous frozen ChatMessage flag problem.
+---
 
-## Movement procedures / Skills
+# Startup regression history — IMPORTANT
 
-`Skok` and `Zeskok` mechanics used so far were verified against both English and Polish WFRP 1e Core Rulebooks before implementation.
+A persistence experiment temporarily broke clean Foundry startup and caused both Character and Skill documents to open with Foundry `BaseSheet` fallback.
 
-Movement procedures do not hardcode Skill names. They consume generic Active Effect parameters:
+Runtime diagnostic showed:
 
+```text
+game.WFRP1ED: undefined
+Actor character sheets: {}
+Skill sheets: {}
+```
+
+A temporary bootstrap probe exposed the exact syntax failure:
+
+```text
+RuleEffectResolver.mjs
+Private field '#collectEffect' must be declared in an enclosing class
+```
+
+Cause: one missing closing brace in the nested Item/effect loop left private class methods parsed outside the class.
+
+Fix:
+
+- `e527d61b4702f32a093d8ef9c6fe3a2cb88140d1` — restore correct `RuleEffectResolver` class structure.
+
+The temporary bootstrap probe was subsequently removed.
+
+**Rule:** startup/import-critical files must be read back after replacement. A hot refresh is not sufficient proof that a clean Foundry boot works.
+
+A small ActiveEffect `wfrp` compatibility declaration still exists because some world documents may have been created during the earlier subtype experiment. Do not remove compatibility support casually while existing worlds may contain those documents. Do not reintroduce the old automatic type-migration hook.
+
+---
+
+# Active Effect architecture — APPROVED
+
+Active Effects are a system-wide WFRP rule mechanism, not Skill-only.
+
+Skills are the first authoring surface. The common effect infrastructure must later be usable by weapons, armour, equipment, spells, diseases, traits/talents, conditions, and other rule-bearing Items.
+
+Subsystems consume stable rule parameters instead of checking Skill/Item names.
+
+Current examples include:
+
+- direct characteristic-test targets;
+- named Standard Test targets;
 - `procedure.movement.jump.reductionDie`;
 - `procedure.movement.leap.distance`.
 
-Do not reintroduce Acrobatics/Clown identity tables into movement executors.
+Persistent ActiveEffect enabled/disabled state is separate from per-roll choices.
 
-## Damage architecture — APPROVED, NOW CURRENT TASK
+---
 
-User approved a WFRP4e-like workflow where calculated damage appears in chat and is applied only after an explicit user action.
+# Movement / rulebook boundary
 
-Target architecture:
+Movement procedures must not hardcode Skill names. They consume stable Active Effect parameters.
+
+Do **not** invent or extend WFRP 1e `Skok` / `Zeskok` damage mechanics from memory.
+
+Before wiring actual fall/jump damage formulas into the new damage pipeline, verify the relevant rules against both:
+
+- English WFRP 1e Core Rulebook for mechanics;
+- Polish Core Rulebook for terminology/translation differences.
+
+The rulebook PDFs are not tracked in the current GitHub `master`, so request/access the source material before adding unverified mechanics.
+
+---
+
+# Generic damage subsystem — CURRENT CONFIRMED STATE
+
+## Architecture
+
+The implemented flow is:
 
 ```text
 damage-producing action/procedure
 → DamagePacket
 → DamageResolver
+→ DamageResolution
 → DamageApplication
-→ Actor Wounds / later critical handling
+→ Actor remaining Wounds
 ```
 
-A damage-producing action must **not silently mutate Wounds when damage is calculated**.
+Damage calculation and damage application are deliberately separate. Calculating damage must not silently mutate an Actor.
 
-`Apply Damage / Zastosuj obrażenia` from a ChatMessage should be available to:
+## Implemented domain contracts
 
-- GM; or
-- a user who owns the Actor receiving that damage.
+Current files:
 
-Permission is checked against the damage target, not necessarily the rolling Actor.
+```text
+module/damage/DamagePacket.mjs
+module/damage/DamageResolution.mjs
+module/damage/DamageResolver.mjs
+module/damage/DamageApplication.mjs
+module/damage/DamageChat.mjs
+module/damage/DamageBootstrap.mjs
+```
 
-Generic `DamagePacket` must support at least:
+`DamagePacket` stores a JSON-safe immutable snapshot including:
 
+- packet id;
 - raw amount;
 - target Actor UUID;
-- source kind/id;
-- Armour apply/ignore policy;
-- Toughness apply/ignore policy;
+- source kind/id/optional label/UUID;
+- Armour policy (`apply` / `ignore`);
+- Toughness policy (`apply` / `ignore`);
 - optional hit location;
-- future special mitigation flags;
-- transaction/application state stored with the ChatMessage.
+- future special-mitigation metadata.
 
-After application, the ChatMessage should record at least:
+`DamageResolution` stores the already-resolved final amount separately from Actor mutation.
 
-- amount applied;
-- Wounds before;
-- Wounds after;
-- applying user;
-- timestamp;
-- applied state;
-- enough identity/state to prevent accidental double application.
+`DamageResolver` is intentionally strict at this stage:
 
-Possible later GM-only Undo must validate and use the stored transaction; never blindly add Wounds back.
+- packets with Armour=`ignore` and Toughness=`ignore` can resolve directly;
+- packets requesting normal Armour/Toughness mitigation currently fail deliberately;
+- do not implement generic mitigation math until the relevant English + Polish combat rules are audited.
 
-`Zeskok` is intended as the first consumer and is expected to ignore Armour and Toughness, but its exact damage-producing formula must continue to follow the verified English/Polish rulebook source.
+The runtime API is exposed at:
 
-### Current rulebook boundary for damage
+```js
+game.WFRP1ED.damage
+```
 
-Repository rulebook audit already verifies:
+with:
 
-- remaining Wounds are persistent play state;
-- damage reduces remaining Wounds;
-- negative remaining Wounds are allowed because excess damage participates in critical damage.
+```text
+Packet
+Resolution
+Resolver
+Application
+Chat
+mitigationPolicy
+```
 
-The current Character schema stores this at:
+## Damage application transaction — CONFIRMED
+
+`DamageApplication` updates:
 
 ```text
 system.status.wounds.value
 ```
 
-and derives maximum Wounds from the `w` characteristic.
+and allows remaining Wounds to go negative for later critical-damage handling.
 
-However, generic combat Armour/Toughness mitigation has not yet been fully audited in `RULEBOOK_IMPLEMENTATION.md`. Do not invent that calculation from memory. It is safe to build mechanics-neutral packet/application/transaction contracts first and defer actual mitigation calculation until the relevant English + Polish combat sections are verified.
+Authorization:
 
-## Current next order
+- GM may apply damage;
+- target Actor OWNER may apply damage;
+- permission is checked against the target Actor, not the message speaker/rolling Actor.
 
-1. Build immutable/serializable `DamagePacket` contract.
-2. Build resolved-damage/application transaction contract around `system.status.wounds.value`.
-3. Add target-ownership permission checks using Foundry v14 Document permissions.
-4. Add ChatMessage damage flags and `Apply Damage / Zastosuj obrażenia` context action.
-5. Prevent double application and record the completed transaction on the message.
-6. Audit English + Polish combat damage/Armour/Toughness rules before enabling generic mitigation calculations.
-7. Wire verified `Zeskok` damage into the generic pipeline as the first consumer.
-8. Later extend the same pipeline to normal weapon/combat damage.
+Authoritative application state is stored on the target Actor under WFRP flags, keyed by DamagePacket id.
 
-## Foundry v14 API notes verified during current work
+Stored transaction includes:
 
-- `foundry.utils.fromUuid(uuid)` resolves a Document from its UUID.
-- `Document.testUserPermission(user, permission)` is the correct capability test; `CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER` is ownership level 3.
-- `Document.update({ "system.status.wounds.value": n })` is the native persistent update path for nested Actor data.
-- ChatMessage and Actor Documents support package flags for serializable system metadata.
+- transaction id;
+- packet id;
+- target Actor UUID;
+- applied amount;
+- Wounds before;
+- Wounds after;
+- applying user id;
+- timestamp;
+- `state: "applied"`.
 
-## Important cautions
+The Actor transaction is authoritative because a target owner may be allowed to update their Actor even when they cannot modify the GM-authored ChatMessage.
+
+## Double-application protection — CONFIRMED
+
+User explicitly confirmed that a packet cannot be applied a second time, including when trying to call the application path again from the console.
+
+The same packet id is rejected once the target Actor already contains its applied transaction.
+
+## Standalone damage ChatMessage — CONFIRMED FOR GM
+
+A generic standalone damage card is implemented with:
+
+- target;
+- source;
+- final damage amount;
+- optional raw amount when different;
+- Armour/Toughness policy display;
+- optional hit location;
+- application status.
+
+The user confirmed the card renders correctly and `Zastosuj obrażenia` works after the v14 callback fix.
+
+Right-click action:
+
+```text
+Zastosuj obrażenia
+```
+
+is available only when the current user may apply the packet and the packet has not already been applied.
+
+After successful application, the standalone card shows a summary such as:
+
+```text
+Zastosowano 1 · Żywotność 6 → 5
+```
+
+and the same packet no longer offers the application action.
+
+## Foundry v14 ContextMenu API fix — CONFIRMED
+
+Foundry v14 deprecated the old ContextMenu entry fields:
+
+```text
+name
+condition
+callback
+```
+
+in favor of:
+
+```text
+label
+visible
+onClick
+```
+
+The important behavioral difference is callback signature:
+
+```js
+// legacy
+callback(target)
+
+// v14
+onClick(event, target)
+```
+
+A first compatibility conversion only renamed the field and therefore passed the `PointerEvent` to the legacy callback as if it were the ChatMessage element. Result: selecting `Zastosuj obrażenia` silently did nothing.
+
+Final fix wraps the old callback semantics correctly:
+
+```js
+entry.onClick = (_event, target) => legacyCallback(target);
+```
+
+Final confirmed fix commit:
+
+- `c0adce4569e39f463b1c9169ed78e8fc94ec66d4` — Fix Foundry v14 context menu callback adapter.
+
+This adapter also protects existing test-result context-menu actions which were authored with the older callback convention.
+
+## Remaining Wounds / Classic sheet integration
+
+The profile `Żyw` characteristic is the Wounds maximum/profile characteristic. In-play remaining Wounds are separate persistent state at:
+
+```text
+system.status.wounds.value
+```
+
+Before the damage workflow, that field was hidden and schema-defaulted to `0`, so old undamaged Actors could appear internally as zero Wounds.
+
+Current integration:
+
+- undamaged Characters whose in-play Wounds lifecycle has not begun synchronize the hidden remaining-Wounds value to their current Wounds maximum;
+- first actual damage application sets `flags.wfrp1ed.woundsInitialized = true`;
+- once initialized, remaining Wounds are no longer auto-synchronized to profile maximum;
+- the Classic `Żyw` cell displays remaining/max (for example `6/6`, then `5/6`) instead of hiding the in-play state.
+
+Relevant commits:
+
+- `61d6572b29b9e08b30281bc39f5a4178c85df915` — initialize remaining Wounds before damage application;
+- `894ad51b10c0dec3eb892bdf178b3282b60b4c03` — initialize legacy Wounds and normalize v14 chat menus;
+- `305c0715b5fa7fce6d355c8199e7ad3eaef1dbd0` — show remaining Wounds in Classic profile;
+- `c1852bc561c6a61b71c98fd381a134946b9deb32` — style remaining Wounds;
+- `69a17c84f9585d08bdf5a32971b72566229d813a` — load Classic remaining-Wounds styles;
+- `7c6dcd587ac9efd126f9d7cfd6069690bd03d58a` — keep undamaged Wounds synchronized with profile.
+
+## Damage commits from this session
+
+Foundation:
+
+- `1f6a339e3173fa003921b126dafce039c9e33485` — add DamagePacket;
+- `33adf495666d2579e0ba8e70b550c715a1a82074` — add DamageResolution;
+- `adf5909becfbe3cb27a8b01eb8c769c71f3ebb8d` — add strict DamageResolver;
+- `cc4e9ddf0a73890d360e6e051d26a422e2037c4a` — add DamageApplication;
+- `d6a4d58c64e4e551f2928ce4d088029f72fdad5f` — expose damage API;
+- `5bf519a4585ec40762f80233fc479ef9e356a1d8` — load damage subsystem.
+
+Chat/application:
+
+- `12dff6278b80d54f70f51f4f924e6d1a2ae0e158` — persist application transactions on target Actors;
+- `fc90d9a3bbcd44e129868ffcba0d270f68a4c85a` — generic damage ChatMessage controller;
+- `a2f9c99bb66982aec30d8bf96e0a5df80cf21914` — standalone damage result card;
+- `e3d6b9e04f85e156c72969ec290d3ea0e7cd1911` — damage-card styling;
+- `e59af2d473ad465015f88eccf4a9902659dd6a9c` — register damage chat integration;
+- `1a7a19e9f6ae5abaa5bd44f415974c6e55805ba2` — load damage chat styles;
+- `4568228af2e8a9a8d357b4894e771718d7d13347` — hide apply hint after application;
+- `c0adce4569e39f463b1c9169ed78e8fc94ec66d4` — correct Foundry v14 context-menu callback adapter; user confirmed working.
+
+---
+
+# NEXT SESSION — start here
+
+Do not redo the GM damage-card test unless a regression appears. It is now confirmed working.
+
+Next steps in order:
+
+1. **Player-owner damage application test**
+   - create/publish a damage card as GM;
+   - log in/switch to a non-GM player who owns the target Actor;
+   - verify that player sees `Zastosuj obrażenia`;
+   - verify the player can apply it even if they cannot edit the GM-authored ChatMessage;
+   - verify Actor Wounds update and double-application protection still work;
+   - verify non-owner players do not see the action.
+
+2. **Only after the permission path is confirmed, connect a real game producer.**
+
+3. **`Zeskok` is the intended first producer**, but first obtain/check the English and Polish WFRP 1e rulebook sections for the exact damage formula and mitigation behavior. Do not implement from memory.
+
+4. Keep generic Armour/Toughness `apply` calculation disabled until the combat damage/mitigation rules are audited against both rulebooks.
+
+5. Later extend the same generic damage pipeline to normal weapon/combat damage, spells, hazards, etc.
+
+Possible later enhancement:
+
+- GM-only Undo Damage based on the stored transaction, but it must validate current Actor state before reversing anything; never blindly add the old amount back.
+
+---
+
+# Important cautions
 
 - Foundry runtime validation is definitive.
-- Do not claim a damage rule is mechanically complete until relevant English mechanics and Polish terminology are verified.
-- Do not calculate or mutate persistent ActiveEffect state for per-roll choices.
-- Keep non-d100 movement procedures outside generic percentile `Test`.
+- If `system.json` changes, perform a full Foundry restart.
+- Read back startup/import-critical files after replacement.
+- Do not claim WFRP mechanics are complete until English mechanics and Polish terminology are verified.
 - Do not apply damage at roll calculation time; use the explicit DamageApplication transaction pipeline.
+- Do not calculate or mutate persistent ActiveEffect state for per-roll choices.
 - Do not auto-delete historical duplicate Skills.
 - Avoid touching the now-confirmed Active Effect persistence path unless a concrete defect requires it.
+- Preserve the current ActiveEffect compatibility subtype declaration until old world data has been safely audited/migrated.
