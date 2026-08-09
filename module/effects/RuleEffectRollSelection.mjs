@@ -83,9 +83,11 @@ export class RuleEffectRollSelection {
 	static snapshotFromForm(actor, targetIds, form) {
 		const candidates = this.candidates(actor, targetIds);
 		const checked = new Set(
-			Array.from(form?.elements?.[FORM_FIELD_NAME] ?? [])
-				.filter((input) => input?.checked)
-				.map((input) => String(input.value ?? "")),
+			Array.from(
+				form?.querySelectorAll?.(
+					`input[name="${FORM_FIELD_NAME}"]:checked`,
+				) ?? [],
+			).map((input) => String(input.value ?? "")),
 		);
 		const selections = {};
 
