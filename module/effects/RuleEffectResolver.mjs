@@ -70,6 +70,7 @@ export class RuleEffectResolver {
 						results,
 					});
 				}
+			}
 		}
 
 		results.sort(compareCandidates);
