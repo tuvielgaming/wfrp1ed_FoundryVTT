@@ -86,6 +86,12 @@ export class RuleEffectDialog {
 	}
 
 	static #buildContent(targets, existing, initialTarget) {
+		/*
+		 * Foundry v14 DialogV2 requires an HTMLElement supplied as `content`
+		 * to have no attributes on that outermost node. Keep the required class
+		 * on an inner wrapper so render-time listener lookup remains stable.
+		 */
+		const content = document.createElement("div");
 		const root = document.createElement("div");
 		root.classList.add("wfrp-rule-effect-editor");
 
@@ -204,7 +210,8 @@ export class RuleEffectDialog {
 		);
 
 		this.#refreshForTarget(root, initialTarget);
-		return root;
+		content.append(root);
+		return content;
 	}
 
 	static #activate(dialog, targets) {
