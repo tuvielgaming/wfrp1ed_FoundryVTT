@@ -59,3 +59,7 @@
 	text-align: center;
 	opacity: 0.78;
 }
+
+.wfrp1e-damage-card.is-applied .wfrp1e-damage-card__hint {
+	display: none;
+}
