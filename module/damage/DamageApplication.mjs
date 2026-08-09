@@ -3,6 +3,7 @@ import { DamageResolution } from "./DamageResolution.mjs";
 
 const APPLICATION_FLAG_SCOPE = "wfrp1ed";
 const APPLICATION_FLAG_KEY = "damageApplications";
+const WOUNDS_INITIALIZED_FLAG_KEY = "woundsInitialized";
 
 /**
  * Explicit application boundary for already-resolved WFRP damage.
@@ -95,6 +96,10 @@ export class DamageApplication {
 	 * it for presentation when the applying user has permission to edit that
 	 * message.
 	 *
+	 * Actors created before the in-play Wounds workflow may still contain the
+	 * schema default 0. Until the per-Actor initialization flag exists, the
+	 * Wounds characteristic maximum is treated as the undamaged starting value.
+	 *
 	 * @param {Object} input
 	 * @returns {Promise<Object>}
 	 */
@@ -172,6 +177,8 @@ export class DamageApplication {
 			"system.status.wounds.value": woundsAfter,
 			[`flags.${APPLICATION_FLAG_SCOPE}.${APPLICATION_FLAG_KEY}`]:
 				applications,
+			[`flags.${APPLICATION_FLAG_SCOPE}.${WOUNDS_INITIALIZED_FLAG_KEY}`]:
+				true,
 		});
 
 		return foundry.utils.deepFreeze(transaction);
@@ -199,6 +206,19 @@ function validatePair(packet, resolution) {
 }
 
 function readRemainingWounds(actor) {
+	if (
+		actor.getFlag?.(
+			APPLICATION_FLAG_SCOPE,
+			WOUNDS_INITIALIZED_FLAG_KEY,
+		) !== true
+	) {
+		const maximum = Number(actor.woundsMaximum);
+
+		if (Number.isFinite(maximum) && Number.isInteger(maximum)) {
+			return maximum;
+		}
+	}
+
 	const value = Number(actor.system?.status?.wounds?.value);
 
 	if (!Number.isFinite(value) || !Number.isInteger(value)) {
