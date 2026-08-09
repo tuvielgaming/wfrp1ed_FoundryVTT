@@ -3,7 +3,6 @@ import { SkillData } from "./data-models/item/SkillData.mjs";
 import { Wfrp1edActor } from "./documents/Wfrp1edActor.mjs";
 import { Wfrp1edItem } from "./documents/Wfrp1edItem.mjs";
 import {
-	configureWfrpRuleEffectType,
 	RULE_EFFECT_OPERATIONS,
 	RULE_EFFECT_SIDES,
 	RuleEffectRegistry,
@@ -48,7 +47,6 @@ Hooks.once("init", async () => {
 	console.info("WFRP1ED | Initializing WFRP 1st Edition");
 
 	configureSystem();
-	configureWfrpRuleEffectType();
 	registerHandlebarsHelpers();
 	registerStandardTests();
 	registerRuleEffectTargets();
