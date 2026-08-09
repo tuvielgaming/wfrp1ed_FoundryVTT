@@ -1,12 +1,20 @@
 import { DamagePacket } from "./DamagePacket.mjs";
 import { DamageResolution } from "./DamageResolution.mjs";
 
+const APPLICATION_FLAG_SCOPE = "wfrp1ed";
+const APPLICATION_FLAG_KEY = "damageApplications";
+
 /**
  * Explicit application boundary for already-resolved WFRP damage.
  *
  * Damage calculation and damage application are intentionally separate. This
  * class mutates remaining Wounds only after a caller explicitly requests the
  * application and the current user has permission over the damage target.
+ *
+ * The target Actor stores the authoritative application transaction keyed by
+ * DamagePacket id. This allows a target owner to apply damage even when they do
+ * not own the originating ChatMessage, and prevents normal repeated use of the
+ * same damage packet.
  */
 export class DamageApplication {
 	static VERSION = 1;
@@ -34,12 +42,58 @@ export class DamageApplication {
 	}
 
 	/**
+	 * Return the stored application transaction for one damage packet.
+	 *
+	 * @param {Actor} actor
+	 * @param {DamagePacket|string} packetOrId
+	 * @returns {Object|null}
+	 */
+	static transactionFor(actor, packetOrId) {
+		if (!(actor instanceof foundry.documents.Actor)) {
+			return null;
+		}
+
+		const packetId = packetOrId instanceof DamagePacket
+			? packetOrId.id
+			: String(packetOrId ?? "").trim();
+
+		if (!packetId) {
+			return null;
+		}
+
+		const applications = actor.getFlag?.(
+			APPLICATION_FLAG_SCOPE,
+			APPLICATION_FLAG_KEY,
+		);
+		const transaction = applications &&
+			typeof applications === "object" &&
+			!Array.isArray(applications)
+				? applications[packetId]
+				: null;
+
+		return transaction && typeof transaction === "object"
+			? foundry.utils.deepClone(transaction)
+			: null;
+	}
+
+	/**
+	 * Whether this packet already has an applied transaction on the target.
+	 *
+	 * @param {Actor} actor
+	 * @param {DamagePacket|string} packetOrId
+	 * @returns {boolean}
+	 */
+	static isApplied(actor, packetOrId) {
+		return this.transactionFor(actor, packetOrId)?.state === "applied";
+	}
+
+	/**
 	 * Apply one resolved damage amount to remaining Wounds.
 	 *
-	 * This method does not update any ChatMessage. The chat integration layer is
-	 * responsible for preventing double application before calling this method
-	 * and for persisting the returned transaction after a successful Actor
-	 * update.
+	 * Remaining Wounds and the packet transaction are written by the same Actor
+	 * update. The Actor transaction is authoritative; a ChatMessage may mirror
+	 * it for presentation when the applying user has permission to edit that
+	 * message.
 	 *
 	 * @param {Object} input
 	 * @returns {Promise<Object>}
@@ -81,15 +135,16 @@ export class DamageApplication {
 			);
 		}
 
+		if (this.isApplied(actor, normalizedPacket.id)) {
+			throw new Error(
+				"This damage packet has already been applied to the target Actor.",
+			);
+		}
+
 		const woundsBefore = readRemainingWounds(actor);
 		const amountApplied = normalizedResolution.finalAmount;
 		const woundsAfter = woundsBefore - amountApplied;
-
-		await actor.update({
-			"system.status.wounds.value": woundsAfter,
-		});
-
-		return Object.freeze({
+		const transaction = {
 			version: DamageApplication.VERSION,
 			id: foundry.utils.randomID(),
 			packetId: normalizedPacket.id,
@@ -100,7 +155,26 @@ export class DamageApplication {
 			userId: user?.id ?? "",
 			appliedAt: Date.now(),
 			state: "applied",
+		};
+		const existingApplications = actor.getFlag?.(
+			APPLICATION_FLAG_SCOPE,
+			APPLICATION_FLAG_KEY,
+		);
+		const applications = existingApplications &&
+			typeof existingApplications === "object" &&
+			!Array.isArray(existingApplications)
+				? foundry.utils.deepClone(existingApplications)
+				: {};
+
+		applications[normalizedPacket.id] = foundry.utils.deepClone(transaction);
+
+		await actor.update({
+			"system.status.wounds.value": woundsAfter,
+			[`flags.${APPLICATION_FLAG_SCOPE}.${APPLICATION_FLAG_KEY}`]:
+				applications,
 		});
+
+		return foundry.utils.deepFreeze(transaction);
 	}
 }
 
