@@ -127,7 +127,7 @@ export class PendingStandardTest {
 		 * supplied flags object while reconstructing ObjectField values.
 		 */
 		const request = {
-			version: 1,
+			version: 2,
 			status: "pending",
 			actorUuid: actor.uuid,
 			testId: test.id,
@@ -699,6 +699,22 @@ export class PendingStandardTest {
 		serialized.resultVisibility = normalizeTestResultVisibility(
 			options?.resultVisibility,
 		);
+
+		/*
+		 * Preserve the exact per-roll Active Effect selection made in the
+		 * Standard Test dialog. RuleEffectResolver snapshots are immutable internal
+		 * contracts, so clone the array, entries and nested source objects before
+		 * placing them in ChatMessage flags. This keeps Foundry's mutable DataModel
+		 * cleaning contract safe while retaining checked/unchecked state.
+		 */
+		if (Array.isArray(options?.ruleEffects)) {
+			serialized.ruleEffects = options.ruleEffects.map((entry) => ({
+				...entry,
+				source: {
+					...(entry?.source ?? {}),
+				},
+			}));
+		}
 
 		if (
 			options?.targetValues &&
