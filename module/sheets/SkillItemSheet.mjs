@@ -17,10 +17,8 @@ const { DialogV2, HandlebarsApplicationMixin } =
 /**
  * Native Foundry v14 sheet for WFRP 1e Skill Items.
  *
- * Skill identity/content remains in SkillData while mechanical rules are
- * authored as normal embedded Foundry ActiveEffect Documents. WFRP rule
- * changes use the shared system-wide rule-effect contract, so Skills are only
- * the first Item type using this editor rather than a special effect system.
+ * Skill content remains in SkillData. Mechanical rules are authored as normal
+ * embedded Foundry ActiveEffects and their v14 `system.changes` records.
  */
 export class SkillItemSheet extends HandlebarsApplicationMixin(
 	ItemSheetV2,
@@ -33,19 +31,15 @@ export class SkillItemSheet extends HandlebarsApplicationMixin(
 			"skill-item-sheet",
 			"wfrp1ed-parchment-window",
 		],
-
 		position: {
 			width: 620,
 			height: 760,
 		},
-
 		tag: "form",
-
 		form: {
 			submitOnChange: true,
 			closeOnSubmit: false,
 		},
-
 		actions: {
 			createEffect: this.#createEffect,
 			configureEffect: this.#configureEffect,
@@ -68,18 +62,8 @@ export class SkillItemSheet extends HandlebarsApplicationMixin(
 		},
 	};
 
-	/**
-	 * Prepare the Skill Item rendering context.
-	 *
-	 * The native Item and embedded ActiveEffect Documents remain the persistent
-	 * sources. Presentation records contain only labels/indices needed by the UI.
-	 *
-	 * @param {Object} options
-	 * @returns {Promise<Object>}
-	 */
 	async _prepareContext(options) {
-		const context =
-			await super._prepareContext(options);
+		const context = await super._prepareContext(options);
 
 		context.item = this.document;
 		context.system = this.document.system;
@@ -87,9 +71,7 @@ export class SkillItemSheet extends HandlebarsApplicationMixin(
 		context.rulesIdOptions = buildRulesIdOptions(
 			this.document.system?.rulesId,
 		);
-		context.ruleEffects = buildEffectPresentation(
-			this.document,
-		);
+		context.ruleEffects = buildEffectPresentation(this.document);
 		context.effectUi = effectUiLabels();
 
 		return context;
@@ -115,7 +97,9 @@ export class SkillItemSheet extends HandlebarsApplicationMixin(
 						foundry.documents.ActiveEffect.DEFAULT_ICON,
 					disabled: false,
 					transfer: true,
-					changes: [],
+					system: {
+						changes: [],
+					},
 				},
 			],
 		);
@@ -142,11 +126,9 @@ export class SkillItemSheet extends HandlebarsApplicationMixin(
 
 		const effect = effectFromTarget(this, target);
 
-		if (!effect) {
-			return;
+		if (effect) {
+			await effect.update({ disabled: !effect.disabled });
 		}
-
-		await effect.update({ disabled: !effect.disabled });
 	}
 
 	/** @this {SkillItemSheet} */
@@ -194,7 +176,7 @@ export class SkillItemSheet extends HandlebarsApplicationMixin(
 			return;
 		}
 
-		const changes = effectSourceChanges(effect);
+		const changes = effectSystemChanges(effect);
 		changes.push(change);
 
 		await persistEffectChanges(
@@ -202,6 +184,7 @@ export class SkillItemSheet extends HandlebarsApplicationMixin(
 			effect,
 			changes,
 			change,
+			changes.length - 1,
 		);
 	}
 
@@ -218,7 +201,7 @@ export class SkillItemSheet extends HandlebarsApplicationMixin(
 			return;
 		}
 
-		const changes = effectSourceChanges(effect);
+		const changes = effectSystemChanges(effect);
 		const existing = changes[index];
 
 		if (!decodeRuleEffectChange(existing)) {
@@ -255,7 +238,7 @@ export class SkillItemSheet extends HandlebarsApplicationMixin(
 			return;
 		}
 
-		const changes = effectSourceChanges(effect);
+		const changes = effectSystemChanges(effect);
 
 		if (!decodeRuleEffectChange(changes[index])) {
 			return;
@@ -276,12 +259,7 @@ export class SkillItemSheet extends HandlebarsApplicationMixin(
 		}
 
 		changes.splice(index, 1);
-
-		await persistEffectChanges(
-			this,
-			effect,
-			changes,
-		);
+		await persistEffectChanges(this, effect, changes);
 	}
 }
 
@@ -295,7 +273,7 @@ function buildEffectPresentation(item) {
 			),
 		)
 		.map((effect) => {
-			const changes = effectSourceChanges(effect);
+			const changes = effectSystemChanges(effect);
 			const rules = [];
 			let otherChangeCount = 0;
 
@@ -434,28 +412,17 @@ function changeIndexFromTarget(target) {
 		: -1;
 }
 
-function effectSourceChanges(effect) {
-	const source = effect.toObject();
-	return foundry.utils.deepClone(source.changes ?? []);
+/**
+ * Return a mutable clone of the v14 ActiveEffect type-data changes array.
+ */
+function effectSystemChanges(effect) {
+	const system = effect?.system?.toObject?.() ?? {};
+	return foundry.utils.deepClone(system.changes ?? []);
 }
 
 /**
- * Persist the complete ActiveEffect changes array through the parent Item.
- *
- * Foundry v14 treats ActiveEffects as embedded Documents owned by their parent
- * Item. Updating through the parent makes that ownership explicit and ensures
- * the Item's EmbeddedCollection is refreshed from the persisted result.
- *
- * When `expectedChange` is supplied, the stored change is decoded and compared
- * with the exact WFRP rule we attempted to write. A mismatch throws instead of
- * allowing the editor to appear successful while retaining stale/default data.
- *
- * @param {SkillItemSheet} application
- * @param {ActiveEffect} effect
- * @param {Array<Object>} changes
- * @param {Object|null} expectedChange
- * @param {number|null} expectedIndex
- * @returns {Promise<ActiveEffect>}
+ * Persist WFRP rule changes through the parent Item using Foundry v14's
+ * `ActiveEffect.system.changes` path.
  */
 async function persistEffectChanges(
 	application,
@@ -477,15 +444,17 @@ async function persistEffectChanges(
 		[
 			{
 				_id: effect.id,
-				changes: foundry.utils.deepClone(changes),
+				"system.changes": foundry.utils.deepClone(changes),
 			},
 		],
 	);
 
-	const stored =
-		item.effects?.get(effect.id) ??
-		updated ??
-		null;
+	/*
+	 * Prefer the Document returned by the update. Synthetic Token Actors can
+	 * briefly retain stale nested collection references on an already-rendered
+	 * Item sheet, while the returned Document represents the committed update.
+	 */
+	const stored = updated ?? item.effects?.get(effect.id) ?? null;
 
 	if (!stored) {
 		throw new Error(
@@ -494,7 +463,7 @@ async function persistEffectChanges(
 	}
 
 	if (expectedChange) {
-		const storedChanges = effectSourceChanges(stored);
+		const storedChanges = effectSystemChanges(stored);
 		const index = Number.isInteger(expectedIndex)
 			? expectedIndex
 			: storedChanges.length - 1;
@@ -508,6 +477,7 @@ async function persistEffectChanges(
 					effect: stored.uuid,
 					expected: expectedChange,
 					actual,
+					storedChanges,
 				},
 			);
 
@@ -558,7 +528,11 @@ function ruleValueLabel(rule) {
 			return `= ${value}`;
 		case RULE_EFFECT_OPERATIONS.GRANT:
 			return value === "—"
-				? localize("WFRP1ED.ActiveEffect.Granted", "Granted", "Przyznane")
+				? localize(
+					"WFRP1ED.ActiveEffect.Granted",
+					"Granted",
+					"Przyznane",
+				)
 				: value;
 		default:
 			return value;
@@ -578,31 +552,59 @@ function numericPrefix(value, prefix) {
 function applicabilityLabel(value) {
 	switch (value) {
 		case RULE_EFFECT_APPLICABILITY.AUTOMATIC:
-			return localize("WFRP1ED.ActiveEffect.Automatic", "Automatic", "Automatyczny");
+			return localize(
+				"WFRP1ED.ActiveEffect.Automatic",
+				"Automatic",
+				"Automatyczny",
+			);
 		case RULE_EFFECT_APPLICABILITY.MANUAL:
-			return localize("WFRP1ED.ActiveEffect.Manual", "Manual", "Ręczny");
+			return localize(
+				"WFRP1ED.ActiveEffect.Manual",
+				"Manual",
+				"Ręczny",
+			);
 		case RULE_EFFECT_APPLICABILITY.CONTEXTUAL:
 		default:
-			return localize("WFRP1ED.ActiveEffect.Contextual", "Contextual", "Sytuacyjny");
+			return localize(
+				"WFRP1ED.ActiveEffect.Contextual",
+				"Contextual",
+				"Sytuacyjny",
+			);
 	}
 }
 
 function sideLabel(value) {
 	switch (value) {
 		case RULE_EFFECT_SIDES.TARGET:
-			return localize("WFRP1ED.ActiveEffect.TargetSide", "Target", "Cel");
+			return localize(
+				"WFRP1ED.ActiveEffect.TargetSide",
+				"Target",
+				"Cel",
+			);
 		case RULE_EFFECT_SIDES.OPPONENT:
-			return localize("WFRP1ED.ActiveEffect.Opponent", "Opponent", "Przeciwnik");
+			return localize(
+				"WFRP1ED.ActiveEffect.Opponent",
+				"Opponent",
+				"Przeciwnik",
+			);
 		case RULE_EFFECT_SIDES.SELF:
 		default:
-			return localize("WFRP1ED.ActiveEffect.Self", "Self", "Właściciel");
+			return localize(
+				"WFRP1ED.ActiveEffect.Self",
+				"Self",
+				"Właściciel",
+			);
 	}
 }
 
 function stackingLabel(value) {
 	switch (value) {
 		case "stack":
-			return localize("WFRP1ED.ActiveEffect.Stack", "Stack", "Kumuluj");
+			return localize(
+				"WFRP1ED.ActiveEffect.Stack",
+				"Stack",
+				"Kumuluj",
+			);
 		case "per-acquisition":
 			return localize(
 				"WFRP1ED.ActiveEffect.PerAcquisition",
@@ -611,43 +613,32 @@ function stackingLabel(value) {
 			);
 		case "once":
 		default:
-			return localize("WFRP1ED.ActiveEffect.Once", "Once", "Jednorazowo");
+			return localize(
+				"WFRP1ED.ActiveEffect.Once",
+				"Once",
+				"Jednorazowo",
+			);
 	}
 }
 
-/**
- * Build localized, immutable options for the audited Skill rules identity.
- *
- * The blank option is intentional: custom Skills and core Skills which are not
- * yet part of Standard Test automation remain valid Skill Items. If an Item
- * contains a non-empty unknown id, preserve it as a selected option so opening
- * and submitting the sheet cannot silently erase data from a future or
- * external rules package.
- *
- * @param {string} currentRulesId
- * @returns {readonly Object[]}
- */
 function buildRulesIdOptions(currentRulesId) {
 	const currentId = String(currentRulesId ?? "").trim();
-
-	const options = Object.entries(
-		STANDARD_TEST_SKILL_IDENTITIES,
-	).map(([value, identity]) => ({
-		value,
-		label: localizeWithFallback(
-			identity.labelKey,
-			identity.label,
-		),
-		selected: value === currentId,
-	}));
-
-	options.sort((first, second) =>
-		first.label.localeCompare(
-			second.label,
-			game.i18n.lang,
-			{ sensitivity: "base" },
-		),
-	);
+	const options = Object.entries(STANDARD_TEST_SKILL_IDENTITIES)
+		.map(([value, identity]) => ({
+			value,
+			label: localizeWithFallback(
+				identity.labelKey,
+				identity.label,
+			),
+			selected: value === currentId,
+		}))
+		.sort((first, second) =>
+			first.label.localeCompare(
+				second.label,
+				game.i18n.lang,
+				{ sensitivity: "base" },
+			),
+		);
 
 	const result = [
 		{
@@ -681,10 +672,7 @@ function buildRulesIdOptions(currentRulesId) {
 
 function localizeWithFallback(key, fallback) {
 	const localized = game.i18n.localize(key);
-
-	return localized === key
-		? fallback
-		: localized;
+	return localized === key ? fallback : localized;
 }
 
 function localize(key, englishFallback, polishFallback) {
