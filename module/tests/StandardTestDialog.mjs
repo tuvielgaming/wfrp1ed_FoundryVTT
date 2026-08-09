@@ -1,3 +1,4 @@
+import { RuleEffectRollSelection } from "../effects/RuleEffectRollSelection.mjs";
 import { MovementStandardTest } from "./MovementStandardTest.mjs";
 import { PendingStandardTest } from "./PendingStandardTest.mjs";
 import {
@@ -63,10 +64,10 @@ export class StandardTestDialog {
 				),
 			},
 
-			content: this._buildContent(entries),
+			content: this._buildContent(actor, entries),
 
 			render: (_event, dialog) =>
-				this._activateDialog(dialog, entries),
+				this._activateDialog(dialog, actor, entries),
 
 			buttons: [
 				{
@@ -136,6 +137,9 @@ export class StandardTestDialog {
 	 * contributes audited non-d100 procedures such as Jumping/Leaping. Keeping
 	 * the kinds explicit prevents movement mechanics from leaking into Test.
 	 *
+	 * Each entry also declares stable Active Effect rule targets consumed by that
+	 * execution so the dialog can show only relevant effects.
+	 *
 	 * @returns {Array<Object>}
 	 * @protected
 	 */
@@ -148,6 +152,9 @@ export class StandardTestDialog {
 				name: test.name,
 				tags: test.tags,
 				test,
+				effectTargets: [
+					RuleEffectRollSelection.targetIdForTest(test),
+				].filter(Boolean),
 			}));
 
 		const procedures = Object.values(
@@ -158,6 +165,7 @@ export class StandardTestDialog {
 			name: standardTestProcedureName(procedure),
 			tags: procedure.tags,
 			procedure,
+			effectTargets: [...(procedure.effectTargets ?? [])],
 		}));
 
 		return [...tests, ...procedures].sort((first, second) =>
@@ -174,14 +182,15 @@ export class StandardTestDialog {
 	 *
 	 * Foundry v14 stringifies HTMLElement dialog content before rendering it.
 	 * Therefore interactive listeners are attached later in `_activateDialog`.
-	 * Initial field visibility is still resolved here so the serialized markup
-	 * starts in a correct state before the dialog reaches the DOM.
+	 * Initial field/effect visibility is still resolved here so the serialized
+	 * markup starts in a correct state before the dialog reaches the DOM.
 	 *
+	 * @param {Actor} actor
 	 * @param {Array<Object>} entries
 	 * @returns {HTMLDivElement}
 	 * @protected
 	 */
-	static _buildContent(entries) {
+	static _buildContent(actor, entries) {
 		const content = document.createElement("div");
 		const body = document.createElement("div");
 		body.classList.add("standard-test-dialog-body");
@@ -286,6 +295,11 @@ export class StandardTestDialog {
 		modifierGroup.input.placeholder = "0";
 		modifierGroup.root.dataset.standardD100Only = "";
 
+		const effectsSection = RuleEffectRollSelection.buildSection(
+			actor,
+			entries[0]?.effectTargets ?? [],
+		);
+
 		body.append(
 			testGroup.root,
 			targetGroup.root,
@@ -295,6 +309,7 @@ export class StandardTestDialog {
 			leapGapGroup.root,
 			runUpGroup.root,
 			modifierGroup.root,
+			effectsSection,
 		);
 
 		if (game.user?.isGM) {
@@ -318,7 +333,7 @@ export class StandardTestDialog {
 
 		content.append(body);
 
-		this._refreshContextFields(body, entries[0]);
+		this._refreshContextFields(body, entries[0], actor);
 
 		return content;
 	}
@@ -331,11 +346,12 @@ export class StandardTestDialog {
 	 * Foundry v14 provides the `render` callback specifically for this stage.
 	 *
 	 * @param {DialogV2} dialog
+	 * @param {Actor} actor
 	 * @param {Array<Object>} entries
 	 * @returns {void}
 	 * @protected
 	 */
-	static _activateDialog(dialog, entries) {
+	static _activateDialog(dialog, actor, entries) {
 		const root = dialog?.element;
 		const body = root?.querySelector?.(
 			".standard-test-dialog-body",
@@ -352,6 +368,7 @@ export class StandardTestDialog {
 			this._refreshContextFields(
 				body,
 				entries.find((entry) => entry.id === select.value),
+				actor,
 			);
 
 		select.addEventListener("change", refresh);
@@ -363,6 +380,8 @@ export class StandardTestDialog {
 	 *
 	 * Percentile Tests keep the existing target/noise/lock/modifier contracts.
 	 * Movement procedures read only the inputs required by their audited rules.
+	 * Both kinds persist a per-roll rule-effect selection snapshot without
+	 * changing any underlying ActiveEffect enabled/disabled state.
 	 *
 	 * @param {Actor} actor
 	 * @param {HTMLFormElement} form
@@ -381,8 +400,14 @@ export class StandardTestDialog {
 			throw new Error("Select a valid WFRP 1e Standard Test.");
 		}
 
+		const ruleEffects = RuleEffectRollSelection.snapshotFromForm(
+			actor,
+			entry.effectTargets,
+			form,
+		);
+
 		if (entry.kind === "procedure") {
-			const options = {};
+			const options = { ruleEffects };
 
 			if (entry.tags.includes("requires-jump-height")) {
 				options.jumpHeight = this._requiredPositiveNumber(
@@ -424,6 +449,7 @@ export class StandardTestDialog {
 		const options = {
 			modifier: TestDialog.readModifier(form),
 			resultVisibility: TestDialog.readResultVisibility(form),
+			ruleEffects,
 		};
 
 		if (test.tags.includes("requires-target")) {
@@ -465,7 +491,8 @@ export class StandardTestDialog {
 	}
 
 	/**
-	 * Show only context controls required by the selected launcher entry.
+	 * Show only context controls required by the selected launcher entry and
+	 * refresh the relevant Active Effect choices for that same entry.
 	 *
 	 * Generic modifier/result-detail controls apply only to d100 Tests. Movement
 	 * procedures have their own dice semantics and therefore do not expose a
@@ -473,10 +500,11 @@ export class StandardTestDialog {
 	 *
 	 * @param {HTMLElement} body
 	 * @param {Object|undefined} entry
+	 * @param {Actor} actor
 	 * @returns {void}
 	 * @protected
 	 */
-	static _refreshContextFields(body, entry) {
+	static _refreshContextFields(body, entry, actor) {
 		const requirements = new Set();
 		const tags = entry?.tags ?? [];
 
@@ -512,6 +540,18 @@ export class StandardTestDialog {
 
 		for (const element of body.querySelectorAll("[data-standard-d100-only]")) {
 			element.hidden = entry?.kind !== "test";
+		}
+
+		const effectSection = body.querySelector(
+			"[data-wfrp-rule-effects]",
+		);
+
+		if (effectSection) {
+			RuleEffectRollSelection.renderSection(
+				effectSection,
+				actor,
+				entry?.effectTargets ?? [],
+			);
 		}
 
 		const targetStatus = body.querySelector(
