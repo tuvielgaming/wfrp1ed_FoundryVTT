@@ -13,7 +13,6 @@
 		}
 	],
 	"esmodules": [
-		"module/diagnostics/BootstrapProbe.mjs",
 		"module/effects/WfrpActiveEffectCompatibility.mjs",
 		"module/wfrp1ed.mjs",
 		"module/tests/TestResultModifierToggle.mjs"
