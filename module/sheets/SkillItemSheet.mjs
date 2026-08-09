@@ -196,7 +196,13 @@ export class SkillItemSheet extends HandlebarsApplicationMixin(
 
 		const changes = effectSourceChanges(effect);
 		changes.push(change);
-		await effect.update({ changes });
+
+		await persistEffectChanges(
+			this,
+			effect,
+			changes,
+			change,
+		);
 	}
 
 	/** @this {SkillItemSheet} */
@@ -226,7 +232,14 @@ export class SkillItemSheet extends HandlebarsApplicationMixin(
 		}
 
 		changes[index] = updated;
-		await effect.update({ changes });
+
+		await persistEffectChanges(
+			this,
+			effect,
+			changes,
+			updated,
+			index,
+		);
 	}
 
 	/** @this {SkillItemSheet} */
@@ -263,7 +276,12 @@ export class SkillItemSheet extends HandlebarsApplicationMixin(
 		}
 
 		changes.splice(index, 1);
-		await effect.update({ changes });
+
+		await persistEffectChanges(
+			this,
+			effect,
+			changes,
+		);
 	}
 }
 
@@ -419,6 +437,111 @@ function changeIndexFromTarget(target) {
 function effectSourceChanges(effect) {
 	const source = effect.toObject();
 	return foundry.utils.deepClone(source.changes ?? []);
+}
+
+/**
+ * Persist the complete ActiveEffect changes array through the parent Item.
+ *
+ * Foundry v14 treats ActiveEffects as embedded Documents owned by their parent
+ * Item. Updating through the parent makes that ownership explicit and ensures
+ * the Item's EmbeddedCollection is refreshed from the persisted result.
+ *
+ * When `expectedChange` is supplied, the stored change is decoded and compared
+ * with the exact WFRP rule we attempted to write. A mismatch throws instead of
+ * allowing the editor to appear successful while retaining stale/default data.
+ *
+ * @param {SkillItemSheet} application
+ * @param {ActiveEffect} effect
+ * @param {Array<Object>} changes
+ * @param {Object|null} expectedChange
+ * @param {number|null} expectedIndex
+ * @returns {Promise<ActiveEffect>}
+ */
+async function persistEffectChanges(
+	application,
+	effect,
+	changes,
+	expectedChange = null,
+	expectedIndex = null,
+) {
+	const item = application?.document;
+
+	if (!item || !effect?.id) {
+		throw new Error(
+			"WFRP rule effect persistence requires an Item and ActiveEffect id.",
+		);
+	}
+
+	const [updated] = await item.updateEmbeddedDocuments(
+		"ActiveEffect",
+		[
+			{
+				_id: effect.id,
+				changes: foundry.utils.deepClone(changes),
+			},
+		],
+	);
+
+	const stored =
+		item.effects?.get(effect.id) ??
+		updated ??
+		null;
+
+	if (!stored) {
+		throw new Error(
+			`Updated ActiveEffect '${effect.id}' is missing from its parent Item.`,
+		);
+	}
+
+	if (expectedChange) {
+		const storedChanges = effectSourceChanges(stored);
+		const index = Number.isInteger(expectedIndex)
+			? expectedIndex
+			: storedChanges.length - 1;
+		const actual = storedChanges[index];
+
+		if (!sameRuleChange(actual, expectedChange)) {
+			console.error(
+				"WFRP1ED | ActiveEffect rule persistence mismatch.",
+				{
+					item: item.uuid,
+					effect: stored.uuid,
+					expected: expectedChange,
+					actual,
+				},
+			);
+
+			throw new Error(
+				localize(
+					"WFRP1ED.ActiveEffect.PersistenceMismatch",
+					"The WFRP rule was not persisted correctly. Check the console for details.",
+					"Reguła WFRP nie została poprawnie zapisana. Szczegóły znajdują się w konsoli.",
+				),
+			);
+		}
+	}
+
+	await application.render({ force: true });
+	return stored;
+}
+
+function sameRuleChange(actual, expected) {
+	const decodedActual = decodeRuleEffectChange(actual);
+	const decodedExpected = decodeRuleEffectChange(expected);
+
+	if (!decodedActual || !decodedExpected) {
+		return false;
+	}
+
+	return (
+		decodedActual.targetId === decodedExpected.targetId &&
+		decodedActual.operation === decodedExpected.operation &&
+		decodedActual.formula === decodedExpected.formula &&
+		decodedActual.applicability === decodedExpected.applicability &&
+		decodedActual.side === decodedExpected.side &&
+		decodedActual.stacking === decodedExpected.stacking &&
+		decodedActual.condition === decodedExpected.condition
+	);
 }
 
 function ruleValueLabel(rule) {
