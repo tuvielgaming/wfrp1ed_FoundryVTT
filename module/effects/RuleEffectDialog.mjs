@@ -39,7 +39,13 @@ export class RuleEffectDialog {
 			initialTarget,
 		);
 
-		const response = await DialogV2.wait({
+		/*
+		 * DialogV2.input is the v14-native path for returning named form fields.
+		 * Using its processed form data avoids relying on a button.form snapshot,
+		 * which can preserve the initial select value instead of the user's live
+		 * selection in this composed HTMLElement dialog.
+		 */
+		const response = await DialogV2.input({
 			classes: [
 				"wfrp1ed",
 				"wfrp1ed-parchment-window",
@@ -55,34 +61,22 @@ export class RuleEffectDialog {
 			content,
 			render: (_event, dialog) =>
 				this.#activate(dialog, targets),
-			buttons: [
-				{
-					action: "save",
-					label: localize(
-						"WFRP1ED.ActiveEffect.Save",
-						"Save",
-						"Zapisz",
-					),
-					icon: "fa-solid fa-floppy-disk",
-					default: true,
-					callback: (_event, button) =>
-						this.#readForm(button.form),
-				},
-				{
-					action: "cancel",
-					label: localize(
-						"WFRP1ED.ActiveEffect.Cancel",
-						"Cancel",
-						"Anuluj",
-					),
-					icon: "fa-solid fa-xmark",
-					callback: () => null,
-				},
-			],
+			ok: {
+				label: localize(
+					"WFRP1ED.ActiveEffect.Save",
+					"Save",
+					"Zapisz",
+				),
+				icon: "fa-solid fa-floppy-disk",
+			},
 			rejectClose: false,
 		});
 
-		return response ?? null;
+		if (!response) {
+			return null;
+		}
+
+		return this.#readInput(response);
 	}
 
 	static #buildContent(targets, existing, initialTarget) {
@@ -259,19 +253,33 @@ export class RuleEffectDialog {
 		}
 	}
 
-	static #readForm(form) {
-		const elements = form?.elements;
-
+	static #readInput(data) {
 		return encodeRuleEffectChange({
-			targetId: elements?.targetId?.value,
-			operation: elements?.operation?.value,
-			formula: elements?.formula?.value,
-			side: elements?.side?.value,
-			applicability: elements?.applicability?.value,
-			stacking: elements?.stacking?.value,
-			condition: elements?.condition?.value,
+			targetId: formDataValue(data, "targetId"),
+			operation: formDataValue(data, "operation"),
+			formula: formDataValue(data, "formula"),
+			side: formDataValue(data, "side"),
+			applicability: formDataValue(data, "applicability"),
+			stacking: formDataValue(data, "stacking"),
+			condition: formDataValue(data, "condition"),
 		});
 	}
+}
+
+function formDataValue(data, name) {
+	if (
+		data &&
+		typeof data === "object" &&
+		Object.hasOwn(data, name)
+	) {
+		return data[name];
+	}
+
+	if (typeof data?.get === "function") {
+		return data.get(name);
+	}
+
+	return undefined;
 }
 
 function formGroup(labelText) {
