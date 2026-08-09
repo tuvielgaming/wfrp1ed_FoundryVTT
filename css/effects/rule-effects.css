@@ -44,6 +44,16 @@
 /* Per-roll WFRP rule-effect selection                            */
 /******************************************************************/
 
+.wfrp-rule-effect-selection {
+	display: grid;
+	gap: 5px;
+}
+
+.wfrp-rule-effect-selection__heading {
+	font-weight: 700;
+	line-height: 1.2;
+}
+
 /*
  * Do not rely on Foundry/browser checkbox artwork here. The real checkbox
  * remains inside the label for normal form semantics, but is visually hidden.
@@ -54,7 +64,8 @@
 	position: relative;
 	display: flex;
 	align-items: flex-start;
-	gap: 6px;
+	gap: 7px;
+	min-width: 0;
 	cursor: pointer;
 }
 
@@ -81,7 +92,7 @@
 
 	width: 16px;
 	height: 16px;
-	margin-top: 1px;
+	margin-top: 2px;
 
 	border: 1px solid rgb(71 49 29 / 82%);
 	border-radius: 1px;
@@ -110,6 +121,41 @@
 
 .wfrp-rule-effect-selection__row:has(> input[type="checkbox"]:disabled)::before {
 	opacity: 0.65;
+}
+
+.wfrp-rule-effect-selection__body {
+	display: grid;
+	gap: 2px;
+	min-width: 0;
+	flex: 1 1 auto;
+}
+
+.wfrp-rule-effect-selection__main {
+	display: flex;
+	align-items: baseline;
+	gap: 10px;
+	min-width: 0;
+}
+
+.wfrp-rule-effect-selection__source {
+	min-width: 0;
+	line-height: 1.2;
+}
+
+.wfrp-rule-effect-selection__value {
+	flex: 0 0 auto;
+	margin-left: 2px;
+	font-weight: 700;
+	white-space: nowrap;
+}
+
+.wfrp-rule-effect-selection__meta {
+	display: block;
+	margin-top: 1px;
+	font-size: 11px;
+	font-style: italic;
+	line-height: 1.15;
+	opacity: 0.76;
 }
 
 @media (max-width: 520px) {
