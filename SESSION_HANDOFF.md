@@ -267,15 +267,72 @@ Verified against Foundry v14 documentation:
 
 Do not depend on old v10/v11 transfer-workaround assumptions without checking v14 behaviour when implementation begins.
 
+## Approved per-roll Active Effect applicability overrides
+
+The user approved temporary enable/disable controls for contextual Skill effects in the roll/test configuration window.
+
+### Persistent state versus per-roll state
+
+Do **not** toggle the underlying Foundry ActiveEffect Document merely because a player or GM enables/disables an effect for one roll. That would change the Skill's persistent state and could affect later tests unexpectedly.
+
+Instead, test/procedure configuration must build a **per-roll effect-selection snapshot** in the test/procedure context. The snapshot records which candidate Active Effect changes are applied or suppressed for that one execution only.
+
+The resulting chat breakdown should preserve the selected effects/sources so the roll remains auditable after Actor/Item data changes.
+
+### Effect applicability modes
+
+The WFRP effect contract should distinguish at least:
+
+- `automatic` — mechanically unconditional for the relevant target; applied by default and normally shown as checked/locked in the roll UI;
+- `contextual` — potentially applicable but dependent on circumstances or GM judgement; displayed as an interactive checkbox/toggle in the roll UI;
+- `manual` — special rule/capability requiring explicit choice or additional input before use.
+
+The exact field names can be finalized during implementation, but this semantic distinction is approved.
+
+### Roll-window presentation
+
+When the selected test/procedure has candidate contextual effects, show an **Applicable effects / Efekty** section in the same roll window rather than opening another dialog.
+
+Conceptual example:
+
+```text
+Efekty
+☑ Akrobatyka — +2 do wyniku K6
+☐ Błaznowanie — +1 do wyniku K6
+☑ Modyfikator sytuacyjny ...
+```
+
+Changing a checkbox must immediately affect the preview/final calculation for that roll, but must not mutate the Skill Item or ActiveEffect Document.
+
+The section should normally show only effects relevant to the currently selected test/procedure, not every Active Effect owned by the Actor.
+
+### Player and GM control
+
+- A player may select/suppress contextual candidate effects available from an Actor they are allowed to roll/control.
+- A GM may select/suppress candidate effects when rolling for any Actor.
+- Automatic effects should not normally be suppressible by a player merely to gain an advantage unless the rule itself makes them optional.
+- GM must retain authority to override applicability where WFRP requires adjudication.
+
+A player-initiated local dialog and a GM client are not automatically the same live form. First implementation should therefore treat the **user initiating/configuring the roll** as the pre-roll selector, while preserving enough effect data in the chat result for GM adjudication. A later shared/pending-GM approval workflow may be added if playtesting shows it is needed.
+
+### Post-roll adjustment direction
+
+The existing GM-editable general modifier demonstrates the desired adjudication pattern. For effect-driven tests, the result snapshot should make individual applied effects visible in the detailed GM breakdown.
+
+A future enhancement may allow GM to toggle eligible contextual effects directly from the chat result and re-evaluate the target/outcome against the **same original dice roll**, similar to editing the general modifier. This should be designed from the same immutable roll snapshot rather than rereading current Actor data.
+
+Do not implement post-roll effect toggling until the Active Effect resolver and result snapshot contracts are stable.
+
 ## Immediate next dependency order
 
-1. Design and implement the WFRP Active Effect change contract/editor for Skills.
-2. Convert the current movement Skill bonuses to Active Effect-driven procedure parameters and delete the duplicated `MOVEMENT_SKILL_BONUSES` table.
-3. Live-test `Skok` / `Zeskok` with and without the relevant Skill effects.
-4. Design the generic `DamagePacket` / `DamageResolver` / `DamageApplication` contract.
-5. Make Zeskok produce an applicable damage packet and add GM/target-owner `Apply Damage` to the ChatMessage context menu.
-6. Live-test damage application and double-application protection.
-7. Continue broader Skill-effect migration/integration across Standard Tests, non-standard procedures and combat in dependency order.
+1. Design and implement the WFRP Active Effect change contract/editor for Skills, including applicability modes and per-roll selection snapshots.
+2. Add relevant-effect selection controls to Standard Test / procedure configuration dialogs.
+3. Convert the current movement Skill bonuses to Active Effect-driven procedure parameters and delete the duplicated `MOVEMENT_SKILL_BONUSES` table.
+4. Live-test `Skok` / `Zeskok` with automatic/contextual effects enabled and suppressed per roll.
+5. Design the generic `DamagePacket` / `DamageResolver` / `DamageApplication` contract.
+6. Make Zeskok produce an applicable damage packet and add GM/target-owner `Apply Damage` to the ChatMessage context menu.
+7. Live-test damage application and double-application protection.
+8. Continue broader Skill-effect migration/integration across Standard Tests, non-standard procedures and combat in dependency order.
 
 ## Important cautions
 
@@ -283,6 +340,8 @@ Do not depend on old v10/v11 transfer-workaround assumptions without checking v1
 - Active Effects are the mechanical representation; localized names are presentation only.
 - Do not create a second permanent hardcoded Skill rules registry alongside Active Effects.
 - Do not auto-enable situational Skill effects when the rule leaves applicability to GM judgement.
+- Do not mutate persistent ActiveEffect enabled/disabled state for one-roll applicability choices.
+- Per-roll effect selections belong to TestContext/procedure context and result snapshots.
 - Do not force non-d100 procedures or combat mechanics into the generic percentile Test class merely to reuse UI.
 - Do not apply calculated damage directly from a roll/procedure; use the approved damage packet/application transaction.
 - Foundry runtime validation remains required after each dependency-ordered change.
