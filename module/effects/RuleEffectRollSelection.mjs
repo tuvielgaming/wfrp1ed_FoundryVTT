@@ -15,16 +15,12 @@ const TEST_MODIFIER_PREFIX = "rule-effect:";
  * effects.
  *
  * Persistent ActiveEffect enabled/disabled state is handled by Foundry and the
- * RuleEffectResolver. This class never changes that state. It only snapshots
- * which currently available effects apply to one execution.
+ * RuleEffectResolver. This class never changes that state. It snapshots which
+ * currently available effects apply to one execution and preserves disabled
+ * candidates so a GM can adjudicate them later without rereading live Actor or
+ * Item data.
  */
 export class RuleEffectRollSelection {
-	/**
-	 * Return the stable effect target id for one percentile Test.
-	 *
-	 * @param {Test} test
-	 * @returns {string|null}
-	 */
 	static targetIdForTest(test) {
 		if (!test?.id) {
 			return null;
@@ -41,45 +37,21 @@ export class RuleEffectRollSelection {
 		return null;
 	}
 
-	/**
-	 * Return currently executable candidates for one or more rule parameters.
-	 *
-	 * The first integration consumes self-side additive/subtractive numeric
-	 * changes. Other sides/operations remain valid authoring vocabulary but are
-	 * intentionally not surfaced until their consumer semantics are implemented.
-	 *
-	 * @param {Actor} actor
-	 * @param {string|string[]} targetIds
-	 * @returns {readonly Object[]}
-	 */
 	static candidates(actor, targetIds) {
 		const ids = normalizeTargetIds(targetIds);
 		const candidates = [];
 
 		for (const targetId of ids) {
 			for (const candidate of RuleEffectResolver.candidates(actor, targetId)) {
-				if (!this.#isExecutableCandidate(candidate)) {
-					continue;
+				if (this.#isExecutableCandidate(candidate)) {
+					candidates.push(candidate);
 				}
-
-				candidates.push(candidate);
 			}
 		}
 
 		return Object.freeze(candidates);
 	}
 
-	/**
-	 * Create a serializable effect-selection snapshot from a rendered roll form.
-	 *
-	 * Players cannot suppress automatic effects. GMs may override them for one
-	 * roll as part of adjudication. Contextual/manual effects are opt-in.
-	 *
-	 * @param {Actor} actor
-	 * @param {string|string[]} targetIds
-	 * @param {HTMLFormElement|null|undefined} form
-	 * @returns {readonly Object[]}
-	 */
 	static snapshotFromForm(actor, targetIds, form) {
 		const candidates = this.candidates(actor, targetIds);
 		const checked = new Set(
@@ -103,14 +75,6 @@ export class RuleEffectRollSelection {
 		return RuleEffectResolver.snapshot(candidates, selections);
 	}
 
-	/**
-	 * Build a roll-window section showing only effects relevant to the selected
-	 * rule parameter(s).
-	 *
-	 * @param {Actor} actor
-	 * @param {string|string[]} targetIds
-	 * @returns {HTMLElement}
-	 */
 	static buildSection(actor, targetIds) {
 		const section = document.createElement("section");
 		section.classList.add("wfrp-rule-effect-selection");
@@ -119,15 +83,6 @@ export class RuleEffectRollSelection {
 		return section;
 	}
 
-	/**
-	 * Refresh an existing effect section when a composed dialog changes its
-	 * selected test/procedure.
-	 *
-	 * @param {HTMLElement} section
-	 * @param {Actor} actor
-	 * @param {string|string[]} targetIds
-	 * @returns {void}
-	 */
 	static renderSection(section, actor, targetIds) {
 		if (!section) {
 			return;
@@ -156,14 +111,12 @@ export class RuleEffectRollSelection {
 	}
 
 	/**
-	 * Apply a previously captured effect selection to a percentile TestContext.
+	 * Resolve every executable candidate once and attach it to the TestContext.
 	 *
-	 * If no UI snapshot exists, automatic effects are still discovered/applied
-	 * while contextual/manual effects remain off. This keeps macros and other
-	 * callers consistent with the declared automatic semantics.
-	 *
-	 * @param {TestContext} context
-	 * @returns {TestContext}
+	 * Selected effects are enabled. Unselected effects are stored as disabled
+	 * modifiers so the completed chat result can later enable them against the
+	 * exact same roll and resolved numeric value. The underlying ActiveEffect is
+	 * never changed by this per-roll decision.
 	 */
 	static applyToTestContext(context) {
 		if (!context?.actor || !context?.test) {
@@ -195,7 +148,7 @@ export class RuleEffectRollSelection {
 		}
 
 		for (const rule of snapshot) {
-			if (!rule?.selected || rule.targetId !== targetId) {
+			if (!rule || rule.targetId !== targetId) {
 				continue;
 			}
 
@@ -209,11 +162,36 @@ export class RuleEffectRollSelection {
 				continue;
 			}
 
-			const resolved = FormulaResolver.resolve(
-				context.actor,
-				String(rule.formula ?? ""),
-				context,
-			);
+			let resolved;
+
+			try {
+				resolved = FormulaResolver.resolve(
+					context.actor,
+					String(rule.formula ?? ""),
+					context,
+				);
+			}
+			catch (error) {
+				/*
+				 * A selected effect must remain strict: if its formula cannot be
+				 * resolved, the roll cannot truthfully continue. An unselected
+				 * optional effect may be omitted from post-roll adjudication instead
+				 * of breaking a roll which did not use it.
+				 */
+				if (rule.selected) {
+					throw error;
+				}
+
+				console.warn(
+					"WFRP1ED | Skipping unresolved disabled rule effect.",
+					{
+						rule,
+						error,
+					},
+				);
+				continue;
+			}
+
 			const value = rule.operation === RULE_EFFECT_OPERATIONS.SUBTRACT
 				? -resolved
 				: resolved;
@@ -223,22 +201,13 @@ export class RuleEffectRollSelection {
 				value,
 				source: sourceLabel(rule),
 				type: "active-effect",
-				enabled: true,
+				enabled: rule.selected === true,
 			});
 		}
 
 		return context;
 	}
 
-	/**
-	 * Resolve selected numeric changes for a non-d100 procedure parameter.
-	 *
-	 * @param {Actor} actor
-	 * @param {string} targetId
-	 * @param {readonly Object[]|null|undefined} snapshot
-	 * @param {Object} formulaContext
-	 * @returns {{total:number, entries:readonly Object[]}}
-	 */
 	static resolveNumeric(actor, targetId, snapshot, formulaContext = {}) {
 		const rules = Array.isArray(snapshot)
 			? snapshot
@@ -313,9 +282,6 @@ export class RuleEffectRollSelection {
 		const body = document.createElement("span");
 		body.classList.add("wfrp-rule-effect-selection__body");
 
-		const main = document.createElement("span");
-		main.classList.add("wfrp-rule-effect-selection__main");
-
 		const source = document.createElement("span");
 		source.classList.add("wfrp-rule-effect-selection__source");
 		source.textContent = sourceLabel(candidate);
@@ -324,24 +290,26 @@ export class RuleEffectRollSelection {
 		value.classList.add("wfrp-rule-effect-selection__value");
 		value.textContent = valueLabel(candidate);
 
-		main.append(source, value);
-		body.append(main);
-
 		const meta = document.createElement("small");
 		meta.classList.add("wfrp-rule-effect-selection__meta");
-		meta.textContent = [
-			applicabilityLabel(candidate.applicability),
-			candidate.condition,
-		].filter(Boolean).join(" • ");
-		body.append(meta);
+		meta.textContent = applicabilityLabel(candidate.applicability);
 
+		body.append(source, value, meta);
 		row.append(input, body);
+
+		const tooltip = candidateTooltip(candidate);
+		if (tooltip) {
+			row.title = tooltip;
+		}
+
 		return row;
 	}
 }
 
 function normalizeTargetIds(targetIds) {
-	const source = Array.isArray(targetIds) ? targetIds : [targetIds];
+	const source = Array.isArray(targetIds)
+		? targetIds
+		: [targetIds];
 	const result = [];
 
 	for (const raw of source) {
@@ -355,6 +323,11 @@ function normalizeTargetIds(targetIds) {
 	return result;
 }
 
+/**
+ * Keep the visible roll/chat source compact. For Item-sourced rules the Item
+ * name is the meaningful rule source; the ActiveEffect name remains available
+ * as tooltip/metadata. Actor-level effects fall back to the effect name.
+ */
 function sourceLabel(candidate) {
 	const item = String(
 		candidate?.source?.itemName ?? candidate?.itemName ?? "",
@@ -363,15 +336,28 @@ function sourceLabel(candidate) {
 		candidate?.source?.effectName ?? candidate?.effectName ?? "",
 	).trim();
 
-	if (item && effect && item !== effect) {
-		return `${item}: ${effect}`;
-	}
-
 	return item || effect || localize(
 		"WFRP1ED.ActiveEffect.RuleChange",
 		"WFRP Rule",
 		"Reguła WFRP",
 	);
+}
+
+function candidateTooltip(candidate) {
+	const item = String(candidate?.itemName ?? "").trim();
+	const effect = String(candidate?.effectName ?? "").trim();
+	const condition = String(candidate?.condition ?? "").trim();
+	const parts = [];
+
+	if (effect && effect !== item) {
+		parts.push(effect);
+	}
+
+	if (condition) {
+		parts.push(condition);
+	}
+
+	return parts.join(" — ");
 }
 
 function valueLabel(candidate) {
@@ -387,21 +373,21 @@ function applicabilityLabel(value) {
 		case RULE_EFFECT_APPLICABILITY.AUTOMATIC:
 			return localize(
 				"WFRP1ED.ActiveEffect.Automatic",
-				"Automatic",
-				"Automatyczny",
+				"automatic",
+				"automatyczny",
 			);
 		case RULE_EFFECT_APPLICABILITY.MANUAL:
 			return localize(
 				"WFRP1ED.ActiveEffect.Manual",
-				"Manual",
-				"Ręczny",
+				"manual",
+				"ręczny",
 			);
 		case RULE_EFFECT_APPLICABILITY.CONTEXTUAL:
 		default:
 			return localize(
 				"WFRP1ED.ActiveEffect.Contextual",
-				"Contextual",
-				"Sytuacyjny",
+				"contextual",
+				"sytuacyjny",
 			);
 	}
 }
