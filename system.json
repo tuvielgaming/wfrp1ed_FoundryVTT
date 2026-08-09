@@ -13,7 +13,8 @@
 		}
 	],
 	"esmodules": [
-		"module/wfrp1ed.mjs"
+		"module/wfrp1ed.mjs",
+		"module/tests/TestResultModifierToggle.mjs"
 	],
 	"styles": [
 		"css/myOwn.css",
@@ -23,6 +24,7 @@
 		"css/sheets/skill-item.css",
 		"css/sheets/standard-test.css",
 		"css/chat/test-result.css",
+		"css/chat/test-result-effects.css",
 		"css/effects/rule-effects.css"
 	],
 	"scripts": [],
