@@ -63,7 +63,7 @@ export class DamageApplication {
 			normalizedPacket.targetActorUuid,
 		);
 
-		if (!(actor instanceof Actor)) {
+		if (!(actor instanceof foundry.documents.Actor)) {
 			throw new Error(
 				`Damage target '${normalizedPacket.targetActorUuid}' is not an Actor.`,
 			);
