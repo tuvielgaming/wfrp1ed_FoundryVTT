@@ -13,7 +13,6 @@
 		}
 	],
 	"esmodules": [
-		"module/effects/WfrpActiveEffectSetup.mjs",
 		"module/wfrp1ed.mjs",
 		"module/tests/TestResultModifierToggle.mjs"
 	],
@@ -43,9 +42,6 @@
 		}
 	],
 	"documentTypes": {
-		"ActiveEffect": {
-			"wfrp": {}
-		},
 		"Actor": {
 			"character": {},
 			"npc": {},
