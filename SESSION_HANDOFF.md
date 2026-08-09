@@ -1,379 +1,288 @@
 # Session Handoff
 
-**Date:** 2026-08-08  
-**Purpose:** Temporary handoff for the next working session. Replace/update this file at the end of future sessions rather than creating additional overlapping progress documents.
+**Date:** 2026-08-09  
+**Purpose:** Current handoff for the next working step. Replace/update this file rather than creating overlapping progress documents.
 
 ## Current working source
 
 Repository: `tuvielgaming/wfrp1ed_FoundryVTT`  
 Branch: `master`
 
-GitHub `master` is the current implementation source of truth. Before modifying anything, fetch the latest `master` version of the exact file and its dependencies.
+GitHub `master` is the implementation source of truth. Fetch the latest exact files before every change.
 
-**Last gameplay/UI commit live-tested by the user:** `2953dd2c174ec4e2a17f39702d1fa2fa491b0dca` — `Use Foundry v14 ChatMessage context hook`.
+### Validation checkpoint
 
-The user confirmed at the end of the session that the current Standard Test result-visibility workflow is working correctly.
+Last fully live-tested Standard Test checkpoint:
 
-## Rulebook policy reminder
+- `2953dd2c174ec4e2a17f39702d1fa2fa491b0dca` — Foundry v14 ChatMessage context-menu hook correction.
 
-Official rulebooks are **not stored in Git**. For any new WFRP mechanics audit or implementation, the English and Polish WFRP 1e Core Rulebooks must be available separately in the working context. Do not infer mechanics from current code, memory, later editions, or fan summaries.
+The user confirmed that the Standard Test launcher, single-window configuration, result card, GM-editable general modifier, and GM-controlled result-detail visibility are working correctly through that checkpoint.
 
-Authority order:
+### Movement work added after the last live-tested checkpoint
 
-1. English WFRP 1e Core Rulebook — mechanics.
-2. Polish WFRP 1e Core Rulebook — official Polish terminology and translation comparison.
-3. Original Polish character-sheet scan — Classic-sheet visual authority.
+The following movement-procedure commits exist on `master` but have not yet completed live Foundry validation:
 
-This is especially important for the next requested movement-related Standard Tests (`Skok` / `Zeskok`). Do not implement their mechanics until the relevant English and Polish rulebook sections are available and checked.
+- `49276ebce2c28a5dbf537a9552742be4b4e4033c` — movement Standard Test procedure definitions.
+- `7db637a68514703c48e5ef35af738a82d8f48b7d` — Jump/Leap movement procedure implementation.
+- `c887bd051ddd583367be01d174c4527ee5e81b9b` — movement procedure result template.
+- `aa4257d8ebe01fd0658604786c36195efd70f025` — expose `Skok` / `Zeskok` through the Standard Test launcher.
 
-## Session results
+## Rulebook verification for movement
 
-### 1. Standard Test launcher on the Classic Character Sheet
+The English and Polish WFRP 1e Core Rulebooks were supplied separately on 2026-08-09 and checked before implementing movement procedures.
 
-The dedicated `🎲 TEST STANDARDOWY` launcher is now implemented and live-tested.
+Verified sources:
 
-Final user-approved presentation:
+- English Core Rulebook, printed p. 75 — `JUMPING, FALLING, LEAPING, CLIMBING`.
+- Polish Core Rulebook, printed p. 75 — `ZESKOK, UPADEK, SKOK, WSPINACZKA`.
+- English Skills section — Acrobatics and Clown descriptions.
+- Polish Skills section — Akrobatyka and Błaznowanie terminology/effects.
 
-- It is an intrinsic built-in action, not an owned Skill Item.
-- It occupies the **first actual writable row** in the first `UMIEJĘTNOŚCI` column.
-- Owned Skills continue underneath it, with overflow continuing into the second column.
-- It no longer overlaps the printed `UMIEJĘTNOŚCI` heading.
-- Extra indentation was removed so the full label fits.
-- It has a subtle background/border treatment so it is distinguishable from normal owned Skills without looking like a floating button.
+Verified movement rules relevant to the current implementation:
 
-The user explicitly confirmed the final button/alignment as correct.
+- `Zeskok` / Jumping is a controlled vertical descent and is not a d100 Standard Test.
+- Damage is based on rounded-up height minus a d6 result; positive remainder is Wounds.
+- Armour and Toughness do not reduce that damage.
+- Acrobatics improves the damage-reduction die by +2.
+- Clown/Błaznowanie improves the Jump/Fall damage-reduction die by +1.
+- If Wounds are suffered, there is a 50% chance of dropping held items.
+- `Skok` / Leaping is horizontal distance and is not a d100 Standard Test.
+- With at least 2 yards/metres run-up: `2 × Movement - 1d6`.
+- Without sufficient run-up: `2 × Movement - 2d6`.
+- Minimum achieved distance is 1 yard/metre.
+- Acrobatics adds +2 yards/metres to Leap distance.
+- If the achieved distance is insufficient, the character falls.
+- These movement procedures consume a full round.
 
-Relevant final commits include:
+## Approved damage-application architecture
 
-- `2ba9110` — align Standard Test with first skill row.
-- `9e21760` — refine Standard Test skill-row styling.
+The user explicitly approved a WFRP4e-like chat workflow for damage application.
 
-### 2. Standard Test configuration is now a single dialog
+### Core rule
 
-The previous two-step flow was refactored.
+A roll/procedure calculates and publishes damage, but does not silently mutate Wounds at calculation time.
 
-Current UX:
+The damage-producing result stores a structured **damage packet**. Applying that packet is a separate explicit action.
 
-`🎲 TEST STANDARDOWY` → choose named Standard Test + required context + general modifier → `Rzuć`
+### Permission rule
 
-There is no unnecessary second generic modifier popup for a Standard Test.
+`Apply Damage / Zastosuj obrażenia` should be available from the ChatMessage context menu to:
 
-Architecture remains modular:
+- a GM; or
+- a user who owns the Actor receiving the damage.
 
-- `TestDialog` still owns generic modifier parsing/application.
-- `StandardTestDialog` composes the Standard-Test-specific controls and the generic modifier in one UI.
-- `RollTestAction` can execute an already-configured context without reopening the generic dialog.
+Permission is checked against the **damage target**, not necessarily the Actor who made the roll.
 
-Relevant commits:
+### Damage packet direction
 
-- `05562a7` — extract reusable test modifier configuration.
-- `ee199db` — support preconfigured test modifiers.
-- `d31e99a` — compose Standard Test into one roll dialog.
-- `587ac95` — preserve Standard Test modifier in pending requests.
+A damage packet should contain enough data for one generic damage service to resolve many sources, for example:
 
-### 3. Standard Test conditional fields are working
+- raw damage amount;
+- target Actor UUID;
+- source kind/id (weapon, movement, spell, environmental effect, etc.);
+- whether Armour applies or is ignored;
+- whether Toughness applies or is ignored;
+- optional hit location;
+- other source-specific mitigation/rule flags when actually required by audited rules;
+- application state/transaction metadata.
 
-The Foundry v14 `DialogV2` lifecycle issue was fixed by attaching listeners at the rendered-dialog stage rather than to the detached HTMLElement that Foundry stringifies.
+`Zeskok` is intended to be the first consumer and should produce a packet with Armour and Toughness explicitly ignored.
 
-Live-tested behavior now includes:
+### Central ownership
 
-- ordinary tests such as `Budowa`, `Strach`, `Głupota` → only the Standard Test selector plus generic controls;
-- `Ukrywanie się` → target context;
-- `Słuchanie` → base Listen chance/noise input;
-- `Otwieranie zamków` → lock difficulty input.
+Do not implement Zeskok-specific Wounds subtraction.
 
-Relevant fix:
+Target architecture:
 
-- `c7785e9` — fix Standard Test dialog field updates.
+`damage-producing procedure/action`
+→ `DamagePacket`
+→ `DamageResolver`
+→ `DamageApplication`
+→ Actor Wounds / later critical-damage handling.
 
-### 4. Deferred target resolution replaces hard target errors
+The damage resolver, not the chat template and not the source procedure, owns mitigation rules.
 
-Target-dependent Standard Tests no longer throw an error when no token is pre-targeted.
+### Application transaction
 
-Current workflow:
+After damage is applied, the ChatMessage should record at least:
 
-- If exactly one target Token is already selected, the test proceeds normally.
-- If target data is missing, the test creates a pending chat request instead of throwing.
-- GM can resolve the pending target by:
-  - using the current targeted Token;
-  - choosing a world Actor, including an off-scene Actor;
-  - drag/drop of an Actor or Token onto the pending card;
-  - manually entering the single required target characteristic value.
-- Current audited target-dependent examples:
-  - `Ukrywanie się` requires target `I`;
-  - `Przekupstwo` requires target `SW/WP`.
-- After target resolution, the existing `Actor.rollTest(...)` pipeline resumes.
-- The already-entered general modifier is preserved.
+- amount actually applied;
+- Wounds before and after;
+- user who applied it;
+- applied timestamp/state.
 
-Important implementation lesson preserved from this session:
+The action must be protected against accidental double application.
 
-- Do **not** pass frozen objects into Foundry Document data/`ChatMessage.flags`; Foundry v14 DataModel cleaning reconstructs/mutates supplied object graphs.
-- Internal rule definitions may remain immutable, but data crossing into Foundry Documents must be mutable JSON-safe data.
+A later GM-only `Undo Applied Damage` action is desirable, but it must use a recorded transaction rather than blindly adding Wounds back. It is a later step, not required for the first Apply Damage implementation.
 
-There was one temporary syntax regression in `PendingStandardTest.mjs` during this work; it was restored and the final mutable-flags correction was reapplied safely. The Classic sheet and pending flow were subsequently live-tested successfully.
+### Critical damage caution
 
-Relevant recovery/final commits:
+The repository does not yet have a complete audited shared damage → zero/negative Wounds → critical handling contract for Character/NPC/Creature Actors. Do not bypass that dependency by directly subtracting Wounds inside movement code.
 
-- `9513f77` — restore parsing pending Standard Test module.
-- `870279a` — fix pending Standard Test mutable chat flags.
+## Approved Skill architecture: Foundry Active Effects
 
-### 5. Test result chat card redesigned
+The user reconfirmed the previously discussed direction: **Skill mechanics should be authored through Foundry Active Effects on Skill Items**, rather than hardcoded by Skill name or duplicated across test executors.
 
-The previous expanded result layout was rejected visually and replaced with a compact WFRP-style result card.
+Foundry v14 Item Documents natively support embedded ActiveEffects and an ActiveEffect may contain multiple changes. The system may also register WFRP-specific custom effect change types/renderers/handlers when the built-in Add/Multiply/Override semantics are insufficient.
 
-Current collapsed hierarchy:
+### Skill identity
 
-- test name;
-- success/failure badge;
-- prominent final target (`Próg`);
-- roll;
-- margin.
+Keep the stable language-neutral `system.rulesId` for core identity/migration/content mapping, but mechanical consumers must not depend on localized `Item.name`.
 
-Clicking the target can reveal a compact detailed calculation when the current visibility policy allows it.
+`rulesId` identifies what core Skill an Item represents. Active Effects describe what that Skill actually does.
 
-The result layout no longer uses a table, which prevents legacy sheet-wide table typography rules from corrupting chat-card fonts/layout.
+### Multiple effects per Skill
 
-A dedicated scoped stylesheet is used for the result card.
+A Skill Item may contain multiple independent Active Effects.
 
-Relevant commits:
+Example approved direction for `Clown / Błaznowanie`:
 
-- `63529b3` — redesign test result chat-card layout.
-- `754f536` — add scoped test-result chat styling.
-- `85226d1` — load scoped test-result chat styles.
+- one effect affecting Jump/Fall procedure mechanics;
+- another effect affecting other applicable tests/procedures such as Bluff/Busk according to the audited rules.
 
-### 6. Target calculation breakdown
+Do not collapse unrelated mechanical effects into one hardcoded Skill switch.
 
-The expanded result view is derived from the same resolved test/context data and does not own or recalculate mechanics independently.
+### Current movement implementation is transitional
 
-It can show:
+`MovementStandardTest.mjs` currently contains a local `MOVEMENT_SKILL_BONUSES` table for Acrobatics and Clown. This duplicates mechanics that should belong to Skill Active Effects.
 
-- formula-derived base target;
-- formula inputs;
-- characteristic base value for direct characteristic tests;
-- rule/default/Skill/context modifiers;
-- general test modifier;
-- total modifier;
-- final target.
+This table is **not approved as the final architecture** and should be refactored out before more Skill-dependent mechanics are built on it.
 
-Mechanical invariant preserved:
+The existing `standard-test-skill-rules.mjs` and `StandardTestSkillResolver.mjs` are useful audited/transitional sources, but their long-term mechanical data should migrate into Active Effect definitions on Skill Items/core compendium content rather than remain a second permanent rules database.
 
-`base target + enabled modifiers = final target`
+## Required WFRP Active Effect vocabulary
 
-Formula presentation is localized and uses Classic-sheet characteristic abbreviations rather than raw resolver identifiers.
+A single effect type of `Standard Test + numeric modifier` is not sufficient for WFRP 1e Skills.
 
-Example Polish presentation:
+The Skill audit shows that core Skills use several different mechanical patterns. The Active Effect editor/resolver must be able to represent at least the following categories.
 
-- raw internal formula: `i + cl - target.i`
-- displayed formula: `I + Op - Cel.I`
+### 1. Test target modifier
 
-The resolver formula itself is unchanged; this is presentation only.
+Adds/subtracts from the acting character's chance for a named test or test family.
 
-Relevant commit:
+Examples include ordinary `+10`, `+15`, `+20`, etc. modifiers to Bluff, Gossip, Construct, Disease, Poison, Risk, Estimate, and similar tests.
 
-- `81b2b56` — localize formula abbreviations in test breakdown.
+Required fields conceptually:
 
-### 7. Pure chance targets display as percentages
+- target scope: Standard Test / characteristic test / named procedure / combat test family;
+- target id;
+- operation/modifier;
+- numeric value or formula;
+- optional condition.
 
-Tests that represent a direct percentage chance rather than a characteristic-derived target are now formatted with `%` in the result card.
+### 2. Opponent/target modifier
 
-Example:
+Some Skills alter the opponent's characteristic/chance rather than the acting character's target.
 
-- `Ryzyko` base target displays as `50%`;
-- after `-30`, final target displays as `20%`.
+The effect model therefore needs an explicit target side, e.g. `self`, `opponent`, `test-target`, rather than assuming every modifier changes the owner.
 
-Characteristic-derived formulas continue to display as normal target numbers rather than percentages.
+### 3. Derived/formula modifier
 
-Relevant commits:
+Some bonuses are calculated from characteristics or other runtime values rather than a fixed number.
 
-- `57b3e8d` — add chance formatting and chat presentation helpers.
-- `62c81b1` — format pure chance targets and hide GM diagnostics.
+The effect value must support a safe formula/expression contract, not only a numeric constant.
 
-### 8. General test modifier is always present and GM-editable after the roll
+### 4. Choice/conditional modifier
 
-The generic `Modyfikator testu` now has a stable internal identity and is present even when its value is `0`.
+Some Skills have different effects depending on the fictional situation.
 
-In the expanded result card:
+Example pattern: one value while stationary, another while moving; environment-dependent Rural/Urban variants; mounted/specific-weapon/etc. conditions.
 
-- players can see the modifier only when the visibility policy permits the detailed breakdown;
-- GM can edit the general test modifier directly in chat.
+The system should expose candidate effects and let the GM decide applicability where the rule requires judgement. Do not silently infer every narrative condition.
 
-Changing it does **not** reroll the d100.
+### 5. Repeated-acquisition scaling
 
-The result chat snapshot preserves:
+Some Skills gain additional bonuses when acquired multiple times, such as Pick Lock/Pick Pocket.
 
-- original d100 roll;
-- resolved base target;
-- other modifier contributions;
-- general modifier;
-- formula/input presentation needed for the diagnostic card.
+The effect contract therefore needs access to acquisition count or a stacking policy, rather than baking repeated-acquisition math into individual test executors.
 
-A GM edit recalculates only:
+### 6. Procedure parameter modifier
 
-- final target;
-- success/failure;
-- margin;
+Some Skills modify a non-d100 procedure parameter rather than a percentile target.
 
-against the original d100 roll.
+Examples:
 
-This prevents later Actor-sheet changes from retroactively changing an old roll's base calculation.
+- Acrobatics: Jump/Fall die result +2;
+- Acrobatics: Leap distance +2;
+- Clown: Jump/Fall die result +1;
+- Acute Hearing: hearing distance;
+- Swim: movement allowance while swimming;
+- Luck: post-roll die/result adjustment uses;
+- other movement, healing, crafting or special-procedure values.
 
-Relevant commits in this feature chain include:
+The effect must identify a stable procedure parameter such as `movement.jump.reductionDie`, `movement.leap.distance`, etc. The procedure consumes generic parameter effects; it must not know Skill identities.
 
-- `0590ee5` — publish editable test-result chat cards.
-- `b6b3977` — show editable general modifier.
-- `1acd74a` — style GM-editable modifier.
-- `0a2b94f` — activate result chat controls.
-- `454891b` — keep fallback result rendering compatible.
+### 7. Characteristic/profile modification
 
-### 9. Result-detail visibility is now controlled by the GM
+Some Skills/talents directly modify Actor characteristics or derived profile values, e.g. Movement, Strength, Toughness or initiative-related values.
 
-The session ended with this workflow live-tested and user-approved.
+These can often use normal Foundry Add/Override Active Effect changes against canonical Actor data/derived effect inputs, but the project must preserve one source of truth and avoid persisting formatted derived values.
 
-There are currently two **calculation-detail** visibility modes:
+### 8. Combat-rule modifier
 
-1. `Tylko MG` / `GM only` — default.
-   - Players see the compact result only.
-   - Players cannot expand the target calculation.
-   - The breakdown DOM is removed on non-GM clients, preventing indirect inference of opponent characteristics through values such as `Próg bazowy`.
-   - GM always retains the full calculation and editable modifier.
+Some Skills modify combat-specific calculations rather than Standard Tests, including hit modifiers, weapon handling, damage, stun/critical location behaviour, dodge/disarm/wrestling procedures, etc.
 
-2. `Publiczne (pełne)` / `Public (full)`.
-   - Players may expand and inspect the complete target calculation.
+These should target stable combat effect keys/parameters and be consumed by the combat subsystem. Do not force combat semantics into the Standard Test resolver.
 
-This visibility is deliberately separate from Foundry's ChatMessage roll/message visibility (`Make Private`, blind roll, self roll, etc.).
+### 9. Capability / rule permission
 
-GM control exists at two points:
+Many Skills do not provide a numeric bonus at all. They permit an action, remove a normal penalty, allow automatic success in certain circumstances, enable spellcasting/specialist weapons/languages, or unlock a dedicated procedure.
 
-- **Before rolling:** GM test dialogs contain a `Szczegóły wyniku` selector.
-- **After rolling:** right-click the result ChatMessage and switch between:
-  - `Szczegóły testu: udostępnij graczom`;
-  - `Szczegóły testu: tylko MG`.
+The Active Effect vocabulary therefore needs boolean/capability effects such as `grant`, `ignorePenalty`, `allowProcedure`, or an equivalent stable contract.
 
-Player-created tests are forced to the safe default (`Tylko MG`); a player cannot force public diagnostic details by passing an option through a macro.
+### 10. Outcome/rule transformation
 
-For target-dependent tests, the chosen detail visibility survives the pending-target flow.
+Some Skills change what success/failure means, modify recovery time, alter damage caused, adjust error margins, allow post-roll modification, change ranges/distances, or add secondary effects.
 
-The initial post-roll context-menu integration used an obsolete/wrong hook. It was corrected to the Foundry v14 hook:
+These require procedure/combat/result hooks rather than simple addition to an Actor field.
 
-`getChatMessageContextOptions`
+## Recommended Active Effect authoring UI
 
-The user then live-tested the right-click visibility switch and explicitly confirmed that it is working correctly.
+For Skill Items, do not expose users only to raw arbitrary data paths.
 
-Relevant commits:
+Preferred WFRP-facing workflow:
 
-- `e969761` — add test-result visibility contract.
-- `7d7e8aa` — add visibility to generic test dialog.
-- `af7f144` — add visibility to Standard Test dialog.
-- `06e9786` — add per-result detail visibility controls.
-- `a2c4c2a` — wire per-result visibility into chat.
-- `2bcbcf3` — preserve result visibility in pending tests.
-- `9a43d81` — style locked player result details.
-- `ac858a1` — enforce GM control of result visibility.
-- `2953dd2` — use Foundry v14 `getChatMessageContextOptions` hook.
+1. Add Active Effect to the Skill Item.
+2. Add one or more WFRP effect changes.
+3. Choose an **Effect Category** (Test Modifier, Procedure Parameter, Characteristic, Combat, Capability, Result Transformation, etc.).
+4. Choose a stable target from filtered dropdowns (for example a registered Standard Test, characteristic, movement procedure, combat parameter).
+5. Choose self/opponent/target side when relevant.
+6. Enter a numeric value or approved formula when that effect type supports it.
+7. Configure stacking/acquisition behaviour when relevant.
+8. Add an optional human-readable condition/GM applicability note where automatic evaluation is inappropriate.
 
-### 10. Opponent information policy established
+Use stable IDs internally and localized labels in the UI.
 
-Current approved presentation policy:
+The UI should allow multiple Active Effects and multiple changes where the Skill has several independent mechanical consequences.
 
-- GM can inspect the full formula and opponent/target statistics in the detailed result calculation.
-- Player access to those diagnostics is controlled by the GM through the per-result visibility policy.
-- Default is `Tylko MG` to avoid leaking NPC/opponent statistics.
-- If GM explicitly sets `Publiczne (pełne)`, the full calculation is intentionally public.
+## Foundry v14 Active Effect implementation notes
 
-Important technical distinction:
+Verified against Foundry v14 documentation:
 
-The current protection is a **client presentation boundary**, not cryptographic secrecy. Shared ChatMessage flags/content may still contain diagnostic data. If hard data secrecy from technically sophisticated player clients becomes a requirement, opponent diagnostics must later move into GM-only storage rather than only per-client rendered visibility.
+- Item Documents have an embedded `effects` collection.
+- Active Effects may contain multiple `changes`.
+- Core change semantics include additive/multiplicative/override-style changes.
+- Foundry v14 allows systems/modules to register additional Active Effect change types with handlers and custom renderers.
+- Active Effect application supports phases; use custom phases only when a WFRP subsystem needs to consume effects at a specific lifecycle point.
 
-## Standard Test status at session end
+Do not depend on old v10/v11 transfer-workaround assumptions without checking v14 behaviour when implementation begins.
 
-User-confirmed working pieces:
+## Immediate next dependency order
 
-- Classic-sheet `🎲 TEST STANDARDOWY` row placement and styling.
-- Single-window Standard Test configuration.
-- Conditional context fields.
-- General modifier in the same dialog.
-- Deferred target workflow instead of hard errors.
-- Pending target resolution by current target / Actor / drag-drop / manual characteristic.
-- Compact result chat card.
-- Expandable diagnostic target calculation for GM.
-- Localized characteristic abbreviations in displayed formulas.
-- Percentage formatting for pure chance tests such as `Ryzyko`.
-- Always-present general modifier in the result snapshot.
-- GM post-roll modifier editing with fixed original d100 roll.
-- GM-only vs public-full result-detail visibility.
-- Post-roll right-click visibility switching through the Foundry v14 ChatMessage context menu.
+1. Design and implement the WFRP Active Effect change contract/editor for Skills.
+2. Convert the current movement Skill bonuses to Active Effect-driven procedure parameters and delete the duplicated `MOVEMENT_SKILL_BONUSES` table.
+3. Live-test `Skok` / `Zeskok` with and without the relevant Skill effects.
+4. Design the generic `DamagePacket` / `DamageResolver` / `DamageApplication` contract.
+5. Make Zeskok produce an applicable damage packet and add GM/target-owner `Apply Damage` to the ChatMessage context menu.
+6. Live-test damage application and double-application protection.
+7. Continue broader Skill-effect migration/integration across Standard Tests, non-standard procedures and combat in dependency order.
 
-## Important items NOT completed yet
+## Important cautions
 
-### `Skok` / `Zeskok`
-
-The user requested that movement-related `Skok` / `Zeskok` procedures appear through the same Standard Test launcher.
-
-They are **not implemented yet**.
-
-Reason: their WFRP mechanics must be verified against both official core rulebooks before implementation. The rulebook PDFs are not tracked in Git and were not available in the active implementation context during this session.
-
-Do not model these as generic percentage tests from memory.
-
-### StandardTestSkillResolver UI integration
-
-The backend `StandardTestSkillResolver` / stable Skill `rulesId` foundation exists from the previous session, but the full UI flow for presenting potentially applicable owned Skills and letting the GM/player decide which actually apply is still not integrated into the final Standard Test dialog/result path.
-
-Preserve the earlier design decision:
-
-- the system may identify candidate Skills;
-- it must **not automatically decide situational applicability** where the WFRP rule leaves that decision to the GM.
-
-### Foundry-native message/roll visibility
-
-The new `Szczegóły wyniku` setting controls **calculation detail visibility only**.
-
-It is not the same as Foundry's native roll/message modes such as:
-
-- public roll;
-- GM/private roll;
-- blind GM roll;
-- self roll.
-
-Those native roll modes remain a separate future integration concern and should not be conflated with `GM only` vs `Public (full)` diagnostic detail visibility.
-
-### NPC/creature sheets
-
-The audited custom Classic sheet is still registered for Character Actors. Do not register the Character sheet for NPC/creature Actor types simply to expose Standard Test controls.
-
-The Standard Test action architecture should be reused when dedicated NPC/creature sheets/data models are implemented.
-
-## Immediate next steps
-
-Recommended order when resuming:
-
-1. Fetch latest `master` and verify the working checkpoint starts from at least gameplay commit `2953dd2` plus this handoff update.
-2. Ask for / obtain the English and Polish WFRP 1e Core Rulebooks before changing movement mechanics.
-3. Audit and implement `Skok` / `Zeskok` as Standard-Test-launcher procedures using the verified rulebook contract rather than forcing them into an inappropriate generic formula.
-4. Then return to `StandardTestSkillResolver` UI integration so candidate owned Skills can participate in Standard Tests without automatic situational decisions.
-5. After those pieces are stable, decide whether to add Foundry-native roll/message mode selection to the test dialogs as a separate concern from result-detail visibility.
-6. Continue representative live Foundry v14 tests after each dependency-ordered change.
-
-## Important implementation cautions
-
-- Fetch latest `master` before every edit.
-- Do not infer WFRP mechanics from current formulas or names when the rulebook has not been checked.
-- Do not pass frozen object graphs into Foundry Document/ChatMessage data.
-- Keep internal immutable rule definitions separate from mutable Foundry Document payloads.
-- Do not couple chat presentation to mechanic recalculation.
-- Result-card GM modifier edits must preserve the original d100 roll and resolved base snapshot.
-- Result-detail visibility and Foundry message/roll visibility are separate concepts.
-- Do not leak opponent statistics by default through either direct target rows or indirectly derivable base-target diagnostics.
-- Use Foundry v14-specific hooks/APIs; the working ChatMessage context hook is `getChatMessageContextOptions`.
-- Foundry live runtime behavior remains the final authority for UI/API behavior.
-- Avoid creating additional overlapping progress/state documents; update this `SESSION_HANDOFF.md` at session end.
-
-## Session end state
-
-This is a good stopping point.
-
-The Standard Test launcher, configuration flow, deferred target handling, result card, GM modifier adjudication, and per-result diagnostic visibility are all at a user-tested working checkpoint.
-
-The final live test in this session confirmed that the GM can right-click a completed result and successfully change whether the detailed calculation is visible to players.
-
-No further gameplay implementation should be started until the next dependency is deliberately chosen and, for mechanics such as `Skok` / `Zeskok`, the required English and Polish rulebook sections are available for verification.
+- Mechanics must still be verified against the English Core Rulebook first and Polish Core Rulebook for terminology before encoding each core Skill effect.
+- Active Effects are the mechanical representation; localized names are presentation only.
+- Do not create a second permanent hardcoded Skill rules registry alongside Active Effects.
+- Do not auto-enable situational Skill effects when the rule leaves applicability to GM judgement.
+- Do not force non-d100 procedures or combat mechanics into the generic percentile Test class merely to reuse UI.
+- Do not apply calculated damage directly from a roll/procedure; use the approved damage packet/application transaction.
+- Foundry runtime validation remains required after each dependency-ordered change.
