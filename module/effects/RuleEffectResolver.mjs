@@ -136,9 +136,14 @@ export class RuleEffectResolver {
 			return;
 		}
 
-		const changes = Array.isArray(effect.changes)
-			? effect.changes
-			: Array.from(effect.changes ?? []);
+		/*
+		 * Foundry v14 stores effect changes on the ActiveEffect type data model:
+		 * `effect.system.changes`. The former top-level `effect.changes` path is
+		 * legacy/shim territory and must not be used as the WFRP source of truth.
+		 */
+		const changes = Array.isArray(effect.system?.changes)
+			? effect.system.changes
+			: Array.from(effect.system?.changes ?? []);
 
 		for (let index = 0; index < changes.length; index += 1) {
 			const decoded = decodeRuleEffectChange(changes[index]);
