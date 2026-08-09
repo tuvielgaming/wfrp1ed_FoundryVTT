@@ -112,7 +112,15 @@
 						data-characteristic="{{characteristic.key}}"
 						aria-label="{{characteristic.label}}"
 					>
-						{{characteristic.current}}
+						<span class="characteristic-current-profile">
+							{{characteristic.current}}
+						</span>
+						<span
+							class="characteristic-current-wounds"
+							title="Pozostała Żywotność / maksimum"
+						>
+							{{@root.display.status.wounds.value}}/{{@root.display.status.wounds.max}}
+						</span>
 					</span>
 				{{/if}}
 			{{/each}}
