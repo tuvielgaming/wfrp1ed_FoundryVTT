@@ -1,297 +1,268 @@
 # Session Handoff
 
 **Date:** 2026-08-09  
-**Purpose:** Current handoff for the next working step. Replace/update this file rather than creating overlapping progress documents.
+**Purpose:** Current implementation/architecture checkpoint. Replace/update this file instead of creating overlapping progress documents.
 
 ## Current working source
 
 Repository: `tuvielgaming/wfrp1ed_FoundryVTT`  
 Branch: `master`
 
-GitHub `master` is the implementation source of truth. Fetch the latest exact files before every change.
+GitHub `master` is the implementation source of truth. Fetch the latest exact files before every code change.
 
-### Validation checkpoint
+## Live-tested checkpoint
 
-Last fully live-tested Standard Test checkpoint:
+The last fully live-tested Standard Test checkpoint remains:
 
 - `2953dd2c174ec4e2a17f39702d1fa2fa491b0dca` — Foundry v14 ChatMessage context-menu hook correction.
 
-The user confirmed that the Standard Test launcher, single-window configuration, result card, GM-editable general modifier, and GM-controlled result-detail visibility are working correctly through that checkpoint.
+The user confirmed the following as working through that checkpoint:
 
-### Movement work added after the last live-tested checkpoint
+- Classic-sheet `🎲 TEST STANDARDOWY` row and styling;
+- one-window Standard Test configuration;
+- conditional Standard Test inputs;
+- deferred target selection through chat instead of hard errors;
+- compact result cards;
+- localized formula display;
+- pure-chance `%` display;
+- always-present general test modifier;
+- GM post-roll modifier editing against the original d100;
+- GM-only vs public-full result-detail visibility;
+- post-roll visibility switching from the Foundry v14 ChatMessage context menu.
 
-The following movement-procedure commits exist on `master` but have not yet completed live Foundry validation:
+## Movement work on master, not yet fully live-tested
 
-- `49276ebce2c28a5dbf537a9552742be4b4e4033c` — movement Standard Test procedure definitions.
-- `7db637a68514703c48e5ef35af738a82d8f48b7d` — Jump/Leap movement procedure implementation.
-- `c887bd051ddd583367be01d174c4527ee5e81b9b` — movement procedure result template.
-- `aa4257d8ebe01fd0658604786c36195efd70f025` — expose `Skok` / `Zeskok` through the Standard Test launcher.
+These commits were added after the last fully validated checkpoint:
 
-## Rulebook verification for movement
+- `49276ebce2c28a5dbf537a9552742be4b4e4033c` — movement Standard Test procedure definitions;
+- `7db637a68514703c48e5ef35af738a82d8f48b7d` — Jump/Leap movement procedure implementation;
+- `c887bd051ddd583367be01d174c4527ee5e81b9b` — movement result template;
+- `aa4257d8ebe01fd0658604786c36195efd70f025` — expose `Skok` / `Zeskok` through Standard Test launcher.
 
-The English and Polish WFRP 1e Core Rulebooks were supplied separately on 2026-08-09 and checked before implementing movement procedures.
+### Verified rulebook contract
+
+English and Polish WFRP 1e Core Rulebooks were supplied separately and checked before implementation.
 
 Verified sources:
 
-- English Core Rulebook, printed p. 75 — `JUMPING, FALLING, LEAPING, CLIMBING`.
-- Polish Core Rulebook, printed p. 75 — `ZESKOK, UPADEK, SKOK, WSPINACZKA`.
-- English Skills section — Acrobatics and Clown descriptions.
-- Polish Skills section — Akrobatyka and Błaznowanie terminology/effects.
+- English Core Rulebook, printed p. 75 — `JUMPING, FALLING, LEAPING, CLIMBING`;
+- Polish Core Rulebook, printed p. 75 — `ZESKOK, UPADEK, SKOK, WSPINACZKA`;
+- English Skills section — Acrobatics and Clown;
+- Polish Skills section — Akrobatyka and Błaznowanie.
 
-Verified movement rules relevant to the current implementation:
+Relevant verified mechanics:
 
-- `Zeskok` / Jumping is a controlled vertical descent and is not a d100 Standard Test.
-- Damage is based on rounded-up height minus a d6 result; positive remainder is Wounds.
-- Armour and Toughness do not reduce that damage.
-- Acrobatics improves the damage-reduction die by +2.
-- Clown/Błaznowanie improves the Jump/Fall damage-reduction die by +1.
-- If Wounds are suffered, there is a 50% chance of dropping held items.
-- `Skok` / Leaping is horizontal distance and is not a d100 Standard Test.
-- With at least 2 yards/metres run-up: `2 × Movement - 1d6`.
-- Without sufficient run-up: `2 × Movement - 2d6`.
-- Minimum achieved distance is 1 yard/metre.
-- Acrobatics adds +2 yards/metres to Leap distance.
-- If the achieved distance is insufficient, the character falls.
-- These movement procedures consume a full round.
+- `Zeskok` / Jumping is a non-d100 controlled vertical descent procedure;
+- rounded height minus d6 gives Wounds when positive;
+- Armour and Toughness do not reduce those Wounds;
+- Acrobatics adds +2 to the Jump/Fall reduction die;
+- Clown/Błaznowanie adds +1 to the Jump/Fall reduction die;
+- suffering Wounds triggers the rulebook 50% held-item drop check;
+- `Skok` / Leaping is a non-d100 horizontal-distance procedure;
+- run-up of at least 2 yards/metres: `2 × Movement - 1d6`;
+- insufficient/no run-up: `2 × Movement - 2d6`;
+- minimum achieved distance is 1 yard/metre;
+- Acrobatics adds +2 yards/metres to Leap distance;
+- insufficient distance means the character falls;
+- these procedures consume a full round.
 
-## Approved damage-application architecture
+## Approved damage architecture
 
-The user explicitly approved a WFRP4e-like chat workflow for damage application.
+The user approved a WFRP4e-like chat workflow for applying calculated damage.
 
-### Core rule
+### Core contract
 
-A roll/procedure calculates and publishes damage, but does not silently mutate Wounds at calculation time.
+A roll/procedure may calculate damage, but must **not silently mutate Wounds at calculation time**.
 
-The damage-producing result stores a structured **damage packet**. Applying that packet is a separate explicit action.
+The result publishes/stores a structured `DamagePacket`. Applying the packet is a separate explicit transaction.
+
+Target architecture:
+
+`damage-producing action/procedure`
+→ `DamagePacket`
+→ `DamageResolver`
+→ `DamageApplication`
+→ Actor Wounds / later critical handling.
 
 ### Permission rule
 
-`Apply Damage / Zastosuj obrażenia` should be available from the ChatMessage context menu to:
+`Apply Damage / Zastosuj obrażenia` from the ChatMessage context menu should be available to:
 
 - a GM; or
 - a user who owns the Actor receiving the damage.
 
-Permission is checked against the **damage target**, not necessarily the Actor who made the roll.
+Permission is checked against the **damage target**, not necessarily the rolling Actor.
 
-### Damage packet direction
+### Damage packet
 
-A damage packet should contain enough data for one generic damage service to resolve many sources, for example:
+The generic packet must support at least:
 
 - raw damage amount;
 - target Actor UUID;
-- source kind/id (weapon, movement, spell, environmental effect, etc.);
-- whether Armour applies or is ignored;
-- whether Toughness applies or is ignored;
+- source kind/id;
+- Armour applies/ignored;
+- Toughness applies/ignored;
 - optional hit location;
-- other source-specific mitigation/rule flags when actually required by audited rules;
+- future audited mitigation/special-rule flags;
 - application state/transaction metadata.
 
-`Zeskok` is intended to be the first consumer and should produce a packet with Armour and Toughness explicitly ignored.
+`Zeskok` should be the first consumer and should explicitly mark Armour and Toughness as ignored.
 
-### Central ownership
+### Transaction requirements
 
-Do not implement Zeskok-specific Wounds subtraction.
-
-Target architecture:
-
-`damage-producing procedure/action`
-→ `DamagePacket`
-→ `DamageResolver`
-→ `DamageApplication`
-→ Actor Wounds / later critical-damage handling.
-
-The damage resolver, not the chat template and not the source procedure, owns mitigation rules.
-
-### Application transaction
-
-After damage is applied, the ChatMessage should record at least:
+After applying damage, the ChatMessage should record at least:
 
 - amount actually applied;
 - Wounds before and after;
 - user who applied it;
-- applied timestamp/state.
+- timestamp/state.
 
-The action must be protected against accidental double application.
+Prevent accidental double application.
 
-A later GM-only `Undo Applied Damage` action is desirable, but it must use a recorded transaction rather than blindly adding Wounds back. It is a later step, not required for the first Apply Damage implementation.
+A later GM-only `Undo Applied Damage` is desirable, but must use the stored transaction rather than simply adding Wounds back.
 
-### Critical damage caution
+Do not implement Zeskok-specific Wounds subtraction. The repository still needs a shared audited damage/critical pipeline for Character/NPC/Creature Actors.
 
-The repository does not yet have a complete audited shared damage → zero/negative Wounds → critical handling contract for Character/NPC/Creature Actors. Do not bypass that dependency by directly subtracting Wounds inside movement code.
+## Approved Active Effect architecture
 
-## Approved Skill architecture: Foundry Active Effects
+### System-wide rule
 
-The user reconfirmed the previously discussed direction: **Skill mechanics should be authored through Foundry Active Effects on Skill Items**, rather than hardcoded by Skill name or duplicated across test executors.
+**WFRP Active Effects are a system-wide rule mechanism, not a Skill-only mechanism.**
 
-Foundry v14 Item Documents natively support embedded ActiveEffects and an ActiveEffect may contain multiple changes. The system may also register WFRP-specific custom effect change types/renderers/handlers when the built-in Add/Multiply/Override semantics are insufficient.
+Skills are the first Item type that will receive the WFRP-specific effect editor/resolver integration, but the effect vocabulary and resolver must be reusable by other rule-bearing Items.
 
-### Skill identity
+Current registered Item types are:
 
-Keep the stable language-neutral `system.rulesId` for core identity/migration/content mapping, but mechanical consumers must not depend on localized `Item.name`.
+- `career`;
+- `skill`;
+- `weapon`;
+- `equipment`;
+- `trait`;
+- `spell`.
 
-`rulesId` identifies what core Skill an Item represents. Active Effects describe what that Skill actually does.
+Only `skill` currently has a dedicated native WFRP TypeDataModel/sheet. Dedicated `armour`, `disease`, and other future Item types are **not registered yet** and must be introduced deliberately rather than guessed into existing temporary data contracts.
 
-### Multiple effects per Skill
+When dedicated types such as Armour/Disease are implemented, they must use the same Active Effect infrastructure.
 
-A Skill Item may contain multiple independent Active Effects.
+### Intended sources of Active Effects
 
-Example approved direction for `Clown / Błaznowanie`:
+The common resolver must eventually be able to consume relevant effects originating from, for example:
 
-- one effect affecting Jump/Fall procedure mechanics;
-- another effect affecting other applicable tests/procedures such as Bluff/Busk according to the audited rules.
+- Skills;
+- weapons;
+- armour;
+- general equipment;
+- spells;
+- diseases;
+- traits/talents/special rules;
+- careers when a career legitimately grants a mechanical state/effect;
+- future conditions/status Items;
+- optional-rule/module Items.
 
-Do not collapse unrelated mechanical effects into one hardcoded Skill switch.
+A subsystem must not care whether an effect came from a Skill, weapon, spell, disease, etc. It asks for effects targeting the rule parameter it owns.
 
-### Current movement implementation is transitional
+Example:
 
-`MovementStandardTest.mjs` currently contains a local `MOVEMENT_SKILL_BONUSES` table for Acrobatics and Clown. This duplicates mechanics that should belong to Skill Active Effects.
+`combat.damage.amount`
 
-This table is **not approved as the final architecture** and should be refactored out before more Skill-dependent mechanics are built on it.
+could receive contributions from a weapon, a Skill, a spell, a temporary condition, or another Item without combat code containing identity-specific switches for those Items.
 
-The existing `standard-test-skill-rules.mjs` and `StandardTestSkillResolver.mjs` are useful audited/transitional sources, but their long-term mechanical data should migrate into Active Effect definitions on Skill Items/core compendium content rather than remain a second permanent rules database.
+### Item state matters
 
-## Required WFRP Active Effect vocabulary
+The common effect contract must support activation policy/source state. Examples:
 
-A single effect type of `Standard Test + numeric modifier` is not sufficient for WFRP 1e Skills.
+- Skill effect: normally available because the Actor owns the Skill;
+- weapon effect: may require that weapon to be equipped/used for this action;
+- armour effect: may require the armour piece to be worn and may be location-specific;
+- equipment effect: may require equipped/carried/consumed state depending on its rule;
+- spell effect: may be temporary and have duration/expiry;
+- disease effect: may depend on disease stage/severity;
+- condition/trait effect: may be always-on, temporary, suppressed, or conditional.
 
-The Skill audit shows that core Skills use several different mechanical patterns. The Active Effect editor/resolver must be able to represent at least the following categories.
+Do not permanently apply every embedded Item ActiveEffect merely because the Item exists in the Actor inventory. The WFRP resolver must consider the effect's activation/applicability contract.
 
-### 1. Test target modifier
+### Skill identity and migration
 
-Adds/subtracts from the acting character's chance for a named test or test family.
+Keep stable language-neutral `system.rulesId` for core Skill identity/migration/content mapping. Mechanical consumers must not depend on localized `Item.name`.
 
-Examples include ordinary `+10`, `+15`, `+20`, etc. modifiers to Bluff, Gossip, Construct, Disease, Poison, Risk, Estimate, and similar tests.
+However, mechanics should ultimately come from Active Effect changes rather than a second permanent hardcoded Skill-rules database.
 
-Required fields conceptually:
+### Current movement table is transitional
 
-- target scope: Standard Test / characteristic test / named procedure / combat test family;
-- target id;
-- operation/modifier;
-- numeric value or formula;
-- optional condition.
+`MovementStandardTest.mjs` currently contains a local `MOVEMENT_SKILL_BONUSES` table for Acrobatics and Clown. It duplicates rules that belong in Skill Active Effects.
 
-### 2. Opponent/target modifier
+This table is **not approved final architecture** and must be removed before more Skill-dependent mechanics are built on it.
 
-Some Skills alter the opponent's characteristic/chance rather than the acting character's target.
+The procedure should instead request generic parameter effects such as:
 
-The effect model therefore needs an explicit target side, e.g. `self`, `opponent`, `test-target`, rather than assuming every modifier changes the owner.
+- `movement.jump.reductionDie`;
+- `movement.fall.reductionDie`;
+- `movement.leap.distance`.
 
-### 3. Derived/formula modifier
+It must not ask whether the Actor owns Acrobatics/Clown/Błaznowanie by identity.
 
-Some bonuses are calculated from characteristics or other runtime values rather than a fixed number.
+## Required WFRP effect vocabulary
 
-The effect value must support a safe formula/expression contract, not only a numeric constant.
+One generic `Standard Test + numeric modifier` effect is insufficient.
 
-### 4. Choice/conditional modifier
+The common Item Active Effect vocabulary must support at least:
 
-Some Skills have different effects depending on the fictional situation.
+1. **Test target modifier** — named Standard Test, characteristic test, test family, etc.
+2. **Target/opponent modifier** — explicit `self` / `target` / `opponent` side.
+3. **Derived/formula modifier** — safe formulas, not only fixed integers.
+4. **Conditional/contextual modifier** — GM/player applicability decision when fiction matters.
+5. **Repeated-acquisition/stacking policy** — needed by repeated Skill acquisitions and other stackable sources.
+6. **Procedure parameter modifier** — movement, hearing distance, healing, crafting, etc.
+7. **Characteristic/profile modification** — canonical Actor/derived values.
+8. **Combat-rule modifier** — hit, damage, weapon handling, critical/stun/location parameters, etc.
+9. **Capability/permission** — grant procedure, ignore penalty, allow specialist use, language/spellcasting capability, etc.
+10. **Outcome/rule transformation** — changes to success/failure consequences, margin/error, post-roll adjustment, damage/recovery/range transformations, secondary effects.
 
-Example pattern: one value while stationary, another while moving; environment-dependent Rural/Urban variants; mounted/specific-weapon/etc. conditions.
+These categories are not Skill-specific. A weapon, spell, disease, armour piece, trait, or other Item may author changes using the same vocabulary.
 
-The system should expose candidate effects and let the GM decide applicability where the rule requires judgement. Do not silently infer every narrative condition.
+## Active Effect authoring UI direction
 
-### 5. Repeated-acquisition scaling
+Do not expose users only to arbitrary raw data paths.
 
-Some Skills gain additional bonuses when acquired multiple times, such as Pick Lock/Pick Pocket.
+Preferred WFRP-facing authoring flow:
 
-The effect contract therefore needs access to acquisition count or a stacking policy, rather than baking repeated-acquisition math into individual test executors.
-
-### 6. Procedure parameter modifier
-
-Some Skills modify a non-d100 procedure parameter rather than a percentile target.
-
-Examples:
-
-- Acrobatics: Jump/Fall die result +2;
-- Acrobatics: Leap distance +2;
-- Clown: Jump/Fall die result +1;
-- Acute Hearing: hearing distance;
-- Swim: movement allowance while swimming;
-- Luck: post-roll die/result adjustment uses;
-- other movement, healing, crafting or special-procedure values.
-
-The effect must identify a stable procedure parameter such as `movement.jump.reductionDie`, `movement.leap.distance`, etc. The procedure consumes generic parameter effects; it must not know Skill identities.
-
-### 7. Characteristic/profile modification
-
-Some Skills/talents directly modify Actor characteristics or derived profile values, e.g. Movement, Strength, Toughness or initiative-related values.
-
-These can often use normal Foundry Add/Override Active Effect changes against canonical Actor data/derived effect inputs, but the project must preserve one source of truth and avoid persisting formatted derived values.
-
-### 8. Combat-rule modifier
-
-Some Skills modify combat-specific calculations rather than Standard Tests, including hit modifiers, weapon handling, damage, stun/critical location behaviour, dodge/disarm/wrestling procedures, etc.
-
-These should target stable combat effect keys/parameters and be consumed by the combat subsystem. Do not force combat semantics into the Standard Test resolver.
-
-### 9. Capability / rule permission
-
-Many Skills do not provide a numeric bonus at all. They permit an action, remove a normal penalty, allow automatic success in certain circumstances, enable spellcasting/specialist weapons/languages, or unlock a dedicated procedure.
-
-The Active Effect vocabulary therefore needs boolean/capability effects such as `grant`, `ignorePenalty`, `allowProcedure`, or an equivalent stable contract.
-
-### 10. Outcome/rule transformation
-
-Some Skills change what success/failure means, modify recovery time, alter damage caused, adjust error margins, allow post-roll modification, change ranges/distances, or add secondary effects.
-
-These require procedure/combat/result hooks rather than simple addition to an Actor field.
-
-## Recommended Active Effect authoring UI
-
-For Skill Items, do not expose users only to raw arbitrary data paths.
-
-Preferred WFRP-facing workflow:
-
-1. Add Active Effect to the Skill Item.
+1. Add an Active Effect to an Item.
 2. Add one or more WFRP effect changes.
-3. Choose an **Effect Category** (Test Modifier, Procedure Parameter, Characteristic, Combat, Capability, Result Transformation, etc.).
-4. Choose a stable target from filtered dropdowns (for example a registered Standard Test, characteristic, movement procedure, combat parameter).
-5. Choose self/opponent/target side when relevant.
-6. Enter a numeric value or approved formula when that effect type supports it.
+3. Choose `Effect Category`.
+4. Choose a stable target from filtered localized dropdowns.
+5. Choose side (`self`, `target`, `opponent`) where relevant.
+6. Enter numeric value or approved formula when supported.
 7. Configure stacking/acquisition behaviour when relevant.
-8. Add an optional human-readable condition/GM applicability note where automatic evaluation is inappropriate.
+8. Configure applicability/activation mode.
+9. Add optional human-readable condition/GM note where automatic evaluation is inappropriate.
 
-Use stable IDs internally and localized labels in the UI.
+Use stable IDs internally and localized labels in UI.
 
-The UI should allow multiple Active Effects and multiple changes where the Skill has several independent mechanical consequences.
+The same editor component should be reusable across WFRP Item sheets. Individual Item sheets may filter categories/targets to those sensible for that Item type, but must not create separate incompatible effect languages.
 
-## Foundry v14 Active Effect implementation notes
+## Approved per-roll applicability overrides
 
-Verified against Foundry v14 documentation:
+Temporary effect selection for one roll is required.
 
-- Item Documents have an embedded `effects` collection.
-- Active Effects may contain multiple `changes`.
-- Core change semantics include additive/multiplicative/override-style changes.
-- Foundry v14 allows systems/modules to register additional Active Effect change types with handlers and custom renderers.
-- Active Effect application supports phases; use custom phases only when a WFRP subsystem needs to consume effects at a specific lifecycle point.
+### Persistent state vs one-roll state
 
-Do not depend on old v10/v11 transfer-workaround assumptions without checking v14 behaviour when implementation begins.
+Do **not** enable/disable the underlying Foundry ActiveEffect Document because a player or GM checks an effect for one roll.
 
-## Approved per-roll Active Effect applicability overrides
+Instead the roll/procedure configuration builds a **per-roll effect-selection snapshot** recording which candidate changes are applied/suppressed for that execution.
 
-The user approved temporary enable/disable controls for contextual Skill effects in the roll/test configuration window.
+The result snapshot should preserve selected effects and source Items so the roll remains auditable even after Actor/Item data changes.
 
-### Persistent state versus per-roll state
+### Applicability modes
 
-Do **not** toggle the underlying Foundry ActiveEffect Document merely because a player or GM enables/disables an effect for one roll. That would change the Skill's persistent state and could affect later tests unexpectedly.
+The effect contract should distinguish at least:
 
-Instead, test/procedure configuration must build a **per-roll effect-selection snapshot** in the test/procedure context. The snapshot records which candidate Active Effect changes are applied or suppressed for that one execution only.
+- `automatic` — unquestionably applies for the relevant target; normally checked/locked;
+- `contextual` — candidate effect controlled by checkbox/toggle for the roll;
+- `manual` — requires explicit choice/additional input before use.
 
-The resulting chat breakdown should preserve the selected effects/sources so the roll remains auditable after Actor/Item data changes.
+### Roll window
 
-### Effect applicability modes
-
-The WFRP effect contract should distinguish at least:
-
-- `automatic` — mechanically unconditional for the relevant target; applied by default and normally shown as checked/locked in the roll UI;
-- `contextual` — potentially applicable but dependent on circumstances or GM judgement; displayed as an interactive checkbox/toggle in the roll UI;
-- `manual` — special rule/capability requiring explicit choice or additional input before use.
-
-The exact field names can be finalized during implementation, but this semantic distinction is approved.
-
-### Roll-window presentation
-
-When the selected test/procedure has candidate contextual effects, show an **Applicable effects / Efekty** section in the same roll window rather than opening another dialog.
+Show only effects relevant to the currently selected test/procedure, not every effect owned by the Actor.
 
 Conceptual example:
 
@@ -299,49 +270,39 @@ Conceptual example:
 Efekty
 ☑ Akrobatyka — +2 do wyniku K6
 ☐ Błaznowanie — +1 do wyniku K6
-☑ Modyfikator sytuacyjny ...
 ```
 
-Changing a checkbox must immediately affect the preview/final calculation for that roll, but must not mutate the Skill Item or ActiveEffect Document.
+Changing a per-roll checkbox must affect that roll's calculation without mutating the source Item or ActiveEffect.
 
-The section should normally show only effects relevant to the currently selected test/procedure, not every Active Effect owned by the Actor.
+### Authority
 
-### Player and GM control
+- Player may select/suppress contextual effects available from an Actor they are allowed to roll/control.
+- GM may select/suppress candidate effects when rolling for any Actor.
+- Automatic effects should not normally be suppressible by players unless the rule makes them optional.
+- GM retains adjudication authority for situational applicability.
 
-- A player may select/suppress contextual candidate effects available from an Actor they are allowed to roll/control.
-- A GM may select/suppress candidate effects when rolling for any Actor.
-- Automatic effects should not normally be suppressible by a player merely to gain an advantage unless the rule itself makes them optional.
-- GM must retain authority to override applicability where WFRP requires adjudication.
+A later enhancement may permit GM post-roll toggling of eligible contextual effects from the result card, recalculating against the same original dice roll. Do not implement that until the common resolver/result snapshot contracts are stable.
 
-A player-initiated local dialog and a GM client are not automatically the same live form. First implementation should therefore treat the **user initiating/configuring the roll** as the pre-roll selector, while preserving enough effect data in the chat result for GM adjudication. A later shared/pending-GM approval workflow may be added if playtesting shows it is needed.
+## Immediate dependency order
 
-### Post-roll adjustment direction
-
-The existing GM-editable general modifier demonstrates the desired adjudication pattern. For effect-driven tests, the result snapshot should make individual applied effects visible in the detailed GM breakdown.
-
-A future enhancement may allow GM to toggle eligible contextual effects directly from the chat result and re-evaluate the target/outcome against the **same original dice roll**, similar to editing the general modifier. This should be designed from the same immutable roll snapshot rather than rereading current Actor data.
-
-Do not implement post-roll effect toggling until the Active Effect resolver and result snapshot contracts are stable.
-
-## Immediate next dependency order
-
-1. Design and implement the WFRP Active Effect change contract/editor for Skills, including applicability modes and per-roll selection snapshots.
-2. Add relevant-effect selection controls to Standard Test / procedure configuration dialogs.
-3. Convert the current movement Skill bonuses to Active Effect-driven procedure parameters and delete the duplicated `MOVEMENT_SKILL_BONUSES` table.
-4. Live-test `Skok` / `Zeskok` with automatic/contextual effects enabled and suppressed per roll.
-5. Design the generic `DamagePacket` / `DamageResolver` / `DamageApplication` contract.
-6. Make Zeskok produce an applicable damage packet and add GM/target-owner `Apply Damage` to the ChatMessage context menu.
-7. Live-test damage application and double-application protection.
-8. Continue broader Skill-effect migration/integration across Standard Tests, non-standard procedures and combat in dependency order.
+1. Design the **system-wide WFRP Active Effect contract/resolver**, not a Skill-only resolver.
+2. Build the reusable WFRP Active Effect editor component; integrate it into Skill Items first.
+3. Add per-roll relevant-effect selection to Standard Test/procedure dialogs.
+4. Convert Acrobatics/Clown movement mechanics to Item Active Effects and delete `MOVEMENT_SKILL_BONUSES`.
+5. Live-test `Skok` / `Zeskok` with relevant effects enabled/suppressed.
+6. Expand the same editor/resolver to other implemented Item types as their data models/sheets are audited (weapon/equipment/spell/trait, then future armour/disease/etc.).
+7. Design `DamagePacket` / `DamageResolver` / `DamageApplication`.
+8. Make Zeskok produce an applicable damage packet and add GM/target-owner `Apply Damage` in chat.
+9. Live-test double-application protection and damage transactions.
+10. Continue broader effect integration across combat, magic, equipment, diseases, conditions and other procedures in dependency order.
 
 ## Important cautions
 
-- Mechanics must still be verified against the English Core Rulebook first and Polish Core Rulebook for terminology before encoding each core Skill effect.
-- Active Effects are the mechanical representation; localized names are presentation only.
-- Do not create a second permanent hardcoded Skill rules registry alongside Active Effects.
-- Do not auto-enable situational Skill effects when the rule leaves applicability to GM judgement.
-- Do not mutate persistent ActiveEffect enabled/disabled state for one-roll applicability choices.
-- Per-roll effect selections belong to TestContext/procedure context and result snapshots.
-- Do not force non-d100 procedures or combat mechanics into the generic percentile Test class merely to reuse UI.
-- Do not apply calculated damage directly from a roll/procedure; use the approved damage packet/application transaction.
+- Verify each encoded WFRP mechanic against English Core first and Polish Core for terminology.
+- Active Effects are the mechanical representation; localized Item names are presentation only.
+- Do not build a second permanent hardcoded Skill/equipment/spell rules registry alongside Active Effects.
+- Do not mutate persistent ActiveEffect state for one-roll applicability choices.
+- Do not treat every owned/equipped Item effect as universally applicable; activation/source state is part of the contract.
+- Keep non-d100 procedures outside the generic percentile Test class.
+- Do not apply calculated damage directly from a roll/procedure; use the approved damage transaction pipeline.
 - Foundry runtime validation remains required after each dependency-ordered change.
