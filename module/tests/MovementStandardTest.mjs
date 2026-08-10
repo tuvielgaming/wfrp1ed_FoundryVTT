@@ -1,5 +1,6 @@
 import { DamageChat } from "../damage/DamageChat.mjs";
 import {
+	DAMAGE_CRITICAL_MODE,
 	DAMAGE_MITIGATION_POLICY,
 	DamagePacket,
 } from "../damage/DamagePacket.mjs";
@@ -206,6 +207,7 @@ export class MovementStandardTest {
 				},
 				armour: DAMAGE_MITIGATION_POLICY.IGNORE,
 				toughness: DAMAGE_MITIGATION_POLICY.IGNORE,
+				criticalMode: DAMAGE_CRITICAL_MODE.SUDDEN_DEATH,
 			});
 			const resolution = DamageResolver.resolve(packet);
 
@@ -274,6 +276,7 @@ export class MovementStandardTest {
 			metricRightLabel: this._localize(
 				"WFRP1ED.Movement.Achieved",
 				"Achieved",
+				"Osiągnięto",
 			),
 			metricRightValue: `${distance} ${this._distanceUnit()}`,
 			rows: [
