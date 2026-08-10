@@ -117,7 +117,7 @@
 								class="characteristic-current-wounds"
 								title="Pozostała Żywotność / maksimum"
 							>
-								{{#if @root.editable}}
+								{{#if (wfrpCanEditRemainingWounds @root.display.actor.uuid)}}
 									<input
 										type="number"
 										class="characteristic-current-wounds-input"
@@ -135,7 +135,26 @@
 										{{@root.display.status.wounds.max}}
 									</span>
 								{{else}}
-									{{@root.display.status.wounds.value}}/{{@root.display.status.wounds.max}}
+									<span class="characteristic-current-wounds-readonly">
+										{{@root.display.status.wounds.value}}/{{@root.display.status.wounds.max}}
+									</span>
+								{{/if}}
+
+								{{#if (wfrpIsGM)}}
+									<button
+										type="button"
+										class="characteristic-current-wounds-permission"
+										data-wfrp-owner-wounds-edit-toggle
+										data-actor-uuid="{{@root.display.actor.uuid}}"
+										title="{{wfrpOwnerWoundsEditTitle @root.display.actor.uuid}}"
+										aria-label="{{wfrpOwnerWoundsEditTitle @root.display.actor.uuid}}"
+									>
+										{{#if (wfrpOwnerWoundsEditEnabled @root.display.actor.uuid)}}
+											<i class="fa-solid fa-lock-open"></i>
+										{{else}}
+											<i class="fa-solid fa-lock"></i>
+										{{/if}}
+									</button>
 								{{/if}}
 							</span>
 						{{else}}
