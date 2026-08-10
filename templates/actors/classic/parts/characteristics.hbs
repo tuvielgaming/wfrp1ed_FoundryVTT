@@ -143,11 +143,12 @@
 								{{#if (wfrpIsGM)}}
 									<button
 										type="button"
-										class="characteristic-current-wounds-permission"
+										class="characteristic-current-wounds-permission {{#if (wfrpOwnerWoundsEditEnabled @root.display.actor.uuid)}}is-enabled{{else}}is-locked{{/if}}"
 										data-wfrp-owner-wounds-edit-toggle
 										data-actor-uuid="{{@root.display.actor.uuid}}"
 										title="{{wfrpOwnerWoundsEditTitle @root.display.actor.uuid}}"
 										aria-label="{{wfrpOwnerWoundsEditTitle @root.display.actor.uuid}}"
+										aria-pressed="{{#if (wfrpOwnerWoundsEditEnabled @root.display.actor.uuid)}}true{{else}}false{{/if}}"
 									>
 										{{#if (wfrpOwnerWoundsEditEnabled @root.display.actor.uuid)}}
 											<i class="fa-solid fa-lock-open"></i>
