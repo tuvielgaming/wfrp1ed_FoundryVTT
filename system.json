@@ -33,6 +33,7 @@
 		"css/effects/rule-effects.css"
 	],
 	"scripts": [],
+	"socket": true,
 	"packs": [],
 	"languages": [
 		{
