@@ -52,7 +52,7 @@ export const STANDARD_TEST_SKILL_IDENTITIES = deepFreeze({
 	jester: identity("Jester"),
 	juggle: identity("Juggle"),
 	linguistics: identity("Linguistics"),
-	luck: { label: "Luck / Szczęście", labelKey: "WFRP1ED.Skill.Luck" },
+	luck: localizedIdentity("Luck", "Szczęście"),
 	mimic: identity("Mimic"),
 	mining: identity("Mining"),
 	musicianship: identity("Musicianship"),
@@ -78,24 +78,11 @@ export const STANDARD_TEST_SKILL_IDENTITIES = deepFreeze({
 	wit: identity("Wit"),
 });
 
-/**
- * Return one audited identity by stable rules id.
- *
- * @param {string} rulesId
- * @returns {Object|null}
- */
 export function getStandardTestSkillIdentity(rulesId) {
 	const id = String(rulesId ?? "").trim();
-
 	return STANDARD_TEST_SKILL_IDENTITIES[id] ?? null;
 }
 
-/**
- * Build one immutable identity descriptor.
- *
- * @param {string} englishLabel
- * @returns {Object}
- */
 function identity(englishLabel) {
 	return {
 		label: englishLabel,
@@ -103,23 +90,21 @@ function identity(englishLabel) {
 	};
 }
 
-/**
- * Convert an audited English label into its localization-key suffix.
- *
- * This affects presentation keys only. The language-neutral rules id remains
- * the object key above and must never be derived from localized Item names.
- *
- * @param {string} label
- * @returns {string}
- */
+function localizedIdentity(englishLabel, polishLabel) {
+	return {
+		get label() {
+			return game?.i18n?.lang === "pl" ? polishLabel : englishLabel;
+		},
+		labelKey: `WFRP1ED.Skill.${skillKey(englishLabel)}`,
+	};
+}
+
 function skillKey(label) {
 	return String(label)
 		.replace(/[^A-Za-z0-9]+/g, " ")
 		.trim()
 		.split(/\s+/)
-		.map((part) =>
-			part.charAt(0).toUpperCase() + part.slice(1),
-		)
+		.map((part) => part.charAt(0).toUpperCase() + part.slice(1))
 		.join("");
 }
 
