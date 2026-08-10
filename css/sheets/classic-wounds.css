@@ -58,3 +58,28 @@
 	appearance: textfield;
 	-moz-appearance: textfield;
 }
+
+.classic-actor-sheet
+	.characteristic-current-wounds-permission {
+	width: 1.15em;
+	min-width: 1.15em;
+	height: 1.15em;
+	min-height: 1.15em;
+	margin: 0 0 0 0.08em;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	box-shadow: none;
+	color: inherit;
+	font-size: 0.72em;
+	line-height: 1;
+	cursor: pointer;
+}
+
+.classic-actor-sheet
+	.characteristic-current-wounds-permission:hover,
+.classic-actor-sheet
+	.characteristic-current-wounds-permission:focus-visible {
+	text-shadow: 0 0 2px currentColor;
+	outline: none;
+}
