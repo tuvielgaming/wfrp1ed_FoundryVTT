@@ -10,6 +10,11 @@ import { DamageResolver } from "./DamageResolver.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
 const WOUNDS_INITIALIZED_FLAG_KEY = "woundsInitialized";
+const WOUNDS_VALUE_PATH = "system.status.wounds.value";
+const WOUNDS_INITIALIZED_PATH =
+	`flags.${FLAG_SCOPE}.${WOUNDS_INITIALIZED_FLAG_KEY}`;
+const PRESERVE_WOUNDS_INITIALIZATION_OPTION =
+	"wfrp1edPreserveWoundsInitialization";
 
 Hooks.once("init", () => {
 	if (!game.WFRP1ED) {
@@ -30,6 +35,17 @@ Hooks.once("init", () => {
 			criticalMode: DAMAGE_CRITICAL_MODE,
 		}),
 	});
+
+	Hooks.on(
+		"preUpdateActor",
+		(actor, changes, options) => {
+			normalizeRemainingWoundsUpdate(
+				actor,
+				changes,
+				options,
+			);
+		},
+	);
 
 	Hooks.on(
 		"renderChatMessageHTML",
@@ -61,6 +77,75 @@ Hooks.once("init", () => {
 Hooks.once("ready", () => {
 	void initializeExistingCharacterWounds();
 });
+
+/**
+ * Keep every Character remaining-Wounds write inside the legal WFRP 1e range.
+ *
+ * This is the common persistence boundary for sheet edits and other modules.
+ * DamageApplication already calculates the same floor explicitly, but the Actor
+ * update hook prevents console/forms/future features from persisting negative
+ * remaining Wounds again. Manual writes initialize the in-play Wounds state.
+ * Internal synchronization may opt out so an undamaged Actor can continue to
+ * follow later profile-Wounds changes until play actually changes the resource.
+ *
+ * @param {Actor} actor
+ * @param {Object} changes
+ * @param {Object} options
+ */
+function normalizeRemainingWoundsUpdate(
+	actor,
+	changes,
+	options = {},
+) {
+	if (
+		actor?.type !== "character" ||
+		!changes ||
+		typeof changes !== "object"
+	) {
+		return;
+	}
+
+	const update = readUpdateValue(
+		changes,
+		WOUNDS_VALUE_PATH,
+	);
+
+	if (!update.present) {
+		return;
+	}
+
+	const requested = Number(update.value);
+
+	if (!Number.isFinite(requested) || !Number.isInteger(requested)) {
+		throw new Error(
+			`Actor '${actor.name ?? actor.id}' remaining Wounds must be a finite integer.`,
+		);
+	}
+
+	const maximum = Number(actor.woundsMaximum);
+	const hasMaximum =
+		Number.isFinite(maximum) &&
+		Number.isInteger(maximum) &&
+		maximum >= 0;
+	const normalized = hasMaximum
+		? Math.min(maximum, Math.max(0, requested))
+		: Math.max(0, requested);
+
+	writeUpdateValue(
+		changes,
+		WOUNDS_VALUE_PATH,
+		normalized,
+		update.dotted,
+	);
+
+	if (
+		options?.[PRESERVE_WOUNDS_INITIALIZATION_OPTION] === true
+	) {
+		return;
+	}
+
+	changes[WOUNDS_INITIALIZED_PATH] = true;
+}
 
 /**
  * Foundry v14 renamed ContextMenuEntry fields to label/visible/onClick and
@@ -165,9 +250,14 @@ async function synchronizeUndamagedWounds(actor) {
 	}
 
 	try {
-		await actor.update({
-			"system.status.wounds.value": Math.max(0, maximum),
-		});
+		await actor.update(
+			{
+				[WOUNDS_VALUE_PATH]: Math.max(0, maximum),
+			},
+			{
+				[PRESERVE_WOUNDS_INITIALIZATION_OPTION]: true,
+			},
+		);
 	} catch (error) {
 		console.error(
 			"WFRP1ED | Unable to synchronize Character remaining Wounds.",
@@ -202,7 +292,7 @@ async function normalizeInitializedWounds(actor) {
 
 	try {
 		await actor.update({
-			"system.status.wounds.value": 0,
+			[WOUNDS_VALUE_PATH]: 0,
 		});
 
 		console.info(
@@ -221,6 +311,38 @@ async function normalizeInitializedWounds(actor) {
 			},
 		);
 	}
+}
+
+function readUpdateValue(changes, path) {
+	if (Object.hasOwn(changes, path)) {
+		return {
+			present: true,
+			value: changes[path],
+			dotted: true,
+		};
+	}
+
+	const value = foundry.utils.getProperty(changes, path);
+
+	return {
+		present: value !== undefined,
+		value,
+		dotted: false,
+	};
+}
+
+function writeUpdateValue(
+	changes,
+	path,
+	value,
+	dotted,
+) {
+	if (dotted) {
+		changes[path] = value;
+		return;
+	}
+
+	foundry.utils.setProperty(changes, path, value);
 }
 
 function woundsProfileChanged(changes) {
