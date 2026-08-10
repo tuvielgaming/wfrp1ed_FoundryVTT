@@ -3,8 +3,17 @@ export const DAMAGE_MITIGATION_POLICY = Object.freeze({
 	IGNORE: "ignore",
 });
 
+export const DAMAGE_CRITICAL_MODE = Object.freeze({
+	UNSPECIFIED: "unspecified",
+	DETAILED: "detailed",
+	SUDDEN_DEATH: "sudden-death",
+});
+
 const ALLOWED_MITIGATION_POLICIES = new Set(
 	Object.values(DAMAGE_MITIGATION_POLICY),
+);
+const ALLOWED_CRITICAL_MODES = new Set(
+	Object.values(DAMAGE_CRITICAL_MODE),
 );
 
 /**
@@ -13,9 +22,14 @@ const ALLOWED_MITIGATION_POLICIES = new Set(
  * DamagePacket does not mutate an Actor and does not itself perform WFRP
  * mitigation calculations. It records the raw amount and the rule policies a
  * later DamageResolver must obey.
+ *
+ * Critical routing is also source data rather than application logic. A packet
+ * may declare whether overflow should later use the detailed Critical Hit
+ * system or the Sudden Death table. Sources which have not yet been audited
+ * leave the routing explicitly unspecified.
  */
 export class DamagePacket {
-	static VERSION = 1;
+	static VERSION = 2;
 
 	constructor({
 		id = null,
@@ -26,6 +40,7 @@ export class DamagePacket {
 		toughness = DAMAGE_MITIGATION_POLICY.APPLY,
 		hitLocation = null,
 		specialMitigation = {},
+		criticalMode = DAMAGE_CRITICAL_MODE.UNSPECIFIED,
 		createdAt = Date.now(),
 	} = {}) {
 		this.version = DamagePacket.VERSION;
@@ -56,6 +71,9 @@ export class DamagePacket {
 				"Special mitigation flags",
 			),
 		});
+		this.critical = Object.freeze({
+			mode: normalizeCriticalMode(criticalMode),
+		});
 		this.hitLocation = normalizeOptionalText(hitLocation);
 		this.createdAt = finiteInteger(createdAt, "Damage packet timestamp");
 
@@ -64,6 +82,9 @@ export class DamagePacket {
 
 	/**
 	 * Rehydrate a packet stored in ChatMessage flags or other JSON data.
+	 *
+	 * Version 1 packets predate explicit critical routing and therefore
+	 * rehydrate as "unspecified".
 	 *
 	 * @param {Object} data
 	 * @returns {DamagePacket}
@@ -74,6 +95,7 @@ export class DamagePacket {
 		}
 
 		const mitigation = data.mitigation ?? {};
+		const critical = data.critical ?? {};
 
 		return new DamagePacket({
 			id: data.id,
@@ -84,6 +106,9 @@ export class DamagePacket {
 			toughness: mitigation.toughness,
 			hitLocation: data.hitLocation,
 			specialMitigation: mitigation.special,
+			criticalMode:
+				critical.mode ??
+				DAMAGE_CRITICAL_MODE.UNSPECIFIED,
 			createdAt: data.createdAt,
 		});
 	}
@@ -112,6 +137,9 @@ export class DamagePacket {
 					this.mitigation.special,
 				),
 			},
+			critical: {
+				mode: this.critical.mode,
+			},
 			hitLocation: this.hitLocation,
 			createdAt: this.createdAt,
 		};
@@ -138,6 +166,24 @@ function normalizeMitigationPolicy(value, label) {
 		throw new Error(
 			`${label} must be '${DAMAGE_MITIGATION_POLICY.APPLY}' or ` +
 				`'${DAMAGE_MITIGATION_POLICY.IGNORE}'.`,
+		);
+	}
+
+	return normalized;
+}
+
+function normalizeCriticalMode(value) {
+	const normalized = String(
+		value ?? DAMAGE_CRITICAL_MODE.UNSPECIFIED,
+	).trim().toLowerCase();
+
+	if (!ALLOWED_CRITICAL_MODES.has(normalized)) {
+		throw new Error(
+			"Critical mode must be " +
+				Object.values(DAMAGE_CRITICAL_MODE)
+					.map((mode) => `'${mode}'`)
+					.join(", ") +
+				".",
 		);
 	}
 
