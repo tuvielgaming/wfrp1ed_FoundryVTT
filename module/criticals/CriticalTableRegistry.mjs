@@ -7,6 +7,25 @@ export const CRITICAL_TABLE_ROLE = Object.freeze({
 	DETAILED_LEG: "critical.detailed.leg",
 });
 
+export const CRITICAL_TABLE_VARIANT = Object.freeze({
+	DEFAULT: "default",
+	PLUS_1: "1",
+	PLUS_2: "2",
+	PLUS_3: "3",
+	PLUS_4: "4",
+	PLUS_5: "5",
+	PLUS_6_PLUS: "6+",
+});
+
+export const CRITICAL_VALUE_VARIANTS = Object.freeze([
+	CRITICAL_TABLE_VARIANT.PLUS_1,
+	CRITICAL_TABLE_VARIANT.PLUS_2,
+	CRITICAL_TABLE_VARIANT.PLUS_3,
+	CRITICAL_TABLE_VARIANT.PLUS_4,
+	CRITICAL_TABLE_VARIANT.PLUS_5,
+	CRITICAL_TABLE_VARIANT.PLUS_6_PLUS,
+]);
+
 export const CRITICAL_TABLE_PROVIDER_SOURCE = Object.freeze({
 	CORE: "core",
 	MODULE: "module",
@@ -14,12 +33,17 @@ export const CRITICAL_TABLE_PROVIDER_SOURCE = Object.freeze({
 
 const SETTINGS_NAMESPACE = "wfrp1ed";
 const SETTINGS_KEY = "criticalTableConfiguration";
-const CONFIG_VERSION = 1;
+const CONFIG_VERSION = 2;
 
 /**
  * Registry and world-level selection boundary for WFRP critical tables.
  *
- * Resolution precedence is intentionally fixed:
+ * A role may expose one or more stable variants. For example, the WFRP 1e
+ * Sudden Death matrix is represented by six native d100 RollTables, one for
+ * each critical value column (+1 through +6 or more). Providers register a
+ * RollTable UUID per variant while the role remains a single stable mechanic.
+ *
+ * Resolution precedence is intentionally fixed for each requested variant:
  *
  * 1. explicit world RollTable override;
  * 2. explicitly selected installed provider;
@@ -36,9 +60,7 @@ export class CriticalTableRegistry {
 	static #warned = new Set();
 
 	static registerSettings() {
-		if (this.#settingsRegistered) {
-			return;
-		}
+		if (this.#settingsRegistered) return;
 
 		game.settings.register(
 			SETTINGS_NAMESPACE,
@@ -97,6 +119,24 @@ export class CriticalTableRegistry {
 			);
 		}
 
+		for (const variant of Object.keys(provider.tableUuids)) {
+			if (!role.variants.includes(variant)) {
+				throw new Error(
+					`Critical table provider '${provider.id}' supplies unknown variant '${variant}' for '${role.id}'.`,
+				);
+			}
+		}
+
+		if (provider.source === CRITICAL_TABLE_PROVIDER_SOURCE.CORE) {
+			for (const variant of role.variants) {
+				if (!provider.tableUuids[variant]) {
+					throw new Error(
+						`Core critical provider '${provider.id}' is missing variant '${variant}' for '${role.id}'.`,
+					);
+				}
+			}
+		}
+
 		const providers = this.#providersForRole(provider.role);
 
 		if (providers.has(provider.id)) {
@@ -128,10 +168,7 @@ export class CriticalTableRegistry {
 
 	static providers(roleId) {
 		const providers = this.#providers.get(normalizeId(roleId));
-
-		return Object.freeze(
-			providers ? [...providers.values()] : [],
-		);
+		return Object.freeze(providers ? [...providers.values()] : []);
 	}
 
 	static providerLabel(providerOrId, roleId = "") {
@@ -147,13 +184,8 @@ export class CriticalTableRegistry {
 			? this.provider(providerOrRole, providerId)
 			: providerOrRole;
 
-		if (!provider) {
-			return false;
-		}
-
-		if (provider.source === CRITICAL_TABLE_PROVIDER_SOURCE.CORE) {
-			return true;
-		}
+		if (!provider) return false;
+		if (provider.source === CRITICAL_TABLE_PROVIDER_SOURCE.CORE) return true;
 
 		return game.modules?.get(provider.packageId)?.active === true;
 	}
@@ -161,10 +193,7 @@ export class CriticalTableRegistry {
 	static configuration() {
 		this.#assertSettingsRegistered();
 		return normalizeConfiguration(
-			game.settings.get(
-				SETTINGS_NAMESPACE,
-				SETTINGS_KEY,
-			),
+			game.settings.get(SETTINGS_NAMESPACE, SETTINGS_KEY),
 		);
 	}
 
@@ -199,17 +228,32 @@ export class CriticalTableRegistry {
 		});
 	}
 
-	static async setWorldOverride(roleId, tableUuid = "") {
+	/**
+	 * Set or clear an explicit world RollTable override for one role variant.
+	 * Single-variant roles may omit variantId. Multi-variant roles require it.
+	 */
+	static async setWorldOverride(
+		roleId,
+		tableUuid = "",
+		variantId = "",
+	) {
 		this.#assertGM();
 		const role = this.#assertRole(roleId);
+		const variant = this.#assertVariant(role, variantId);
 		const normalizedUuid = String(tableUuid ?? "").trim();
 
-		if (normalizedUuid) {
-			await assertRollTableUuid(normalizedUuid);
-		}
+		if (normalizedUuid) await assertRollTableUuid(normalizedUuid);
+
+		const configured = this.configuredRole(role.id);
+		const worldTableUuids = {
+			...(configured.worldTableUuids ?? {}),
+		};
+
+		if (normalizedUuid) worldTableUuids[variant] = normalizedUuid;
+		else delete worldTableUuids[variant];
 
 		return this.#updateRoleConfiguration(role.id, {
-			worldTableUuid: normalizedUuid,
+			worldTableUuids,
 		});
 	}
 
@@ -223,23 +267,21 @@ export class CriticalTableRegistry {
 	}
 
 	/**
-	 * Resolve the active RollTable for one stable critical role.
-	 *
-	 * Invalid or unavailable configured choices are skipped with a GM warning;
-	 * resolution continues to the next fallback layer. A missing Core provider
-	 * is a hard error because the campaign would otherwise have no deterministic
-	 * rules fallback.
+	 * Resolve the active RollTable for one stable critical role and variant.
 	 */
-	static async resolve(roleId) {
+	static async resolve(roleId, { variant: variantId = "" } = {}) {
 		const role = this.#assertRole(roleId);
+		const variant = this.#assertVariant(role, variantId);
 		const configured = this.configuredRole(role.id);
+		const worldTableUuid = configured.worldTableUuids?.[variant] ?? "";
 
-		if (configured.worldTableUuid) {
-			const table = await resolveRollTable(configured.worldTableUuid);
+		if (worldTableUuid) {
+			const table = await resolveRollTable(worldTableUuid);
 
 			if (table) {
 				return freezeResolution({
 					role: role.id,
+					variant,
 					source: "world-override",
 					providerId: "",
 					table,
@@ -247,23 +289,26 @@ export class CriticalTableRegistry {
 			}
 
 			this.#warnOnce(
-				`${role.id}:world:${configured.worldTableUuid}`,
-				`Configured world critical RollTable '${configured.worldTableUuid}' for '${role.id}' is unavailable. Falling back.`,
+				`${role.id}:${variant}:world:${worldTableUuid}`,
+				`Configured world critical RollTable '${worldTableUuid}' for '${role.id}' variant '${variant}' is unavailable. Falling back.`,
 			);
 		}
 
 		if (configured.providerId) {
-			const provider = this.provider(
-				role.id,
-				configured.providerId,
-			);
+			const provider = this.provider(role.id, configured.providerId);
+			const providerTableUuid = provider?.tableUuids?.[variant] ?? "";
 
-			if (provider && this.isProviderAvailable(provider)) {
-				const table = await resolveRollTable(provider.tableUuid);
+			if (
+				provider &&
+				providerTableUuid &&
+				this.isProviderAvailable(provider)
+			) {
+				const table = await resolveRollTable(providerTableUuid);
 
 				if (table) {
 					return freezeResolution({
 						role: role.id,
+						variant,
 						source: "provider",
 						providerId: provider.id,
 						table,
@@ -272,8 +317,8 @@ export class CriticalTableRegistry {
 			}
 
 			this.#warnOnce(
-				`${role.id}:provider:${configured.providerId}`,
-				`Configured critical provider '${configured.providerId}' for '${role.id}' is unavailable. Falling back to Core.`,
+				`${role.id}:${variant}:provider:${configured.providerId}`,
+				`Configured critical provider '${configured.providerId}' for '${role.id}' variant '${variant}' is unavailable. Falling back to Core.`,
 			);
 		}
 
@@ -288,16 +333,25 @@ export class CriticalTableRegistry {
 			);
 		}
 
-		const coreTable = await resolveRollTable(coreProvider.tableUuid);
+		const coreTableUuid = coreProvider.tableUuids[variant];
+
+		if (!coreTableUuid) {
+			throw new Error(
+				`WFRP1ED Core provider '${coreProvider.id}' has no table for '${role.id}' variant '${variant}'.`,
+			);
+		}
+
+		const coreTable = await resolveRollTable(coreTableUuid);
 
 		if (!coreTable) {
 			throw new Error(
-				`WFRP1ED Core critical table '${coreProvider.tableUuid}' for '${role.id}' is unavailable.`,
+				`WFRP1ED Core critical table '${coreTableUuid}' for '${role.id}' variant '${variant}' is unavailable.`,
 			);
 		}
 
 		return freezeResolution({
 			role: role.id,
+			variant,
 			source: "core",
 			providerId: coreProvider.id,
 			table: coreTable,
@@ -316,7 +370,7 @@ export class CriticalTableRegistry {
 		}));
 
 		return foundry.utils.deepFreeze({
-			version: 1,
+			version: CONFIG_VERSION,
 			roles,
 		});
 	}
@@ -343,6 +397,21 @@ export class CriticalTableRegistry {
 		}
 
 		return role;
+	}
+
+	static #assertVariant(role, variantId = "") {
+		const requested = normalizeId(variantId);
+		const variant = requested || (
+			role.variants.length === 1 ? role.variants[0] : ""
+		);
+
+		if (!variant || !role.variants.includes(variant)) {
+			throw new Error(
+				`Critical table role '${role.id}' requires one of variants: ${role.variants.join(", ")}.`,
+			);
+		}
+
+		return variant;
 	}
 
 	static #assertSettingsRegistered() {
@@ -386,16 +455,12 @@ export class CriticalTableRegistry {
 	}
 
 	static #warnOnce(key, message) {
-		if (this.#warned.has(key)) {
-			return;
-		}
+		if (this.#warned.has(key)) return;
 
 		this.#warned.add(key);
 		console.warn(`WFRP1ED | ${message}`);
 
-		if (game.user?.isGM) {
-			ui.notifications.warn(message);
-		}
+		if (game.user?.isGM) ui.notifications.warn(message);
 	}
 }
 
@@ -404,12 +469,19 @@ function normalizeRole(definition) {
 	const label = String(definition.label ?? id).trim();
 	const labelKey = String(definition.labelKey ?? "").trim();
 	const labels = normalizeLabels(definition.labels);
+	const variants = normalizeVariants(definition.variants);
 
 	if (!id || !label) {
 		throw new Error("Critical table roles require id and label.");
 	}
 
-	return Object.freeze({ id, label, labelKey, labels });
+	return Object.freeze({
+		id,
+		label,
+		labelKey,
+		labels,
+		variants: Object.freeze(variants),
+	});
 }
 
 function normalizeProvider(definition) {
@@ -422,11 +494,11 @@ function normalizeProvider(definition) {
 		definition.source ?? CRITICAL_TABLE_PROVIDER_SOURCE.MODULE,
 	).trim();
 	const packageId = String(definition.packageId ?? "").trim();
-	const tableUuid = String(definition.tableUuid ?? "").trim();
+	const tableUuids = normalizeTableUuids(definition);
 
-	if (!id || !role || !label || !tableUuid) {
+	if (!id || !role || !label || Object.keys(tableUuids).length === 0) {
 		throw new Error(
-			"Critical table providers require id, role, label, and tableUuid.",
+			"Critical table providers require id, role, label, and at least one table UUID.",
 		);
 	}
 
@@ -453,8 +525,30 @@ function normalizeProvider(definition) {
 		labels,
 		source,
 		packageId,
-		tableUuid,
+		tableUuids,
+		// Compatibility convenience for existing single-table providers.
+		tableUuid: tableUuids[CRITICAL_TABLE_VARIANT.DEFAULT] ?? "",
 	});
+}
+
+function normalizeTableUuids(definition) {
+	const tables = {};
+	const supplied = definition?.tableUuids;
+
+	if (supplied && typeof supplied === "object" && !Array.isArray(supplied)) {
+		for (const [variant, uuid] of Object.entries(supplied)) {
+			const key = normalizeId(variant);
+			const value = String(uuid ?? "").trim();
+			if (key && value) tables[key] = value;
+		}
+	}
+
+	const legacy = String(definition?.tableUuid ?? "").trim();
+	if (legacy && !tables[CRITICAL_TABLE_VARIANT.DEFAULT]) {
+		tables[CRITICAL_TABLE_VARIANT.DEFAULT] = legacy;
+	}
+
+	return Object.freeze(tables);
 }
 
 function normalizeConfiguration(value) {
@@ -468,14 +562,33 @@ function normalizeConfiguration(value) {
 
 	for (const [roleId, configuration] of Object.entries(roles)) {
 		const id = normalizeId(roleId);
+		if (!id) continue;
 
-		if (!id) {
-			continue;
+		const worldTableUuids = {};
+		const supplied = configuration?.worldTableUuids;
+
+		if (supplied && typeof supplied === "object" && !Array.isArray(supplied)) {
+			for (const [variant, uuid] of Object.entries(supplied)) {
+				const key = normalizeId(variant);
+				const value = String(uuid ?? "").trim();
+				if (key && value) worldTableUuids[key] = value;
+			}
+		}
+
+		// Version-1 migration for any early single-table world override.
+		const legacyWorldTableUuid = String(
+			configuration?.worldTableUuid ?? "",
+		).trim();
+		if (
+			legacyWorldTableUuid &&
+			!worldTableUuids[CRITICAL_TABLE_VARIANT.DEFAULT]
+		) {
+			worldTableUuids[CRITICAL_TABLE_VARIANT.DEFAULT] = legacyWorldTableUuid;
 		}
 
 		normalizedRoles[id] = {
 			providerId: normalizeId(configuration?.providerId),
-			worldTableUuid: String(configuration?.worldTableUuid ?? "").trim(),
+			worldTableUuids,
 		};
 	}
 
@@ -488,8 +601,26 @@ function normalizeConfiguration(value) {
 function emptyRoleConfiguration() {
 	return {
 		providerId: "",
-		worldTableUuid: "",
+		worldTableUuids: {},
 	};
+}
+
+function normalizeVariants(value) {
+	const source = Array.isArray(value) && value.length > 0
+		? value
+		: [CRITICAL_TABLE_VARIANT.DEFAULT];
+	const variants = [];
+
+	for (const item of source) {
+		const variant = normalizeId(item);
+		if (variant && !variants.includes(variant)) variants.push(variant);
+	}
+
+	if (variants.length === 0) {
+		variants.push(CRITICAL_TABLE_VARIANT.DEFAULT);
+	}
+
+	return variants;
 }
 
 function normalizeLabels(value) {
@@ -502,26 +633,18 @@ function normalizeLabels(value) {
 	for (const [language, label] of Object.entries(value)) {
 		const lang = String(language ?? "").trim();
 		const text = String(label ?? "").trim();
-
-		if (lang && text) {
-			labels[lang] = text;
-		}
+		if (lang && text) labels[lang] = text;
 	}
 
 	return Object.freeze(labels);
 }
 
 function localizedLabel(definition, fallback) {
-	if (!definition) {
-		return String(fallback ?? "");
-	}
+	if (!definition) return String(fallback ?? "");
 
 	if (definition.labelKey) {
 		const localized = game.i18n.localize(definition.labelKey);
-
-		if (localized !== definition.labelKey) {
-			return localized;
-		}
+		if (localized !== definition.labelKey) return localized;
 	}
 
 	const language = String(game.i18n.lang ?? "").trim();
@@ -545,9 +668,7 @@ async function assertRollTableUuid(uuid) {
 }
 
 async function resolveRollTable(uuid) {
-	if (!uuid) {
-		return null;
-	}
+	if (!uuid) return null;
 
 	try {
 		const document = await foundry.utils.fromUuid(uuid);
@@ -559,9 +680,10 @@ async function resolveRollTable(uuid) {
 	}
 }
 
-function freezeResolution({ role, source, providerId, table }) {
+function freezeResolution({ role, variant, source, providerId, table }) {
 	return Object.freeze({
 		role,
+		variant,
 		source,
 		providerId,
 		table,
