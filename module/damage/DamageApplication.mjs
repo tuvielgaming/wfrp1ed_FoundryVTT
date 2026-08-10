@@ -4,6 +4,8 @@ import { DamageResolution } from "./DamageResolution.mjs";
 const APPLICATION_FLAG_SCOPE = "wfrp1ed";
 const APPLICATION_FLAG_KEY = "damageApplications";
 const WOUNDS_INITIALIZED_FLAG_KEY = "woundsInitialized";
+const AUTHORIZED_DAMAGE_APPLICATION_OPTION =
+	"wfrp1edAuthorizedDamageApplication";
 
 /**
  * Explicit application boundary for already-resolved WFRP damage.
@@ -20,13 +22,6 @@ const WOUNDS_INITIALIZED_FLAG_KEY = "woundsInitialized";
 export class DamageApplication {
 	static VERSION = 2;
 
-	/**
-	 * Whether a User may apply damage to the target Actor.
-	 *
-	 * @param {Actor} actor
-	 * @param {User} user
-	 * @returns {boolean}
-	 */
 	static canApply(actor, user = game.user) {
 		if (!actor || !user) {
 			return false;
@@ -42,13 +37,6 @@ export class DamageApplication {
 		);
 	}
 
-	/**
-	 * Return the stored application transaction for one damage packet.
-	 *
-	 * @param {Actor} actor
-	 * @param {DamagePacket|string} packetOrId
-	 * @returns {Object|null}
-	 */
 	static transactionFor(actor, packetOrId) {
 		if (!(actor instanceof foundry.documents.Actor)) {
 			return null;
@@ -77,34 +65,10 @@ export class DamageApplication {
 			: null;
 	}
 
-	/**
-	 * Whether this packet already has an applied transaction on the target.
-	 *
-	 * @param {Actor} actor
-	 * @param {DamagePacket|string} packetOrId
-	 * @returns {boolean}
-	 */
 	static isApplied(actor, packetOrId) {
 		return this.transactionFor(actor, packetOrId)?.state === "applied";
 	}
 
-	/**
-	 * Apply one resolved damage amount to remaining Wounds.
-	 *
-	 * Remaining Wounds and the packet transaction are written by the same Actor
-	 * update. WFRP 1e remaining Wounds stop at zero; damage beyond the remaining
-	 * value becomes the per-hit critical value instead of negative Wounds.
-	 *
-	 * The Actor transaction is authoritative; a ChatMessage may mirror it for
-	 * presentation when the applying user has permission to edit that message.
-	 *
-	 * Actors created before the in-play Wounds workflow may still contain the
-	 * schema default 0. Until the per-Actor initialization flag exists, the
-	 * Wounds characteristic maximum is treated as the undamaged starting value.
-	 *
-	 * @param {Object} input
-	 * @returns {Promise<Object>}
-	 */
 	static async apply({
 		packet,
 		resolution,
@@ -178,13 +142,18 @@ export class DamageApplication {
 
 		applications[normalizedPacket.id] = foundry.utils.deepClone(transaction);
 
-		await actor.update({
-			"system.status.wounds.value": woundsAfter,
-			[`flags.${APPLICATION_FLAG_SCOPE}.${APPLICATION_FLAG_KEY}`]:
-				applications,
-			[`flags.${APPLICATION_FLAG_SCOPE}.${WOUNDS_INITIALIZED_FLAG_KEY}`]:
-				true,
-		});
+		await actor.update(
+			{
+				"system.status.wounds.value": woundsAfter,
+				[`flags.${APPLICATION_FLAG_SCOPE}.${APPLICATION_FLAG_KEY}`]:
+					applications,
+				[`flags.${APPLICATION_FLAG_SCOPE}.${WOUNDS_INITIALIZED_FLAG_KEY}`]:
+					true,
+			},
+			{
+				[AUTHORIZED_DAMAGE_APPLICATION_OPTION]: true,
+			},
+		);
 
 		return foundry.utils.deepFreeze(transaction);
 	}
@@ -232,8 +201,5 @@ function readRemainingWounds(actor) {
 		);
 	}
 
-	// Older test builds could persist negative Wounds. Treat them as the
-	// canonical WFRP 1e floor of zero; the next Actor update will normalize the
-	// stored value as part of the same application transaction.
 	return Math.max(0, value);
 }
