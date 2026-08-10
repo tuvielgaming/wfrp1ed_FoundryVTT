@@ -119,7 +119,26 @@
 							class="characteristic-current-wounds"
 							title="Pozostała Żywotność / maksimum"
 						>
-							{{@root.display.status.wounds.value}}/{{@root.display.status.wounds.max}}
+							{{#if @root.editable}}
+								<input
+									type="number"
+									class="characteristic-current-wounds-input"
+									name="system.status.wounds.value"
+									value="{{@root.display.status.wounds.value}}"
+									min="0"
+									max="{{@root.display.status.wounds.max}}"
+									step="1"
+									inputmode="numeric"
+									autocomplete="off"
+									aria-label="Pozostała Żywotność"
+								/>
+								<span class="characteristic-current-wounds-separator">/</span>
+								<span class="characteristic-current-wounds-max">
+									{{@root.display.status.wounds.max}}
+								</span>
+							{{else}}
+								{{@root.display.status.wounds.value}}/{{@root.display.status.wounds.max}}
+							{{/if}}
 						</span>
 					</span>
 				{{/if}}
