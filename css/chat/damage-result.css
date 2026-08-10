@@ -63,3 +63,38 @@
 .wfrp1e-damage-card.is-applied .wfrp1e-damage-card__hint {
 	display: none;
 }
+
+.wfrp1e-critical-result {
+	margin-top: 0.5rem;
+	padding: 0.4rem 0.5rem;
+	border: 1px solid rgba(108, 35, 35, 0.52);
+	border-radius: 3px;
+	background: rgba(139, 52, 52, 0.08);
+	text-align: center;
+}
+
+.wfrp1e-critical-result__header {
+	font-size: 0.92rem;
+}
+
+.wfrp1e-critical-result__meta,
+.wfrp1e-critical-result__pending {
+	margin-top: 0.15rem;
+	font-size: 0.78rem;
+	opacity: 0.82;
+}
+
+.wfrp1e-critical-result__outcome {
+	margin-top: 0.2rem;
+	font-weight: 700;
+	font-size: 1rem;
+}
+
+.wfrp1e-critical-result.is-killed {
+	border-width: 2px;
+	background: rgba(139, 52, 52, 0.15);
+}
+
+.wfrp1e-critical-result.is-no-effect {
+	background: rgba(247, 238, 215, 0.4);
+}
