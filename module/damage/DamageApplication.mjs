@@ -18,7 +18,7 @@ const WOUNDS_INITIALIZED_FLAG_KEY = "woundsInitialized";
  * same damage packet.
  */
 export class DamageApplication {
-	static VERSION = 1;
+	static VERSION = 2;
 
 	/**
 	 * Whether a User may apply damage to the target Actor.
@@ -92,9 +92,11 @@ export class DamageApplication {
 	 * Apply one resolved damage amount to remaining Wounds.
 	 *
 	 * Remaining Wounds and the packet transaction are written by the same Actor
-	 * update. The Actor transaction is authoritative; a ChatMessage may mirror
-	 * it for presentation when the applying user has permission to edit that
-	 * message.
+	 * update. WFRP 1e remaining Wounds stop at zero; damage beyond the remaining
+	 * value becomes the per-hit critical value instead of negative Wounds.
+	 *
+	 * The Actor transaction is authoritative; a ChatMessage may mirror it for
+	 * presentation when the applying user has permission to edit that message.
 	 *
 	 * Actors created before the in-play Wounds workflow may still contain the
 	 * schema default 0. Until the per-Actor initialization flag exists, the
@@ -148,7 +150,8 @@ export class DamageApplication {
 
 		const woundsBefore = readRemainingWounds(actor);
 		const amountApplied = normalizedResolution.finalAmount;
-		const woundsAfter = woundsBefore - amountApplied;
+		const woundsAfter = Math.max(0, woundsBefore - amountApplied);
+		const criticalValue = Math.max(0, amountApplied - woundsBefore);
 		const transaction = {
 			version: DamageApplication.VERSION,
 			id: foundry.utils.randomID(),
@@ -157,6 +160,8 @@ export class DamageApplication {
 			amountApplied,
 			woundsBefore,
 			woundsAfter,
+			criticalValue,
+			criticalMode: normalizedPacket.critical.mode,
 			userId: user?.id ?? "",
 			appliedAt: Date.now(),
 			state: "applied",
@@ -215,7 +220,7 @@ function readRemainingWounds(actor) {
 		const maximum = Number(actor.woundsMaximum);
 
 		if (Number.isFinite(maximum) && Number.isInteger(maximum)) {
-			return maximum;
+			return Math.max(0, maximum);
 		}
 	}
 
@@ -227,5 +232,8 @@ function readRemainingWounds(actor) {
 		);
 	}
 
-	return value;
+	// Older test builds could persist negative Wounds. Treat them as the
+	// canonical WFRP 1e floor of zero; the next Actor update will normalize the
+	// stored value as part of the same application transaction.
+	return Math.max(0, value);
 }
