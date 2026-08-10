@@ -11,8 +11,50 @@
 .classic-actor-sheet
 	.characteristic-cell--current[data-characteristic="w"]
 	.characteristic-current-wounds {
-	display: inline;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.08em;
 	font-size: 0.82em;
 	font-variant-numeric: tabular-nums;
 	white-space: nowrap;
+}
+
+.classic-actor-sheet
+	.characteristic-current-wounds-input {
+	width: 1.7em;
+	min-width: 0;
+	height: 1.3em;
+	padding: 0;
+	border: 0;
+	border-bottom: 1px dotted currentColor;
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+	color: inherit;
+	font: inherit;
+	font-variant-numeric: tabular-nums;
+	line-height: 1;
+	text-align: right;
+}
+
+.classic-actor-sheet
+	.characteristic-current-wounds-input:focus {
+	outline: 1px solid currentColor;
+	outline-offset: 1px;
+	border-bottom-color: transparent;
+}
+
+.classic-actor-sheet
+	.characteristic-current-wounds-input::-webkit-outer-spin-button,
+.classic-actor-sheet
+	.characteristic-current-wounds-input::-webkit-inner-spin-button {
+	margin: 0;
+	-webkit-appearance: none;
+}
+
+.classic-actor-sheet
+	.characteristic-current-wounds-input[type="number"] {
+	appearance: textfield;
+	-moz-appearance: textfield;
 }
