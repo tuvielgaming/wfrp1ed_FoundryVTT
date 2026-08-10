@@ -3,6 +3,11 @@
 }
 
 .classic-actor-sheet
+	.characteristic-cell--current[data-characteristic="w"] {
+	position: relative;
+}
+
+.classic-actor-sheet
 	.characteristic-cell--current[data-characteristic="w"]
 	.characteristic-current-profile {
 	display: none;
@@ -14,6 +19,9 @@
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
+	width: 100%;
+	box-sizing: border-box;
+	padding-right: 0.58em;
 	gap: 0.08em;
 	font-size: 0.82em;
 	font-variant-numeric: tabular-nums;
@@ -61,25 +69,39 @@
 
 .classic-actor-sheet
 	.characteristic-current-wounds-permission {
-	width: 1.15em;
-	min-width: 1.15em;
-	height: 1.15em;
-	min-height: 1.15em;
-	margin: 0 0 0 0.08em;
+	position: absolute;
+	top: 0.12em;
+	right: 0.16em;
+	width: 0.9em;
+	min-width: 0.9em;
+	height: 0.9em;
+	min-height: 0.9em;
+	margin: 0;
 	padding: 0;
 	border: 0;
+	border-radius: 2px;
 	background: transparent;
 	box-shadow: none;
-	color: inherit;
-	font-size: 0.72em;
-	line-height: 1;
+	color: #b95b6b;
+	font-size: 0.62em;
+	line-height: 0.9em;
 	cursor: pointer;
+	z-index: 1;
+}
+
+.classic-actor-sheet
+	.characteristic-current-wounds-permission.is-enabled {
+	background: rgba(210, 74, 99, 0.14);
+	color: #c92f4c;
 }
 
 .classic-actor-sheet
 	.characteristic-current-wounds-permission:hover,
 .classic-actor-sheet
 	.characteristic-current-wounds-permission:focus-visible {
-	text-shadow: 0 0 2px currentColor;
-	outline: none;
+	background: rgba(210, 74, 99, 0.18);
+	color: #a91f3a;
+	text-shadow: none;
+	outline: 1px solid rgba(169, 31, 58, 0.35);
+	outline-offset: 1px;
 }
