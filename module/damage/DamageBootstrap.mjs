@@ -84,7 +84,10 @@ Hooks.once("ready", () => {
  * This is the common persistence boundary for sheet edits and other modules.
  * DamageApplication already calculates the same floor explicitly, but the Actor
  * update hook prevents console/forms/future features from persisting negative
- * remaining Wounds again. Manual writes initialize the in-play Wounds state.
+ * remaining Wounds again. A real manual resource change initializes the in-play
+ * Wounds state. Merely submitting the same value as part of another form edit
+ * does not initialize it.
+ *
  * Internal synchronization may opt out so an undamaged Actor can continue to
  * follow later profile-Wounds changes until play actually changes the resource.
  *
@@ -130,6 +133,12 @@ function normalizeRemainingWoundsUpdate(
 	const normalized = hasMaximum
 		? Math.min(maximum, Math.max(0, requested))
 		: Math.max(0, requested);
+	const stored = Number(
+		actor.system?.status?.wounds?.value,
+	);
+	const valueChanged =
+		!Number.isFinite(stored) ||
+		normalized !== stored;
 
 	writeUpdateValue(
 		changes,
@@ -139,7 +148,8 @@ function normalizeRemainingWoundsUpdate(
 	);
 
 	if (
-		options?.[PRESERVE_WOUNDS_INITIALIZATION_OPTION] === true
+		options?.[PRESERVE_WOUNDS_INITIALIZATION_OPTION] === true ||
+		!valueChanged
 	) {
 		return;
 	}
