@@ -1,3 +1,9 @@
+import { DamageChat } from "../damage/DamageChat.mjs";
+import {
+	DAMAGE_MITIGATION_POLICY,
+	DamagePacket,
+} from "../damage/DamagePacket.mjs";
+import { DamageResolver } from "../damage/DamageResolver.mjs";
 import { RuleEffectRollSelection } from "../effects/RuleEffectRollSelection.mjs";
 import {
 	STANDARD_TEST_PROCEDURES,
@@ -72,9 +78,10 @@ export class MovementStandardTest {
 	 * is Wounds suffered, ignoring armour and Toughness. If Wounds are suffered,
 	 * a separate 50% check determines whether held items are dropped.
 	 *
-	 * This procedure reports Wounds but does not mutate Actor Wounds yet because
-	 * the repository does not currently provide one audited common Wounds update
-	 * contract for Character and NPC Actor types.
+	 * Calculating Zeskok never mutates Wounds automatically. When positive damage
+	 * is produced, the movement result ChatMessage receives a generic
+	 * DamagePacket so the GM or target Actor OWNER can explicitly use the shared
+	 * Apply Damage / Zastosuj obrażenia transaction.
 	 *
 	 * @protected
 	 */
@@ -95,6 +102,7 @@ export class MovementStandardTest {
 		const die = this._finiteNumber(roll.total, "jump roll");
 		const effectiveDie = die + effectBonus;
 		const wounds = Math.max(0, height - effectiveDie);
+		const procedureName = standardTestProcedureName(procedure);
 
 		let dropRoll = null;
 		let dropsHeldItems = false;
@@ -105,9 +113,9 @@ export class MovementStandardTest {
 				this._finiteNumber(dropRoll.total, "drop roll") <= 50;
 		}
 
-		return this._publish(actor, {
+		const message = await this._publish(actor, {
 			kind: "jump",
-			procedureName: standardTestProcedureName(procedure),
+			procedureName,
 			success: wounds === 0,
 			primaryLabel: this._localize(
 				"WFRP1ED.Movement.Height",
@@ -186,6 +194,28 @@ export class MovementStandardTest {
 		fullRound: true,
 		rolls: dropRoll ? [roll, dropRoll] : [roll],
 		});
+
+		if (wounds > 0) {
+			const packet = new DamagePacket({
+				rawAmount: wounds,
+				targetActorUuid: actor.uuid,
+				source: {
+					kind: "movement-procedure",
+					id: procedure.id ?? "jump",
+					label: procedureName,
+				},
+				armour: DAMAGE_MITIGATION_POLICY.IGNORE,
+				toughness: DAMAGE_MITIGATION_POLICY.IGNORE,
+			});
+			const resolution = DamageResolver.resolve(packet);
+
+			await DamageChat.attach(message, {
+				packet,
+				resolution,
+			});
+		}
+
+		return message;
 	}
 
 	/**
@@ -244,7 +274,6 @@ export class MovementStandardTest {
 			metricRightLabel: this._localize(
 				"WFRP1ED.Movement.Achieved",
 				"Achieved",
-				"Osiągnięte",
 			),
 			metricRightValue: `${distance} ${this._distanceUnit()}`,
 			rows: [
