@@ -108,3 +108,27 @@
 .wfrp1e-critical-result.is-no-effect {
 	background: rgba(247, 238, 215, 0.4);
 }
+
+.wfrp1e-critical-result.is-fate-saved {
+	border-style: double;
+}
+
+.wfrp1e-fate-intervention {
+	margin-top: 0.5rem;
+	padding-top: 0.45rem;
+	border-top: 1px solid rgba(108, 35, 35, 0.35);
+}
+
+.wfrp1e-fate-intervention__resource {
+	font-size: 0.82rem;
+	font-weight: 600;
+}
+
+.wfrp1e-fate-intervention__action {
+	width: 100%;
+	margin-top: 0.35rem;
+}
+
+.wfrp1e-fate-intervention__spent {
+	font-weight: 700;
+}
