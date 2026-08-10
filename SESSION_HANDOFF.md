@@ -1,6 +1,6 @@
 # Session Handoff
 
-**Date:** 2026-08-09  
+**Date:** 2026-08-10  
 **Purpose:** Current implementation/architecture checkpoint. Update this file instead of creating overlapping progress documents.
 
 ## Current working source
@@ -15,16 +15,24 @@ GitHub `master` is the implementation source of truth. Fetch the latest exact fi
 Two major slices are now live-tested in Foundry v14:
 
 1. Skill + Active Effect persistence/adjudication.
-2. Generic damage packet + explicit ChatMessage application for the GM path.
+2. Generic damage packet + explicit ChatMessage application, including the full GM/player permission matrix.
 
-The last user-confirmed runtime state is after commit:
+The last code runtime-confirmed by the user is after commit:
 
 ```text
 c0adce4569e39f463b1c9169ed78e8fc94ec66d4
 Fix Foundry v14 context menu callback adapter
 ```
 
-At that point the user confirmed that `Zastosuj obrażenia` works again after the v14 callback-signature fix.
+On 2026-08-10 the user additionally confirmed all remaining damage-permission scenarios:
+
+- GM can apply damage;
+- a non-GM player with OWNER permission on the target Actor can see and use `Zastosuj obrażenia` on a GM-authored damage message;
+- the target Actor Wounds update correctly for that player-owner path;
+- double-application protection still works;
+- a non-owner player does not receive the apply action.
+
+No source-code change was required for those permission confirmations.
 
 ---
 
@@ -183,11 +191,13 @@ Before wiring actual fall/jump damage formulas into the new damage pipeline, ver
 - English WFRP 1e Core Rulebook for mechanics;
 - Polish Core Rulebook for terminology/translation differences.
 
-The rulebook PDFs are not tracked in the current GitHub `master`, so request/access the source material before adding unverified mechanics.
+The rulebook PDFs are not tracked in current GitHub `master`.
+
+On 2026-08-10 a File Library search found the existing `RULEBOOK_IMPLEMENTATION.md` audit and project-state documents, but did not surface the English or Polish core-rulebook PDFs themselves. Therefore the next mechanics change is blocked until the user provides/accesses both rulebooks again, preferably by uploading the current repository ZIP containing both PDFs or the two PDFs directly.
 
 ---
 
-# Generic damage subsystem — CURRENT CONFIRMED STATE
+# Generic damage subsystem — FULL PERMISSION MATRIX CONFIRMED
 
 ## Architecture
 
@@ -263,11 +273,14 @@ system.status.wounds.value
 
 and allows remaining Wounds to go negative for later critical-damage handling.
 
-Authorization:
+Authorization is now live-tested for the full intended matrix:
 
-- GM may apply damage;
-- target Actor OWNER may apply damage;
-- permission is checked against the target Actor, not the message speaker/rolling Actor.
+- GM may apply damage — CONFIRMED;
+- target Actor OWNER may apply damage — CONFIRMED;
+- target owner can apply damage from a GM-authored ChatMessage — CONFIRMED;
+- a non-owner player does not receive the apply action — CONFIRMED.
+
+Permission is checked against the target Actor, not the message speaker/rolling Actor.
 
 Authoritative application state is stored on the target Actor under WFRP flags, keyed by DamagePacket id.
 
@@ -291,7 +304,7 @@ User explicitly confirmed that a packet cannot be applied a second time, includi
 
 The same packet id is rejected once the target Actor already contains its applied transaction.
 
-## Standalone damage ChatMessage — CONFIRMED FOR GM
+## Standalone damage ChatMessage — CONFIRMED
 
 A generic standalone damage card is implemented with:
 
@@ -303,8 +316,6 @@ A generic standalone damage card is implemented with:
 - optional hit location;
 - application status.
 
-The user confirmed the card renders correctly and `Zastosuj obrażenia` works after the v14 callback fix.
-
 Right-click action:
 
 ```text
@@ -313,6 +324,8 @@ Zastosuj obrażenia
 
 is available only when the current user may apply the packet and the packet has not already been applied.
 
+The user confirmed successful application as GM and as a non-GM OWNER of the target Actor.
+
 After successful application, the standalone card shows a summary such as:
 
 ```text
@@ -320,6 +333,8 @@ Zastosowano 1 · Żywotność 6 → 5
 ```
 
 and the same packet no longer offers the application action.
+
+A player without OWNER permission on the target Actor does not receive `Zastosuj obrażenia`.
 
 ## Foundry v14 ContextMenu API fix — CONFIRMED
 
@@ -389,7 +404,7 @@ Relevant commits:
 - `69a17c84f9585d08bdf5a32971b72566229d813a` — load Classic remaining-Wounds styles;
 - `7c6dcd587ac9efd126f9d7cfd6069690bd03d58a` — keep undamaged Wounds synchronized with profile.
 
-## Damage commits from this session
+## Damage commits
 
 Foundation:
 
@@ -413,27 +428,36 @@ Chat/application:
 
 ---
 
-# NEXT SESSION — start here
+# NEXT SESSION / CURRENT NEXT TASK — start here
 
-Do not redo the GM damage-card test unless a regression appears. It is now confirmed working.
+Do not redo the GM/player permission tests unless a regression appears. The complete intended permission matrix is now confirmed working.
 
 Next steps in order:
 
-1. **Player-owner damage application test**
-   - create/publish a damage card as GM;
-   - log in/switch to a non-GM player who owns the target Actor;
-   - verify that player sees `Zastosuj obrażenia`;
-   - verify the player can apply it even if they cannot edit the GM-authored ChatMessage;
-   - verify Actor Wounds update and double-application protection still work;
-   - verify non-owner players do not see the action.
+1. **Obtain both WFRP 1e core rulebooks in the current working context.**
+   - English WFRP 1e Core Rulebook: primary mechanics authority.
+   - Polish WFRP 1e Core Rulebook: terminology and translation comparison.
+   - Current File Library search did not surface the PDFs themselves.
 
-2. **Only after the permission path is confirmed, connect a real game producer.**
+2. **Verify `Skok` / `Zeskok` rules in both books before any mechanics change.**
+   - exact procedure;
+   - exact damage formula;
+   - whether Armour applies or is ignored;
+   - whether Toughness applies or is ignored;
+   - any reduction/avoidance roll;
+   - exact English and official Polish terminology;
+   - document printed page/chapter references in `RULEBOOK_IMPLEMENTATION.md`.
 
-3. **`Zeskok` is the intended first producer**, but first obtain/check the English and Polish WFRP 1e rulebook sections for the exact damage formula and mitigation behavior. Do not implement from memory.
+3. **Inspect the current movement producer code from GitHub only after rulebook verification.**
 
-4. Keep generic Armour/Toughness `apply` calculation disabled until the combat damage/mitigation rules are audited against both rulebooks.
+4. **Wire verified `Zeskok` damage into the generic DamagePacket → DamageResolver → DamageChat pipeline as the first real producer.**
+   - calculation must create/publish damage;
+   - it must not directly subtract Wounds;
+   - application remains the confirmed explicit `Zastosuj obrażenia` transaction.
 
-5. Later extend the same generic damage pipeline to normal weapon/combat damage, spells, hazards, etc.
+5. Keep generic Armour/Toughness `apply` calculation disabled until normal combat damage/mitigation rules are separately audited against both rulebooks.
+
+6. Later extend the same generic damage pipeline to normal weapon/combat damage, spells, hazards, etc.
 
 Possible later enhancement:
 
