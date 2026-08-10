@@ -117,8 +117,8 @@ Derived values must not be duplicated as independent persistent values.
 
 5. **Current Wounds tracking is unresolved**
    - Wounds is part of the profile and represents the amount of damage that can be endured before serious injury.
-   - The combat chapter must be verified before choosing the persistent structure for current damage/current Wounds.
    - The profile maximum and in-play wound state must not be conflated accidentally.
+   - Critical-hit overflow must not be represented by allowing remaining Wounds to become negative.
 
 ## Required implementation sequence
 
@@ -163,6 +163,7 @@ The Characteristics subsystem must be repaired in this order:
 - **The Players' Section — Fate**, printed pages 15–16.
 - **The Gamesmaster — Fate Points**, printed page 72.
 - **The Gamesmaster — Character Advancement and Experience / Experience Points / Spending Experience Points**, printed pages 90–91.
+- **Combat — Critical Hits / Critical Hit Chart**, printed page 122.
 - **Combat — Wounds and Recovery**, printed pages 129–130.
 
 ### Polish Core Rulebook
@@ -170,6 +171,7 @@ The Characteristics subsystem must be repaired in this order:
 - **Podręcznik Gracza — Przeznaczenie**, printed pages 15–16.
 - **Mistrz Gry — Punkty Przeznaczenia**, printed page 72.
 - **Mistrz Gry — Rozwój bohatera i doświadczenie / Punkty doświadczenia / Wydawanie punktów doświadczenia**, printed pages 90–91.
+- **Walka — Trafienia krytyczne / Tabela trafień krytycznych**, printed page 122.
 - **Walka — Rany i rekonwalescencja**, printed pages 129–130.
 
 ## Fate Points
@@ -191,23 +193,50 @@ A single scalar `fate.value` cannot preserve both concepts after points are spen
 
 The current Character schema contains both `fate` and `fortune`. The WFRP 1e core rules verified above define Fate Points but do not define a replenishing Fortune Point resource. `fortune` is therefore not part of the WFRP 1e core Character model and must be removed unless a later, explicitly optional supplement requires it.
 
-## Wounds and in-play damage
+## Wounds, critical overflow, and in-play damage
 
-Wounds is one of the fourteen profile characteristics. It represents a buffer of damage a creature can endure before serious damage occurs. Damage reduces remaining Wounds; critical damage becomes relevant after that buffer is reduced below zero. The recovery rules classify wounded characters according to remaining Wounds and critical injuries.
+Wounds is one of the fourteen profile characteristics and acts as a damage buffer. Normal damage reduces remaining Wounds toward zero.
 
-The official Polish profile term is **Żywotność**, while the recovery section uses the language of wounds and injuries (**rany**, **obrażenia**, **Rany i rekonwalescencja**).
+The critical-hit rules are explicit about the lower bound:
+
+- remaining Wounds stop at **0** and never become negative;
+- if one resolved hit exceeds the target's remaining Wounds, only the amount needed to reach zero is deducted from Wounds;
+- the excess from that same hit becomes the **critical value** used to resolve the critical hit;
+- example: 5 damage against a target with 2 Wounds remaining produces Wounds `2 → 0` and a `+3` critical hit;
+- once Wounds are already zero, subsequent damage does not accumulate as negative Wounds; each new damage amount is used as the critical value for that hit/round as appropriate.
+
+The English book states that Wounds remain at zero once exhausted. The Polish **Trafienia krytyczne** section expresses the same mechanic: Żywotność is reduced to zero, while damage beyond that threshold determines the critical result rather than being stored as negative Żywotność.
+
+The official Polish profile term is **Żywotność**, while the recovery section uses **rany**, **obrażenia**, and **Rany i rekonwalescencja**.
 
 ### Data-model consequences
 
 The system must distinguish:
 
 - the derived current **Wounds characteristic maximum** from the profile;
-- the persistent **remaining Wounds** during play, or an equivalent persistent damage value from which remaining Wounds is derived;
-- critical injuries, which cannot be represented by a simple negative number alone once the full combat subsystem is implemented.
+- persistent **remaining Wounds**, clamped to the interval `0..maximum` during damage application;
+- per-hit **critical overflow / critical value**, which is transaction/result state and must not be encoded by negative remaining Wounds;
+- persistent critical injuries/effects once the full critical subsystem is implemented.
 
-The current schema has only the profile characteristic `w` and no verified in-play wound state. This is incomplete for a campaign-ready Character Actor.
+For a resolved damage amount `D` and remaining Wounds `W` before application:
 
-The canonical representation is not selected yet. Before replacing the schema, the Classic sheet's exact fields and the combat/critical-injury lifecycle must be audited. Whichever representation is selected must have one calculation owner and must not persist both damage and remaining Wounds independently.
+```text
+woundsAfter = max(0, W - D)
+criticalValue = max(0, D - W)
+```
+
+The critical value belongs to the applied damage transaction and the subsequent critical-hit resolution. It is not a temporary replacement value for the Actor's Wounds characteristic and should not be persisted by setting remaining Wounds below zero.
+
+### Current repository discrepancy — IMPORTANT
+
+The current generic `DamageApplication` still allows `system.status.wounds.value` to become negative. That behavior was based on an earlier incorrect interpretation and is now confirmed to violate the Core Rulebook.
+
+Before implementing `Upadek` or extending damage to normal combat, the damage application contract should be corrected so that:
+
+1. remaining Wounds clamp at zero;
+2. the application transaction records `criticalValue` when damage exceeds remaining Wounds;
+3. the ChatMessage/application summary can expose that critical value;
+4. actual critical-hit-table resolution is handled by a dedicated critical subsystem rather than by negative Wounds.
 
 ## Experience Points
 
@@ -248,19 +277,19 @@ The current `experience` object contains `value`, `total`, `spent`, and `log`. T
 
 1. `fortune` is not a WFRP 1e core resource.
 2. `fate.value` alone cannot preserve generated maximum and currently unspent Fate Points.
-3. No in-play remaining-Wounds or damage state is defined.
+3. Generic damage application currently permits negative remaining Wounds; this must be replaced by Wounds clamped at zero plus a separate critical value.
 4. `experience.value`, `experience.total`, and `experience.spent` create an ambiguous, potentially contradictory model.
 5. `system.json` currently points token bars to `health` and `power`, neither of which exists in the current Actor schema. The token-bar decision must wait until the wound and magic-resource models are verified.
 
 ## Required implementation sequence
 
-1. Audit the original Polish Classic sheet fields for Fate, Wounds, critical injuries, and Experience.
-2. Verify critical-hit and recovery persistence requirements from the combat chapter.
-3. Select one non-redundant Wounds/damage representation.
-4. Replace the Character status and Experience structures in `template.json`.
-5. Update `Wfrp1edActor.prepareDerivedData()` to derive Wounds maximum and available Experience in one place.
+1. Correct `DamageApplication` so remaining Wounds never fall below zero and critical overflow is stored separately in the transaction.
+2. Audit the critical-hit table/result lifecycle, including hit location and persistent injury consequences.
+3. Audit the original Polish Classic sheet fields for Fate, Wounds, critical injuries, and Experience.
+4. Select/confirm the persistent critical-injury representation.
+5. Update Character status/Experience structures only when required by the audited sheet contract.
 6. Update sheet context, HBS bindings, token attributes, and actions.
-7. Add migration handling for existing Actors.
+7. Add migration handling for any existing Actors currently storing negative Wounds.
 
 ## Status
 
@@ -270,11 +299,11 @@ The current `experience` object contains `value`, `total`, `spent`, and `log`. T
 | Polish Fate terminology | Verified |
 | Fortune core-rule status | Verified absent from core |
 | Experience rule verification | Verified |
-| Wounds/recovery rule verification | Partially verified; critical lifecycle still required |
-| Current schema audit | Verified |
-| Code changes | Not started |
-| Migration design | Required |
-| Runtime test in Foundry v14 | Required |
+| Wounds lower bound / critical overflow | Verified |
+| Full critical-hit effect lifecycle | Partially verified; further audit required |
+| Current damage application compliance | Incorrect; fix required |
+| Migration design for negative Wounds | Required |
+| Runtime test in Foundry v14 | Required after fix |
 
 ---
 
@@ -400,8 +429,8 @@ No damage packet is attached when Zeskok causes zero Wounds.
 |---|---|
 | English movement mechanics | Verified |
 | Polish terminology/mechanics comparison | Verified |
-| Zeskok calculation | Implemented; previously runtime-tested |
-| Zeskok generic damage integration | Implemented; Foundry v14 runtime test required |
+| Zeskok calculation | Implemented; runtime-confirmed |
+| Zeskok generic damage integration | Implemented; runtime-confirmed |
 | Skok calculation | Implemented; previously runtime-tested |
 | Failed Skok → situational fall handling | Implemented as GM/scene decision |
 | Standalone Upadek procedure | Not implemented |
@@ -410,6 +439,4 @@ No damage packet is attached when Zeskok causes zero Wounds.
 
 # Next audit section
 
-**Classic-sheet field contract:** inspect the original Polish character-sheet scans and every active overlay binding for Characteristics, Fate, Wounds, Experience, and career advances.
-
-This must be completed before replacing `template.json`, because the production schema has to satisfy both the verified core rules and the exact information recorded by the original sheet.
+**Critical-hit application contract:** correct Wounds clamping and preserve per-hit critical overflow before adding `Upadek` or normal combat damage.
