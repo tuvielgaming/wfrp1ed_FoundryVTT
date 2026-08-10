@@ -112,34 +112,37 @@
 						data-characteristic="{{characteristic.key}}"
 						aria-label="{{characteristic.label}}"
 					>
-						<span class="characteristic-current-profile">
-							{{characteristic.current}}
-						</span>
-						<span
-							class="characteristic-current-wounds"
-							title="Pozostała Żywotność / maksimum"
-						>
-							{{#if @root.editable}}
-								<input
-									type="number"
-									class="characteristic-current-wounds-input"
-									name="system.status.wounds.value"
-									value="{{@root.display.status.wounds.value}}"
-									min="0"
-									max="{{@root.display.status.wounds.max}}"
-									step="1"
-									inputmode="numeric"
-									autocomplete="off"
-									aria-label="Pozostała Żywotność"
-								/>
-								<span class="characteristic-current-wounds-separator">/</span>
-								<span class="characteristic-current-wounds-max">
-									{{@root.display.status.wounds.max}}
-								</span>
-							{{else}}
-								{{@root.display.status.wounds.value}}/{{@root.display.status.wounds.max}}
-							{{/if}}
-						</span>
+						{{#if (eq characteristic.id "w")}}
+							<span
+								class="characteristic-current-wounds"
+								title="Pozostała Żywotność / maksimum"
+							>
+								{{#if @root.editable}}
+									<input
+										type="number"
+										class="characteristic-current-wounds-input"
+										name="system.status.wounds.value"
+										value="{{@root.display.status.wounds.value}}"
+										min="0"
+										max="{{@root.display.status.wounds.max}}"
+										step="1"
+										inputmode="numeric"
+										autocomplete="off"
+										aria-label="Pozostała Żywotność"
+									/>
+									<span class="characteristic-current-wounds-separator">/</span>
+									<span class="characteristic-current-wounds-max">
+										{{@root.display.status.wounds.max}}
+									</span>
+								{{else}}
+									{{@root.display.status.wounds.value}}/{{@root.display.status.wounds.max}}
+								{{/if}}
+							</span>
+						{{else}}
+							<span class="characteristic-current-profile">
+								{{characteristic.current}}
+							</span>
+						{{/if}}
 					</span>
 				{{/if}}
 			{{/each}}
