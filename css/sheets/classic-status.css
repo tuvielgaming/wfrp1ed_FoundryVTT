@@ -1,0 +1,52 @@
+/* Classic page-2 status overlays which already have geometry in ClassicLayout. */
+
+.wfrp1ed-classic-fate {
+	position: absolute;
+	inset: 0;
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	align-items: end;
+	gap: 22px;
+	padding: 42px 24px 14px;
+	box-sizing: border-box;
+}
+
+.wfrp1ed-classic-fate__field {
+	display: block;
+	min-width: 0;
+}
+
+.wfrp1ed-classic-fate__field input {
+	width: 100%;
+	height: 40px;
+	box-sizing: border-box;
+	border: 0;
+	border-bottom: 1px solid rgba(55, 35, 20, 0.35);
+	border-radius: 0;
+	background: rgba(255, 248, 226, 0.18);
+	box-shadow: none;
+	font-size: 28px;
+	font-weight: 700;
+	line-height: 40px;
+	text-align: center;
+}
+
+.wfrp1ed-classic-fate__field input[readonly] {
+	cursor: default;
+	background: transparent;
+}
+
+.wfrp1e-luck-result {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 0.6rem;
+	margin-top: 0.45rem;
+	padding-top: 0.35rem;
+	border-top: 1px solid rgba(65, 70, 35, 0.35);
+	font-size: 0.82rem;
+}
+
+.wfrp1e-luck-result strong {
+	font-weight: 700;
+}

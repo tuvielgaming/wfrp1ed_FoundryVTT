@@ -174,6 +174,26 @@
 						}}
 					</section>
 				{{/if}}
+
+				{{#if page.sections.fate}}
+					<section
+						class="sheet-overlay sheet-overlay--fate"
+						data-section="fate"
+						style="
+							{{page.sections.fate.cssVariables}};
+							position: absolute;
+							left: var(--section-x);
+							top: var(--section-y);
+							width: var(--section-width);
+							height: var(--section-height);
+						"
+					>
+						{{>
+							"systems/wfrp1ed/templates/actors/classic/parts/fate.hbs"
+							@root
+						}}
+					</section>
+				{{/if}}
 			</section>
 		{{/each}}
 	</div>

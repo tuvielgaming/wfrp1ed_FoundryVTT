@@ -1,0 +1,26 @@
+<div class="wfrp1ed-classic-fate" aria-label="Punkty Przeznaczenia">
+	<label class="wfrp1ed-classic-fate__field" title="Pozostałe Punkty Przeznaczenia">
+		<input
+			type="number"
+			name="system.status.fate.value"
+			aria-label="Pozostałe Punkty Przeznaczenia"
+			value="{{display.status.fate.value}}"
+			min="0"
+			max="{{display.status.fate.max}}"
+			step="1"
+			{{#unless (wfrpIsGM)}}readonly{{/unless}}
+		/>
+	</label>
+
+	<label class="wfrp1ed-classic-fate__field" title="Maksymalne Punkty Przeznaczenia">
+		<input
+			type="number"
+			name="system.status.fate.max"
+			aria-label="Maksymalne Punkty Przeznaczenia"
+			value="{{display.status.fate.max}}"
+			min="0"
+			step="1"
+			{{#unless (wfrpIsGM)}}readonly{{/unless}}
+		/>
+	</label>
+</div>

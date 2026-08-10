@@ -1,6 +1,13 @@
 /*
- * Stable identities for WFRP 1e core Skills which participate in the
- * Standard Tests subsystem.
+ * Stable identities for audited WFRP 1e core Skills which participate in
+ * implemented system mechanics.
+ *
+ * This file historically began with Standard Test skills only, which is why
+ * its filename is retained for compatibility. `luck` is now included because
+ * the Skill Item sheet needs one stable rulesId for the dedicated Luck
+ * subsystem. StandardTestSkillResolver still consumes only rulesIds which have
+ * entries in standard-test-skill-rules.mjs, so adding Luck here does not make
+ * it a Standard Test modifier.
  *
  * Mechanics authority:
  * - English Core Rulebook, Skills index and descriptions, printed pp. 45-58.
@@ -13,8 +20,6 @@
  *
  * These ids are language-neutral mechanical identities. They are deliberately
  * independent from Item.name, which remains editable presentation/content.
- * Only core Skills currently needed by the Standard Tests subsystem are listed
- * here. An unrelated or custom Skill may keep an empty `system.rulesId`.
  */
 
 export const STANDARD_TEST_SKILL_IDENTITIES = deepFreeze({
@@ -47,6 +52,7 @@ export const STANDARD_TEST_SKILL_IDENTITIES = deepFreeze({
 	jester: identity("Jester"),
 	juggle: identity("Juggle"),
 	linguistics: identity("Linguistics"),
+	luck: { label: "Luck / Szczęście", labelKey: "WFRP1ED.Skill.Luck" },
 	mimic: identity("Mimic"),
 	mining: identity("Mining"),
 	musicianship: identity("Musicianship"),
