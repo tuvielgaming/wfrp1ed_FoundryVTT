@@ -10,11 +10,14 @@ import { DamageResolver } from "./DamageResolver.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
 const WOUNDS_INITIALIZED_FLAG_KEY = "woundsInitialized";
+const OWNER_WOUNDS_EDIT_FLAG_KEY = "allowOwnerWoundsEdit";
 const WOUNDS_VALUE_PATH = "system.status.wounds.value";
 const WOUNDS_INITIALIZED_PATH =
 	`flags.${FLAG_SCOPE}.${WOUNDS_INITIALIZED_FLAG_KEY}`;
 const PRESERVE_WOUNDS_INITIALIZATION_OPTION =
 	"wfrp1edPreserveWoundsInitialization";
+const AUTHORIZED_DAMAGE_APPLICATION_OPTION =
+	"wfrp1edAuthorizedDamageApplication";
 
 Hooks.once("init", () => {
 	if (!game.WFRP1ED) {
@@ -36,15 +39,21 @@ Hooks.once("init", () => {
 		}),
 	});
 
+	registerWoundsPermissionHelpers();
+	document.addEventListener(
+		"click",
+		onOwnerWoundsEditToggle,
+	);
+
 	Hooks.on(
 		"preUpdateActor",
-		(actor, changes, options) => {
+		(actor, changes, options, userId) =>
 			normalizeRemainingWoundsUpdate(
 				actor,
 				changes,
 				options,
-			);
-		},
+				userId,
+			),
 	);
 
 	Hooks.on(
@@ -75,30 +84,123 @@ Hooks.once("init", () => {
 });
 
 Hooks.once("ready", () => {
-	void initializeExistingCharacterWounds();
+	if (game.user?.isGM) {
+		void initializeExistingCharacterWounds();
+	}
 });
 
-/**
- * Keep every Character remaining-Wounds write inside the legal WFRP 1e range.
- *
- * This is the common persistence boundary for sheet edits and other modules.
- * DamageApplication already calculates the same floor explicitly, but the Actor
- * update hook prevents console/forms/future features from persisting negative
- * remaining Wounds again. A real manual resource change initializes the in-play
- * Wounds state. Merely submitting the same value as part of another form edit
- * does not initialize it.
- *
- * Internal synchronization may opt out so an undamaged Actor can continue to
- * follow later profile-Wounds changes until play actually changes the resource.
- *
- * @param {Actor} actor
- * @param {Object} changes
- * @param {Object} options
- */
+function registerWoundsPermissionHelpers() {
+	Handlebars.registerHelper(
+		"wfrpCanEditRemainingWounds",
+		(actorUuid) => {
+			const actor = actorFromUuidSync(actorUuid);
+			return canUserManuallyEditRemainingWounds(
+				actor,
+				game.user,
+			);
+		},
+	);
+
+	Handlebars.registerHelper(
+		"wfrpIsGM",
+		() => Boolean(game.user?.isGM),
+	);
+
+	Handlebars.registerHelper(
+		"wfrpOwnerWoundsEditEnabled",
+		(actorUuid) => {
+			const actor = actorFromUuidSync(actorUuid);
+			return actor?.getFlag?.(
+				FLAG_SCOPE,
+				OWNER_WOUNDS_EDIT_FLAG_KEY,
+			) === true;
+		},
+	);
+
+	Handlebars.registerHelper(
+		"wfrpOwnerWoundsEditTitle",
+		(actorUuid) => {
+			const actor = actorFromUuidSync(actorUuid);
+			const enabled = actor?.getFlag?.(
+				FLAG_SCOPE,
+				OWNER_WOUNDS_EDIT_FLAG_KEY,
+			) === true;
+
+			if (game.i18n.lang === "pl") {
+				return enabled
+					? "Zablokuj właścicielowi ręczną edycję Żywotności"
+					: "Pozwól właścicielowi ręcznie edytować Żywotność";
+			}
+
+			return enabled
+				? "Disable owner manual Wounds editing"
+				: "Allow owner manual Wounds editing";
+		},
+	);
+}
+
+async function onOwnerWoundsEditToggle(event) {
+	const target = event.target?.closest?.(
+		"[data-wfrp-owner-wounds-edit-toggle]",
+	);
+
+	if (!target) {
+		return;
+	}
+
+	event.preventDefault();
+	event.stopPropagation();
+
+	if (!game.user?.isGM) {
+		ui.notifications.warn(
+			game.i18n.lang === "pl"
+				? "Tylko MG może zmienić uprawnienie do ręcznej edycji Żywotności."
+				: "Only a GM can change manual Wounds editing permission.",
+		);
+		return;
+	}
+
+	const actor = await foundry.utils.fromUuid(
+		String(target.dataset.actorUuid ?? "").trim(),
+	);
+
+	if (!(actor instanceof foundry.documents.Actor)) {
+		ui.notifications.error(
+			game.i18n.lang === "pl"
+				? "Nie znaleziono postaci dla tego ustawienia Żywotności."
+				: "The Actor for this Wounds permission was not found.",
+		);
+		return;
+	}
+
+	const enabled = actor.getFlag?.(
+		FLAG_SCOPE,
+		OWNER_WOUNDS_EDIT_FLAG_KEY,
+	) === true;
+	const next = !enabled;
+
+	await actor.setFlag(
+		FLAG_SCOPE,
+		OWNER_WOUNDS_EDIT_FLAG_KEY,
+		next,
+	);
+
+	ui.notifications.info(
+		game.i18n.lang === "pl"
+			? next
+				? `Właściciel może teraz ręcznie edytować Żywotność: ${actor.name}.`
+				: `Ręczna edycja Żywotności przez właściciela została zablokowana: ${actor.name}.`
+			: next
+				? `The owner may now manually edit Wounds: ${actor.name}.`
+				: `Owner manual Wounds editing has been disabled: ${actor.name}.`,
+	);
+}
+
 function normalizeRemainingWoundsUpdate(
 	actor,
 	changes,
 	options = {},
+	userId = null,
 ) {
 	if (
 		actor?.type !== "character" ||
@@ -115,6 +217,25 @@ function normalizeRemainingWoundsUpdate(
 
 	if (!update.present) {
 		return;
+	}
+
+	const internalSynchronization =
+		options?.[PRESERVE_WOUNDS_INITIALIZATION_OPTION] === true;
+	const authorizedDamageApplication =
+		options?.[AUTHORIZED_DAMAGE_APPLICATION_OPTION] === true;
+	const user = game.users?.get?.(userId) ?? game.user;
+
+	if (
+		!internalSynchronization &&
+		!authorizedDamageApplication &&
+		!canUserManuallyEditRemainingWounds(actor, user)
+	) {
+		ui.notifications.warn(
+			game.i18n.lang === "pl"
+				? "Ręczna edycja Żywotności jest zablokowana przez MG."
+				: "Manual Wounds editing is locked by the GM.",
+		);
+		return false;
 	}
 
 	const requested = Number(update.value);
@@ -148,7 +269,7 @@ function normalizeRemainingWoundsUpdate(
 	);
 
 	if (
-		options?.[PRESERVE_WOUNDS_INITIALIZATION_OPTION] === true ||
+		internalSynchronization ||
 		!valueChanged
 	) {
 		return;
@@ -157,17 +278,50 @@ function normalizeRemainingWoundsUpdate(
 	changes[WOUNDS_INITIALIZED_PATH] = true;
 }
 
-/**
- * Foundry v14 renamed ContextMenuEntry fields to label/visible/onClick and
- * changed the click callback signature from callback(target) to
- * onClick(event, target).
- *
- * The test-result controller predates that API and DamageChat was initially
- * implemented using the backwards-compatible aliases. Normalize WFRP entries
- * before the menu renders while preserving the legacy callback semantics.
- *
- * @param {Array<Object>} menuItems
- */
+function canUserManuallyEditRemainingWounds(
+	actor,
+	user = game.user,
+) {
+	if (
+		!(actor instanceof foundry.documents.Actor) ||
+		actor.type !== "character" ||
+		!user
+	) {
+		return false;
+	}
+
+	if (user.isGM) {
+		return true;
+	}
+
+	if (
+		!actor.testUserPermission(
+			user,
+			CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER,
+		)
+	) {
+		return false;
+	}
+
+	return actor.getFlag?.(
+		FLAG_SCOPE,
+		OWNER_WOUNDS_EDIT_FLAG_KEY,
+	) === true;
+}
+
+function actorFromUuidSync(uuid) {
+	try {
+		const actor = foundry.utils.fromUuidSync(
+			String(uuid ?? "").trim(),
+		);
+		return actor instanceof foundry.documents.Actor
+			? actor
+			: null;
+	} catch (_error) {
+		return null;
+	}
+}
+
 function normalizeContextMenuEntries(menuItems) {
 	if (!Array.isArray(menuItems)) {
 		return;
@@ -197,15 +351,6 @@ function normalizeContextMenuEntries(menuItems) {
 	}
 }
 
-/**
- * Initialize or normalize the remaining-Wounds field for existing Character
- * Actors.
- *
- * Actors which have never received explicit in-play damage remain synchronized
- * to their current Wounds characteristic maximum. Actors initialized by older
- * test builds may contain negative Wounds; WFRP 1e never persists Wounds below
- * zero, so those legacy values are normalized to zero on ready.
- */
 async function initializeExistingCharacterWounds() {
 	for (const actor of game.actors ?? []) {
 		if (actor?.type !== "character") {
@@ -226,12 +371,6 @@ async function initializeExistingCharacterWounds() {
 	}
 }
 
-/**
- * Keep an Actor which has not yet entered the in-play Wounds lifecycle at its
- * current Wounds characteristic maximum.
- *
- * @param {Actor} actor
- */
 async function synchronizeUndamagedWounds(actor) {
 	if (
 		actor?.type !== "character" ||
@@ -279,16 +418,6 @@ async function synchronizeUndamagedWounds(actor) {
 	}
 }
 
-/**
- * Normalize legacy initialized Actors created while the damage prototype still
- * represented critical overflow as negative Wounds.
- *
- * This intentionally does not recreate a historical critical value. The source
- * hit has already happened and its exact per-hit overflow may not be recoverable
- * from the current Actor total alone.
- *
- * @param {Actor} actor
- */
 async function normalizeInitializedWounds(actor) {
 	const stored = Number(actor.system?.status?.wounds?.value);
 
@@ -301,9 +430,14 @@ async function normalizeInitializedWounds(actor) {
 	}
 
 	try {
-		await actor.update({
-			[WOUNDS_VALUE_PATH]: 0,
-		});
+		await actor.update(
+			{
+				[WOUNDS_VALUE_PATH]: 0,
+			},
+			{
+				[PRESERVE_WOUNDS_INITIALIZATION_OPTION]: true,
+			},
+		);
 
 		console.info(
 			"WFRP1ED | Normalized legacy negative remaining Wounds to zero.",
