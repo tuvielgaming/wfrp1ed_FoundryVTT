@@ -20,6 +20,7 @@ const TABLE_IDS = Object.freeze({
 	"5": "wfrpCritSD000005",
 	"6+": "wfrpCritSD000006",
 });
+const MANAGED_TABLE_IDS = new Set(Object.values(TABLE_IDS));
 
 export const CORE_SUDDEN_DEATH_TABLE_UUIDS = Object.freeze(
 	Object.fromEntries(
@@ -207,6 +208,8 @@ function band(min, max, outcomes) {
 
 function coreMetadata(table) {
 	if (!(table instanceof foundry.documents.RollTable)) return null;
+	if (!MANAGED_TABLE_IDS.has(table.id)) return null;
+
 	const value = table.getFlag?.(FLAG_SCOPE, TABLE_FLAG_KEY);
 	return value && typeof value === "object" && !Array.isArray(value)
 		? value
