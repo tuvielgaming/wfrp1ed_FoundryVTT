@@ -3,37 +3,37 @@
 .wfrp1ed-classic-fate {
 	position: absolute;
 	inset: 0;
-	display: grid;
-	grid-template-columns: repeat(2, minmax(0, 1fr));
-	align-items: end;
-	gap: 22px;
-	padding: 42px 24px 14px;
-	box-sizing: border-box;
+	pointer-events: none;
 }
 
-.wfrp1ed-classic-fate__field {
-	display: block;
-	min-width: 0;
-}
-
-.wfrp1ed-classic-fate__field input {
-	width: 100%;
-	height: 40px;
+.wfrp1ed-classic-fate__input {
+	position: absolute;
+	left: 50%;
+	bottom: 10px;
+	width: 72px;
+	height: 32px;
+	transform: translateX(-50%);
 	box-sizing: border-box;
+	padding: 0;
 	border: 0;
-	border-bottom: 1px solid rgba(55, 35, 20, 0.35);
 	border-radius: 0;
-	background: rgba(255, 248, 226, 0.18);
+	outline: 0;
+	background: transparent;
 	box-shadow: none;
 	font-size: 28px;
 	font-weight: 700;
-	line-height: 40px;
+	line-height: 32px;
 	text-align: center;
+	pointer-events: auto;
 }
 
-.wfrp1ed-classic-fate__field input[readonly] {
+.wfrp1ed-classic-fate__input:focus {
+	outline: 1px dashed rgba(55, 35, 20, 0.45);
+	outline-offset: 2px;
+}
+
+.wfrp1ed-classic-fate__input[readonly] {
 	cursor: default;
-	background: transparent;
 }
 
 .wfrp1e-luck-result {
