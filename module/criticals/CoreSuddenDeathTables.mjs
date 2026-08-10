@@ -141,6 +141,13 @@ export async function ensureCoreSuddenDeathTables() {
 			},
 		);
 	}
+
+	/*
+	 * Creation above intentionally suppresses six individual directory renders.
+	 * Refresh the world RollTable collection once after materialization so the
+	 * sidebar reflects the managed Core tables immediately on this same client.
+	 */
+	game.tables?.render?.(false);
 }
 
 function buildTableData(variant) {
