@@ -6,6 +6,7 @@ import {
 	SUDDEN_DEATH_OUTCOME,
 } from "./CoreSuddenDeathTables.mjs";
 import { registerCriticalDamageIntegration } from "./CriticalDamageIntegration.mjs";
+import { registerFatalCriticalIntegration } from "./FatalCriticalIntegration.mjs";
 import {
 	CRITICAL_TABLE_PROVIDER_SOURCE,
 	CRITICAL_TABLE_ROLE,
@@ -27,6 +28,7 @@ Hooks.once("init", () => {
 	registerCoreProviders();
 	registerCoreSuddenDeathTableProtection();
 	registerCriticalDamageIntegration();
+	registerFatalCriticalIntegration();
 
 	game.WFRP1ED = Object.freeze({
 		...game.WFRP1ED,
