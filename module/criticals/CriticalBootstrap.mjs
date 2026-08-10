@@ -5,6 +5,7 @@ import {
 	registerCoreSuddenDeathTableProtection,
 	SUDDEN_DEATH_OUTCOME,
 } from "./CoreSuddenDeathTables.mjs";
+import { registerCriticalDamageIntegration } from "./CriticalDamageIntegration.mjs";
 import {
 	CRITICAL_TABLE_PROVIDER_SOURCE,
 	CRITICAL_TABLE_ROLE,
@@ -12,6 +13,7 @@ import {
 	CRITICAL_VALUE_VARIANTS,
 	CriticalTableRegistry,
 } from "./CriticalTableRegistry.mjs";
+import { SuddenDeathResolver } from "./SuddenDeathResolver.mjs";
 
 Hooks.once("init", () => {
 	if (!game.WFRP1ED) {
@@ -24,6 +26,7 @@ Hooks.once("init", () => {
 	registerCoreRoles();
 	registerCoreProviders();
 	registerCoreSuddenDeathTableProtection();
+	registerCriticalDamageIntegration();
 
 	game.WFRP1ED = Object.freeze({
 		...game.WFRP1ED,
@@ -36,6 +39,7 @@ Hooks.once("init", () => {
 				suddenDeath: SUDDEN_DEATH_OUTCOME,
 			}),
 			registry: CriticalTableRegistry,
+			suddenDeath: SuddenDeathResolver,
 		}),
 	});
 
