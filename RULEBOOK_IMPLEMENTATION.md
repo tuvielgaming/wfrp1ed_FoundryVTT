@@ -278,6 +278,136 @@ The current `experience` object contains `value`, `total`, `spent`, and `log`. T
 
 ---
 
+# Section 3 — Movement Procedures: Zeskok, Upadek, Skok
+
+## Sources verified
+
+### English Core Rulebook
+
+- **The Gamesmaster — Jumping, Falling, Leaping, Climbing**, printed page 75.
+- **The Gamesmaster — Standard Tests**, printed page 66, where Fall, Jump, and Leap refer to Movement and Acrobatics.
+
+### Polish Core Rulebook
+
+- **Mistrz Gry — Zeskok, Upadek, Skok, Wspinaczka**, printed page 75.
+
+The editions agree mechanically on the audited procedures. The Polish edition uses metric equivalents and provides the official terminology mapping:
+
+| English procedure | Polish procedure | Meaning |
+|---|---|---|
+| Jumping | Zeskok | controlled vertical descent |
+| Falling | Upadek | uncontrolled vertical descent |
+| Leaping | Skok | horizontal jump |
+
+This distinction is canonical for the system. `Zeskok` must not be presented as `Skok`, and a failed horizontal `Skok` leads to an `Upadek`, not another `Zeskok`.
+
+## Zeskok / Jumping
+
+Zeskok is a deliberate, controlled descent in which the character expects to land on their feet. An accidental descent or a character being pushed is an Upadek instead.
+
+Mechanical procedure:
+
+1. Determine vertical distance.
+2. Round the distance **up** to the next whole yard/metre.
+3. Roll `1d6`.
+4. Acrobatics contributes `+2` to that die result.
+5. Subtract the effective die result from the rounded distance.
+6. If the result is zero or less, no Wounds are suffered.
+7. A positive result is the number of Wounds suffered.
+8. These Wounds ignore both Armour and Toughness modifiers.
+9. If any Wounds are suffered, there is a 50% chance the character drops everything held.
+10. The procedure occupies a full round.
+
+Canonical calculation:
+
+```text
+zeskokDamage = max(0, ceil(height) - (1d6 + reductionDieBonuses))
+```
+
+The system does not hardcode Acrobatics by Item name. Its audited +2 contribution is represented through the stable Active Effect target:
+
+```text
+procedure.movement.jump.reductionDie
+```
+
+## Upadek / Falling
+
+Upadek is uncontrolled descent. It uses the same damage procedure as Zeskok except the fall distance is treated as **double** before the d6 reduction is applied.
+
+Acrobatics again contributes `+2` to the d6 result, and suffering Wounds again causes the 50% held-item drop check.
+
+Canonical calculation:
+
+```text
+fallDamage = max(0, 2 * ceil(height) - (1d6 + reductionDieBonuses))
+```
+
+A standalone Upadek procedure is not yet exposed by the system. When a horizontal Skok fails, the current implementation correctly leaves the actual fall height to the GM/scene rather than inventing it from the attempted gap distance.
+
+## Skok / Leaping
+
+Skok is a horizontal leap.
+
+With at least two yards/metres of run-up:
+
+```text
+distance = max(1, 2 * Movement - 1d6 + leapBonuses)
+```
+
+Without sufficient run-up:
+
+```text
+distance = max(1, 2 * Movement - 2d6 + leapBonuses)
+```
+
+Acrobatics contributes `+2` yards/metres to the achieved leap distance. The system represents this through the stable target:
+
+```text
+procedure.movement.leap.distance
+```
+
+If the achieved distance is insufficient, the character falls. The actual fall height is situational and must be supplied from the scene/GM before Upadek damage can be resolved.
+
+## Current implementation comparison
+
+`module/tests/MovementStandardTest.mjs` already implements the audited Zeskok and Skok calculations without hardcoding Skill names.
+
+Zeskok now integrates with the generic damage workflow only when it produces positive Wounds:
+
+```text
+MovementStandardTest
+→ DamagePacket
+→ DamageResolver
+→ existing movement ChatMessage damage flag
+→ explicit Zastosuj obrażenia
+→ DamageApplication
+```
+
+The packet declares:
+
+```text
+Armour: ignore
+Toughness: ignore
+```
+
+which matches the rulebook. Calculation still does **not** mutate Actor Wounds automatically. The existing movement result card receives the damage state and uses the common GM/target-OWNER application transaction.
+
+No damage packet is attached when Zeskok causes zero Wounds.
+
+## Status
+
+| Area | Status |
+|---|---|
+| English movement mechanics | Verified |
+| Polish terminology/mechanics comparison | Verified |
+| Zeskok calculation | Implemented; previously runtime-tested |
+| Zeskok generic damage integration | Implemented; Foundry v14 runtime test required |
+| Skok calculation | Implemented; previously runtime-tested |
+| Failed Skok → situational fall handling | Implemented as GM/scene decision |
+| Standalone Upadek procedure | Not implemented |
+
+---
+
 # Next audit section
 
 **Classic-sheet field contract:** inspect the original Polish character-sheet scans and every active overlay binding for Characteristics, Fate, Wounds, Experience, and career advances.
