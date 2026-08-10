@@ -85,9 +85,9 @@ export function registerCoreSuddenDeathTableProtection() {
 		"preDeleteTableResult",
 	]) {
 		Hooks.on(hook, (result, ...args) => {
-			const options = hook === "preUpdateTableResult"
-				? args[1]
-				: args[0];
+			const options = hook === "preDeleteTableResult"
+				? args[0]
+				: args[1];
 			return protectCoreDocument(result?.parent, options);
 		});
 	}
