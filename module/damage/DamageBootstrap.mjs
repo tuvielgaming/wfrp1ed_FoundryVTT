@@ -1,6 +1,7 @@
 import { DamageApplication } from "./DamageApplication.mjs";
 import { DamageChat } from "./DamageChat.mjs";
 import {
+	DAMAGE_CRITICAL_MODE,
 	DAMAGE_MITIGATION_POLICY,
 	DamagePacket,
 } from "./DamagePacket.mjs";
@@ -26,6 +27,7 @@ Hooks.once("init", () => {
 			Application: DamageApplication,
 			Chat: DamageChat,
 			mitigationPolicy: DAMAGE_MITIGATION_POLICY,
+			criticalMode: DAMAGE_CRITICAL_MODE,
 		}),
 	});
 
@@ -101,17 +103,30 @@ function normalizeContextMenuEntries(menuItems) {
 }
 
 /**
- * Initialize the formerly hidden remaining-Wounds field for existing Character
- * Actors. Before the damage workflow existed the schema default was 0 and the
- * Classic sheet never exposed that value, so it did not represent an actual
- * wounded state.
+ * Initialize or normalize the remaining-Wounds field for existing Character
+ * Actors.
  *
- * The initialization flag deliberately remains false here. It becomes true
- * only when the Actor receives explicit in-play damage, allowing an undamaged
- * Actor's remaining Wounds to continue following profile changes beforehand.
+ * Actors which have never received explicit in-play damage remain synchronized
+ * to their current Wounds characteristic maximum. Actors initialized by older
+ * test builds may contain negative Wounds; WFRP 1e never persists Wounds below
+ * zero, so those legacy values are normalized to zero on ready.
  */
 async function initializeExistingCharacterWounds() {
 	for (const actor of game.actors ?? []) {
+		if (actor?.type !== "character") {
+			continue;
+		}
+
+		if (
+			actor.getFlag?.(
+				FLAG_SCOPE,
+				WOUNDS_INITIALIZED_FLAG_KEY,
+			) === true
+		) {
+			await normalizeInitializedWounds(actor);
+			continue;
+		}
+
 		await synchronizeUndamagedWounds(actor);
 	}
 }
@@ -151,11 +166,55 @@ async function synchronizeUndamagedWounds(actor) {
 
 	try {
 		await actor.update({
-			"system.status.wounds.value": maximum,
+			"system.status.wounds.value": Math.max(0, maximum),
 		});
 	} catch (error) {
 		console.error(
 			"WFRP1ED | Unable to synchronize Character remaining Wounds.",
+			{
+				actor: actor.uuid,
+				error,
+			},
+		);
+	}
+}
+
+/**
+ * Normalize legacy initialized Actors created while the damage prototype still
+ * represented critical overflow as negative Wounds.
+ *
+ * This intentionally does not recreate a historical critical value. The source
+ * hit has already happened and its exact per-hit overflow may not be recoverable
+ * from the current Actor total alone.
+ *
+ * @param {Actor} actor
+ */
+async function normalizeInitializedWounds(actor) {
+	const stored = Number(actor.system?.status?.wounds?.value);
+
+	if (
+		!Number.isFinite(stored) ||
+		!Number.isInteger(stored) ||
+		stored >= 0
+	) {
+		return;
+	}
+
+	try {
+		await actor.update({
+			"system.status.wounds.value": 0,
+		});
+
+		console.info(
+			"WFRP1ED | Normalized legacy negative remaining Wounds to zero.",
+			{
+				actor: actor.uuid,
+				previousWounds: stored,
+			},
+		);
+	} catch (error) {
+		console.error(
+			"WFRP1ED | Unable to normalize legacy negative remaining Wounds.",
 			{
 				actor: actor.uuid,
 				error,
