@@ -5,7 +5,7 @@ import {
 
 export const CORE_SUDDEN_DEATH_PROVIDER_ID =
 	"wfrp1ed.core.suddenDeath";
-export const CORE_SUDDEN_DEATH_TABLE_VERSION = 1;
+export const CORE_SUDDEN_DEATH_TABLE_VERSION = 2;
 
 const MAINTENANCE_OPTION = "wfrp1edCoreCriticalMaintenance";
 const FLAG_SCOPE = "wfrp1ed";
@@ -21,6 +21,27 @@ const TABLE_IDS = Object.freeze({
 	"6+": "wfrpCritSD000006",
 });
 const MANAGED_TABLE_IDS = new Set(Object.values(TABLE_IDS));
+
+const PRESENTATION = Object.freeze({
+	en: Object.freeze({
+		tableName: (variant) => `WFRP1ED Core — Sudden Death +${variant}`,
+		description:
+			"System-managed WFRP 1e Core fallback. English Combat pp. 124-125. Duplicate this table and configure the copy as an override for house rules.",
+		noEffect: "No Effect",
+		killed: "Killed",
+		protectedWarning:
+			"This is a system-managed WFRP 1e Core table. Duplicate it and select the copy as an override for house rules.",
+	}),
+	pl: Object.freeze({
+		tableName: (variant) => `WFRP1ED Core — Nagła Śmierć +${variant}`,
+		description:
+			"Zarządzana przez system domyślna tabela WFRP 1e Core. Walka, str. 125. Utwórz kopię i ustaw ją jako nadpisanie, aby użyć zasad własnych.",
+		noEffect: "Bez efektu",
+		killed: "Śmierć",
+		protectedWarning:
+			"To jest zarządzana przez system tabela WFRP 1e Core. Utwórz kopię i ustaw ją jako nadpisanie, aby użyć zasad własnych.",
+	}),
+});
 
 export const CORE_SUDDEN_DEATH_TABLE_UUIDS = Object.freeze(
 	Object.fromEntries(
@@ -101,9 +122,15 @@ export function registerCoreSuddenDeathTableProtection() {
  * text-only source edits, so these six system-managed world RollTables are
  * materialized with stable IDs. They are read-only; a GM may duplicate one and
  * select the duplicate as a world override without modifying the Core fallback.
+ *
+ * Presentation is materialized in the active GM language. Structured outcome
+ * flags remain language-neutral. If the language changes, only the six reserved
+ * Core tables are rebuilt; GM-created copies are never touched.
  */
 export async function ensureCoreSuddenDeathTables() {
 	if (!game.user?.isGM) return;
+
+	const language = presentationLanguage();
 
 	for (const variant of CRITICAL_VALUE_VARIANTS) {
 		const id = TABLE_IDS[variant];
@@ -122,7 +149,8 @@ export async function ensureCoreSuddenDeathTables() {
 			if (
 				metadata.role === CRITICAL_TABLE_ROLE.SUDDEN_DEATH &&
 				metadata.variant === variant &&
-				Number(metadata.version) === CORE_SUDDEN_DEATH_TABLE_VERSION
+				Number(metadata.version) === CORE_SUDDEN_DEATH_TABLE_VERSION &&
+				metadata.language === language
 			) {
 				continue;
 			}
@@ -134,7 +162,7 @@ export async function ensureCoreSuddenDeathTables() {
 		}
 
 		await foundry.documents.RollTable.create(
-			buildTableData(variant),
+			buildTableData(variant, language),
 			{
 				keepId: true,
 				render: false,
@@ -151,18 +179,19 @@ export async function ensureCoreSuddenDeathTables() {
 	game.tables?.render?.(false);
 }
 
-function buildTableData(variant) {
+function buildTableData(variant, language) {
 	const variantIndex = CRITICAL_VALUE_VARIANTS.indexOf(variant);
 
 	if (variantIndex < 0) {
 		throw new Error(`Unknown Sudden Death critical variant '${variant}'.`);
 	}
 
+	const presentation = PRESENTATION[language];
+
 	return {
 		_id: TABLE_IDS[variant],
-		name: `WFRP1ED Core — Sudden Death / Nagła Śmierć +${variant}`,
-		description:
-			"System-managed WFRP 1e Core fallback. English Combat pp. 124-125; Polish Walka p. 125. Duplicate this table and configure the copy as an override for house rules.",
+		name: presentation.tableName(variant),
+		description: presentation.description,
 		formula: "1d100",
 		replacement: true,
 		displayRoll: true,
@@ -175,6 +204,7 @@ function buildTableData(variant) {
 					role: CRITICAL_TABLE_ROLE.SUDDEN_DEATH,
 					variant,
 					version: CORE_SUDDEN_DEATH_TABLE_VERSION,
+					language,
 				},
 			},
 		},
@@ -184,8 +214,8 @@ function buildTableData(variant) {
 			return {
 				type: "text",
 				text: outcome === SUDDEN_DEATH_OUTCOME.KILLED
-					? "Killed / Śmierć"
-					: "No Effect / Bez efektu",
+					? presentation.killed
+					: presentation.noEffect,
 				range: [...entry.range],
 				weight: 1,
 				drawn: false,
@@ -206,6 +236,14 @@ function band(min, max, outcomes) {
 	});
 }
 
+function presentationLanguage() {
+	return String(game.i18n.lang ?? "en")
+		.toLowerCase()
+		.startsWith("pl")
+		? "pl"
+		: "en";
+}
+
 function coreMetadata(table) {
 	if (!(table instanceof foundry.documents.RollTable)) return null;
 	if (!MANAGED_TABLE_IDS.has(table.id)) return null;
@@ -221,9 +259,7 @@ function protectCoreDocument(table, options = {}) {
 	if (!coreMetadata(table)) return;
 
 	ui.notifications.warn(
-		game.i18n.lang === "pl"
-			? "To jest zarządzana przez system tabela WFRP 1e Core. Utwórz kopię i ustaw ją jako nadpisanie, aby użyć zasad własnych."
-			: "This is a system-managed WFRP 1e Core table. Duplicate it and select the copy as an override for house rules.",
+		PRESENTATION[presentationLanguage()].protectedWarning,
 	);
 	return false;
 }
