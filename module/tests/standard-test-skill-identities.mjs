@@ -93,7 +93,7 @@ function identity(englishLabel) {
 function localizedIdentity(englishLabel, polishLabel) {
 	return {
 		get label() {
-			return game?.i18n?.lang === "pl" ? polishLabel : englishLabel;
+			return globalThis.game?.i18n?.lang === "pl" ? polishLabel : englishLabel;
 		},
 		labelKey: `WFRP1ED.Skill.${skillKey(englishLabel)}`,
 	};
