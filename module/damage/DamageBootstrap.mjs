@@ -79,6 +79,10 @@ Hooks.once("init", () => {
 			if (woundsProfileChanged(changes)) {
 				void synchronizeUndamagedWounds(actor);
 			}
+
+			if (ownerWoundsEditPermissionChanged(changes)) {
+				void refreshRenderedActorSheet(actor);
+			}
 		},
 	);
 });
@@ -178,6 +182,16 @@ async function onOwnerWoundsEditToggle(event) {
 		OWNER_WOUNDS_EDIT_FLAG_KEY,
 	) === true;
 	const next = !enabled;
+	const explicitOwners = explicitPlayerOwners(actor);
+
+	if (next && explicitOwners.length === 0) {
+		ui.notifications.warn(
+			game.i18n.lang === "pl"
+				? `Postać ${actor.name} nie ma jawnie przypisanego właściciela-gracza. Najpierw ustaw konkretnemu graczowi poziom Właściciel w uprawnieniach postaci.`
+				: `${actor.name} has no explicitly assigned player owner. Assign a specific player OWNER permission on the Actor first.`,
+		);
+		return;
+	}
 
 	await actor.setFlag(
 		FLAG_SCOPE,
@@ -185,13 +199,18 @@ async function onOwnerWoundsEditToggle(event) {
 		next,
 	);
 
+	const ownerNames = explicitOwners
+		.map((user) => user.name)
+		.filter(Boolean)
+		.join(", ");
+
 	ui.notifications.info(
 		game.i18n.lang === "pl"
 			? next
-				? `Właściciel może teraz ręcznie edytować Żywotność: ${actor.name}.`
+				? `Ręczna edycja Żywotności odblokowana dla: ${ownerNames}.`
 				: `Ręczna edycja Żywotności przez właściciela została zablokowana: ${actor.name}.`
 			: next
-				? `The owner may now manually edit Wounds: ${actor.name}.`
+				? `Manual Wounds editing enabled for: ${ownerNames}.`
 				: `Owner manual Wounds editing has been disabled: ${actor.name}.`,
 	);
 }
@@ -294,12 +313,7 @@ function canUserManuallyEditRemainingWounds(
 		return true;
 	}
 
-	if (
-		!actor.testUserPermission(
-			user,
-			CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER,
-		)
-	) {
+	if (!isExplicitPlayerOwner(actor, user)) {
 		return false;
 	}
 
@@ -307,6 +321,35 @@ function canUserManuallyEditRemainingWounds(
 		FLAG_SCOPE,
 		OWNER_WOUNDS_EDIT_FLAG_KEY,
 	) === true;
+}
+
+function isExplicitPlayerOwner(actor, user) {
+	if (
+		!(actor instanceof foundry.documents.Actor) ||
+		!user ||
+		user.isGM
+	) {
+		return false;
+	}
+
+	const ownership =
+		actor.ownership ??
+		actor._source?.ownership ??
+		{};
+	const level = Number(ownership?.[user.id]);
+
+	return level ===
+		CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER;
+}
+
+function explicitPlayerOwners(actor) {
+	if (!(actor instanceof foundry.documents.Actor)) {
+		return [];
+	}
+
+	return [...(game.users ?? [])].filter((user) =>
+		isExplicitPlayerOwner(actor, user),
+	);
 }
 
 function actorFromUuidSync(uuid) {
@@ -457,6 +500,26 @@ async function normalizeInitializedWounds(actor) {
 	}
 }
 
+async function refreshRenderedActorSheet(actor) {
+	const sheet = actor?.sheet;
+
+	if (!sheet?.rendered) {
+		return;
+	}
+
+	try {
+		await sheet.render();
+	} catch (error) {
+		console.error(
+			"WFRP1ED | Unable to refresh Character sheet after Wounds permission change.",
+			{
+				actor: actor.uuid,
+				error,
+			},
+		);
+	}
+}
+
 function readUpdateValue(changes, path) {
 	if (Object.hasOwn(changes, path)) {
 		return {
@@ -506,4 +569,22 @@ function woundsProfileChanged(changes) {
 	return Object.keys(changes).some((key) =>
 		key.startsWith("system.characteristics.w."),
 	);
+}
+
+function ownerWoundsEditPermissionChanged(changes) {
+	if (!changes || typeof changes !== "object") {
+		return false;
+	}
+
+	const path =
+		`flags.${FLAG_SCOPE}.${OWNER_WOUNDS_EDIT_FLAG_KEY}`;
+
+	if (Object.hasOwn(changes, path)) {
+		return true;
+	}
+
+	return foundry.utils.getProperty(
+		changes,
+		path,
+	) !== undefined;
 }
