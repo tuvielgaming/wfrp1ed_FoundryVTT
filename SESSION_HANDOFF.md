@@ -12,54 +12,52 @@ GitHub `master` is the implementation source of truth. Fetch the latest exact fi
 
 ---
 
-# Current confirmed checkpoint
+# Current session checkpoint
 
-The following slices are live-tested and confirmed in Foundry v14:
+The session ended immediately after correcting the first Fate-sheet and Luck/Szczęście runtime defects reported by the user.
 
-1. Skill + Active Effect persistence/adjudication.
-2. Duplicate Skill prevention.
-3. Generic damage packet + explicit ChatMessage application.
-4. Full damage application permission matrix: GM, target OWNER, non-owner denial.
-5. Double-application protection.
-6. Remaining/max Wounds display on the Classic sheet.
-7. Wounds floor at zero during new damage application.
-8. Manual current-Wounds editing on the Classic sheet.
-9. Manual Wounds permission split:
-   - GM always allowed;
-   - explicit Actor OWNER locked by default;
-   - GM can temporarily unlock/re-lock OWNER manual editing;
-   - non-owner remains blocked;
-   - normal OWNER `Zastosuj obrażenia` remains independent from the manual-edit lock.
-10. Bilingual WFRP 1e movement audit for Zeskok / Upadek / Skok.
-11. Zeskok integrated into the generic damage workflow and runtime-confirmed.
-
-Latest confirmed Wounds-permission fixes:
+The last code commit before this handoff update is:
 
 ```text
-111eae7551cfefbdbd804af7c9d54141bd562602
-Restrict temporary Wounds editing to explicit Actor owners
-
-40e4755c053f35f20c066b114ddf4d98d8d47950
-Keep Wounds permission control inside Classic cell
-
-78732be5ad442e3aeca1dfeace7cfce1cc0acbbe
-Refine Classic Wounds lock positioning and color
+af6a6b9bdf62dd29e1ce6dc2475a74d84bf6af02
 ```
 
-The user confirmed the final behavior works as intended.
+That code is on `master`.
+
+The user has **not yet runtime-tested this corrected build**. The next session must begin with a clean Foundry restart and verification of the Fate + Luck fixes described below.
+
+Do not assume the corrected Fate/Luck behavior is confirmed until the user tests it.
 
 ---
 
-# IMPORTANT RULE CORRECTION — Wounds never become negative
+# Runtime-confirmed foundations
+
+The following areas were already live-tested and confirmed in Foundry v14 before the current Fate/Luck work:
+
+1. Skill + Active Effect persistence/adjudication.
+2. Duplicate Skill prevention.
+3. Generic damage packet + explicit ChatMessage damage application.
+4. Damage permission matrix: GM, target OWNER, non-owner denial.
+5. Double-application protection.
+6. Classic-sheet remaining/max Wounds display.
+7. Wounds floor at zero during damage application.
+8. Manual current-Wounds editing and its dedicated permission lock.
+9. Bilingual WFRP 1e movement audit for Zeskok / Upadek / Skok.
+10. Zeskok integrated into generic damage and runtime-confirmed.
+11. Sudden Death critical resolution from an explicit ChatMessage action.
+12. Sudden Death result publication as a separate roll-bearing chat card.
+13. Critical-resolution permissions: GM OR user who created/caused the damage message.
+14. Fatal Sudden Death result produces the expected `Śmierć / Killed` outcome.
+
+The user explicitly confirmed the explicit Sudden Death critical flow worked before Fate/Luck work began.
+
+---
+
+# Wounds rule — confirmed
 
 The English and Polish WFRP 1e Core Rulebooks were checked directly.
 
-Verified sources:
-
-- English Core Rulebook — Combat, Critical Hits / Critical Hit Chart, printed page 122.
-- Polish Core Rulebook — Walka, Trafienia krytyczne / Tabela trafień krytycznych, printed page 122.
-
-Canonical application rule:
+Canonical damage application remains:
 
 ```text
 woundsAfter = max(0, woundsBefore - damage)
@@ -71,206 +69,293 @@ Rules conclusions:
 - remaining Wounds/Żywotność stop at `0`;
 - Wounds never become negative;
 - excess damage from one hit becomes that hit's `criticalValue`;
-- once at zero Wounds, later damage produces new per-hit critical values rather than accumulating negative Wounds.
+- later damage at zero Wounds creates a new per-hit critical value rather than accumulating negative Wounds.
 
-Current runtime implementation stores:
-
-```text
-criticalValue
-criticalMode
-```
-
-in the authoritative damage-application transaction.
-
-`DamagePacket` currently supports critical routing values:
-
-```text
-unspecified
-detailed
-sudden-death
-```
-
-Legacy Actors created during the earlier negative-Wounds prototype are normalized toward the zero floor; no historical critical value is fabricated from an old negative total.
-
-Key commits:
-
-```text
-7281a079b642bc5a76098dfa02adf20b01e35272
-Correct Wounds floor and critical-hit overflow rules
-
-062ed05
-Add explicit critical routing to damage packets
-
-4413fbe
-Clamp Wounds and preserve critical overflow
-
-3e98e91
-Normalize legacy negative Wounds and expose critical modes
-```
+Do not reintroduce negative Wounds as critical-state storage.
 
 ---
 
-# Manual Wounds editing contract — CONFIRMED
+# Sudden Death critical flow — runtime-confirmed before current session end
 
-The Classic `Żyw` cell displays current/max Wounds, e.g.:
-
-```text
-6/6
-4/6
-0/6
-```
-
-The persistent current value is:
+Relevant historical commit:
 
 ```text
-system.status.wounds.value
+6a9a107b33a2eeeaed1d7ff4d60a8cc64a7982cd
+Resolve criticals from dedicated chat action
 ```
 
-The maximum is derived from the current Wounds characteristic.
-
-Current values are clamped to:
+Current intended flow:
 
 ```text
-0 <= remaining Wounds <= maximum Wounds
+damage applied
+→ pending Sudden Death state on damage card
+→ explicit "Rozstrzygnij trafienie krytyczne"
+→ real 1d100 roll by clicking user
+→ Actor-authoritative critical resolution persisted
+→ separate critical result ChatMessage
 ```
 
-Manual editing permission is deliberately separate from normal Actor ownership gameplay permissions.
-
-Per-Actor flag:
+Display convention:
 
 ```text
-flags.wfrp1ed.allowOwnerWoundsEdit
+Nagła Śmierć +6
 ```
 
-Rules:
+Raw overflow values above 6 are normalized to the printed `+6` tier for presentation. Do not show a second `Tabela +6+` or raw overflow metadata.
 
-- GM always receives the editable current-Wounds field.
-- A non-GM must be an **explicitly assigned OWNER** on that Actor and the flag must be `true`.
-- `default` ownership or broad world permissions do not grant the temporary manual-edit privilege.
-- Non-owners remain blocked.
-- GM lock/unlock changes re-render already-open Character sheets on connected clients.
-- The GM lock icon is positioned inside the Żyw cell and uses a light-crimson accent.
-- Authorized `DamageApplication` bypasses only the manual-edit lock after independently validating normal GM/OWNER damage permission.
+Permissions:
 
-Do not merge the manual-edit permission with Foundry user role/GM permissions.
+- damage application: GM OR target Actor OWNER;
+- critical resolution: GM OR source/damage-message creator;
+- those are deliberately separate permissions.
 
 ---
 
-# Skill + Active Effect subsystem — CONFIRMED
+# Fatal critical + Fate intervention — implemented, partially tested
 
-## Persistence
+Initial fatal/Fate implementation landed before the current Fate-sheet UI fixes.
 
-Confirmed:
-
-- WFRP rules authored on a world Skill survive a full Foundry restart;
-- dragging the world Skill onto a Character preserves Active Effect rule setup;
-- Actor-embedded Skill rules survive restart;
-- Standard Test dialogs discover copied/persisted effects.
-
-Durable WFRP rule descriptors are mirrored into:
+Relevant earlier code head:
 
 ```text
-ActiveEffect.flags.wfrp1ed.ruleChanges
+a85bd23bcb1aaecf14c91908d17853c1e9a30689
 ```
 
-`system.changes` remains as a compatibility/runtime mirror.
-
-Key commits:
+Main file:
 
 ```text
-8a86af4893b5a0da54669ebb73f2c741de39fe8a
-Resolve WFRP rules from persisted Active Effect flags
-
-d1cbfc7b702fff2fd25fc0fc427a0cc42e8edf0e
-Persist Skill WFRP rules in Active Effect flags
+module/criticals/FatalCriticalIntegration.mjs
 ```
 
-## Duplicate Skill prevention
-
-Confirmed identity rule:
-
-- mapped/core Skill: same `system.rulesId` + same `system.specialisation` = duplicate;
-- custom/unmapped Skill: same normalized Item name + same specialisation = duplicate;
-- different specialisations remain legal.
-
-Final creation guard uses `Wfrp1edItem._preCreateOperation`.
-
-Key commit:
+Behavior:
 
 ```text
-df261fe53307860aebc0e2b3be1d3e2343585d03
-Enforce Skill uniqueness at Item creation operation
+fatal Sudden Death result
+→ Actor receives Foundry defeated/dead status overlay
+→ eligible GM/OWNER may spend one Fate Point
+→ original fatal critical result remains historically "killed"
+→ separate Fate intervention flag records that death was averted
+→ Fate decreases by exactly 1
+→ defeated/dead status is removed
 ```
 
-Historical duplicates are not auto-deleted because they may contain different authored effects.
+The fatal-critical implementation does **not** heal Wounds. A character may remain at 0 Wounds after spending Fate. This is intentional until a separate recovery/injury rule requires otherwise.
 
-## Per-roll and post-roll adjudication
+Permissions:
 
-Confirmed:
+- attacker/source user may resolve the critical if authorized by the critical flow;
+- only GM OR target Actor OWNER may spend the victim's Fate;
+- unrelated users do not see the target's Fate count/action.
 
-- contextual/manual effects can be selected per roll;
-- automatic effects are selected by default;
-- roll selection does not mutate persistent ActiveEffect state;
-- unchecked candidates are snapshotted for GM post-roll adjudication;
-- GM toggling recalculates target/modifier/margin only and never rerolls;
-- target-dependent pending tests preserve effect selections.
-
-Pending-target preservation commit:
-
-```text
-64c847e0039629df688306f827fdd53677aceda4
-```
-
-Active Effects remain system-wide WFRP rule descriptors, not Skill-only. Future weapons, armour, equipment, spells, diseases, traits/talents and other rule-bearing Items should consume the same stable rule-target language.
+The user previously observed a fatal critical card showing that Fate had been spent and death averted, so the existing intervention path itself had already executed in runtime. The missing/incorrect part was the editable Fate resource on the Character sheet.
 
 ---
 
-# Generic damage subsystem — CONFIRMED FOUNDATION
+# IMPORTANT RULE CORRECTION — Fate Points are one resource
 
-Architecture:
+The user correctly identified that WFRP 1e does **not** use a separate current/max Fate Points concept on the character sheet.
+
+The Classic sheet must expose exactly one value:
 
 ```text
-damage-producing procedure/action
-→ DamagePacket
-→ DamageResolver
-→ DamageResolution
-→ explicit ChatMessage Zastosuj obrażenia
-→ DamageApplication
-→ Actor remaining Wounds + application transaction
+PUNKTY PRZEZNACZENIA
+[ value ]
 ```
 
-Damage calculation and damage application are deliberately separate. Calculating damage never silently mutates an Actor.
+No visible `Current` / `Maximum` distinction belongs in the WFRP 1e UI.
+
+## Transitional internal storage caveat
+
+`CharacterData` still currently stores Fate as:
+
+```text
+system.status.fate.value
+system.status.fate.max
+```
+
+and still has joint validation which rejects:
+
+```text
+value > max
+```
+
+This is a **legacy/transitional internal model**, not the intended WFRP 1e rule/UI contract.
+
+To avoid a risky Actor migration at the end of this session, the new sheet integration writes both values atomically to the same number:
+
+```text
+system.status.fate.value = N
+system.status.fate.max   = N
+```
+
+This keeps existing Actors valid while presenting only the authentic single Fate resource.
+
+Future cleanup should migrate CharacterData to a true single Fate value, but only as a dedicated migration slice after runtime confirmation of the current fix.
+
+---
+
+# Fate sheet correction — current untested build
 
 Current files:
 
 ```text
-module/damage/DamagePacket.mjs
-module/damage/DamageResolution.mjs
-module/damage/DamageResolver.mjs
-module/damage/DamageApplication.mjs
-module/damage/DamageChat.mjs
-module/damage/DamageBootstrap.mjs
+templates/actors/classic/parts/fate.hbs
+css/sheets/classic-status.css
+module/fate/FateSheetIntegration.mjs
 ```
 
-Runtime API:
+`system.json` now loads:
 
-```js
-game.WFRP1ED.damage
+```text
+module/fate/FateSheetIntegration.mjs
 ```
 
-`DamageResolver` currently resolves packets only when Armour and Toughness are explicitly ignored. Normal combat mitigation must not be invented before the corresponding bilingual combat audit.
+The corrected Classic page-2 Fate overlay:
 
-## Damage application permission matrix — CONFIRMED
+- shows one numeric field only;
+- has no added parchment/background fill;
+- has no decorative underline;
+- is centered inside the printed `PUNKTY PRZEZNACZENIA` box;
+- is GM-editable and player read-only for direct manual editing;
+- synchronizes transitional `value/max` internally in one Actor update.
 
-- GM can apply damage.
-- Target Actor OWNER can apply damage.
-- OWNER can apply damage from a GM-authored ChatMessage without owning the ChatMessage.
-- Non-owner does not receive the action.
-- Same packet cannot normally be applied twice.
+The prior broken build produced:
 
-Actor-side application transaction is authoritative because Actor ownership and ChatMessage ownership may differ.
+```text
+DataModelValidationError:
+Current Fate Points cannot exceed maximum Fate Points.
+```
 
-Foundry v14 context menu compatibility uses:
+when editing the visible Fate value. The current integration is specifically intended to eliminate that failure.
+
+## First Fate test next session
+
+After a full Foundry restart:
+
+1. Open a Character Classic sheet, page 2.
+2. Verify exactly one numeric Fate field is visible and aligned within the printed box.
+3. As GM change it directly, e.g. `1 → 2`.
+4. Confirm no DataModelValidationError occurs.
+5. Cause a fatal Sudden Death critical.
+6. Verify defeated/dead overlay is applied.
+7. Spend one Fate Point.
+8. Verify Fate decreases by one and defeated/dead status disappears.
+9. Verify Wounds remain unchanged (normally 0).
+
+---
+
+# Luck / Szczęście rule audit — confirmed from Core Rulebooks
+
+Official terminology:
+
+```text
+English: Luck
+Polish:  Szczęście
+stable rulesId: luck
+```
+
+Do **not** call this resource `Fortune` and do not resurrect the obsolete generic `status.fortune` field.
+
+The mechanic belongs to the Skill `Luck / Szczęście`, not to a universal Fortune-point resource.
+
+Verified core behavior:
+
+- daily allowance is `1d6` uses;
+- allowance is secret from the player;
+- player learns it is exhausted only when a later attempted use fails;
+- `d100/K100` may be changed by `±10`;
+- `d6/K6` may be changed by `±1`;
+- the skill may be used after seeing the original roll.
+
+English-vs-Polish timing difference:
+
+- English rule: secret `1d6` is rolled on the first attempted use during that game day;
+- Polish rule: GM rolls the secret `K6` at the beginning of the day.
+
+Project policy remains:
+
+- English Core Rulebook controls mechanics;
+- Polish Core Rulebook controls Polish terminology;
+- significant edition/translation differences are documented, not silently merged.
+
+Current default workflow therefore uses first-attempt initialization, while the GM also receives a manual `roll allowance now` action to support the Polish start-of-day timing.
+
+---
+
+# Luck Skill identity — corrected
+
+Current stable identity remains:
+
+```text
+system.rulesId = "luck"
+```
+
+The Skill Item Rules Link must display **one localized name only**:
+
+```text
+Polish UI: Szczęście
+English UI: Luck
+```
+
+It must **not** display:
+
+```text
+Luck / Szczęście
+```
+
+Current file:
+
+```text
+module/tests/standard-test-skill-identities.mjs
+```
+
+The identity stays language-neutral mechanically; only its presentation label changes with locale.
+
+---
+
+# Luck/Szczęście integration — current untested build
+
+The first implementation in:
+
+```text
+module/luck/LuckBootstrap.mjs
+```
+
+was replaced after runtime defects were reported.
+
+The old file is removed from the manifest and repository.
+
+Current integration:
+
+```text
+module/luck/LuckIntegration.mjs
+```
+
+`system.json` loads it directly.
+
+## Why the first runtime test failed
+
+The user created/edited `Szczęście` on an Ork token Actor and correctly set its Rules Link to Luck/Szczęście, then made a Ballistic Skill roll.
+
+Right-click showed no Luck action.
+
+The key defect was Actor resolution: the first implementation preferred the world Actor prototype before the Scene Token Actor. For an unlinked/synthetic token, the token Actor may own a different embedded Skill set than its world prototype.
+
+The corrected resolver now uses:
+
+```text
+ChatMessage speaker
+→ Scene
+→ Token
+→ token.actor first
+→ world Actor only as fallback
+```
+
+That is required for token-specific Skills and synthetic Actors.
+
+## Foundry v14 context-menu contract
+
+The corrected implementation uses the v14-style entry contract already proven by the damage/critical subsystems:
 
 ```text
 label
@@ -278,260 +363,226 @@ visible
 onClick(event, target)
 ```
 
-Confirmed callback adapter fix:
+Do not revert Luck context options to legacy `name / condition / callback` fields.
+
+## Player actions on completed d100 TestResult cards
+
+For an eligible Actor owning `rulesId = "luck"`:
 
 ```text
-c0adce4569e39f463b1c9169ed78e8fc94ec66d4
-Fix Foundry v14 context menu callback adapter
+Szczęście: zmień wynik o -10
+Szczęście: zmień wynik o +10
 ```
+
+Eligibility:
+
+- message must contain a WFRP `testResultState`;
+- Actor must own a Skill Item with `system.rulesId === "luck"`;
+- current user must be GM or Actor OWNER;
+- one Luck modification maximum per test message;
+- Luck cannot modify a roll after associated damage has already been applied;
+- a non-GM needs an active GM because the allowance is secret and GM-authoritative.
+
+## Hidden daily state
+
+Current Actor flag:
+
+```text
+flags.wfrp1ed.luckDaily
+```
+
+State contains a generation/day counter, hidden allowance, used count and audit timestamps/user ids.
+
+The allowance is persisted by the GM client only.
+
+Player socket responses must never contain the hidden allowance or remaining uses.
+
+## First use
+
+Normal English-rule path:
+
+```text
+player chooses Luck ±10
+→ request sent to primary active GM
+→ GM receives confirmation prompt if today's pool is uninitialized
+→ GM rolls hidden 1d6
+→ GM-only whispered roll message is created
+→ first Luck use is consumed
+→ test card is re-evaluated from adjusted roll
+```
+
+Example:
+
+```text
+Target 20
+original Roll 24
+Szczęście -10
+adjusted Roll 14
+→ failure becomes success
+```
+
+The card should show an audit line similar to:
+
+```text
+Szczęście    24 → 14 (-10)
+```
+
+## Exhaustion
+
+If hidden allowance was 3:
+
+- first 3 attempts succeed and consume uses;
+- the 4th attempt does not modify the roll;
+- player receives:
+
+```text
+Szczęście cię opuściło.
+```
+
+The player still never sees the hidden original allowance.
+
+## GM context actions
+
+For a test belonging to an Actor with Luck:
+
+```text
+Szczęście: pokaż dzisiejszy stan
+Szczęście: wylosuj dzisiejszy limit
+Szczęście: nowy dzień / reset
+```
+
+`pokaż stan` is GM-only and may reveal used/allowance/remaining.
+
+`nowy dzień / reset` clears the previous pool and leaves it uninitialized.
+
+`wylosuj dzisiejszy limit` lets the GM initialize immediately, supporting tables which follow the Polish start-of-day wording.
 
 ---
 
-# Movement audit and implementation — CONFIRMED
+# Luck scope boundary — K6 ±1 not implemented yet
 
-The uploaded English and Polish WFRP 1e Core Rulebooks were directly checked.
+The current Luck implementation only changes completed WFRP d100 TestResult cards by ±10.
 
-Canonical terminology:
+The Core rule also permits d6/K6 changes by ±1, but that is **not yet wired to Zeskok/Skok movement cards**.
 
-| English | Polish | Meaning |
-|---|---|---|
-| Jumping | Zeskok | controlled vertical descent |
-| Falling | Upadek | uncontrolled vertical descent |
-| Leaping | Skok | horizontal jump |
+Do not implement this by merely changing displayed dice.
 
-## Zeskok
+Movement procedures derive downstream values from their d6 results:
 
-Verified formula:
+- Zeskok may change Wounds and a DamagePacket;
+- Skok changes achieved distance and success/failure.
 
-```text
-zeskokDamage = max(0, ceil(height) - (1d6 + reductionDieBonuses))
-```
+Therefore K6 Luck needs an immutable/re-runnable movement-result state so the procedure can safely recompute all consequences before any damage is applied.
 
-- Acrobatics contributes +2 through stable Active Effect target `procedure.movement.jump.reductionDie`.
-- Positive damage ignores Armour and Toughness.
-- If damage is suffered, roll the 50% held-item drop check.
-- Full-round procedure.
-- Generic damage is attached to the same movement ChatMessage only when positive damage is produced.
-- Damage is applied only through explicit `Zastosuj obrażenia`.
-- Runtime-confirmed.
-
-## Upadek
-
-Verified formula:
+Recommended later slice:
 
 ```text
-fallDamage = max(0, 2 * ceil(height) - (1d6 + reductionDieBonuses))
+movement roll snapshot
+→ Luck ±1
+→ recompute complete movement procedure result
+→ update attached damage snapshot if still unapplied
 ```
 
-Standalone Upadek is not implemented yet.
-
-## Skok
-
-With run-up:
-
-```text
-distance = max(1, 2 * Movement - 1d6 + leapBonuses)
-```
-
-Without sufficient run-up:
-
-```text
-distance = max(1, 2 * Movement - 2d6 + leapBonuses)
-```
-
-If a Skok fails, the GM determines actual vertical fall height from the scene. Do not infer vertical fall height from horizontal gap distance.
+Do not allow Luck to rewrite a movement die after its resulting damage has already been applied.
 
 ---
 
-# Critical resolution rules — VERIFIED ARCHITECTURAL DISTINCTION
+# Current manifest/runtime caution
 
-Two critical paths must remain separate.
-
-## Detailed combat criticals
-
-Normal combat overflow uses the detailed Critical Hit process:
+`system.json` changed during Fate/Luck work and currently loads:
 
 ```text
-criticalValue + d100
-→ Critical Hit Chart
-→ effect number
-→ hit-location Critical Effect
-```
-
-The detailed path requires hit-location context.
-
-## Sudden Death / Nagła Śmierć
-
-The simplified Sudden Death table is distinct from the detailed combat chart.
-
-It is used as an optional simplified critical system and for non-combat critical damage such as falls/bleeding where the rules direct that path.
-
-Zeskok/Upadek critical overflow must route through:
-
-```text
-criticalMode: sudden-death
-```
-
-not the detailed combat chart.
-
-Do not infer critical routing from localized source labels or Item names.
-
----
-
-# Critical Table extension architecture — APPROVED
-
-Critical tables are intended as a first-class modular extension surface.
-
-WFRP1ED Core must provide audited default/fallback tables. Alternative or expanded tables should naturally be supplied by Foundry modules/expansions.
-
-Stable resolution precedence:
-
-```text
-1. explicit world RollTable override
-2. explicitly selected installed module/expansion provider
-3. audited WFRP1ED Core fallback
-```
-
-Important rules:
-
-- registering a module provider does **not** activate it;
-- installation/activation of a module must never silently change campaign mechanics;
-- GM explicitly selects a provider for a role;
-- a missing/disabled provider falls back safely to Core;
-- an invalid/deleted world override falls through to provider/Core;
-- world RollTable override remains an advanced escape hatch for quick house-rule experimentation;
-- serious/reusable alternate rules should normally live in an expansion/module;
-- system defaults must not be edited in place by world customization.
-
-Stable initial critical-table roles:
-
-```text
-critical.suddenDeath
-critical.detailed.chart
-critical.detailed.head
-critical.detailed.body
-critical.detailed.arm
-critical.detailed.leg
-```
-
-Modules may later register additional roles for optional content where appropriate.
-
----
-
-# Critical Table Registry — IMPLEMENTED, NOT YET RUNTIME-CONFIRMED
-
-New files:
-
-```text
-module/criticals/CriticalTableRegistry.mjs
+module/effects/WfrpActiveEffectCompatibility.mjs
+module/wfrp1ed.mjs
+module/damage/DamageBootstrap.mjs
 module/criticals/CriticalBootstrap.mjs
+module/fate/FateSheetIntegration.mjs
+module/luck/LuckIntegration.mjs
+module/tests/TestResultModifierToggle.mjs
 ```
 
-Commits:
+Because startup modules changed, a full Foundry/world restart is required before evaluating the current build.
 
-```text
-ae31c917d10e1dbdd8b8af74abf88354e5adeb74
-Add critical table registry contract
-
-369779a31f50dbe7eba133ced82538a895cb7e7d
-Expose critical table provider API
-
-00c3b2151995bbd66bc792e6c6f269f739d94b48
-Load critical table registry bootstrap
-```
-
-The registry currently provides:
-
-- stable role registration;
-- provider registration;
-- Core-vs-module provider source distinction;
-- module-active availability check;
-- hidden world-scoped configuration setting;
-- GM-only provider selection;
-- GM-only explicit world RollTable override;
-- fallback resolution order;
-- invalid/missing configured source warnings;
-- snapshot/inspection API;
-- module registration hook:
-
-```text
-wfrp1edRegisterCriticalTableProviders
-```
-
-Runtime API after successful startup should be:
-
-```js
-game.WFRP1ED.criticals.roles
-game.WFRP1ED.criticals.providerSource
-game.WFRP1ED.criticals.registry
-```
-
-No actual Core RollTable provider has been registered yet. `resolve(role)` is expected to fail with a clear missing-Core-provider error until the audited Core tables are created and registered.
-
-Do not encode Sudden Death percentages from memory. Verify exact English/Polish table contents before creating the Core provider.
-
----
-
-# Startup regression caution — IMPORTANT
-
-A prior persistence experiment caused Character and Skill documents to fall back to Foundry `BaseSheet` because of a syntax error in `RuleEffectResolver.mjs`.
-
-Historical error:
-
-```text
-Private field '#collectEffect' must be declared in an enclosing class
-```
-
-Fix commit:
-
-```text
-e527d61b4702f32a093d8ef9c6fe3a2cb88140d1
-Fix RuleEffectResolver class structure
-```
-
-Rules:
-
-- read back startup/import-critical files after replacement;
-- if `system.json` changes, perform a full Foundry restart;
-- hot refresh is not proof of clean startup;
-- do not reintroduce old ActiveEffect subtype migration behavior.
-
-A small ActiveEffect `wfrp` compatibility declaration still exists because old world documents may have been created during the earlier subtype experiment. Do not remove it casually.
+A simple F5/hot refresh is not sufficient proof of clean startup.
 
 ---
 
 # CURRENT NEXT TASK — start here
 
-The Critical Table Registry has just been added but is **not yet runtime-tested**.
+The corrected build at code commit:
 
-Next steps:
+```text
+af6a6b9bdf62dd29e1ce6dc2475a74d84bf6af02
+```
 
-1. `git pull` and fully restart Foundry because `system.json` changed.
-2. Confirm Character and Skill sheets still register/open normally.
-3. Inspect:
-   ```js
-   game.WFRP1ED.criticals.registry.snapshot()
-   ```
-   Expected: six registered roles, zero providers, empty configuration.
-4. Confirm the registry setting exists and startup has no console errors.
-5. After this passes, inspect the uploaded English + Polish Sudden Death tables directly and transcribe/audit the exact ranges.
-6. Implement the audited WFRP1ED Core Sudden Death RollTable/provider.
-7. Register it as the Core fallback for `critical.suddenDeath`.
-8. Connect Zeskok critical overflow to that role and test the complete flow.
-9. Then implement standalone Upadek using the already-audited falling damage formula and the same Sudden Death route.
-10. Detailed combat Critical Hit tables remain a later dedicated slice because they require the detailed chart plus hit-location effect tables.
+has not yet been runtime-tested.
+
+Start the next session with this exact sequence:
+
+1. Pull/update to current `master` and fully restart Foundry.
+2. Confirm Character and Skill sheets open without startup/import errors.
+3. Open Character page 2 and verify the Fate box has exactly one clean numeric field.
+4. As GM edit Fate directly (`1 → 2`) and confirm no `DataModelValidationError`.
+5. Open the `Szczęście` Skill and verify Rules Link shows only `Szczęście` in Polish (or only `Luck` in English).
+6. Make a simple d100 characteristic test from an Actor/token which owns that Skill, e.g. Ballistic Skill.
+7. Right-click the test result and verify `Szczęście: zmień wynik o -10/+10` appears.
+8. Use `-10` on a near miss such as Target 20 / Roll 24.
+9. Confirm GM receives the hidden daily-roll prompt.
+10. Confirm GM sees the secret 1d6 result and the player does not see the allowance/remaining count.
+11. Confirm the chat result changes from 24 to 14 and success/margin are recomputed without rerolling.
+12. Test repeated uses until exhaustion and verify `Szczęście cię opuściło.` on the first over-limit attempt.
+13. Verify GM status/reset/manual-roll actions.
+14. Re-test fatal Sudden Death + spend Fate with the corrected one-value sheet.
+
+If any Luck menu action is still absent, inspect in this order:
+
+```text
+message.getFlag("wfrp1ed", "testResultState")
+message.speaker
+resolved token.actor
+actor.items with system.rulesId === "luck"
+current user OWNER permission
+active GM availability
+```
+
+Do not jump to K6 Luck or detailed Critical Wounds until this corrected d100/Fate path is runtime-confirmed.
 
 ---
 
-# Important cautions
+# Likely next feature after confirmation
+
+Once Fate + d100 Luck are confirmed, choose one contained next slice:
+
+1. K6/K6 Luck ±1 with safe movement-procedure re-resolution; or
+2. detailed/normal Critical Wound Item + Active Effects architecture.
+
+The previously discussed detailed Critical Wound target remains:
+
+```text
+resolved detailed critical
+→ real Item representing the wound/effect
+→ Active Effects for mechanical consequences
+→ draggable/assignable to Actor/token
+```
+
+Do not mix that detailed critical path with Sudden Death.
+
+---
+
+# Persistent project cautions
 
 - Foundry runtime validation is definitive.
 - No WFRP mechanic is implemented from memory alone.
 - English Core Rulebook controls mechanics; Polish Core Rulebook controls terminology and is checked for differences.
+- Original Polish character sheet controls Classic-sheet visual placement.
 - Do not apply damage at roll-calculation time.
 - Do not use negative Wounds as critical-state storage.
 - Do not mutate persistent ActiveEffect state for per-roll choices.
 - Do not auto-delete historical duplicate Skills.
-- Avoid touching confirmed Active Effect persistence unless a concrete defect requires it.
-- Preserve ActiveEffect compatibility subtype support until old world data has been safely audited/migrated.
-- Module provider registration and world activation must remain separate concerns.
+- Do not infer rule identity from localized Item names; use stable `rulesId`.
+- Resolve synthetic/token Actors before world prototypes when a ChatMessage speaker identifies a token.
+- Keep damage permissions, critical-resolution permissions and victim-Fate permissions separate.
+- Preserve the original physical roll when post-roll mechanics such as Luck alter the effective result.
+- Avoid irreversible downstream consequences before post-roll interventions are finished.
+- If `system.json` changes, perform a full Foundry restart.
+- Fetch the current GitHub file before editing; never assume an old local copy is current.
