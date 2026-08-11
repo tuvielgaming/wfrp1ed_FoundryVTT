@@ -70,8 +70,8 @@
 .classic-actor-sheet
 	.characteristic-current-wounds-permission {
 	position: absolute;
-	top: 0.12em;
-	right: 0.16em;
+	top: 0.5em;
+	right: 0.5em;
 	width: 0.9em;
 	min-width: 0.9em;
 	height: 0.9em;
@@ -82,7 +82,7 @@
 	border-radius: 2px;
 	background: transparent;
 	box-shadow: none;
-	color: #b95b6b;
+	color: #e21010;
 	font-size: 0.62em;
 	line-height: 0.9em;
 	cursor: pointer;
