@@ -2,40 +2,48 @@ const scrollPositions = new WeakMap();
 
 /**
  * ApplicationV2 replaces sheet content during document rerenders. The Classic
- * sheet is two printed pages inside one scrolling window, so returning to the
- * top after every Actor/Item update is especially disruptive.
+ * sheet itself is the scrolling element (`.wfrp1ed-classic-sheet`), not the
+ * outer ApplicationV2 frame content. Preserve that inner scroll position
+ * across Actor and owned-Item updates.
  *
- * Capture the existing frame-content scroll position immediately before a
- * Classic Actor sheet rerenders and restore it immediately afterward. The
- * position belongs to the Application instance only and is never persisted to
- * Actor data.
+ * The position belongs to the Application instance only and is never persisted
+ * to Actor data.
  */
-Hooks.on("preRenderApplicationV2", (application, _context, options) => {
+Hooks.on("preRenderApplication", (application, _context, options) => {
 	if (!isClassicActorSheet(application) || options?.isFirstRender) {
 		return;
 	}
 
-	const content = application.window?.content;
-	if (!(content instanceof HTMLElement)) return;
+	const scroller = currentScroller(application);
+	if (!(scroller instanceof HTMLElement)) return;
 
 	scrollPositions.set(application, {
-		top: content.scrollTop,
-		left: content.scrollLeft,
+		top: scroller.scrollTop,
+		left: scroller.scrollLeft,
 	});
 });
 
-Hooks.on("renderApplicationV2", (application) => {
+Hooks.on("renderApplicationV2", (application, element) => {
 	if (!isClassicActorSheet(application)) return;
 
 	const position = scrollPositions.get(application);
-	const content = application.window?.content;
+	if (!position) return;
 
-	if (!position || !(content instanceof HTMLElement)) {
-		return;
-	}
+	/*
+	 * renderApplicationV2 receives the pending inner HTML before Foundry inserts
+	 * it into the live frame. Restore immediately where possible, then repeat on
+	 * the next animation frame after insertion/layout so a large vertical
+	 * position cannot be clamped to zero by detached-element geometry.
+	 */
+	const pendingScroller = findScroller(element);
+	if (pendingScroller) restore(pendingScroller, position);
 
-	content.scrollTop = position.top;
-	content.scrollLeft = position.left;
+	requestAnimationFrame(() => {
+		if (!application.rendered) return;
+
+		const liveScroller = currentScroller(application);
+		if (liveScroller) restore(liveScroller, position);
+	});
 });
 
 Hooks.on("closeApplicationV2", (application) => {
@@ -43,6 +51,25 @@ Hooks.on("closeApplicationV2", (application) => {
 		scrollPositions.delete(application);
 	}
 });
+
+function currentScroller(application) {
+	return findScroller(application?.element);
+}
+
+function findScroller(root) {
+	if (!(root instanceof HTMLElement)) return null;
+
+	if (root.matches?.(".wfrp1ed-classic-sheet")) {
+		return root;
+	}
+
+	return root.querySelector?.(".wfrp1ed-classic-sheet") ?? null;
+}
+
+function restore(scroller, position) {
+	scroller.scrollTop = position.top;
+	scroller.scrollLeft = position.left;
+}
 
 function isClassicActorSheet(application) {
 	if (application?.document?.documentName !== "Actor") {
