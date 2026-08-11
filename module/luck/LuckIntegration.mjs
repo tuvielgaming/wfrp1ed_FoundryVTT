@@ -160,7 +160,6 @@ async function promptAndResetDailyLuckPools() {
 
 	const groups = collectLuckActors();
 	const content = document.createElement("div");
-	content.className = "wfrp1e-luck-reset-dialog";
 
 	const intro = document.createElement("p");
 	intro.textContent = localize(
