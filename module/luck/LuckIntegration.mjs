@@ -5,14 +5,17 @@ import { TestResultChat } from "../tests/TestResultChat.mjs";
 const FLAG_SCOPE = "wfrp1ed";
 const TEST_RESULT_FLAG_KEY = "testResultState";
 const DAMAGE_STATE_FLAG_KEY = "damageState";
-const LUCK_RESULT_FLAG_KEY = "luckResult";
+const LUCK_RESULT_FLAG_KEY = "luckResult"; // legacy single-result flag
+const LUCK_RESULTS_FLAG_KEY = "luckResults";
 const LUCK_DAILY_FLAG_KEY = "luckDaily";
 const LUCK_RULES_ID = "luck";
-const LUCK_VERSION = 2;
+const LUCK_VERSION = 3;
+
+const TEST_ROLL_ID = "test.primary";
 
 const SOCKET_CHANNEL = "system.wfrp1ed";
-const SOCKET_USE_REQUEST = "luck-v3-use-request";
-const SOCKET_USE_RESPONSE = "luck-v3-use-response";
+const SOCKET_USE_REQUEST = "luck-v4-use-request";
+const SOCKET_USE_RESPONSE = "luck-v4-use-response";
 const SOCKET_TIMEOUT_MS = 60000;
 
 const pendingRequests = new Map();
@@ -38,55 +41,40 @@ Hooks.once("ready", () => {
 			resetPlayers: resetPlayerLuckPools,
 			resetNpcs: resetNpcLuckPools,
 			status: luckStatus,
+			options: luckOptionsForMessage,
 		}),
 	});
 });
 
 function addLuckContextOptions(menuItems) {
-	if (!Array.isArray(menuItems)) {
-		return;
-	}
+	if (!Array.isArray(menuItems)) return;
 
+	/*
+	 * These are die-family actions, not procedure actions. The visible callback
+	 * asks the message for a concrete adjustable roll. Movement procedures may
+	 * expose d6, d100, or both without LuckIntegration knowing their formulas.
+	 */
 	menuItems.push(
-		{
-			label: localize(
-				"Luck: change roll by -10",
-				"Szczęście: zmień wynik o -10",
-			),
-			icon: "fa-solid fa-clover",
-			visible: (target) =>
-				canAttemptLuck(messageFromContextTarget(target), -10),
-			onClick: (_event, target) => {
-				const message = messageFromContextTarget(target);
-				if (message) void useLuckOnMessage(message, -10);
-			},
-		},
-		{
-			label: localize(
-				"Luck: change roll by +10",
-				"Szczęście: zmień wynik o +10",
-			),
-			icon: "fa-solid fa-clover",
-			visible: (target) =>
-				canAttemptLuck(messageFromContextTarget(target), 10),
-			onClick: (_event, target) => {
-				const message = messageFromContextTarget(target);
-				if (message) void useLuckOnMessage(message, 10);
-			},
-		},
-		{
-			label: localize(
-				"Luck: change d6 by +1",
-				"Szczęście: zmień K6 o +1",
-			),
-			icon: "fa-solid fa-clover",
-			visible: (target) =>
-				canAttemptLuck(messageFromContextTarget(target), 1),
-			onClick: (_event, target) => {
-				const message = messageFromContextTarget(target);
-				if (message) void useLuckOnMessage(message, 1);
-			},
-		},
+		luckContextEntry({
+			delta: -10,
+			english: "Luck: change d100 by -10",
+			polish: "Szczęście: zmień K100 o -10",
+		}),
+		luckContextEntry({
+			delta: 10,
+			english: "Luck: change d100 by +10",
+			polish: "Szczęście: zmień K100 o +10",
+		}),
+		luckContextEntry({
+			delta: -1,
+			english: "Luck: change d6 by -1",
+			polish: "Szczęście: zmień K6 o -1",
+		}),
+		luckContextEntry({
+			delta: 1,
+			english: "Luck: change d6 by +1",
+			polish: "Szczęście: zmień K6 o +1",
+		}),
 		{
 			label: localize(
 				"Luck: show today's hidden status",
@@ -96,7 +84,9 @@ function addLuckContextOptions(menuItems) {
 			visible: (target) => {
 				if (!game.user?.isGM) return false;
 				return hasLuckSkill(
-					actorForMessage(messageFromContextTarget(target)),
+					actorForMessage(
+						messageFromContextTarget(target),
+					),
 				);
 			},
 			onClick: (_event, target) => {
@@ -114,30 +104,70 @@ function addLuckContextOptions(menuItems) {
 			icon: "fa-solid fa-sun",
 			visible: (target) =>
 				game.user?.isGM === true &&
-				isWfrpResultMessage(messageFromContextTarget(target)),
+				isWfrpResultMessage(
+					messageFromContextTarget(target),
+				),
 			onClick: () => {
-				void promptAndResetDailyLuckPools().catch(reportError);
+				void promptAndResetDailyLuckPools().catch(
+					reportError,
+				);
 			},
 		},
 	);
 }
 
+function luckContextEntry({ delta, english, polish }) {
+	return {
+		label: localize(english, polish),
+		icon: "fa-solid fa-clover",
+		visible: (target) =>
+			canAttemptLuck(
+				messageFromContextTarget(target),
+				delta,
+			),
+		onClick: (_event, target) => {
+			const message = messageFromContextTarget(target);
+			if (message) {
+				void useLuckOnMessage(message, delta);
+			}
+		},
+	};
+}
+
 /**
- * Use one point from the already-generated daily Luck pool.
+ * Spend one daily Luck use on one concrete roll exposed by the message.
  *
- * The pool is no longer rolled on first use. Daily initialization belongs to
- * the GM-wide reset action, so normal play never interrupts a player's roll
- * with an extra GM confirmation dialog.
+ * `rollId` is optional for the public API. Context-menu actions use a delta
+ * which uniquely identifies the currently available roll in existing WFRP1ED
+ * cards. A future card with two same-family rolls can pass its explicit rollId.
  */
-export async function useLuckOnMessage(message, delta, user = game.user) {
+export async function useLuckOnMessage(
+	message,
+	delta,
+	user = game.user,
+	rollId = null,
+) {
 	try {
-		const adjustment = resolveLuckAdjustment(message, delta);
+		const adjustment = resolveLuckAdjustment(
+			message,
+			delta,
+			rollId,
+		);
 		const actor = actorForMessage(message);
 		assertAttempt(message, actor, user, adjustment);
 
 		const result = user?.isGM
-			? await performLuckUse(message, actor, user, adjustment)
-			: await requestLuckUseFromGm(message, adjustment.delta, user);
+			? await performLuckUse(
+				message,
+				actor,
+				user,
+				adjustment,
+			)
+			: await requestLuckUseFromGm(
+				message,
+				adjustment,
+				user,
+			);
 
 		reportUseResult(actor, result, user);
 		return result;
@@ -150,12 +180,14 @@ export async function useLuckOnMessage(message, delta, user = game.user) {
 /**
  * GM-facing global new-day workflow.
  *
- * Players are selected by default. NPC/Monster actors are a separate opt-in
- * path because Luck on non-player Actors is expected to be uncommon.
+ * Player-owned Actors are selected by default. NPC/Monster Actors remain an
+ * explicit opt-in path because core Luck on non-player Actors is uncommon.
  */
 async function promptAndResetDailyLuckPools() {
 	if (!game.user?.isGM) {
-		throw new Error("Only a GM may reset daily Luck pools.");
+		throw new Error(
+			"Only a GM may reset daily Luck pools.",
+		);
 	}
 
 	const groups = collectLuckActors();
@@ -189,47 +221,57 @@ async function promptAndResetDailyLuckPools() {
 		),
 	);
 
-	const selection = await foundry.applications.api.DialogV2.wait({
-		window: {
-			title: localize(
-				"Reset Daily Luck Pools",
-				"Reset dziennych pul Szczęścia",
-			),
-		},
-		content,
-		modal: true,
-		rejectClose: false,
-		buttons: [
-			{
-				action: "reset",
-				label: localize("Reset and Roll", "Resetuj i rzuć"),
-				icon: "fa-solid fa-dice-six",
-				default: true,
-				callback: (_event, button) => ({
-					players:
-						button.form?.elements?.players?.checked === true,
-					npcs:
-						button.form?.elements?.npcs?.checked === true,
-				}),
+	const selection =
+		await foundry.applications.api.DialogV2.wait({
+			window: {
+				title: localize(
+					"Reset Daily Luck Pools",
+					"Reset dziennych pul Szczęścia",
+				),
 			},
-			{
-				action: "cancel",
-				label: localize("Cancel", "Anuluj"),
-				icon: "fa-solid fa-xmark",
-			},
-		],
-	});
+			content,
+			modal: true,
+			rejectClose: false,
+			buttons: [
+				{
+					action: "reset",
+					label: localize(
+						"Reset and Roll",
+						"Resetuj i rzuć",
+					),
+					icon: "fa-solid fa-dice-six",
+					default: true,
+					callback: (_event, button) => ({
+						players:
+							button.form?.elements?.players
+								?.checked === true,
+						npcs:
+							button.form?.elements?.npcs
+								?.checked === true,
+					}),
+				},
+				{
+					action: "cancel",
+					label: localize(
+						"Cancel",
+						"Anuluj",
+					),
+					icon: "fa-solid fa-xmark",
+				},
+			],
+		});
 
 	if (!selection || typeof selection !== "object") {
 		return null;
 	}
 
-	return resetDailyLuckPools(selection, game.user, groups);
+	return resetDailyLuckPools(
+		selection,
+		game.user,
+		groups,
+	);
 }
 
-/**
- * Reset selected daily pools and immediately generate the secret allowance.
- */
 export async function resetDailyLuckPools(
 	{ players = true, npcs = false } = {},
 	user = game.user,
@@ -238,32 +280,49 @@ export async function resetDailyLuckPools(
 	assertGm(user);
 
 	if (!players && !npcs) {
-		ui.notifications.warn(localize(
-			"No Luck group was selected.",
-			"Nie wybrano żadnej grupy Szczęścia.",
-		));
-		return Object.freeze({ players: 0, npcs: 0, failed: 0 });
+		ui.notifications.warn(
+			localize(
+				"No Luck group was selected.",
+				"Nie wybrano żadnej grupy Szczęścia.",
+			),
+		);
+		return Object.freeze({
+			players: 0,
+			npcs: 0,
+			failed: 0,
+		});
 	}
 
-	const groups = precollectedGroups ?? collectLuckActors();
+	const groups =
+		precollectedGroups ?? collectLuckActors();
 	let playerResult = { success: 0, failed: 0 };
 	let npcResult = { success: 0, failed: 0 };
 
 	if (players) {
-		playerResult = await resetPlayerLuckPools(groups.players, user);
+		playerResult = await resetPlayerLuckPools(
+			groups.players,
+			user,
+		);
 	}
 
 	if (npcs) {
-		npcResult = await resetNpcLuckPools(groups.npcs, user);
+		npcResult = await resetNpcLuckPools(
+			groups.npcs,
+			user,
+		);
 	}
 
-	const total = playerResult.success + npcResult.success;
-	const failed = playerResult.failed + npcResult.failed;
+	const total =
+		playerResult.success + npcResult.success;
+	const failed =
+		playerResult.failed + npcResult.failed;
 
-	ui.notifications.info(localize(
-		`Daily Luck pools reset: ${total}. Failed: ${failed}.`,
-		`Zresetowano dzienne pule Szczęścia: ${total}. Błędy: ${failed}.`,
-	));
+	ui.notifications.info(
+		localize(
+			`Daily Luck pools reset: ${total}. Failed: ${failed}.`,
+			`Zresetowano dzienne pule Szczęścia: ${total}. Błędy: ${failed}.`,
+		),
+	);
 
 	return Object.freeze({
 		players: playerResult.success,
@@ -272,7 +331,6 @@ export async function resetDailyLuckPools(
 	});
 }
 
-/** Separate execution path for player-owned Actors. */
 export async function resetPlayerLuckPools(
 	actors = collectLuckActors().players,
 	user = game.user,
@@ -281,7 +339,6 @@ export async function resetPlayerLuckPools(
 	return resetActorGroup(actors, user, "player");
 }
 
-/** Separate execution path for NPC/Monster Actors. */
 export async function resetNpcLuckPools(
 	actors = collectLuckActors().npcs,
 	user = game.user,
@@ -294,6 +351,7 @@ export function luckStatus(actor) {
 	if (!game.user?.isGM || !hasLuckSkill(actor)) {
 		return null;
 	}
+
 	return readLuckDaily(actor);
 }
 
@@ -319,9 +377,7 @@ async function resetActorGroup(actors, user, group) {
 
 async function resetAndRollActor(actor, user, group) {
 	return withActorLock(actor.uuid, async () => {
-		if (!hasLuckSkill(actor)) {
-			return null;
-		}
+		if (!hasLuckSkill(actor)) return null;
 
 		const previous = readLuckDaily(actor);
 		const daily = {
@@ -340,20 +396,37 @@ async function resetAndRollActor(actor, user, group) {
 			lastUsedAt: null,
 		};
 
-		return initializeAllowance(actor, daily, user);
+		return initializeAllowance(
+			actor,
+			daily,
+			user,
+		);
 	});
 }
 
-async function performLuckUse(message, actor, requester, adjustment) {
+async function performLuckUse(
+	message,
+	actor,
+	requester,
+	adjustment,
+) {
 	return withActorLock(actor.uuid, async () => {
-		assertAttempt(message, actor, requester, adjustment);
+		assertAttempt(
+			message,
+			actor,
+			requester,
+			adjustment,
+		);
+
 		const daily = readLuckDaily(actor);
 
 		if (!daily.initialized) {
-			throw new Error(localize(
-				"The GM has not generated today's Luck pool yet. Ask the GM to use 'Reset Daily Luck Pools'.",
-				"MG nie wygenerował jeszcze dzisiejszej puli Szczęścia. MG musi użyć „Reset dziennych pul Szczęścia”.",
-			));
+			throw new Error(
+				localize(
+					"The GM has not generated today's Luck pool yet. Ask the GM to use 'Reset Daily Luck Pools'.",
+					"MG nie wygenerował jeszcze dzisiejszej puli Szczęścia. MG musi użyć „Reset dziennych pul Szczęścia”.",
+				),
+			);
 		}
 
 		if (daily.used >= daily.allowance) {
@@ -382,21 +455,22 @@ async function performLuckUse(message, actor, requester, adjustment) {
 		await persistLuckDaily(actor, nextDaily);
 
 		try {
-			const result = adjustment.kind === "d100"
-				? await applyLuckToD100(
-					message,
-					actor,
-					requester,
-					adjustment,
-					daily,
-				)
-				: await applyLuckToMovement(
-					message,
-					actor,
-					requester,
-					adjustment,
-					daily,
-				);
+			const result =
+				adjustment.provider === "test"
+					? await applyLuckToTest(
+						message,
+						actor,
+						requester,
+						adjustment,
+						daily,
+					)
+					: await applyLuckToMovement(
+						message,
+						actor,
+						requester,
+						adjustment,
+						daily,
+					);
 
 			return Object.freeze({
 				ok: true,
@@ -418,7 +492,7 @@ async function performLuckUse(message, actor, requester, adjustment) {
 	});
 }
 
-async function applyLuckToD100(
+async function applyLuckToTest(
 	message,
 	actor,
 	requester,
@@ -426,9 +500,14 @@ async function applyLuckToD100(
 	daily,
 ) {
 	const state = testResultState(message);
-	const originalRoll = finiteNumber(state.roll, "test roll");
-	const adjustedRoll = originalRoll + adjustment.delta;
+	const originalRoll = finiteNumber(
+		state.roll,
+		"test roll",
+	);
+	const adjustedRoll =
+		originalRoll + adjustment.delta;
 	const updated = foundry.utils.deepClone(state);
+
 	updated.roll = adjustedRoll;
 	updated.updatedBy = String(requester?.id ?? "");
 	updated.updatedAt = Date.now();
@@ -437,20 +516,25 @@ async function applyLuckToD100(
 		actor,
 		daily,
 		requester,
-		kind: adjustment.kind,
+		adjustment,
 		originalRoll,
 		adjustedRoll,
-		delta: adjustment.delta,
 	});
+	const results = luckResultsFor(message);
+	results[adjustment.id] = luckResult;
+
 	const content = await TestResultChat._render(updated);
 
 	await message.update({
 		content,
-		[`flags.${FLAG_SCOPE}.${TEST_RESULT_FLAG_KEY}`]: updated,
-		[`flags.${FLAG_SCOPE}.${LUCK_RESULT_FLAG_KEY}`]: luckResult,
+		[`flags.${FLAG_SCOPE}.${TEST_RESULT_FLAG_KEY}`]:
+			updated,
+		[`flags.${FLAG_SCOPE}.${LUCK_RESULTS_FLAG_KEY}`]:
+			results,
 	});
 
 	return {
+		rollId: adjustment.id,
 		originalRoll,
 		adjustedRoll,
 		delta: adjustment.delta,
@@ -464,37 +548,50 @@ async function applyLuckToMovement(
 	adjustment,
 	daily,
 ) {
-	const state = MovementStandardTest.stateFor(message);
-	const originalRoll = finiteNumber(state?.die, "movement d6 roll");
-	const adjustedRoll = originalRoll + adjustment.delta;
-	const luckResult = buildLuckResult({
+	const originalRoll = finiteNumber(
+		adjustment.value,
+		"movement roll",
+	);
+	const adjustedRoll =
+		originalRoll + adjustment.delta;
+	const previousResults = luckResultsFor(message);
+	const nextResults = foundry.utils.deepClone(
+		previousResults,
+	);
+	nextResults[adjustment.id] = buildLuckResult({
 		actor,
 		daily,
 		requester,
-		kind: adjustment.kind,
+		adjustment,
 		originalRoll,
 		adjustedRoll,
-		delta: adjustment.delta,
 	});
 
 	/*
-	 * Polish note: ustawiamy ślad użycia Szczęścia przed rekalkulacją ruchu.
-	 * Jeśli rekalkulacja się nie powiedzie, flaga jest cofana razem z dziennym
-	 * zużyciem. Dzięki temu ten sam rzut nie może zużyć Szczęścia dwa razy.
+	 * Store the per-roll Luck marker before re-resolution. If movement
+	 * recalculation fails, restore the previous map. This keeps repeated Luck
+	 * protection and the daily-pool rollback coherent.
 	 */
-	await message.setFlag(FLAG_SCOPE, LUCK_RESULT_FLAG_KEY, luckResult);
+	await message.update({
+		[`flags.${FLAG_SCOPE}.${LUCK_RESULTS_FLAG_KEY}`]:
+			nextResults,
+	});
 
 	try {
 		return await MovementStandardTest.applyLuck(
 			message,
+			adjustment.id,
 			adjustment.delta,
 		);
 	} catch (error) {
 		try {
-			await message.unsetFlag(FLAG_SCOPE, LUCK_RESULT_FLAG_KEY);
+			await message.update({
+				[`flags.${FLAG_SCOPE}.${LUCK_RESULTS_FLAG_KEY}`]:
+					previousResults,
+			});
 		} catch (flagRollbackError) {
 			console.error(
-				"WFRP1ED | Unable to roll back movement Luck flag.",
+				"WFRP1ED | Unable to roll back movement Luck result state.",
 				flagRollbackError,
 			);
 		}
@@ -506,18 +603,18 @@ function buildLuckResult({
 	actor,
 	daily,
 	requester,
-	kind,
+	adjustment,
 	originalRoll,
 	adjustedRoll,
-	delta,
 }) {
 	return {
 		version: LUCK_VERSION,
 		actorUuid: actor.uuid,
 		generation: daily.generation,
-		kind,
+		rollId: adjustment.id,
+		die: adjustment.die,
 		originalRoll,
-		delta,
+		delta: adjustment.delta,
 		adjustedRoll,
 		usedBy: String(requester?.id ?? ""),
 		usedAt: Date.now(),
@@ -525,10 +622,7 @@ function buildLuckResult({
 }
 
 /**
- * Roll one allowance and publish it in GM roll mode.
- *
- * `messageMode: "gm"` is used instead of manually constructing whisper IDs so
- * Foundry owns visibility semantics for the roll message.
+ * Roll one allowance and publish it using Foundry's native GM roll mode.
  */
 async function initializeAllowance(actor, daily, user) {
 	const roll = await new Roll("1d6").evaluate({
@@ -539,7 +633,9 @@ async function initializeAllowance(actor, daily, user) {
 	);
 
 	if (allowance < 1 || allowance > 6) {
-		throw new Error(`Luck allowance must be between 1 and 6: ${allowance}`);
+		throw new Error(
+			`Luck allowance must be between 1 and 6: ${allowance}`,
+		);
 	}
 
 	const next = {
@@ -579,32 +675,44 @@ async function initializeAllowance(actor, daily, user) {
 			"WFRP1ED | Luck pool stored but GM-only roll message failed.",
 			error,
 		);
-		ui.notifications.warn(localize(
-			`Luck pool for ${actor.name} was stored, but its GM-only roll card could not be created.`,
-			`Pula Szczęścia dla ${actor.name} została zapisana, ale nie udało się utworzyć tajnej karty rzutu dla MG.`,
-		));
+		ui.notifications.warn(
+			localize(
+				`Luck pool for ${actor.name} was stored, but its GM-only roll card could not be created.`,
+				`Pula Szczęścia dla ${actor.name} została zapisana, ale nie udało się utworzyć tajnej karty rzutu dla MG.`,
+			),
+		);
 	}
 
 	return foundry.utils.deepClone(next);
 }
 
-async function requestLuckUseFromGm(message, delta, user) {
+async function requestLuckUseFromGm(
+	message,
+	adjustment,
+	user,
+) {
 	const gm = primaryActiveGm();
 	if (!gm) {
-		throw new Error(localize(
-			"An active GM is required to use Luck because its daily pool is GM-controlled.",
-			"Do użycia Szczęścia potrzebny jest aktywny MG, ponieważ dzienna pula jest kontrolowana przez MG.",
-		));
+		throw new Error(
+			localize(
+				"An active GM is required to use Luck because its daily pool is GM-controlled.",
+				"Do użycia Szczęścia potrzebny jest aktywny MG, ponieważ dzienna pula jest kontrolowana przez MG.",
+			),
+		);
 	}
 
 	const requestId = foundry.utils.randomID();
 	const promise = new Promise((resolve, reject) => {
 		const timeout = setTimeout(() => {
 			pendingRequests.delete(requestId);
-			reject(new Error(localize(
-				"The GM did not answer the Luck request in time.",
-				"MG nie odpowiedział na próbę użycia Szczęścia w wyznaczonym czasie.",
-			)));
+			reject(
+				new Error(
+					localize(
+						"The GM did not answer the Luck request in time.",
+						"MG nie odpowiedział na próbę użycia Szczęścia w wyznaczonym czasie.",
+					),
+				),
+			);
 		}, SOCKET_TIMEOUT_MS);
 
 		pendingRequests.set(requestId, {
@@ -619,7 +727,8 @@ async function requestLuckUseFromGm(message, delta, user) {
 		requestId,
 		requesterUserId: String(user.id ?? ""),
 		messageId: String(message.id ?? ""),
-		delta,
+		rollId: adjustment.id,
+		delta: adjustment.delta,
 	});
 
 	return promise;
@@ -635,11 +744,16 @@ async function onSocketMessage(payload) {
 		return;
 	}
 
-	if (payload.type !== SOCKET_USE_REQUEST || !isPrimaryActiveGm()) {
+	if (
+		payload.type !== SOCKET_USE_REQUEST ||
+		!isPrimaryActiveGm()
+	) {
 		return;
 	}
 
-	const requesterUserId = String(payload.requesterUserId ?? "");
+	const requesterUserId = String(
+		payload.requesterUserId ?? "",
+	);
 	const response = {
 		type: SOCKET_USE_RESPONSE,
 		requestId: String(payload.requestId ?? ""),
@@ -650,9 +764,12 @@ async function onSocketMessage(payload) {
 	};
 
 	try {
-		const requester = game.users?.get(requesterUserId);
+		const requester =
+			game.users?.get(requesterUserId);
 		if (!requester?.active) {
-			throw new Error("Luck requester is not active.");
+			throw new Error(
+				"Luck requester is not active.",
+			);
 		}
 
 		const message = game.messages?.get(
@@ -662,8 +779,15 @@ async function onSocketMessage(payload) {
 		const adjustment = resolveLuckAdjustment(
 			message,
 			payload.delta,
+			payload.rollId,
 		);
-		assertAttempt(message, actor, requester, adjustment);
+
+		assertAttempt(
+			message,
+			actor,
+			requester,
+			adjustment,
+		);
 
 		const result = await performLuckUse(
 			message,
@@ -673,8 +797,12 @@ async function onSocketMessage(payload) {
 		);
 		Object.assign(response, result);
 	} catch (error) {
-		console.error("WFRP1ED | GM Luck request failed.", error);
-		response.error = error?.message ?? "Unable to use Luck.";
+		console.error(
+			"WFRP1ED | GM Luck request failed.",
+			error,
+		);
+		response.error =
+			error?.message ?? "Unable to use Luck.";
 	}
 
 	game.socket.emit(SOCKET_CHANNEL, response);
@@ -690,29 +818,37 @@ function handleSocketResponse(payload) {
 
 	const requestId = String(payload.requestId ?? "");
 	const pending = pendingRequests.get(requestId);
-	if (!pending) {
-		return;
-	}
+	if (!pending) return;
 
 	clearTimeout(pending.timeout);
 	pendingRequests.delete(requestId);
 
 	if (payload.error) {
-		pending.reject(new Error(String(payload.error)));
+		pending.reject(
+			new Error(String(payload.error)),
+		);
 		return;
 	}
 
-	pending.resolve(Object.freeze({
-		ok: payload.ok === true,
-		cancelled: payload.cancelled === true,
-		exhausted: payload.exhausted === true,
-		originalRoll: payload.originalRoll,
-		adjustedRoll: payload.adjustedRoll,
-		delta: payload.delta,
-	}));
+	pending.resolve(
+		Object.freeze({
+			ok: payload.ok === true,
+			cancelled: payload.cancelled === true,
+			exhausted: payload.exhausted === true,
+			rollId: payload.rollId,
+			originalRoll: payload.originalRoll,
+			adjustedRoll: payload.adjustedRoll,
+			delta: payload.delta,
+		}),
+	);
 }
 
-function assertAttempt(message, actor, user, adjustment) {
+function assertAttempt(
+	message,
+	actor,
+	user,
+	adjustment,
+) {
 	if (!(message instanceof foundry.documents.ChatMessage)) {
 		throw new Error(
 			"Luck requires a completed ChatMessage result.",
@@ -732,82 +868,234 @@ function assertAttempt(message, actor, user, adjustment) {
 	}
 
 	if (!hasLuckSkill(actor)) {
-		throw new Error(localize(
-			`${actor.name} does not have the Luck skill.`,
-			`${actor.name} nie posiada umiejętności Szczęście.`,
-		));
+		throw new Error(
+			localize(
+				`${actor.name} does not have the Luck skill.`,
+				`${actor.name} nie posiada umiejętności Szczęście.`,
+			),
+		);
 	}
 
 	if (!canManageActor(actor, user)) {
-		throw new Error(localize(
-			"Only the GM or an OWNER of the rolling Actor may use Luck.",
-			"Szczęścia może użyć tylko MG albo właściciel postaci wykonującej rzut.",
-		));
+		throw new Error(
+			localize(
+				"Only the GM or an OWNER of the rolling Actor may use Luck.",
+				"Szczęścia może użyć tylko MG albo właściciel postaci wykonującej rzut.",
+			),
+		);
 	}
 
-	if (message.getFlag?.(FLAG_SCOPE, LUCK_RESULT_FLAG_KEY)) {
-		throw new Error(localize(
-			"Luck has already modified this roll.",
-			"Szczęście zostało już użyte do tego rzutu.",
-		));
+	const used = luckResultsFor(message);
+	if (used[adjustment.id]) {
+		throw new Error(
+			localize(
+				"Luck has already modified this roll.",
+				"Szczęście zostało już użyte do tego rzutu.",
+			),
+		);
 	}
 
-	if (damageAlreadyApplied(message)) {
-		throw new Error(localize(
-			"Luck cannot change this roll after its damage has been applied.",
-			"Nie można zmienić tego rzutu Szczęściem po zastosowaniu wynikających z niego obrażeń.",
-		));
+	if (
+		adjustment.blocksAfterDamage &&
+		damageAlreadyApplied(message)
+	) {
+		throw new Error(
+			localize(
+				"Luck cannot change this roll after its damage has been applied.",
+				"Nie można zmienić tego rzutu Szczęściem po zastosowaniu wynikających z niego obrażeń.",
+			),
+		);
 	}
 }
 
 function canAttemptLuck(message, delta) {
 	try {
-		const adjustment = resolveLuckAdjustment(message, delta);
+		const adjustment =
+			resolveLuckAdjustment(message, delta);
 		const actor = actorForMessage(message);
-		assertAttempt(message, actor, game.user, adjustment);
-		return game.user?.isGM === true || Boolean(primaryActiveGm());
+
+		assertAttempt(
+			message,
+			actor,
+			game.user,
+			adjustment,
+		);
+
+		return (
+			game.user?.isGM === true ||
+			Boolean(primaryActiveGm())
+		);
 	} catch (_error) {
 		return false;
 	}
 }
 
-function resolveLuckAdjustment(message, delta) {
+/**
+ * Resolve one concrete message roll from a die-family delta.
+ *
+ * Standard d100 Tests expose the historical ±10 choice. Movement procedures
+ * expose their own descriptors, including Leap and the Jump held-items d100
+ * check. If a future card has two rolls with the same delta, callers must pass
+ * the explicit rollId to avoid ambiguity.
+ */
+function resolveLuckAdjustment(
+	message,
+	delta,
+	rollId = null,
+) {
 	const number = Number(delta);
+	const requestedId =
+		rollId === null || rollId === undefined
+			? null
+			: String(rollId);
 
-	if (testResultState(message)) {
-		if (number !== -10 && number !== 10) {
-			return null;
-		}
-		return Object.freeze({ kind: "d100", delta: number });
+	const matches = luckOptionsForMessage(message).filter(
+		(option) =>
+			option.delta === number &&
+			(requestedId === null ||
+				option.id === requestedId),
+	);
+
+	if (matches.length === 1) {
+		return matches[0];
 	}
 
-	if (MovementStandardTest.canApplyLuck(message, number)) {
-		return Object.freeze({ kind: "d6", delta: number });
+	if (matches.length > 1) {
+		throw new Error(
+			"More than one roll matches this Luck action; an explicit roll id is required.",
+		);
 	}
 
 	return null;
+}
+
+function luckOptionsForMessage(message) {
+	const options = [];
+	const state = testResultState(message);
+
+	if (state) {
+		const value = finiteNumber(
+			state.roll,
+			"test roll",
+		);
+
+		for (const delta of [-10, 10]) {
+			options.push(
+				Object.freeze({
+					id: TEST_ROLL_ID,
+					provider: "test",
+					die: "d100",
+					delta,
+					value,
+					blocksAfterDamage: true,
+				}),
+			);
+		}
+	}
+
+	for (
+		const option of
+			MovementStandardTest.luckOptions(message)
+	) {
+		options.push(
+			Object.freeze({
+				...option,
+				provider: "movement",
+			}),
+		);
+	}
+
+	return options;
+}
+
+function luckResultsFor(message) {
+	const raw = message?.getFlag?.(
+		FLAG_SCOPE,
+		LUCK_RESULTS_FLAG_KEY,
+	);
+
+	const results =
+		raw &&
+		typeof raw === "object" &&
+		!Array.isArray(raw)
+			? foundry.utils.deepClone(raw)
+			: {};
+
+	/*
+	 * Backward compatibility for cards created by Luck v1/v2, which stored only
+	 * one result in flags.wfrp1ed.luckResult.
+	 */
+	const legacy = message?.getFlag?.(
+		FLAG_SCOPE,
+		LUCK_RESULT_FLAG_KEY,
+	);
+
+	if (
+		legacy &&
+		typeof legacy === "object" &&
+		!Array.isArray(legacy)
+	) {
+		const legacyId = inferLegacyRollId(
+			message,
+			legacy,
+		);
+		if (legacyId && !results[legacyId]) {
+			results[legacyId] = {
+				...foundry.utils.deepClone(legacy),
+				rollId: legacyId,
+			};
+		}
+	}
+
+	return results;
+}
+
+function inferLegacyRollId(message, legacy) {
+	if (testResultState(message)) {
+		return TEST_ROLL_ID;
+	}
+
+	const state = MovementStandardTest.stateFor(message);
+	if (state?.kind === "jump") {
+		return "movement.jump.reduction";
+	}
+	if (state?.kind === "leap") {
+		return "movement.leap.distance";
+	}
+
+	return String(legacy?.rollId ?? "").trim() || null;
 }
 
 function isWfrpResultMessage(message) {
 	return Boolean(
 		testResultState(message) ||
 		MovementStandardTest.stateFor(message) ||
-		message?.getFlag?.(FLAG_SCOPE, DAMAGE_STATE_FLAG_KEY),
+		message?.getFlag?.(
+			FLAG_SCOPE,
+			DAMAGE_STATE_FLAG_KEY,
+		),
 	);
 }
 
 function actorForMessage(message) {
 	const speaker = message?.speaker ?? {};
 
-	// Token first: an unlinked synthetic Actor may own a different Skill list
-	// than its world prototype. The roll belongs to the token that made it.
-	const scene = game.scenes?.get?.(String(speaker.scene ?? ""));
-	const token = scene?.tokens?.get?.(String(speaker.token ?? ""));
-	if (token?.actor instanceof foundry.documents.Actor) {
+	// Token first: synthetic/unlinked token Actors can have their own Skills.
+	const scene = game.scenes?.get?.(
+		String(speaker.scene ?? ""),
+	);
+	const token = scene?.tokens?.get?.(
+		String(speaker.token ?? ""),
+	);
+	if (
+		token?.actor instanceof foundry.documents.Actor
+	) {
 		return token.actor;
 	}
 
-	const worldActor = game.actors?.get?.(String(speaker.actor ?? ""));
+	const worldActor = game.actors?.get?.(
+		String(speaker.actor ?? ""),
+	);
 	return worldActor instanceof foundry.documents.Actor
 		? worldActor
 		: null;
@@ -817,7 +1105,9 @@ function collectLuckActors() {
 	const unique = new Map();
 
 	const add = (actor) => {
-		if (!(actor instanceof foundry.documents.Actor)) return;
+		if (!(actor instanceof foundry.documents.Actor)) {
+			return;
+		}
 		if (!hasLuckSkill(actor)) return;
 		unique.set(actor.uuid, actor);
 	};
@@ -827,9 +1117,8 @@ function collectLuckActors() {
 	}
 
 	/*
-	 * Polish note: osobno zbieramy syntetycznych Actorów niepołączonych tokenów.
-	 * NPC może mieć Szczęście tylko na konkretnym tokenie, więc sam world Actor
-	 * nie jest wystarczającym źródłem do dziennego resetu.
+	 * Also collect synthetic Actors from placed tokens. An unlinked NPC may
+	 * possess Luck only on that token and must not be silently skipped.
 	 */
 	for (const scene of game.scenes ?? []) {
 		for (const token of scene.tokens ?? []) {
@@ -841,8 +1130,11 @@ function collectLuckActors() {
 	const npcs = [];
 
 	for (const actor of unique.values()) {
-		if (hasExplicitPlayerOwner(actor)) players.push(actor);
-		else npcs.push(actor);
+		if (hasExplicitPlayerOwner(actor)) {
+			players.push(actor);
+		} else {
+			npcs.push(actor);
+		}
 	}
 
 	players.sort(actorNameSort);
@@ -855,11 +1147,17 @@ function hasExplicitPlayerOwner(actor) {
 	for (const user of game.users ?? []) {
 		if (!user || user.isGM) continue;
 
-		const level = Number(actor.ownership?.[user.id] ?? 0);
-		if (level >= CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER) {
+		const level = Number(
+			actor.ownership?.[user.id] ?? 0,
+		);
+		if (
+			level >=
+			CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER
+		) {
 			return true;
 		}
 	}
+
 	return false;
 }
 
@@ -876,19 +1174,23 @@ function hasLuckSkill(actor) {
 		return false;
 	}
 
-	return [...(actor.items ?? [])].some((item) =>
-		item?.type === "skill" &&
-		String(item.system?.rulesId ?? "").trim() === LUCK_RULES_ID,
+	return [...(actor.items ?? [])].some(
+		(item) =>
+			item?.type === "skill" &&
+			String(item.system?.rulesId ?? "").trim() ===
+				LUCK_RULES_ID,
 	);
 }
 
 function canManageActor(actor, user) {
-	if (!(actor instanceof foundry.documents.Actor) || !user) {
+	if (
+		!(actor instanceof foundry.documents.Actor) ||
+		!user
+	) {
 		return false;
 	}
-	if (user.isGM) {
-		return true;
-	}
+	if (user.isGM) return true;
+
 	return actor.testUserPermission(
 		user,
 		CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER,
@@ -900,7 +1202,10 @@ function testResultState(message) {
 		FLAG_SCOPE,
 		TEST_RESULT_FLAG_KEY,
 	);
-	return state && typeof state === "object" && !Array.isArray(state)
+
+	return state &&
+		typeof state === "object" &&
+		!Array.isArray(state)
 		? state
 		: null;
 }
@@ -918,18 +1223,24 @@ function damageAlreadyApplied(message) {
 		return true;
 	}
 
-	const packetId = String(state.packet?.id ?? "").trim();
+	const packetId = String(
+		state.packet?.id ?? "",
+	).trim();
 	const targetActorUuid = String(
 		state.packet?.targetActorUuid ?? "",
 	).trim();
+
 	if (!packetId || !targetActorUuid) {
 		return false;
 	}
 
 	try {
-		const actor = foundry.utils.fromUuidSync(targetActorUuid);
-		return actor instanceof foundry.documents.Actor &&
-			DamageApplication.isApplied(actor, packetId);
+		const actor =
+			foundry.utils.fromUuidSync(targetActorUuid);
+		return (
+			actor instanceof foundry.documents.Actor &&
+			DamageApplication.isApplied(actor, packetId)
+		);
 	} catch (_error) {
 		return false;
 	}
@@ -940,7 +1251,10 @@ function readLuckDaily(actor) {
 		FLAG_SCOPE,
 		LUCK_DAILY_FLAG_KEY,
 	);
-	const generation = positiveInteger(raw?.generation, 0);
+	const generation = positiveInteger(
+		raw?.generation,
+		0,
+	);
 	const initialized = raw?.initialized === true;
 	const allowance = initialized
 		? allowanceValue(raw?.allowance)
@@ -960,14 +1274,17 @@ function readLuckDaily(actor) {
 		used,
 		exhausted:
 			initialized &&
-			(raw?.exhausted === true || used >= allowance),
+			(raw?.exhausted === true ||
+				used >= allowance),
 		group: String(raw?.group ?? ""),
 		resetBy: String(raw?.resetBy ?? ""),
 		resetAt: timestampOrNull(raw?.resetAt),
 		rolledBy: String(raw?.rolledBy ?? ""),
 		rolledAt: timestampOrNull(raw?.rolledAt),
 		lastUsedBy: String(raw?.lastUsedBy ?? ""),
-		lastUsedAt: timestampOrNull(raw?.lastUsedAt),
+		lastUsedAt: timestampOrNull(
+			raw?.lastUsedAt,
+		),
 	};
 }
 
@@ -984,43 +1301,57 @@ async function persistLuckDaily(actor, state) {
 	});
 }
 
-function showLuckStatus(actor, state = readLuckDaily(actor)) {
+function showLuckStatus(
+	actor,
+	state = readLuckDaily(actor),
+) {
 	if (!game.user?.isGM || !hasLuckSkill(actor)) {
 		return;
 	}
 
 	if (!state.initialized) {
-		ui.notifications.info(localize(
-			`Luck — ${actor.name}: no daily pool has been generated yet.`,
-			`Szczęście — ${actor.name}: dzienna pula nie została jeszcze wygenerowana.`,
-		));
+		ui.notifications.info(
+			localize(
+				`Luck — ${actor.name}: no daily pool has been generated yet.`,
+				`Szczęście — ${actor.name}: dzienna pula nie została jeszcze wygenerowana.`,
+			),
+		);
 		return;
 	}
 
-	const remaining = Math.max(0, state.allowance - state.used);
-	ui.notifications.info(localize(
-		`Luck — ${actor.name}: used ${state.used}/${state.allowance}, remaining ${remaining}.`,
-		`Szczęście — ${actor.name}: wykorzystano ${state.used}/${state.allowance}, pozostało ${remaining}.`,
-	));
+	const remaining = Math.max(
+		0,
+		state.allowance - state.used,
+	);
+	ui.notifications.info(
+		localize(
+			`Luck — ${actor.name}: used ${state.used}/${state.allowance}, remaining ${remaining}.`,
+			`Szczęście — ${actor.name}: wykorzystano ${state.used}/${state.allowance}, pozostało ${remaining}.`,
+		),
+	);
 }
 
 function reportUseResult(actor, result, user) {
 	if (!result) return;
 
 	if (result.exhausted) {
-		ui.notifications.warn(localize(
-			"Luck has deserted you.",
-			"Szczęście cię opuściło.",
-		));
+		ui.notifications.warn(
+			localize(
+				"Luck has deserted you.",
+				"Szczęście cię opuściło.",
+			),
+		);
 		return;
 	}
 
 	if (!result.ok) return;
 
-	ui.notifications.info(localize(
-		`Luck changed the roll: ${result.originalRoll} → ${result.adjustedRoll}.`,
-		`Szczęście zmieniło wynik rzutu: ${result.originalRoll} → ${result.adjustedRoll}.`,
-	));
+	ui.notifications.info(
+		localize(
+			`Luck changed the roll: ${result.originalRoll} → ${result.adjustedRoll}.`,
+			`Szczęście zmieniło wynik rzutu: ${result.originalRoll} → ${result.adjustedRoll}.`,
+		),
+	);
 
 	if (user?.isGM) {
 		showLuckStatus(actor);
@@ -1028,13 +1359,23 @@ function reportUseResult(actor, result, user) {
 }
 
 function applyLuckResultPresentation(message, html) {
-	const result = message?.getFlag?.(
-		FLAG_SCOPE,
-		LUCK_RESULT_FLAG_KEY,
-	);
-	if (!result || typeof result !== "object") {
-		return;
-	}
+	const results = luckResultsFor(message);
+	const entries = Object.values(results)
+		.filter(
+			(result) =>
+				result &&
+				typeof result === "object" &&
+				Number.isFinite(
+					Number(result.usedAt ?? 0),
+				),
+		)
+		.sort(
+			(first, second) =>
+				Number(first.usedAt ?? 0) -
+				Number(second.usedAt ?? 0),
+		);
+
+	if (entries.length === 0) return;
 
 	const root = asElement(html);
 	if (!root) return;
@@ -1044,28 +1385,67 @@ function applyLuckResultPresentation(message, html) {
 		: root.querySelector?.(".wfrp1e-test-card");
 	if (!card) return;
 
-	card.querySelector?.("[data-wfrp-luck-result]")?.remove();
+	card
+		.querySelector?.("[data-wfrp-luck-result]")
+		?.remove();
 
 	const panel = document.createElement("div");
 	panel.className = "wfrp1e-luck-result";
 	panel.dataset.wfrpLuckResult = "";
 
-	const label = document.createElement("strong");
-	label.textContent = localize("Luck", "Szczęście");
-	panel.append(label);
+	for (const result of entries) {
+		const row = document.createElement("div");
+		row.className = "wfrp1e-luck-result__row";
 
-	const history = document.createElement("span");
-	history.textContent =
-		`${result.originalRoll} → ${result.adjustedRoll} ` +
-		`(${signed(result.delta)})`;
-	panel.append(history);
+		const label = document.createElement("strong");
+		label.textContent =
+			`${localize("Luck", "Szczęście")} — ` +
+			luckResultLabel(result);
+		row.append(label);
+
+		const history = document.createElement("span");
+		history.textContent =
+			`${result.originalRoll} → ${result.adjustedRoll} ` +
+			`(${signed(result.delta)})`;
+		row.append(history);
+
+		panel.append(row);
+	}
 
 	card.append(panel);
 }
 
+function luckResultLabel(result) {
+	switch (String(result?.rollId ?? "")) {
+		case TEST_ROLL_ID:
+			return localize(
+				"test roll",
+				"rzut testu",
+			);
+		case "movement.jump.reduction":
+			return localize(
+				"Jump d6",
+				"K6 Zeskoku",
+			);
+		case "movement.jump.heldItems":
+			return localize(
+				"held-items d100",
+				"K100 utrzymania przedmiotów",
+			);
+		case "movement.leap.distance":
+			return localize(
+				"Leap dice",
+				"kości Skoku",
+			);
+		default:
+			return String(result?.die ?? "roll");
+	}
+}
+
 function resetCheckbox(name, labelText, checked) {
 	const label = document.createElement("label");
-	label.className = "wfrp1e-luck-reset-dialog__option";
+	label.className =
+		"wfrp1e-luck-reset-dialog__option";
 	label.style.display = "flex";
 	label.style.alignItems = "center";
 	label.style.gap = "0.5rem";
@@ -1080,21 +1460,25 @@ function resetCheckbox(name, labelText, checked) {
 	const text = document.createElement("span");
 	text.textContent = labelText;
 	label.append(text);
+
 	return label;
 }
 
 function messageFromContextTarget(target) {
-	const element = target instanceof HTMLElement
-		? target
-		: target?.[0] instanceof HTMLElement
-			? target[0]
-			: null;
-	const entry = element?.closest?.("[data-message-id]") ?? element;
+	const element =
+		target instanceof HTMLElement
+			? target
+			: target?.[0] instanceof HTMLElement
+				? target[0]
+				: null;
+	const entry =
+		element?.closest?.("[data-message-id]") ??
+		element;
 	const messageId = String(
 		entry?.dataset?.messageId ??
-			target?.attr?.("data-message-id") ??
-			target?.data?.("message-id") ??
-			"",
+		target?.attr?.("data-message-id") ??
+		target?.data?.("message-id") ??
+		"",
 	).trim();
 
 	return messageId
@@ -1104,7 +1488,9 @@ function messageFromContextTarget(target) {
 
 function allowanceValue(value) {
 	const number = Number(value);
-	return Number.isInteger(number) && number >= 1 && number <= 6
+	return Number.isInteger(number) &&
+		number >= 1 &&
+		number <= 6
 		? number
 		: 1;
 }
@@ -1142,25 +1528,35 @@ function finiteNumber(value, label) {
 
 function signed(value) {
 	const number = Number(value);
-	return number >= 0 ? `+${number}` : String(number);
+	return number >= 0
+		? `+${number}`
+		: String(number);
 }
 
 function primaryActiveGm() {
 	return [...(game.users ?? [])]
-		.filter((user) => user?.active && user?.isGM)
+		.filter(
+			(user) => user?.active && user?.isGM,
+		)
 		.sort((first, second) =>
-			String(first.id).localeCompare(String(second.id)),
+			String(first.id).localeCompare(
+				String(second.id),
+			),
 		)[0] ?? null;
 }
 
 function isPrimaryActiveGm() {
 	const primary = primaryActiveGm();
-	return Boolean(primary && primary.id === game.user?.id);
+	return Boolean(
+		primary &&
+		primary.id === game.user?.id,
+	);
 }
 
 function withActorLock(actorUuid, callback) {
 	const key = String(actorUuid ?? "");
-	const previous = actorLocks.get(key) ?? Promise.resolve();
+	const previous =
+		actorLocks.get(key) ?? Promise.resolve();
 	const next = previous
 		.catch(() => undefined)
 		.then(callback);
@@ -1171,6 +1567,7 @@ function withActorLock(actorUuid, callback) {
 			actorLocks.delete(key);
 		}
 	});
+
 	return next;
 }
 
@@ -1184,18 +1581,28 @@ function assertGm(user) {
 
 function asElement(html) {
 	if (html instanceof HTMLElement) return html;
-	if (html?.[0] instanceof HTMLElement) return html[0];
+	if (html?.[0] instanceof HTMLElement) {
+		return html[0];
+	}
 	return null;
 }
 
 function reportError(error) {
-	console.error("WFRP1ED | Luck operation failed.", error);
+	console.error(
+		"WFRP1ED | Luck operation failed.",
+		error,
+	);
 	ui.notifications.error(
 		error?.message ??
-			localize("Unable to use Luck.", "Nie można użyć Szczęścia."),
+		localize(
+			"Unable to use Luck.",
+			"Nie można użyć Szczęścia.",
+		),
 	);
 }
 
 function localize(english, polish) {
-	return game.i18n.lang === "pl" ? polish : english;
+	return game.i18n.lang === "pl"
+		? polish
+		: english;
 }
