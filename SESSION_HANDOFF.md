@@ -10,14 +10,25 @@ Primary branch: `master`
 
 GitHub is the implementation source of truth. Fetch the exact current file before every code change and preserve user commits made between assistant turns.
 
-User-authored visual adjustments which must remain preserved:
+Latest implementation commit before this handoff save:
+
+```text
+15bbd587f8cd5d7e1e3f45bd446369bee5bac9e2
+```
+
+Latest user-authored combat-sheet visual adjustment which must remain preserved:
+
+```text
+308b5fdd996a3683e67da68e096f0eb9c79cc347
+Adjust melee wepon table top display
+```
+
+Earlier user-authored visual adjustments which must also remain preserved:
 
 ```text
 39a9b2bb288e74f5e451fcde9e08780b67806ec6
 Crit wound placement
 ```
-
-Changes only `css/sheets/classic-health.css`, moving the Critical Wounds launcher upward (`bottom: 7px` → `bottom: 20px`).
 
 ```text
 91b3fd95b3d4300b51ef1cd0a45fecff19249892
@@ -77,7 +88,7 @@ Runtime-confirmed:
 
 - GM global daily reset with Players selected by default and NPC/Monsters optional.
 - Secret GM-only `1d6` allowance per selected Actor with Luck.
-- Players do not see the hidden daily pool rolls.
+- Players do not see hidden daily pool rolls.
 - d100/K100 ±10 and provider-exposed d6/K6 ±1.
 - repeated Luck uses on the same physical roll while daily uses remain.
 - append-only `luckHistory`.
@@ -106,7 +117,7 @@ Runtime-confirmed:
 Still open:
 
 - standalone `Upadek / Falling`;
-- actual `drop-held-items` application, blocked until equipment has a canonical held/equipped state.
+- actual `drop-held-items` application. The new combat equipment state now gives us a canonical held/worn distinction, so this is no longer blocked by missing state, but application should wait until the unified inventory flow is stable.
 
 ---
 
@@ -135,125 +146,23 @@ The user runtime-confirmed that the category window lists, creates, opens and re
 
 Future Diseases/Choroby, Mutations/Mutacje, etc. should get their own launcher and purpose-built window only when their real Item/data contract exists.
 
-### CriticalWoundData provenance
-
-Current rule-neutral persistent fields:
-
-```text
-description
-criticalValue
-hitLocation
-resolution.damagePacketId
-resolution.sourceMessageId
-resolution.resultMessageId
-resolution.tableRole
-resolution.tableVariant
-resolution.providerId
-resolution.tableUuid
-resolution.tableResultId
-resolution.roll
-resolution.resolvedByUserId
-resolution.resolvedAt
-```
-
-No speculative bleeding/amputation/recovery fields were added. Ongoing mechanical consequences belong to embedded native Active Effects once their consumer contracts are implemented.
-
 ---
 
-# Critical Wound materialization boundary — IMPLEMENTED, FULL PATH NOT YET RUNTIME-CONFIRMED
+# Detailed Critical Hits — RULEBOOK AUDITED, IMPLEMENTED, END-TO-END RUNTIME TEST DEFERRED
+
+The user supplied both English and Polish WFRP 1e Core Rulebooks. Detailed Critical Hits / Trafienia krytyczne were visually audited from printed pp. 122–124 in both editions. English controls mechanics; Polish controls official terminology.
 
 Implemented:
-
-```text
-module/criticals/CriticalWoundApplication.mjs
-```
-
-Exposed as:
-
-```text
-game.WFRP1ED.criticals.wounds
-```
-
-It converts an already-resolved critical result into one Actor-owned `criticalWound` Item. It is rule-neutral: it does not choose tables or interpret injuries.
-
-It enforces GM/target-OWNER permission, requires resolution provenance, accepts verified embedded ActiveEffect source objects, and prevents sequential duplicate materialization from the same result ChatMessage.
-
-The underlying Actor-owned wound workflow is runtime-confirmed; the automatic result→materializer connection below still needs runtime testing.
-
----
-
-# Detailed Critical Hit rulebook audit — VERIFIED
-
-The user supplied `WFRP Core RuleBooks(6).zip` containing both Core Rulebooks. The detailed tables were visually re-audited from the scans.
-
-### English Core Rulebook
-
-- Combat — **Critical Hits / Critical Hit Chart / Critical Effects**, printed pp. **122-124**.
-
-### Polish Core Rulebook
-
-- Walka — **Trafienia krytyczne / Tabela trafień krytycznych / Efekty trafień krytycznych**, printed pp. **122-124**.
-
-The English and Polish editions agree mechanically for the audited detailed chart/effects. English controls mechanics; Polish controls official terminology.
-
-Verified chart contract:
-
-```text
-D100       +1  +2  +3  +4  +5  +6+
-01-10       1   3   5   7  11* 14*
-11-20       2   4   6   9* 13* 15
-21-30       3   5   8* 14* 16  16
-31-40       4   7  10* 13* 15  15
-41-50       5   9* 14* 16  16  16
-51-60       7  12* 15  15  15  15
-61-70       9* 16  16  16  16  16
-71-80      11* 15  15  15  15  15
-81-90      16  16  16  16  16  16
-91-00      15  15  15  15  15  15
-```
-
-`*` means the victim must flee combat if possible.
-
-The four numbered effect families are:
-
-```text
-Arm / Ramię
-Head / Głowa
-Body / Korpus
-Leg / Noga
-```
-
-Each has effects 1-16. Immediate-fatal Core rows verified and represented structurally are:
-
-```text
-Arm: 15, 16
-Head: 14, 15, 16
-Body: 14, 15, 16
-Leg: 15, 16
-```
-
-Delayed/conditional death rows are not marked as immediate `killed`.
-
-Important Core rule: once Wounds reach zero, additional Wounds from critical effects are not accumulated as negative Wounds; each such later loss is checked as the appropriate Sudden Death critical for that round.
-
----
-
-# Core detailed critical tables/resolver — IMPLEMENTED, RUNTIME TEST REQUIRED
-
-New implementation on the current detailed-critical slice:
 
 ```text
 module/criticals/CoreDetailedCriticalTables.mjs
 module/criticals/DetailedCriticalResolver.mjs
 module/criticals/DetailedCriticalIntegration.mjs
+module/criticals/CriticalWoundApplication.mjs
 templates/chat/detailed-critical-result.hbs
 ```
 
-`CriticalBootstrap.mjs` now registers/materializes the Core detailed providers alongside Sudden Death.
-
-## Managed Core tables
-
-The GM-ready hook materializes ten read-only system-managed RollTables:
+The GM-ready hook materializes ten managed Core RollTables:
 
 ```text
 6 × Critical Hit Chart variants: +1, +2, +3, +4, +5, +6+
@@ -263,86 +172,297 @@ The GM-ready hook materializes ten read-only system-managed RollTables:
 1 × Leg effects
 ```
 
-The chart stores stable structured result flags (`effectNumber`, `flee`) so mechanics are never parsed from localized table text. Effect tables store stable location/effect-number/outcome flags. World/module overrides remain supported through `CriticalTableRegistry`.
-
-## Detailed resolver
-
-`DetailedCriticalResolver`:
-
-1. requires a positive `criticalValue`;
-2. requires canonical humanoid hit location (`head`, `rightArm`, `leftArm`, `body`, `rightLeg`, `leftLeg`);
-3. resolves the correct +1…+6+ chart provider;
-4. performs one real d100 roll;
-5. reads the numbered effect from structured chart data;
-6. resolves the matching Arm/Head/Body/Leg effect table;
-7. returns a language-neutral resolution snapshot plus provider/table/result provenance.
-
-## Chat/application lifecycle
-
-Intended current flow:
+Intended lifecycle:
 
 ```text
-applied damage with critical.mode = detailed and criticalValue > 0
-→ source damage card exposes Resolve Detailed Critical
-→ real 1d100
-→ Actor-authoritative detailed resolution
-→ separate roll-bearing detailed result ChatMessage
-→ result is localized per viewing client
-→ nonfatal result offers Apply Critical Wound to GM/target OWNER
-→ exactly one Actor-owned criticalWound Item via CriticalWoundApplication
+real combat damage with critical.mode = detailed
+→ apply damage
+→ Resolve Detailed Critical
+→ real d100
+→ separate detailed result card
+→ nonfatal result: Apply Critical Wound
+→ exactly one Actor-owned criticalWound Item
 → visible under Psychika i zdrowie / Rany krytyczne
 ```
 
-Immediate-fatal detailed results use `outcome: killed` and the existing fatal/Fate lifecycle instead of offering persistent wound materialization.
+Immediate-fatal detailed results use the existing defeated/Fate lifecycle.
 
-### Deliberately not automated in this slice
+### Why runtime testing was deferred
 
-The exact table text is preserved in the Critical Wound description, but ongoing consequences such as:
+A synthetic console smoke test exposed that Armour/Toughness mitigation is intentionally still unimplemented in `DamageResolver`. The first suggested console snippet also used the wrong nested `DamagePacket` constructor shape; the corrected constructor would use top-level `armour`, `toughness`, and `criticalMode` arguments.
 
-- per-round bleeding;
-- temporary inability to attack/parry/move;
-- characteristic penalties;
-- unconsciousness;
-- amputation state;
-- recovery-until-medical-attention;
-- forced Sudden Death routing for later criticals;
+Rather than continue with synthetic damage, the user chose to implement the real Weapon/Armour/combat dependencies first. This is now the active development path. Do **not** call the detailed critical end-to-end path runtime-confirmed yet.
 
-are **not yet converted into Active Effects or timers**. The current rule-effect registry does not yet have canonical consumers for all of these. Do not encode them as arbitrary Actor data paths or fake Apply actions.
-
-Next dependency after the resolver/materialization path is runtime-confirmed: define the minimal stable consequence/effect contracts needed by the verified Core rows, then generate embedded Active Effects from those structured contracts.
+Ongoing detailed-critical consequences such as bleeding, temporary incapacity, characteristic penalties, unconsciousness, amputation/recovery, and forced Sudden Death routing are still deliberately not automated until stable consequence/ActiveEffect consumer contracts exist.
 
 ---
 
-# Required next runtime test
+# Combat equipment foundation — IMPLEMENTED, PARTIALLY RUNTIME-CONFIRMED
 
-1. Full Foundry/world restart so GM-ready can create the managed Core detailed tables.
-2. Verify six detailed chart tables plus four location-effect tables appear without startup errors.
-3. Create/apply a damage packet with `criticalMode: detailed`, positive overflow, and canonical humanoid hit location.
-4. Verify the source card offers **Resolve Detailed Critical / Rozstrzygnij szczegółowe trafienie krytyczne**.
-5. Resolve it and confirm a real d100 plus separate detailed result card with hit location, effect number/text and starred flee note when applicable.
-6. On a nonfatal result, GM or target OWNER applies the wound; confirm exactly one new Critical Wound appears under Psychika i zdrowie and repeated application does not duplicate it.
-7. Test an immediate-fatal detailed row; confirm defeated status/Fate integration works and no persistent-wound Apply action is offered.
-8. Compare Polish and English clients for the same result card.
-9. Regression-check existing Sudden Death.
+This became the active subsystem after detailed-critical resolution reached the real-combat dependency boundary.
 
-Do not call this detailed critical path runtime-confirmed until the user completes the Foundry test.
+## Native Weapon and Armour contracts
+
+Implemented native Foundry v14 Item TypeDataModels and sheets for:
+
+```text
+weapon
+armour
+```
+
+Key files include:
+
+```text
+module/data-models/item/InventoryItemFields.mjs
+module/data-models/item/WeaponData.mjs
+module/data-models/item/ArmourData.mjs
+module/combat/CombatEquipment.mjs
+module/combat/CombatEquipmentState.mjs
+module/combat/CombatEquipmentBootstrap.mjs
+module/combat/CombatSheetIntegration.mjs
+module/sheets/WeaponItemSheet.mjs
+module/sheets/ArmourItemSheet.mjs
+templates/item/weapon-item-sheet.hbs
+templates/item/armour-item-sheet.hbs
+css/sheets/combat-item.css
+css/sheets/classic-combat-equipment.css
+```
+
+### Canonical internal equipment state
+
+Persistent physical Item state remains precise:
+
+```text
+state.mode = carried | held | worn
+state.hand = none | right | left | both
+```
+
+User-facing combat UI deliberately simplifies this to **Carried / Used**:
+
+```text
+Used weapon  → held
+Used shield  → held
+Used armour  → worn
+Not used     → carried
+```
+
+Do not collapse the internal held/worn distinction. It is needed by mechanics such as dropping held Items and armour protection, even though users should normally interact with a simpler two-state control.
+
+### Weapon facts currently stored
+
+- melee/ranged kind;
+- ordinary/specialist/improvised group;
+- handedness;
+- parry suitability and main-rule parry bonus;
+- optional Weapon Modifier values, stored but not automatically enabled;
+- ranged short/long/max range;
+- effective Strength;
+- reload.
+
+### Armour facts currently stored
+
+- Armour class (Shield/Mail/Plate/Leather/Other);
+- Armour Points;
+- explicit coverage for six humanoid body locations;
+- parry suitability and bonus for Shields;
+- carried/held/worn state.
+
+### Runtime checks already passed
+
+Before the later UX fixes, the user confirmed the equipment resolver returned expected values in console tests, including active Armour totals and parry options.
+
+Current resolver APIs include:
+
+```text
+game.WFRP1ED.equipment.resolver.armourAt(actor, location)
+game.WFRP1ED.equipment.resolver.shieldArmour(actor)
+game.WFRP1ED.equipment.resolver.parryOptions(actor)
+```
+
+`armourAt` includes active Shield AP for actual combat by default. Classic-sheet presentation may call it with `includeShields: false` because the printed sheet records Shield separately.
+
+---
+
+# Classic combat-sheet equipment UX — IMPLEMENTED, LATEST FIXES NEED RUNTIME CONFIRMATION
+
+The page-1 printed tables now render Actor-owned Weapon and Armour Items.
+
+Current behavior:
+
+- Melee and ranged Weapons are shown in their printed tables.
+- Armour Items are shown in the Armour table.
+- Double-clicking a row opens the Item sheet.
+- Small radio-style state control toggles Carried / Used.
+- Trash icon removes the Item from the Actor after confirmation.
+- carried rows are visually subdued; used rows are normal emphasis.
+- positive optional melee modifiers display with `+`;
+- negative modifiers retain `-`;
+- zero displays as `-` instead of `0`.
+- ranged Weapon sheet exposes short/long/max range, effective Strength, and reload.
+- shared checkbox artwork now matches the Standard Test checkbox style across system-owned forms.
+
+### Armour Point diagram
+
+The six printed body-location boxes now show **worn non-Shield armour only**.
+
+A separate derived Shield value is displayed in the printed shield symbol. Actual combat protection still includes an active Shield when `CombatEquipment.armourAt(...)` is called normally.
+
+The user's latest screenshot showed Mail Shirt body protection and Shield value appearing in the intended separate places after restoring the Item data.
+
+### Armour location presentation
+
+Latest implementation at commit `15bbd587...` changes long Armour location text:
+
+- full six-location coverage displays `Whole body / Całe ciało` instead of enumerating every location;
+- partial multi-location coverage is allowed to wrap over multiple lines;
+- full detail remains available in the tooltip.
+
+This specific presentation change has **not yet been runtime-confirmed by the user**.
+
+---
+
+# Important bug fixes at the current checkpoint
+
+## Carried / Used toggle data-loss bug
+
+The initial toggle wrote only the dotted key:
+
+```text
+system.state.mode
+```
+
+Because WeaponData/ArmourData still contain compatibility migrations, this could cause omitted authored fields to be normalized to defaults during update cleaning. Runtime symptom: Armour Points and coverage disappeared after toggling Carried/Used even though the state itself changed.
+
+Current fix in `CombatEquipmentState.mjs`:
+
+```text
+read complete current TypeDataModel source
+→ change only state.mode in that full source
+→ update the complete system object
+```
+
+The user's following screenshot showed restored AP/coverage and correct used-state presentation, but they did not explicitly declare this regression fully closed. Recheck it next session before treating it as runtime-confirmed.
+
+## Classic-sheet scroll reset bug — LATEST FIX NOT YET RUNTIME-CONFIRMED
+
+Problem: any Actor/owned-Item update caused the long two-page Classic sheet to jump back toward the top.
+
+The first two attempted fixes were insufficient because the wrong scroller/lifecycle moment was captured.
+
+Latest implementation in:
+
+```text
+module/sheets/ClassicSheetScrollPreservation.mjs
+```
+
+Current strategy:
+
+```text
+.wfrp1ed-classic-sheet is the actual scroll owner
+→ continuously record its position on scroll events
+→ also capture before rerender when possible
+→ restore on the pending rerendered sheet
+→ restore again on the next animation frame after live DOM insertion/layout
+```
+
+The user had **not yet tested this latest commit** when the session ended. Do not say scroll preservation works until runtime-confirmed.
+
+Immediate first test next session:
+
+1. scroll well down the Classic sheet;
+2. edit Fate;
+3. confirm position remains;
+4. scroll elsewhere and toggle Weapon/Armour Carried/Used;
+5. confirm position remains;
+6. edit an owned combat Item and confirm the Actor sheet still retains its position.
+
+If this still fails, inspect the live DOM for the actual element whose `scrollTop` changes and log the ApplicationV2 hook ordering rather than adding another speculative preservation layer.
+
+---
+
+# Approved inventory direction — NEXT FEATURE AFTER CURRENT FIXES ARE CONFIRMED
+
+The user proposed, and we agreed, that page-2 **Ekwipunek / Equipment** should become the master physical inventory view.
+
+Target UX:
+
+```text
+Page 2 Ekwipunek
+→ normal Equipment + Weapons + Armour in one inventory list
+→ primary Carried / Used radio-style state control
+→ open/edit/delete actions
+```
+
+Then page-1 combat tables become **combat summaries**, not duplicate inventory managers:
+
+```text
+Broń ręczna      → only Used melee Weapons
+Broń strzelecka  → only Used ranged Weapons
+Zbroja            → only Used Armour/Shield Items
+```
+
+Important architecture decision:
+
+- user-facing state stays simple: Carried / Used;
+- internal `held` vs `worn` remains intact;
+- do not hide Carried Items from page-1 combat tables until page-2 Ekwipunek is actually implemented, otherwise an Item could disappear from every useful sheet UI.
+
+The `equipment` Item type still exists as an older/un-audited contract. Audit/normalize the physical Equipment model as part of this slice rather than building the page-2 inventory around stale placeholder fields.
+
+After unified Ekwipunek is runtime-confirmed, remove or reduce redundant controls in the page-1 combat summaries as appropriate.
+
+---
+
+# Combat implementation path after inventory
+
+Once the unified physical inventory is stable:
+
+1. Audit and implement Combatant-level **Attacks / Ataki** turn resource.
+   - Actor characteristic `A` defines the allowance.
+   - spent attacks/parries are encounter/turn state on Combatant, not permanent Actor characteristic mutation.
+2. Implement first melee attack transaction:
+
+```text
+choose target + used/held weapon
+→ check remaining Attacks
+→ WS test + audited modifiers
+→ miss OR hit
+→ hit location from reversed attack d100
+→ defence opportunity
+→ Parry / Dodge / none
+→ damage roll
+→ Strength + weapon
+→ Toughness + armour by location
+→ existing DamagePacket
+→ Apply Damage
+→ detailed/Sudden Death critical pipeline
+```
+
+3. Implement Parry/Dodge as responses to a pending incoming attack, not disconnected standalone rolls.
+4. Then expand to charge, ranged attack/reload/range, surprise, fleeing, optional Weapon Modifiers, shields and other audited combat options.
+
+The Core Weapon Modifiers table is optional. Storing modifier fields does not mean the optional rule is enabled.
 
 ---
 
 # Documentation debt
 
-`RULEBOOK_IMPLEMENTATION.md` still contains older status statements from before Wounds clamping, current Fate/Luck work and this detailed-critical audit. Do not trust its old implementation-status rows blindly. Update that existing document in place after this runtime slice; do not create a competing audit document.
+`RULEBOOK_IMPLEMENTATION.md` still contains older implementation-status statements from before current Wounds/Fate/Luck/detailed-critical/combat-equipment work. Do not trust its old status rows blindly. Update that existing document in place after the current combat-equipment/inventory runtime slice; do not create a competing audit document.
 
 ---
 
 # Other intentionally open work
 
-1. Detailed Critical consequence/ActiveEffect contracts and recovery automation after current runtime confirmation.
-2. Standalone `Upadek / Falling`.
-3. Canonical held/equipped equipment state + real `drop-held-items` application.
-4. Fate internal `{value,max}` cleanup to final one-value contract with migration.
-5. Future Psychika i zdrowie categories such as Diseases and Mutations, only after real Item/data contracts are audited.
-6. Remaining unaudited Actor/Item types and Classic-sheet sections required by the MVP.
+1. Latest Classic scroll-preservation runtime verification.
+2. Unified page-2 Ekwipunek master inventory.
+3. Combatant Attacks/action economy and first real melee attack.
+4. End-to-end runtime test of detailed Critical Wounds through real combat damage.
+5. Detailed Critical consequence/ActiveEffect contracts and recovery automation.
+6. Standalone `Upadek / Falling`.
+7. Real `drop-held-items` application using canonical held state.
+8. Fate internal `{value,max}` cleanup to final one-value contract with migration.
+9. Future Psychika i zdrowie categories such as Diseases and Mutations only after real Item/data contracts are audited.
+10. Remaining unaudited Actor/Item types and Classic-sheet sections required by the MVP.
 
 ---
 
@@ -360,3 +480,4 @@ Do not call this detailed critical path runtime-confirmed until the user complet
 - Do not infer mechanical identity from localized names; use stable IDs/flags.
 - Keep damage, critical resolution, Fate and consequence permissions separate.
 - Do not create an Apply action unless the underlying persistent model can actually represent and perform the consequence.
+- Keep user-facing equipment state simple, but retain mechanically necessary internal precision.
