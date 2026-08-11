@@ -54,9 +54,26 @@ export class CombatEquipmentState {
 			return item;
 		}
 
-		await item.update({
-			"system.state.mode": mode,
-		});
+		/*
+		 * Update the complete TypeDataModel source, not only a dotted state key.
+		 *
+		 * WeaponData/ArmourData still contain compatibility migrations which are
+		 * allowed to receive candidate system data during Foundry's update
+		 * cleaning workflow. Supplying only `system.state.mode` can therefore
+		 * make omitted authored fields look like legacy/missing data and reset
+		 * them to migration defaults. That showed up at runtime as Armour Points
+		 * and coverage disappearing after a Carried/Used toggle.
+		 *
+		 * Keeping the whole current source in this explicit state transaction
+		 * makes the operation lossless while the legacy migration layer exists.
+		 */
+		const system = systemSource(item);
+		system.state = {
+			...(system.state ?? {}),
+			mode,
+		};
+
+		await item.update({ system });
 
 		return item;
 	}
@@ -64,6 +81,16 @@ export class CombatEquipmentState {
 	static async toggleUsed(item) {
 		return this.setUsed(item, !this.isUsed(item));
 	}
+}
+
+function systemSource(item) {
+	const model = item.system;
+
+	if (typeof model?.toObject === "function") {
+		return model.toObject(true);
+	}
+
+	return foundry.utils.deepClone(model ?? {});
 }
 
 function assertSupportedItem(item) {
