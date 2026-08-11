@@ -85,7 +85,11 @@ function renderDerivedArmourPoints(root, actor) {
 		const input = root.querySelector(selector);
 		if (!(input instanceof HTMLInputElement)) continue;
 
-		const protection = CombatEquipment.armourAt(actor, location);
+		const protection = CombatEquipment.armourAt(
+			actor,
+			location,
+			{ includeShields: false },
+		);
 		makeDerivedArmourInput(
 			input,
 			protection.total,
