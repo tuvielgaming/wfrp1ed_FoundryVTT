@@ -95,12 +95,13 @@ export class WeaponData extends TypeDataModel {
 				parry: integerField(),
 			}),
 
-			/** Transitional ranged-weapon facts retained for future ranged audit. */
+			/** Authored ranged/thrown-weapon facts shown by the printed sheet. */
 			range: new SchemaField({
 				short: nonNegativeIntegerField(),
 				long: nonNegativeIntegerField(),
 				max: nonNegativeIntegerField(),
 			}),
+			effectiveStrength: nonNegativeIntegerField(),
 			reload: nonNegativeIntegerField(),
 		};
 	}
@@ -119,14 +120,15 @@ export class WeaponData extends TypeDataModel {
 		const oldParry = objectValue(sourceObject.parry);
 		const optional = objectValue(sourceObject.optionalModifiers);
 		const range = objectValue(sourceObject.range);
+		const kind = normalizeAllowed(
+			sourceObject.kind,
+			Object.values(WEAPON_KIND),
+			inferWeaponKind(sourceObject, range),
+		);
 
 		migrated.rulesId = unwrapText(sourceObject.rulesId);
 		migrated.weaponClass = unwrapText(sourceObject.weaponClass);
-		migrated.kind = normalizeAllowed(
-			sourceObject.kind,
-			Object.values(WEAPON_KIND),
-			inferWeaponKind(range),
-		);
+		migrated.kind = kind;
 		migrated.group = normalizeAllowed(
 			sourceObject.group,
 			Object.values(WEAPON_GROUP),
@@ -162,7 +164,9 @@ export class WeaponData extends TypeDataModel {
 			damage: legacyModifier(
 				optional,
 				"damage",
-				sourceObject.damage,
+				kind === WEAPON_KIND.MELEE
+					? sourceObject.damage
+					: 0,
 			),
 			parry: legacyModifier(
 				optional,
@@ -176,6 +180,15 @@ export class WeaponData extends TypeDataModel {
 			long: toNonNegativeInteger(unwrapValue(range.long)),
 			max: toNonNegativeInteger(unwrapValue(range.max)),
 		};
+		migrated.effectiveStrength = toNonNegativeInteger(
+			unwrapValue(
+				Object.hasOwn(sourceObject, "effectiveStrength")
+					? sourceObject.effectiveStrength
+					: kind === WEAPON_KIND.RANGED
+						? sourceObject.damage
+						: 0,
+			),
+		);
 		migrated.reload = toNonNegativeInteger(
 			unwrapValue(sourceObject.reload),
 		);
@@ -220,7 +233,15 @@ function legacyModifier(container, key, legacyValue) {
 	return toInteger(unwrapValue(legacyValue));
 }
 
-function inferWeaponKind(range) {
+function inferWeaponKind(source, range) {
+	if (source?.isRanged === true) {
+		return WEAPON_KIND.RANGED;
+	}
+
+	if (source?.isRanged === false) {
+		return WEAPON_KIND.MELEE;
+	}
+
 	return [range.short, range.long, range.max].some(
 		(value) => toNonNegativeInteger(unwrapValue(value)) > 0,
 	)
