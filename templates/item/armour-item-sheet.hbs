@@ -78,7 +78,7 @@
 			<legend>{{ui.coverage}}</legend>
 			<div class="combat-item-sheet__coverage-grid">
 				{{#each coverage as |area|}}
-					<label class="combat-item-sheet__check">
+					<label class="combat-item-sheet__check wfrp1ed-checkbox">
 						<input type="checkbox" name="system.coverage.{{area.id}}" {{#if area.checked}}checked{{/if}} {{#unless ../editable}}disabled{{/unless}}>
 						<span>{{area.label}}</span>
 					</label>
@@ -87,7 +87,7 @@
 		</fieldset>
 
 		<div class="combat-item-sheet__parry">
-			<label class="combat-item-sheet__check">
+			<label class="combat-item-sheet__check wfrp1ed-checkbox">
 				<input type="checkbox" name="system.parry.suitable" {{#if system.parry.suitable}}checked{{/if}} {{#unless editable}}disabled{{/unless}}>
 				<span>{{ui.parrySuitable}}</span>
 			</label>
