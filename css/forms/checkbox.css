@@ -1,0 +1,66 @@
+/******************************************************************/
+/*                     WFRP 1e checkboxes                         */
+/******************************************************************/
+
+/*
+ * System-owned checkbox rows use one stable parchment-safe presentation.
+ * The real checkbox remains in the document for native form semantics, but
+ * the label draws the visible box/check so Foundry Accent Color does not alter
+ * individual system sheets differently.
+ */
+.wfrp1ed-checkbox {
+	position: relative;
+	display: flex;
+	align-items: baseline;
+	gap: 7px;
+	min-width: 0;
+	cursor: pointer;
+}
+
+.wfrp1ed-checkbox > input[type="checkbox"] {
+	position: absolute !important;
+	width: 1px !important;
+	height: 1px !important;
+	min-width: 1px !important;
+	margin: 0 !important;
+	padding: 0 !important;
+	opacity: 0 !important;
+	appearance: none !important;
+	-webkit-appearance: none !important;
+	pointer-events: none;
+}
+
+.wfrp1ed-checkbox::before {
+	content: "";
+	display: inline-grid;
+	place-items: center;
+	flex: 0 0 16px;
+	width: 16px;
+	height: 16px;
+	border: 1px solid rgb(71 49 29 / 82%);
+	border-radius: 1px;
+	background: transparent;
+	box-shadow: none;
+	color: #2b2115;
+	font-family: Arial, sans-serif;
+	font-size: 14px;
+	font-weight: 700;
+	line-height: 1;
+}
+
+.wfrp1ed-checkbox:has(> input[type="checkbox"]:checked)::before {
+	content: "✓";
+}
+
+.wfrp1ed-checkbox:has(> input[type="checkbox"]:focus-visible)::before {
+	outline: 2px solid currentColor;
+	outline-offset: 2px;
+}
+
+.wfrp1ed-checkbox:has(> input[type="checkbox"]:disabled) {
+	cursor: default;
+}
+
+.wfrp1ed-checkbox:has(> input[type="checkbox"]:disabled)::before {
+	opacity: 0.65;
+}
