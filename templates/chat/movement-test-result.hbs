@@ -35,6 +35,23 @@
     </div>
   </details>
 
+  {{#if showHeldItemsAction}}
+    <div class="wfrp1e-movement-consequence">
+      <button
+        type="button"
+        class="wfrp1e-movement-consequence__action"
+        data-wfrp-held-items-roll
+      >{{heldItemsActionLabel}}</button>
+    </div>
+  {{/if}}
+
+  {{#if heldItemsPhaseLabel}}
+    <div
+      class="wfrp1e-movement-consequence__status"
+      data-wfrp-held-items-phase
+    >{{heldItemsPhaseLabel}}</div>
+  {{/if}}
+
   <div class="wfrp1e-test-card__metrics">
     <div class="wfrp1e-test-card__metric">
       <span>{{metricLeftLabel}}</span>

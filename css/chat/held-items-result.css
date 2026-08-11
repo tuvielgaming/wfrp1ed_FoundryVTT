@@ -1,0 +1,55 @@
+.wfrp1e-movement-consequence {
+    margin: 0.45rem 0 0;
+    padding: 0.45rem 0.55rem 0;
+    border-top: 1px solid rgba(88, 66, 38, 0.25);
+}
+
+.wfrp1e-movement-consequence__action {
+    width: 100%;
+}
+
+.wfrp1e-movement-consequence__status {
+    padding: 0.45rem 0.55rem;
+    border-top: 1px solid rgba(88, 66, 38, 0.25);
+    font-size: 0.8rem;
+    font-style: italic;
+}
+
+.wfrp1e-held-items-card {
+    padding: 0.65rem;
+    border: 1px solid rgba(88, 66, 38, 0.45);
+    border-radius: 4px;
+}
+
+.wfrp1e-held-items-card__header h3 {
+    margin: 0;
+    font-size: 1.05rem;
+}
+
+.wfrp1e-held-items-card__rule {
+    margin-top: 0.45rem;
+    padding-top: 0.4rem;
+    border-top: 1px solid rgba(88, 66, 38, 0.25);
+    font-size: 0.82rem;
+}
+
+.wfrp1e-held-items-card__roll {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-top: 0.5rem;
+    padding: 0.4rem 0;
+    border-top: 1px solid rgba(88, 66, 38, 0.25);
+    border-bottom: 1px solid rgba(88, 66, 38, 0.25);
+}
+
+.wfrp1e-held-items-card__roll strong {
+    font-size: 1.25rem;
+}
+
+.wfrp1e-held-items-card__outcome {
+    margin-top: 0.5rem;
+    text-align: center;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+}

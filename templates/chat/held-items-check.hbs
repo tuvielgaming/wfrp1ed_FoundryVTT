@@ -1,0 +1,21 @@
+<article
+  class="wfrp1e-held-items-card {{#if success}}is-success{{else}}is-failure{{/if}}"
+  data-wfrp-held-items-card
+>
+  <header class="wfrp1e-held-items-card__header">
+    <h3 data-held-items-title>{{title}}</h3>
+  </header>
+
+  <div class="wfrp1e-held-items-card__rule" data-held-items-rule>
+    {{rule}}
+  </div>
+
+  <div class="wfrp1e-held-items-card__roll">
+    <span data-held-items-roll-label>{{rollLabel}}</span>
+    <strong data-held-items-roll-value>{{roll}}</strong>
+  </div>
+
+  <div class="wfrp1e-held-items-card__outcome" data-held-items-outcome>
+    {{outcomeLabel}}
+  </div>
+</article>
