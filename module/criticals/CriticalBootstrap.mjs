@@ -6,6 +6,9 @@ import {
 	SUDDEN_DEATH_OUTCOME,
 } from "./CoreSuddenDeathTables.mjs";
 import { registerCriticalDamageIntegration } from "./CriticalDamageIntegration.mjs";
+import {
+	CriticalWoundApplication,
+} from "./CriticalWoundApplication.mjs";
 import { registerFatalCriticalIntegration } from "./FatalCriticalIntegration.mjs";
 import {
 	CRITICAL_TABLE_PROVIDER_SOURCE,
@@ -42,6 +45,7 @@ Hooks.once("init", () => {
 			}),
 			registry: CriticalTableRegistry,
 			suddenDeath: SuddenDeathResolver,
+			wounds: CriticalWoundApplication,
 		}),
 	});
 
