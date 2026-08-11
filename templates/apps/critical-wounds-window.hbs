@@ -1,0 +1,103 @@
+<section class="critical-wounds-browser">
+	<header class="critical-wounds-browser__header">
+		<div>
+			<h2>{{ui.title}}</h2>
+			<p>{{actor.name}}</p>
+		</div>
+
+		{{#if editable}}
+			<button
+				type="button"
+				class="critical-wounds-browser__add"
+				data-action="addWound"
+				title="{{ui.add}}"
+			>
+				<i class="fas fa-plus" aria-hidden="true"></i>
+				<span>{{ui.add}}</span>
+			</button>
+		{{/if}}
+	</header>
+
+	<p class="critical-wounds-browser__hint">{{ui.hint}}</p>
+
+	{{#if wounds.length}}
+		<div class="critical-wounds-browser__list">
+			{{#each wounds as |wound|}}
+				<article
+					class="critical-wounds-browser__row"
+					data-item-id="{{wound.id}}"
+				>
+					<img
+						class="critical-wounds-browser__image"
+						src="{{wound.img}}"
+						alt=""
+					/>
+
+					<div class="critical-wounds-browser__main">
+						<button
+							type="button"
+							class="critical-wounds-browser__name"
+							data-action="openWound"
+							title="{{../ui.open}}"
+						>
+							{{wound.name}}
+						</button>
+
+						<div class="critical-wounds-browser__meta">
+							{{#if wound.criticalValue}}
+								<span>
+									<strong>{{../ui.criticalValue}}:</strong>
+									+{{wound.criticalValue}}
+								</span>
+							{{/if}}
+
+							{{#if wound.hitLocation}}
+								<span>
+									<strong>{{../ui.location}}:</strong>
+									{{wound.hitLocation}}
+								</span>
+							{{/if}}
+
+							<span>
+								<strong>{{../ui.effects}}:</strong>
+								{{wound.effectCount}}
+							</span>
+						</div>
+
+						{{#if wound.description}}
+							<p class="critical-wounds-browser__description">
+								{{wound.description}}
+							</p>
+						{{/if}}
+					</div>
+
+					<div class="critical-wounds-browser__actions">
+						<button
+							type="button"
+							data-action="openWound"
+							title="{{../ui.open}}"
+						>
+							<i class="fas fa-pen-to-square" aria-hidden="true"></i>
+						</button>
+
+						{{#if ../editable}}
+							<button
+								type="button"
+								class="critical-wounds-browser__remove"
+								data-action="removeWound"
+								title="{{../ui.remove}}"
+							>
+								<i class="fas fa-trash" aria-hidden="true"></i>
+							</button>
+						{{/if}}
+					</div>
+				</article>
+			{{/each}}
+		</div>
+	{{else}}
+		<div class="critical-wounds-browser__empty">
+			<i class="fas fa-heart" aria-hidden="true"></i>
+			<span>{{ui.empty}}</span>
+		</div>
+	{{/if}}
+</section>
