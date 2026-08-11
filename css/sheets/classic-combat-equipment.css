@@ -97,3 +97,25 @@
 .wfrp1ed-classic-sheet .armour-row.is-equipped {
 	opacity: 1;
 }
+
+/******************************************************************/
+/* Shield value in the printed Armour Points diagram              */
+/******************************************************************/
+
+/*
+ * Calibrated against the Polish Classic page-one scan. The shield symbol is a
+ * separate printed writing area above the body silhouette, so its value remains
+ * visually distinct even though combat resolution may also include shield AP in
+ * the protection total for a struck location.
+ */
+.wfrp1ed-classic-sheet .armour-points-field--shield {
+	left: 144px;
+	top: 112px;
+	width: 44px;
+	height: 42px;
+}
+
+.wfrp1ed-classic-sheet .armour-points-field--shield input:focus {
+	outline: 0;
+	background: transparent;
+}
