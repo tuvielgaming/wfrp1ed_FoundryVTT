@@ -98,7 +98,7 @@
 		</div>
 
 		<div class="combat-item-sheet__parry">
-			<label class="combat-item-sheet__check">
+			<label class="combat-item-sheet__check wfrp1ed-checkbox">
 				<input type="checkbox" name="system.parry.suitable" {{#if system.parry.suitable}}checked{{/if}} {{#unless editable}}disabled{{/unless}}>
 				<span>{{ui.parrySuitable}}</span>
 			</label>
@@ -109,6 +109,34 @@
 			</label>
 		</div>
 	</section>
+
+	{{#if isRanged}}
+		<section class="combat-item-sheet__panel">
+			<h3>{{ui.rangedDetails}}</h3>
+			<div class="combat-item-sheet__grid combat-item-sheet__grid--5">
+				<label class="combat-item-sheet__field">
+					<span>{{ui.shortRange}}</span>
+					<input type="number" min="0" step="1" name="system.range.short" value="{{system.range.short}}" {{#unless editable}}disabled{{/unless}}>
+				</label>
+				<label class="combat-item-sheet__field">
+					<span>{{ui.longRange}}</span>
+					<input type="number" min="0" step="1" name="system.range.long" value="{{system.range.long}}" {{#unless editable}}disabled{{/unless}}>
+				</label>
+				<label class="combat-item-sheet__field">
+					<span>{{ui.maximumRange}}</span>
+					<input type="number" min="0" step="1" name="system.range.max" value="{{system.range.max}}" {{#unless editable}}disabled{{/unless}}>
+				</label>
+				<label class="combat-item-sheet__field">
+					<span>{{ui.effectiveStrength}}</span>
+					<input type="number" min="0" step="1" name="system.effectiveStrength" value="{{system.effectiveStrength}}" {{#unless editable}}disabled{{/unless}}>
+				</label>
+				<label class="combat-item-sheet__field">
+					<span>{{ui.reload}}</span>
+					<input type="number" min="0" step="1" name="system.reload" value="{{system.reload}}" {{#unless editable}}disabled{{/unless}}>
+				</label>
+			</div>
+		</section>
+	{{/if}}
 
 	<section class="combat-item-sheet__panel">
 		<div class="combat-item-sheet__panel-heading">
