@@ -51,6 +51,38 @@ export class CombatEquipment {
 	}
 
 	/**
+	 * Sum Armour Points from active held Shield Items.
+	 *
+	 * The Classic sheet has a dedicated Shield box in addition to the six body
+	 * locations. Keep that presentation value derived from the same Item state
+	 * used by armourAt instead of persisting another Actor field.
+	 */
+	static shieldArmour(actor) {
+		assertActor(actor);
+		const sources = [];
+		let total = 0;
+
+		for (const item of this.activeArmour(actor)) {
+			if (item.system?.armourClass !== ARMOUR_CLASS.SHIELD) continue;
+
+			const points = nonNegativeInteger(item.system?.armourPoints);
+			if (points <= 0) continue;
+
+			total += points;
+			sources.push(Object.freeze({
+				itemUuid: String(item.uuid ?? ""),
+				itemName: String(item.name ?? ""),
+				points,
+			}));
+		}
+
+		return foundry.utils.deepFreeze({
+			total,
+			sources,
+		});
+	}
+
+	/**
 	 * Sum active Armour Points covering one canonical humanoid hit location.
 	 * Layer legality is intentionally audited/applied elsewhere; this function
 	 * only answers the value represented by the Actor's current Item state.
