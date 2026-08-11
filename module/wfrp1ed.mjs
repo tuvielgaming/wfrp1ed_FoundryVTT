@@ -1,4 +1,5 @@
 import { CharacterData } from "./data-models/actor/CharacterData.mjs";
+import { CriticalWoundData } from "./data-models/item/CriticalWoundData.mjs";
 import { SkillData } from "./data-models/item/SkillData.mjs";
 import { Wfrp1edActor } from "./documents/Wfrp1edActor.mjs";
 import { Wfrp1edItem } from "./documents/Wfrp1edItem.mjs";
@@ -11,6 +12,7 @@ import {
 import { RuleEffectResolver } from "./effects/RuleEffectResolver.mjs";
 import { WFRP1ED } from "./helpers/config.mjs";
 import { ClassicActorSheet } from "./sheets/ClassicActorSheet.mjs";
+import { CriticalWoundItemSheet } from "./sheets/CriticalWoundItemSheet.mjs";
 import { SkillItemSheet } from "./sheets/SkillItemSheet.mjs";
 import { NAMED_STANDARD_TESTS } from "./tests/named-standard-tests.mjs";
 import { PendingStandardTest } from "./tests/PendingStandardTest.mjs";
@@ -62,9 +64,9 @@ Hooks.once("init", async () => {
 /**
  * Configure the system's custom Documents and native Foundry v14 data models.
  *
- * The Character Actor and Skill Item models are currently registered.
- * Other Actor and Item subtypes must remain on their temporary data contracts
- * until dedicated TypeDataModels have been implemented and audited.
+ * Character, Skill, and Critical Wound now have explicit native TypeDataModels.
+ * Other Actor and Item subtypes remain on their temporary data contracts until
+ * their own dependency-ordered audits are complete.
  *
  * @returns {void}
  */
@@ -76,16 +78,15 @@ function configureSystem() {
 
 	CONFIG.Actor.dataModels.character = CharacterData;
 	CONFIG.Item.dataModels.skill = SkillData;
+	CONFIG.Item.dataModels.criticalWound = CriticalWoundData;
 }
 
 /**
  * Register audited WFRP1ED Document sheets.
  *
- * The Classic sheet owns Character Actors.
- * SkillItemSheet owns Skill Items.
- *
- * Core Foundry sheets remain registered for document subtypes which do not yet
- * have an audited WFRP1ED sheet implementation.
+ * The Classic sheet owns Character Actors. Dedicated native ItemSheetV2
+ * implementations own Skill and Critical Wound Items. Core Foundry sheets
+ * remain available for document subtypes which have not yet been audited.
  *
  * @returns {void}
  */
@@ -106,6 +107,16 @@ function registerDocumentSheets() {
 		SkillItemSheet,
 		{
 			types: ["skill"],
+			makeDefault: true,
+		},
+	);
+
+	DocumentSheetConfig.registerSheet(
+		Item,
+		game.system.id,
+		CriticalWoundItemSheet,
+		{
+			types: ["criticalWound"],
 			makeDefault: true,
 		},
 	);
@@ -273,6 +284,7 @@ function exposeSystemApi() {
 		dataModels: Object.freeze({
 			Character: CharacterData,
 			Skill: SkillData,
+			CriticalWound: CriticalWoundData,
 		}),
 
 		documents: Object.freeze({
