@@ -1,0 +1,108 @@
+<section class="combat-item-sheet__content">
+	<header class="combat-item-sheet__header">
+		<img
+			class="combat-item-sheet__image"
+			src="{{item.img}}"
+			alt="{{item.name}}"
+		>
+		<label class="combat-item-sheet__field combat-item-sheet__field--name">
+			<span>{{ui.name}}</span>
+			<input
+				type="text"
+				name="name"
+				value="{{item.name}}"
+				autocomplete="off"
+				required
+				{{#unless editable}}disabled{{/unless}}
+			>
+		</label>
+	</header>
+
+	<section class="combat-item-sheet__panel">
+		<h3>{{ui.inventory}}</h3>
+		<div class="combat-item-sheet__grid combat-item-sheet__grid--4">
+			<label class="combat-item-sheet__field">
+				<span>{{ui.mode}}</span>
+				<select name="system.state.mode" {{#unless editable}}disabled{{/unless}}>
+					{{#each modeOptions as |option|}}
+						<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>
+					{{/each}}
+				</select>
+			</label>
+
+			<label class="combat-item-sheet__field">
+				<span>{{ui.hand}}</span>
+				<select name="system.state.hand" {{#unless editable}}disabled{{/unless}}>
+					{{#each handOptions as |option|}}
+						<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>
+					{{/each}}
+				</select>
+			</label>
+
+			<label class="combat-item-sheet__field">
+				<span>{{ui.quantity}}</span>
+				<input type="number" min="0" step="1" name="system.quantity" value="{{system.quantity}}" {{#unless editable}}disabled{{/unless}}>
+			</label>
+
+			<label class="combat-item-sheet__field">
+				<span>{{ui.encumbrance}}</span>
+				<input type="number" min="0" step="any" name="system.encumbrance" value="{{system.encumbrance}}" {{#unless editable}}disabled{{/unless}}>
+			</label>
+		</div>
+	</section>
+
+	<section class="combat-item-sheet__panel">
+		<h3>{{ui.protection}}</h3>
+		<div class="combat-item-sheet__grid combat-item-sheet__grid--3">
+			<label class="combat-item-sheet__field">
+				<span>{{ui.rulesId}}</span>
+				<input type="text" name="system.rulesId" value="{{system.rulesId}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}>
+			</label>
+
+			<label class="combat-item-sheet__field">
+				<span>{{ui.armourClass}}</span>
+				<select name="system.armourClass" {{#unless editable}}disabled{{/unless}}>
+					{{#each classOptions as |option|}}
+						<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>
+					{{/each}}
+				</select>
+			</label>
+
+			<label class="combat-item-sheet__field">
+				<span>{{ui.armourPoints}}</span>
+				<input type="number" min="0" step="1" name="system.armourPoints" value="{{system.armourPoints}}" {{#unless editable}}disabled{{/unless}}>
+			</label>
+		</div>
+
+		<fieldset class="combat-item-sheet__coverage">
+			<legend>{{ui.coverage}}</legend>
+			<div class="combat-item-sheet__coverage-grid">
+				{{#each coverage as |area|}}
+					<label class="combat-item-sheet__check">
+						<input type="checkbox" name="system.coverage.{{area.id}}" {{#if area.checked}}checked{{/if}} {{#unless ../editable}}disabled{{/unless}}>
+						<span>{{area.label}}</span>
+					</label>
+				{{/each}}
+			</div>
+		</fieldset>
+
+		<div class="combat-item-sheet__parry">
+			<label class="combat-item-sheet__check">
+				<input type="checkbox" name="system.parry.suitable" {{#if system.parry.suitable}}checked{{/if}} {{#unless editable}}disabled{{/unless}}>
+				<span>{{ui.parrySuitable}}</span>
+			</label>
+
+			<label class="combat-item-sheet__field combat-item-sheet__field--compact">
+				<span>{{ui.parryBonus}}</span>
+				<input type="number" step="1" name="system.parry.bonus" value="{{system.parry.bonus}}" {{#unless editable}}disabled{{/unless}}>
+			</label>
+		</div>
+
+		<p class="combat-item-sheet__hint">{{ui.shieldHint}}</p>
+	</section>
+
+	<label class="combat-item-sheet__field combat-item-sheet__description">
+		<span>{{ui.description}}</span>
+		<textarea name="system.description" spellcheck="true" {{#unless editable}}disabled{{/unless}}>{{system.description}}</textarea>
+	</label>
+</section>
