@@ -1,4 +1,12 @@
 import {
+	CORE_DETAILED_CHART_PROVIDER_ID,
+	CORE_DETAILED_CHART_TABLE_UUIDS,
+	CORE_DETAILED_EFFECT_PROVIDERS,
+	DETAILED_CRITICAL_OUTCOME,
+	ensureCoreDetailedCriticalTables,
+	registerCoreDetailedCriticalTableProtection,
+} from "./CoreDetailedCriticalTables.mjs";
+import {
 	CORE_SUDDEN_DEATH_PROVIDER_ID,
 	CORE_SUDDEN_DEATH_TABLE_UUIDS,
 	ensureCoreSuddenDeathTables,
@@ -9,6 +17,10 @@ import { registerCriticalDamageIntegration } from "./CriticalDamageIntegration.m
 import {
 	CriticalWoundApplication,
 } from "./CriticalWoundApplication.mjs";
+import {
+	registerDetailedCriticalIntegration,
+} from "./DetailedCriticalIntegration.mjs";
+import { DetailedCriticalResolver } from "./DetailedCriticalResolver.mjs";
 import { registerFatalCriticalIntegration } from "./FatalCriticalIntegration.mjs";
 import {
 	CRITICAL_TABLE_PROVIDER_SOURCE,
@@ -30,7 +42,9 @@ Hooks.once("init", () => {
 	registerCoreRoles();
 	registerCoreProviders();
 	registerCoreSuddenDeathTableProtection();
+	registerCoreDetailedCriticalTableProtection();
 	registerCriticalDamageIntegration();
+	registerDetailedCriticalIntegration();
 	registerFatalCriticalIntegration();
 
 	game.WFRP1ED = Object.freeze({
@@ -42,9 +56,11 @@ Hooks.once("init", () => {
 			providerSource: CRITICAL_TABLE_PROVIDER_SOURCE,
 			outcomes: Object.freeze({
 				suddenDeath: SUDDEN_DEATH_OUTCOME,
+				detailed: DETAILED_CRITICAL_OUTCOME,
 			}),
 			registry: CriticalTableRegistry,
 			suddenDeath: SuddenDeathResolver,
+			detailed: DetailedCriticalResolver,
 			wounds: CriticalWoundApplication,
 		}),
 	});
@@ -60,19 +76,31 @@ Hooks.once("init", () => {
 });
 
 Hooks.once("ready", () => {
-	if (game.user?.isGM) {
-		void ensureCoreSuddenDeathTables().catch((error) => {
-			console.error(
-				"WFRP1ED | Unable to materialize Core Sudden Death tables.",
-				error,
-			);
-			ui.notifications.error(
-				game.i18n.lang === "pl"
-					? "Nie udało się przygotować domyślnych tabel Nagłej Śmierci."
-					: "Unable to prepare the default Sudden Death tables.",
-			);
-		});
-	}
+	if (!game.user?.isGM) return;
+
+	void ensureCoreSuddenDeathTables().catch((error) => {
+		console.error(
+			"WFRP1ED | Unable to materialize Core Sudden Death tables.",
+			error,
+		);
+		ui.notifications.error(
+			game.i18n.lang === "pl"
+				? "Nie udało się przygotować domyślnych tabel Nagłej Śmierci."
+				: "Unable to prepare the default Sudden Death tables.",
+		);
+	});
+
+	void ensureCoreDetailedCriticalTables().catch((error) => {
+		console.error(
+			"WFRP1ED | Unable to materialize Core detailed critical tables.",
+			error,
+		);
+		ui.notifications.error(
+			game.i18n.lang === "pl"
+				? "Nie udało się przygotować domyślnych tabel szczegółowych trafień krytycznych."
+				: "Unable to prepare the default detailed Critical Hit tables.",
+		);
+	});
 });
 
 function registerCoreRoles() {
@@ -102,7 +130,7 @@ function registerCoreRoles() {
 		{
 			id: CRITICAL_TABLE_ROLE.DETAILED_ARM,
 			label: "Critical Effects — Arm",
-			labels: { pl: "Efekty krytyczne — Ręka" },
+			labels: { pl: "Efekty krytyczne — Ramię" },
 		},
 		{
 			id: CRITICAL_TABLE_ROLE.DETAILED_LEG,
@@ -127,4 +155,31 @@ function registerCoreProviders() {
 		source: CRITICAL_TABLE_PROVIDER_SOURCE.CORE,
 		tableUuids: CORE_SUDDEN_DEATH_TABLE_UUIDS,
 	});
+
+	CriticalTableRegistry.registerProvider({
+		id: CORE_DETAILED_CHART_PROVIDER_ID,
+		role: CRITICAL_TABLE_ROLE.DETAILED_CHART,
+		label: "WFRP 1e Core — Critical Hit Chart",
+		labels: {
+			pl: "WFRP 1e Core — Tabela trafień krytycznych",
+		},
+		source: CRITICAL_TABLE_PROVIDER_SOURCE.CORE,
+		tableUuids: CORE_DETAILED_CHART_TABLE_UUIDS,
+	});
+
+	for (
+		const [role, provider]
+		of Object.entries(CORE_DETAILED_EFFECT_PROVIDERS)
+	) {
+		CriticalTableRegistry.registerProvider({
+			id: provider.id,
+			role,
+			label: `WFRP 1e Core — ${CriticalTableRegistry.role(role)?.label ?? role}`,
+			labels: {
+				pl: `WFRP 1e Core — ${CriticalTableRegistry.role(role)?.labels?.pl ?? role}`,
+			},
+			source: CRITICAL_TABLE_PROVIDER_SOURCE.CORE,
+			tableUuids: provider.tableUuids,
+		});
+	}
 }
