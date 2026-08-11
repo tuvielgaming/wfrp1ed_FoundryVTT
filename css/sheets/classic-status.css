@@ -1,12 +1,12 @@
 /* Classic page-2 status overlays which already have geometry in ClassicLayout. */
 
-.wfrp1ed-classic-fate {
+.wfrp1ed-classic-sheet .wfrp1ed-classic-fate {
 	position: absolute;
 	inset: 0;
 	pointer-events: none;
 }
 
-.wfrp1ed-classic-fate__input {
+.wfrp1ed-classic-sheet .wfrp1ed-classic-fate__input {
 	position: absolute;
 	left: 50%;
 	bottom: 10px;
@@ -20,19 +20,21 @@
 	outline: 0;
 	background: transparent;
 	box-shadow: none;
-	font-size: 28px;
+	font-family: inherit;
+	font-size: var(--characteristics-current-font-size, 20px);
 	font-weight: 700;
-	line-height: 32px;
+	line-height: 1;
 	text-align: center;
+	font-variant-numeric: tabular-nums;
 	pointer-events: auto;
 }
 
-.wfrp1ed-classic-fate__input:focus {
+.wfrp1ed-classic-sheet .wfrp1ed-classic-fate__input:focus {
 	outline: 1px dashed rgba(55, 35, 20, 0.45);
 	outline-offset: 2px;
 }
 
-.wfrp1ed-classic-fate__input[readonly] {
+.wfrp1ed-classic-sheet .wfrp1ed-classic-fate__input[readonly] {
 	cursor: default;
 }
 
