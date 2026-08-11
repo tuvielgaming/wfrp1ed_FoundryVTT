@@ -1,0 +1,142 @@
+<section class="combat-item-sheet__content">
+	<header class="combat-item-sheet__header">
+		<img
+			class="combat-item-sheet__image"
+			src="{{item.img}}"
+			alt="{{item.name}}"
+		>
+		<label class="combat-item-sheet__field combat-item-sheet__field--name">
+			<span>{{ui.name}}</span>
+			<input
+				type="text"
+				name="name"
+				value="{{item.name}}"
+				autocomplete="off"
+				required
+				{{#unless editable}}disabled{{/unless}}
+			>
+		</label>
+	</header>
+
+	<section class="combat-item-sheet__panel">
+		<h3>{{ui.inventory}}</h3>
+		<div class="combat-item-sheet__grid combat-item-sheet__grid--4">
+			<label class="combat-item-sheet__field">
+				<span>{{ui.mode}}</span>
+				<select name="system.state.mode" {{#unless editable}}disabled{{/unless}}>
+					{{#each modeOptions as |option|}}
+						<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>
+					{{/each}}
+				</select>
+			</label>
+
+			<label class="combat-item-sheet__field">
+				<span>{{ui.hand}}</span>
+				<select name="system.state.hand" {{#unless editable}}disabled{{/unless}}>
+					{{#each handOptions as |option|}}
+						<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>
+					{{/each}}
+				</select>
+			</label>
+
+			<label class="combat-item-sheet__field">
+				<span>{{ui.quantity}}</span>
+				<input type="number" min="0" step="1" name="system.quantity" value="{{system.quantity}}" {{#unless editable}}disabled{{/unless}}>
+			</label>
+
+			<label class="combat-item-sheet__field">
+				<span>{{ui.encumbrance}}</span>
+				<input type="number" min="0" step="any" name="system.encumbrance" value="{{system.encumbrance}}" {{#unless editable}}disabled{{/unless}}>
+			</label>
+		</div>
+	</section>
+
+	<section class="combat-item-sheet__panel">
+		<h3>{{ui.combat}}</h3>
+		<div class="combat-item-sheet__grid combat-item-sheet__grid--2">
+			<label class="combat-item-sheet__field">
+				<span>{{ui.rulesId}}</span>
+				<input type="text" name="system.rulesId" value="{{system.rulesId}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}>
+			</label>
+
+			<label class="combat-item-sheet__field">
+				<span>{{ui.weaponClass}}</span>
+				<input type="text" name="system.weaponClass" value="{{system.weaponClass}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}>
+			</label>
+
+			<label class="combat-item-sheet__field">
+				<span>{{ui.kind}}</span>
+				<select name="system.kind" {{#unless editable}}disabled{{/unless}}>
+					{{#each kindOptions as |option|}}
+						<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>
+					{{/each}}
+				</select>
+			</label>
+
+			<label class="combat-item-sheet__field">
+				<span>{{ui.group}}</span>
+				<select name="system.group" {{#unless editable}}disabled{{/unless}}>
+					{{#each groupOptions as |option|}}
+						<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>
+					{{/each}}
+				</select>
+			</label>
+
+			<label class="combat-item-sheet__field">
+				<span>{{ui.handedness}}</span>
+				<select name="system.handedness" {{#unless editable}}disabled{{/unless}}>
+					{{#each handednessOptions as |option|}}
+						<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>
+					{{/each}}
+				</select>
+			</label>
+
+			<label class="combat-item-sheet__field">
+				<span>{{ui.specialistSkillId}}</span>
+				<input type="text" name="system.specialistSkillId" value="{{system.specialistSkillId}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}>
+			</label>
+		</div>
+
+		<div class="combat-item-sheet__parry">
+			<label class="combat-item-sheet__check">
+				<input type="checkbox" name="system.parry.suitable" {{#if system.parry.suitable}}checked{{/if}} {{#unless editable}}disabled{{/unless}}>
+				<span>{{ui.parrySuitable}}</span>
+			</label>
+
+			<label class="combat-item-sheet__field combat-item-sheet__field--compact">
+				<span>{{ui.parryBonus}}</span>
+				<input type="number" step="1" name="system.parry.bonus" value="{{system.parry.bonus}}" {{#unless editable}}disabled{{/unless}}>
+			</label>
+		</div>
+	</section>
+
+	<section class="combat-item-sheet__panel">
+		<div class="combat-item-sheet__panel-heading">
+			<h3>{{ui.optionalModifiers}}</h3>
+			<p>{{ui.optionalHint}}</p>
+		</div>
+		<div class="combat-item-sheet__grid combat-item-sheet__grid--4">
+			<label class="combat-item-sheet__field">
+				<span>{{ui.initiative}}</span>
+				<input type="number" step="1" name="system.optionalModifiers.initiative" value="{{system.optionalModifiers.initiative}}" {{#unless editable}}disabled{{/unless}}>
+			</label>
+			<label class="combat-item-sheet__field">
+				<span>{{ui.toHit}}</span>
+				<input type="number" step="1" name="system.optionalModifiers.toHit" value="{{system.optionalModifiers.toHit}}" {{#unless editable}}disabled{{/unless}}>
+			</label>
+			<label class="combat-item-sheet__field">
+				<span>{{ui.damage}}</span>
+				<input type="number" step="1" name="system.optionalModifiers.damage" value="{{system.optionalModifiers.damage}}" {{#unless editable}}disabled{{/unless}}>
+			</label>
+			<label class="combat-item-sheet__field">
+				<span>{{ui.parryModifier}}</span>
+				<input type="number" step="1" name="system.optionalModifiers.parry" value="{{system.optionalModifiers.parry}}" {{#unless editable}}disabled{{/unless}}>
+			</label>
+		</div>
+	</section>
+
+	<label class="combat-item-sheet__field combat-item-sheet__description">
+		<span>{{ui.description}}</span>
+		<textarea name="system.description" spellcheck="true" {{#unless editable}}disabled{{/unless}}>{{system.description}}</textarea>
+	</label>
+</section>
