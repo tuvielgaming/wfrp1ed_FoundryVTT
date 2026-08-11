@@ -1,0 +1,186 @@
+/******************************************************************/
+/*               WFRP 1e Weapon / Armour Items                   */
+/******************************************************************/
+
+.combat-item-sheet {
+	--combat-item-gap: 14px;
+	--combat-item-border: rgb(70 51 30 / 38%);
+	--combat-item-field-background: #e8dfcc;
+	--combat-item-text: #1c1812;
+
+	font-family:
+		"Book Antiqua",
+		"Times New Roman",
+		serif;
+	color: var(--combat-item-text);
+}
+
+.combat-item-sheet .window-content {
+	overflow-y: auto;
+}
+
+.combat-item-sheet .combat-item-sheet__content {
+	display: grid;
+	gap: var(--combat-item-gap);
+	padding: 16px;
+}
+
+.combat-item-sheet .combat-item-sheet__header {
+	display: grid;
+	grid-template-columns: 52px minmax(0, 1fr);
+	align-items: end;
+	gap: 12px;
+}
+
+.combat-item-sheet .combat-item-sheet__image {
+	width: 52px;
+	height: 52px;
+	border: 1px solid var(--combat-item-border);
+	border-radius: 4px;
+	object-fit: cover;
+}
+
+.combat-item-sheet .combat-item-sheet__panel {
+	display: grid;
+	gap: 10px;
+	padding: 11px;
+	border: 1px solid var(--combat-item-border);
+	border-radius: 5px;
+	background: rgb(255 250 231 / 42%);
+}
+
+.combat-item-sheet .combat-item-sheet__panel > h3,
+.combat-item-sheet .combat-item-sheet__panel-heading h3 {
+	margin: 0;
+	font-size: 17px;
+}
+
+.combat-item-sheet .combat-item-sheet__panel-heading {
+	display: grid;
+	gap: 2px;
+}
+
+.combat-item-sheet .combat-item-sheet__panel-heading p,
+.combat-item-sheet .combat-item-sheet__hint {
+	margin: 0;
+	font-size: 11px;
+	line-height: 1.35;
+	color: rgb(28 24 18 / 72%);
+}
+
+.combat-item-sheet .combat-item-sheet__grid {
+	display: grid;
+	gap: 10px;
+}
+
+.combat-item-sheet .combat-item-sheet__grid--2 {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.combat-item-sheet .combat-item-sheet__grid--3 {
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.combat-item-sheet .combat-item-sheet__grid--4 {
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.combat-item-sheet .combat-item-sheet__field {
+	display: grid;
+	gap: 5px;
+	min-width: 0;
+	font-size: 12px;
+	font-weight: 700;
+}
+
+.combat-item-sheet .combat-item-sheet__field input,
+.combat-item-sheet .combat-item-sheet__field select,
+.combat-item-sheet .combat-item-sheet__field textarea {
+	width: 100%;
+	margin: 0;
+	border: 1px solid var(--combat-item-border);
+	border-radius: 3px;
+	background: var(--combat-item-field-background);
+	box-shadow: none;
+	font: inherit;
+	font-weight: 400;
+	color: var(--combat-item-text);
+}
+
+.combat-item-sheet .combat-item-sheet__field input,
+.combat-item-sheet .combat-item-sheet__field select {
+	height: 32px;
+	padding: 3px 7px;
+}
+
+.combat-item-sheet .combat-item-sheet__field--name input {
+	height: 38px;
+	font-size: 20px;
+	font-weight: 700;
+}
+
+.combat-item-sheet .combat-item-sheet__field--compact {
+	max-width: 220px;
+}
+
+.combat-item-sheet .combat-item-sheet__description textarea {
+	min-height: 130px;
+	padding: 8px;
+	line-height: 1.35;
+	resize: vertical;
+}
+
+.combat-item-sheet .combat-item-sheet__parry {
+	display: flex;
+	align-items: end;
+	gap: 18px;
+	padding-top: 2px;
+}
+
+.combat-item-sheet .combat-item-sheet__check {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	min-height: 30px;
+	font-size: 12px;
+	font-weight: 700;
+}
+
+.combat-item-sheet .combat-item-sheet__check input[type="checkbox"] {
+	flex: 0 0 auto;
+	width: 16px;
+	height: 16px;
+	margin: 0;
+}
+
+.combat-item-sheet .combat-item-sheet__coverage {
+	margin: 0;
+	padding: 8px 10px 10px;
+	border: 1px solid rgb(70 51 30 / 28%);
+	border-radius: 4px;
+}
+
+.combat-item-sheet .combat-item-sheet__coverage legend {
+	padding: 0 5px;
+	font-size: 12px;
+	font-weight: 700;
+}
+
+.combat-item-sheet .combat-item-sheet__coverage-grid {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 4px 12px;
+}
+
+.combat-item-sheet input:disabled,
+.combat-item-sheet select:disabled,
+.combat-item-sheet textarea:disabled {
+	opacity: 0.75;
+}
+
+@media (max-width: 620px) {
+	.combat-item-sheet .combat-item-sheet__grid--3,
+	.combat-item-sheet .combat-item-sheet__grid--4 {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
