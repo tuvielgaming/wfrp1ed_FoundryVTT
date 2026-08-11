@@ -10,23 +10,14 @@ Primary branch: `master`
 
 GitHub is the implementation source of truth. Fetch the exact current file before every code change and preserve user commits made between assistant turns.
 
-Latest code commit before this handoff update:
-
-```text
-de6a7af202fdc356d5eee59b2b9e56b27a5a0aa3
-Expose Critical Wound materialization API
-```
-
-Latest user-authored visual adjustment observed:
+User-authored visual adjustments which must remain preserved:
 
 ```text
 39a9b2bb288e74f5e451fcde9e08780b67806ec6
 Crit wound placement
 ```
 
-It changes only `css/sheets/classic-health.css`, moving the Critical Wounds health-category launcher upward (`bottom: 7px` → `bottom: 20px`). Preserve it.
-
-Earlier user-authored Wounds adjustment that must also remain preserved:
+Changes only `css/sheets/classic-health.css`, moving the Critical Wounds launcher upward (`bottom: 7px` → `bottom: 20px`).
 
 ```text
 91b3fd95b3d4300b51ef1cd0a45fecff19249892
@@ -37,12 +28,10 @@ Small Wound lock marker alignment
 
 # Runtime-confirmed foundations
 
-The user has live-tested the following in Foundry v14 and reported them working.
-
 ## Wounds / damage
 
-- Remaining Wounds are persistent and stop at zero during damage application.
-- Per-hit overflow is stored as `criticalValue`; negative Wounds are not critical-state storage.
+- Remaining Wounds persist and stop at zero.
+- Per-hit overflow is `criticalValue`; negative Wounds are never critical-state storage.
 - Classic sheet shows remaining/max Wounds and protects manual editing.
 - Generic immutable `DamagePacket` + `DamageResolver` flow exists.
 - Damage is applied explicitly from ChatMessage state.
@@ -50,7 +39,7 @@ The user has live-tested the following in Foundry v14 and reported them working.
 - Double application is protected.
 - Critical routing distinguishes `unspecified`, `detailed`, and `sudden-death`.
 
-Canonical damage boundary:
+Canonical boundary:
 
 ```text
 woundsAfter = max(0, woundsBefore - damage)
@@ -70,17 +59,7 @@ damage applied
 → separate result ChatMessage
 ```
 
-Fatal result:
-
-```text
-Killed / Śmierć
-→ defeated/dead overlay
-→ GM or target OWNER may spend one Fate Point
-→ Fate -1
-→ defeated status removed
-```
-
-Spending Fate does not heal Wounds.
+Fatal result applies the defeated/dead overlay. GM or target OWNER may spend one Fate Point to avert death; Fate decreases by one and defeated status is removed. Spending Fate does not heal Wounds.
 
 The Classic sheet exposes one visible Fate/Punkty Przeznaczenia value. Internal `fate.value/max` remains transitional technical debt and must not be exposed as a WFRP 1e current/max UI.
 
@@ -127,59 +106,38 @@ Runtime-confirmed:
 Still open:
 
 - standalone `Upadek / Falling`;
-- actual application of `drop-held-items`, blocked until equipment has a canonical held/equipped state.
+- actual `drop-held-items` application, blocked until equipment has a canonical held/equipped state.
 
 ---
 
-# Detailed Critical Wounds — active subsystem
+# Critical Wound persistent state — IMPLEMENTED AND RUNTIME-CONFIRMED
 
-This is the feature resumed after the Fate/Luck/movement detour.
-
-## Existing registry architecture
-
-`CriticalTableRegistry` already defines:
-
-```text
-critical.detailed.chart
-critical.detailed.head
-critical.detailed.body
-critical.detailed.arm
-critical.detailed.leg
-```
-
-Detailed critical variants use the shared critical-value contract (`+1` through `+6+`). Keep the provider/registry boundary intact. Sudden Death remains a separate subsystem.
-
-## Approved lifecycle
-
-```text
-applied damage with critical.mode = detailed
-→ detailed critical resolution
-→ separate roll-bearing result ChatMessage
-→ real Critical Wound Item representing persistent injury
-→ native embedded ActiveEffects for ongoing mechanical consequences
-→ Item persists on / is assigned to an Actor
-→ recovery/removal operates through normal Documents
-```
-
-ChatMessage = historical resolution event.  
-Critical Wound Item = persistent injury state.
-
----
-
-# Critical Wound Item foundation — IMPLEMENTED AND RUNTIME-CONFIRMED
-
-Implemented foundation:
+Implemented:
 
 ```text
 module/data-models/item/CriticalWoundData.mjs
 module/sheets/CriticalWoundItemSheet.mjs
 templates/item/critical-wound-sheet.hbs
 css/sheets/critical-wound-item.css
+module/sheets/CriticalWoundsWindow.mjs
+module/health/HealthCategoryIntegration.mjs
 ```
 
-The `criticalWound` Item subtype is registered in `system.json`, backed by a native Foundry v14 `TypeDataModel`, and has a dedicated `ItemSheetV2`.
+The `criticalWound` Item subtype is a native Foundry v14 TypeDataModel with a dedicated ItemSheetV2. The user confirmed the Item sheet and embedded Active Effect lifecycle work correctly.
 
-Persistent rule-neutral fields currently include:
+The Classic sheet uses **Psychika i zdrowie** as a compact launcher area. Current implemented category:
+
+```text
+Rany krytyczne / Critical Wounds
+```
+
+The user runtime-confirmed that the category window lists, creates, opens and removes Actor-owned `criticalWound` Items, displays the count, and that dragging a world Critical Wound Item onto an Actor makes it available there.
+
+Future Diseases/Choroby, Mutations/Mutacje, etc. should get their own launcher and purpose-built window only when their real Item/data contract exists.
+
+### CriticalWoundData provenance
+
+Current rule-neutral persistent fields:
 
 ```text
 description
@@ -198,122 +156,193 @@ resolution.resolvedByUserId
 resolution.resolvedAt
 ```
 
-No speculative penalty/duration/bleeding/amputation fields were added.
-
-Ongoing mechanical consequences belong to normal Item-embedded Foundry `ActiveEffect` Documents. The wound sheet can list, create, open, enable/disable and delete those effects.
-
-The user confirmed that the wound Item sheet and embedded Active Effect lifecycle work correctly.
+No speculative bleeding/amputation/recovery fields were added. Ongoing mechanical consequences belong to embedded native Active Effects once their consumer contracts are implemented.
 
 ---
 
-# Psychika i zdrowie / Actor-side health-category UI — IMPLEMENTED AND RUNTIME-CONFIRMED
+# Critical Wound materialization boundary — IMPLEMENTED, FULL PATH NOT YET RUNTIME-CONFIRMED
 
-The Classic sheet uses the **Psychika i zdrowie** area as the launcher space for persistent health categories.
-
-Current implemented category:
-
-```text
-Rany krytyczne / Critical Wounds
-```
-
-Architecture:
-
-```text
-Psychika i zdrowie
-→ compact category button/tag with current count
-→ category-specific Foundry window
-→ list of Actor-owned Items of that category
-→ category-specific actions and lifecycle
-```
-
-The current Critical Wounds window supports listing, creating, opening and removing Actor-owned `criticalWound` Items. The wound count is reflected on the Classic-sheet launcher, and the wound's embedded Active Effects follow the normal Item document lifecycle.
-
-The user runtime-tested and confirmed that this works as described, including dragging a world Critical Wound Item onto an Actor and seeing it in the category window.
-
-The user also manually adjusted the category launcher position in commit `39a9b2bb288e74f5e451fcde9e08780b67806ec6`; preserve that visual placement.
-
-This UI pattern is intentionally extensible. Future categories such as Diseases/Choroby, Mutations/Mutacje, etc. should receive their own category button/tag and their own purpose-built window when their Item contracts are actually implemented. Do not add fake/inert categories before the corresponding subsystem exists.
-
----
-
-# Critical Wound materialization boundary — IMPLEMENTED, NOT YET RUNTIME-CONFIRMED
-
-New rule-neutral dependency added after the Actor-side wound lifecycle was confirmed:
+Implemented:
 
 ```text
 module/criticals/CriticalWoundApplication.mjs
 ```
 
-It is exposed as:
+Exposed as:
 
 ```text
 game.WFRP1ED.criticals.wounds
 ```
 
-Purpose: convert an **already-resolved and already-verified** detailed critical result into persistent Actor state without knowing or inventing any critical-table mechanics.
+It converts an already-resolved critical result into one Actor-owned `criticalWound` Item. It is rule-neutral: it does not choose tables or interpret injuries.
 
-Contract:
+It enforces GM/target-OWNER permission, requires resolution provenance, accepts verified embedded ActiveEffect source objects, and prevents sequential duplicate materialization from the same result ChatMessage.
+
+The underlying Actor-owned wound workflow is runtime-confirmed; the automatic result→materializer connection below still needs runtime testing.
+
+---
+
+# Detailed Critical Hit rulebook audit — VERIFIED
+
+The user supplied `WFRP Core RuleBooks(6).zip` containing both Core Rulebooks. The detailed tables were visually re-audited from the scans.
+
+### English Core Rulebook
+
+- Combat — **Critical Hits / Critical Hit Chart / Critical Effects**, printed pp. **122-124**.
+
+### Polish Core Rulebook
+
+- Walka — **Trafienia krytyczne / Tabela trafień krytycznych / Efekty trafień krytycznych**, printed pp. **122-124**.
+
+The English and Polish editions agree mechanically for the audited detailed chart/effects. English controls mechanics; Polish controls official terminology.
+
+Verified chart contract:
 
 ```text
-resolved detailed result
-→ CriticalWoundApplication.create(...)
-→ Actor-owned criticalWound Item
-→ optional verified embedded ActiveEffect sources
+D100       +1  +2  +3  +4  +5  +6+
+01-10       1   3   5   7  11* 14*
+11-20       2   4   6   9* 13* 15
+21-30       3   5   8* 14* 16  16
+31-40       4   7  10* 13* 15  15
+41-50       5   9* 14* 16  16  16
+51-60       7  12* 15  15  15  15
+61-70       9* 16  16  16  16  16
+71-80      11* 15  15  15  15  15
+81-90      16  16  16  16  16  16
+91-00      15  15  15  15  15  15
 ```
 
-The service:
+`*` means the victim must flee combat if possible.
 
-- requires a real target Actor;
-- allows application by GM or target Actor OWNER;
-- requires a positive `criticalValue`;
-- requires resolution provenance including `damagePacketId`, `resultMessageId`, and `tableRole`;
-- preserves all neutral `CriticalWoundData.resolution` provenance fields;
-- accepts optional ActiveEffect source objects supplied by a future audited resolver;
-- provides sequential idempotency by returning the existing wound when the same `resultMessageId` was already materialized.
+The four numbered effect families are:
 
-Important limitation: this is a persistence boundary only. It does **not** select critical tables, interpret table rows, invent injury names, generate penalties, or decide recovery rules. Those remain behind the rulebook gate.
+```text
+Arm / Ramię
+Head / Głowa
+Body / Korpus
+Leg / Noga
+```
 
-The materialization service has passed source/static review but has not yet been exercised through a real detailed-critical Foundry runtime path. Do not call it runtime-confirmed yet.
+Each has effects 1-16. Immediate-fatal Core rows verified and represented structurally are:
 
----
+```text
+Arm: 15, 16
+Head: 14, 15, 16
+Body: 14, 15, 16
+Leg: 15, 16
+```
 
-# Rulebook gate before actual detailed table mechanics
+Delayed/conditional death rows are not marked as immediate `killed`.
 
-The general Critical Hits / Critical Hit Chart section was previously audited at printed page 122 in both Core Rulebooks, but the exact detailed effect rows and persistent consequences must be reopened before they are encoded.
-
-The active GitHub repository does not contain the Core PDFs. Current conversation uploads and File Library searches were also checked and did not recover the actual English and Polish Core Rulebook files.
-
-Therefore do **not** materialize detailed Core RollTables, penalties, durations, bleeding, amputations, recovery rules, or other wound-specific effects from memory or fan material.
-
-Before the mechanics slice continues, recover/upload the exact English and Polish WFRP 1e Core Rulebook PDFs or the archive which contains them.
-
-Policy:
-
-- English Core Rulebook controls mechanics;
-- Polish Core Rulebook controls official Polish terminology and is checked for differences.
+Important Core rule: once Wounds reach zero, additional Wounds from critical effects are not accumulated as negative Wounds; each such later loss is checked as the appropriate Sudden Death critical for that round.
 
 ---
 
-# Immediate next steps
+# Core detailed critical tables/resolver — IMPLEMENTED, RUNTIME TEST REQUIRED
 
-1. Fetch current `master` first and preserve any user changes made after this checkpoint.
-2. Recover/open the English and Polish Core Rulebook detailed critical chart/effect table sections.
-3. Update `RULEBOOK_IMPLEMENTATION.md` with the verified detailed injury contract and repair its stale implementation-status statements.
-4. Define/materialize the WFRP1ED Core provider for the detailed critical registry roles.
-5. Implement the detailed resolver and separate roll-bearing result ChatMessage.
-6. Feed the verified result into `CriticalWoundApplication` so the target receives exactly one persistent wound Item.
-7. Generate only the native ActiveEffects required by the exact verified injury row.
-8. Runtime-test the full lifecycle before implementing recovery/removal automation.
+New implementation on the current detailed-critical slice:
+
+```text
+module/criticals/CoreDetailedCriticalTables.mjs
+module/criticals/DetailedCriticalResolver.mjs
+module/criticals/DetailedCriticalIntegration.mjs
+templates/chat/detailed-critical-result.hbs
+```
+
+`CriticalBootstrap.mjs` now registers/materializes the Core detailed providers alongside Sudden Death.
+
+## Managed Core tables
+
+The GM-ready hook materializes ten read-only system-managed RollTables:
+
+```text
+6 × Critical Hit Chart variants: +1, +2, +3, +4, +5, +6+
+1 × Arm effects
+1 × Head effects
+1 × Body effects
+1 × Leg effects
+```
+
+The chart stores stable structured result flags (`effectNumber`, `flee`) so mechanics are never parsed from localized table text. Effect tables store stable location/effect-number/outcome flags. World/module overrides remain supported through `CriticalTableRegistry`.
+
+## Detailed resolver
+
+`DetailedCriticalResolver`:
+
+1. requires a positive `criticalValue`;
+2. requires canonical humanoid hit location (`head`, `rightArm`, `leftArm`, `body`, `rightLeg`, `leftLeg`);
+3. resolves the correct +1…+6+ chart provider;
+4. performs one real d100 roll;
+5. reads the numbered effect from structured chart data;
+6. resolves the matching Arm/Head/Body/Leg effect table;
+7. returns a language-neutral resolution snapshot plus provider/table/result provenance.
+
+## Chat/application lifecycle
+
+Intended current flow:
+
+```text
+applied damage with critical.mode = detailed and criticalValue > 0
+→ source damage card exposes Resolve Detailed Critical
+→ real 1d100
+→ Actor-authoritative detailed resolution
+→ separate roll-bearing detailed result ChatMessage
+→ result is localized per viewing client
+→ nonfatal result offers Apply Critical Wound to GM/target OWNER
+→ exactly one Actor-owned criticalWound Item via CriticalWoundApplication
+→ visible under Psychika i zdrowie / Rany krytyczne
+```
+
+Immediate-fatal detailed results use `outcome: killed` and the existing fatal/Fate lifecycle instead of offering persistent wound materialization.
+
+### Deliberately not automated in this slice
+
+The exact table text is preserved in the Critical Wound description, but ongoing consequences such as:
+
+- per-round bleeding;
+- temporary inability to attack/parry/move;
+- characteristic penalties;
+- unconsciousness;
+- amputation state;
+- recovery-until-medical-attention;
+- forced Sudden Death routing for later criticals;
+
+are **not yet converted into Active Effects or timers**. The current rule-effect registry does not yet have canonical consumers for all of these. Do not encode them as arbitrary Actor data paths or fake Apply actions.
+
+Next dependency after the resolver/materialization path is runtime-confirmed: define the minimal stable consequence/effect contracts needed by the verified Core rows, then generate embedded Active Effects from those structured contracts.
+
+---
+
+# Required next runtime test
+
+1. Full Foundry/world restart so GM-ready can create the managed Core detailed tables.
+2. Verify six detailed chart tables plus four location-effect tables appear without startup errors.
+3. Create/apply a damage packet with `criticalMode: detailed`, positive overflow, and canonical humanoid hit location.
+4. Verify the source card offers **Resolve Detailed Critical / Rozstrzygnij szczegółowe trafienie krytyczne**.
+5. Resolve it and confirm a real d100 plus separate detailed result card with hit location, effect number/text and starred flee note when applicable.
+6. On a nonfatal result, GM or target OWNER applies the wound; confirm exactly one new Critical Wound appears under Psychika i zdrowie and repeated application does not duplicate it.
+7. Test an immediate-fatal detailed row; confirm defeated status/Fate integration works and no persistent-wound Apply action is offered.
+8. Compare Polish and English clients for the same result card.
+9. Regression-check existing Sudden Death.
+
+Do not call this detailed critical path runtime-confirmed until the user completes the Foundry test.
+
+---
+
+# Documentation debt
+
+`RULEBOOK_IMPLEMENTATION.md` still contains older status statements from before Wounds clamping, current Fate/Luck work and this detailed-critical audit. Do not trust its old implementation-status rows blindly. Update that existing document in place after this runtime slice; do not create a competing audit document.
 
 ---
 
 # Other intentionally open work
 
-1. Standalone `Upadek / Falling`.
-2. Canonical held/equipped equipment state + real `drop-held-items` application.
-3. Fate internal `{value,max}` cleanup to the final one-value contract with migration.
-4. Future Psychika i zdrowie categories such as Diseases and Mutations, only after their real Item/data contracts are audited.
-5. Remaining unaudited Actor/Item types and Classic-sheet sections required by the MVP.
+1. Detailed Critical consequence/ActiveEffect contracts and recovery automation after current runtime confirmation.
+2. Standalone `Upadek / Falling`.
+3. Canonical held/equipped equipment state + real `drop-held-items` application.
+4. Fate internal `{value,max}` cleanup to final one-value contract with migration.
+5. Future Psychika i zdrowie categories such as Diseases and Mutations, only after real Item/data contracts are audited.
+6. Remaining unaudited Actor/Item types and Classic-sheet sections required by the MVP.
 
 ---
 
@@ -328,6 +357,6 @@ Policy:
 - Preserve the original physical roll when post-roll mechanics alter an effective result.
 - Avoid irreversible downstream consequences until post-roll interventions are finished.
 - Resolve synthetic/token Actors before world prototypes when a ChatMessage identifies a token.
-- Do not infer mechanical identity from localized Item names; use stable IDs.
+- Do not infer mechanical identity from localized names; use stable IDs/flags.
 - Keep damage, critical resolution, Fate and consequence permissions separate.
 - Do not create an Apply action unless the underlying persistent model can actually represent and perform the consequence.
