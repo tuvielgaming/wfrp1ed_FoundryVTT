@@ -169,14 +169,15 @@ function armourRow(item, editable) {
 	if (used) row.classList.add("is-equipped");
 	else row.classList.add("is-carried");
 
-	const coverage = ARMOUR_LOCATIONS
-		.filter((location) => item.system?.coverage?.[location] === true)
-		.map((location) => hitLocationLabel(location))
-		.join(", ");
+	const coverage = armourCoverageDisplay(item);
 
 	row.append(
 		itemNameCell("armour-cell armour-cell--name", item, used, editable),
-		cell("armour-cell armour-cell--location", coverage || "—", coverage || "—"),
+		cell(
+			"armour-cell armour-cell--location",
+			coverage.label,
+			coverage.title,
+		),
 		cell(
 			"armour-cell armour-cell--encumbrance",
 			nonNegativeNumber(item.system?.encumbrance),
@@ -184,6 +185,33 @@ function armourRow(item, editable) {
 	);
 
 	return row;
+}
+
+function armourCoverageDisplay(item) {
+	const covered = ARMOUR_LOCATIONS.filter(
+		(location) => item.system?.coverage?.[location] === true,
+	);
+
+	if (covered.length === 0) {
+		return Object.freeze({
+			label: "—",
+			title: "—",
+		});
+	}
+
+	const full = covered.map((location) => hitLocationLabel(location)).join(", ");
+
+	if (covered.length === ARMOUR_LOCATIONS.length) {
+		return Object.freeze({
+			label: localize("Whole body", "Całe ciało"),
+			title: full,
+		});
+	}
+
+	return Object.freeze({
+		label: full,
+		title: full,
+	});
 }
 
 function replaceRows(container, items, rowFactory) {
