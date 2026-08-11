@@ -31,6 +31,7 @@
 		"css/sheets/modern.css",
 		"css/sheets/parchment-window.css",
 		"css/sheets/skill-item.css",
+		"css/sheets/critical-wound-item.css",
 		"css/sheets/standard-test.css",
 		"css/chat/test-result.css",
 		"css/chat/test-result-effects.css",
@@ -66,6 +67,7 @@
 		"Item": {
 			"career": {},
 			"skill": {},
+			"criticalWound": {},
 			"weapon": {},
 			"equipment": {},
 			"trait": {},
