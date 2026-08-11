@@ -10,7 +10,14 @@ Primary branch: `master`
 
 GitHub is the implementation source of truth. Fetch the exact current file before every code change and preserve user commits made between assistant turns.
 
-Latest user-authored commit observed before this handoff update:
+Latest code commit before this handoff update:
+
+```text
+de6a7af202fdc356d5eee59b2b9e56b27a5a0aa3
+Expose Critical Wound materialization API
+```
+
+Latest user-authored visual adjustment observed:
 
 ```text
 39a9b2bb288e74f5e451fcde9e08780b67806ec6
@@ -201,7 +208,7 @@ The user confirmed that the wound Item sheet and embedded Active Effect lifecycl
 
 # Psychika i zdrowie / Actor-side health-category UI — IMPLEMENTED AND RUNTIME-CONFIRMED
 
-The Classic sheet now uses the **Psychika i zdrowie** area as the launcher space for persistent health categories.
+The Classic sheet uses the **Psychika i zdrowie** area as the launcher space for persistent health categories.
 
 Current implemented category:
 
@@ -219,16 +226,9 @@ Psychika i zdrowie
 → category-specific actions and lifecycle
 ```
 
-The current Critical Wounds window supports:
+The current Critical Wounds window supports listing, creating, opening and removing Actor-owned `criticalWound` Items. The wound count is reflected on the Classic-sheet launcher, and the wound's embedded Active Effects follow the normal Item document lifecycle.
 
-- listing Actor-owned `criticalWound` Items;
-- showing the wound count on the Classic-sheet category launcher;
-- creating a new embedded Critical Wound;
-- opening the embedded wound in its dedicated wound sheet;
-- removing the wound from the Actor;
-- retaining/removing the wound's embedded Active Effects through the normal Item document lifecycle.
-
-The user runtime-tested and confirmed that this works as described.
+The user runtime-tested and confirmed that this works as described, including dragging a world Critical Wound Item onto an Actor and seeing it in the category window.
 
 The user also manually adjusted the category launcher position in commit `39a9b2bb288e74f5e451fcde9e08780b67806ec6`; preserve that visual placement.
 
@@ -236,15 +236,56 @@ This UI pattern is intentionally extensible. Future categories such as Diseases/
 
 ---
 
+# Critical Wound materialization boundary — IMPLEMENTED, NOT YET RUNTIME-CONFIRMED
+
+New rule-neutral dependency added after the Actor-side wound lifecycle was confirmed:
+
+```text
+module/criticals/CriticalWoundApplication.mjs
+```
+
+It is exposed as:
+
+```text
+game.WFRP1ED.criticals.wounds
+```
+
+Purpose: convert an **already-resolved and already-verified** detailed critical result into persistent Actor state without knowing or inventing any critical-table mechanics.
+
+Contract:
+
+```text
+resolved detailed result
+→ CriticalWoundApplication.create(...)
+→ Actor-owned criticalWound Item
+→ optional verified embedded ActiveEffect sources
+```
+
+The service:
+
+- requires a real target Actor;
+- allows application by GM or target Actor OWNER;
+- requires a positive `criticalValue`;
+- requires resolution provenance including `damagePacketId`, `resultMessageId`, and `tableRole`;
+- preserves all neutral `CriticalWoundData.resolution` provenance fields;
+- accepts optional ActiveEffect source objects supplied by a future audited resolver;
+- provides sequential idempotency by returning the existing wound when the same `resultMessageId` was already materialized.
+
+Important limitation: this is a persistence boundary only. It does **not** select critical tables, interpret table rows, invent injury names, generate penalties, or decide recovery rules. Those remain behind the rulebook gate.
+
+The materialization service has passed source/static review but has not yet been exercised through a real detailed-critical Foundry runtime path. Do not call it runtime-confirmed yet.
+
+---
+
 # Rulebook gate before actual detailed table mechanics
 
 The general Critical Hits / Critical Hit Chart section was previously audited at printed page 122 in both Core Rulebooks, but the exact detailed effect rows and persistent consequences must be reopened before they are encoded.
 
-The active GitHub repository does not contain the Core PDFs and the current accessible uploaded-file sources did not recover them during this session.
+The active GitHub repository does not contain the Core PDFs. Current conversation uploads and File Library searches were also checked and did not recover the actual English and Polish Core Rulebook files.
 
 Therefore do **not** materialize detailed Core RollTables, penalties, durations, bleeding, amputations, recovery rules, or other wound-specific effects from memory or fan material.
 
-Before the next mechanics slice, recover/upload the exact English and Polish WFRP 1e Core Rulebook PDFs (or a repository/archive snapshot containing them).
+Before the mechanics slice continues, recover/upload the exact English and Polish WFRP 1e Core Rulebook PDFs or the archive which contains them.
 
 Policy:
 
@@ -255,14 +296,14 @@ Policy:
 
 # Immediate next steps
 
-1. At the start of the next session, fetch current `master` first and preserve any user changes made after this handoff.
-2. Recover/open the English and Polish Core Rulebook detailed critical-effect tables.
-3. Update `RULEBOOK_IMPLEMENTATION.md` with the verified detailed injury contract and repair any stale status statements there.
+1. Fetch current `master` first and preserve any user changes made after this checkpoint.
+2. Recover/open the English and Polish Core Rulebook detailed critical chart/effect table sections.
+3. Update `RULEBOOK_IMPLEMENTATION.md` with the verified detailed injury contract and repair its stale implementation-status statements.
 4. Define/materialize the WFRP1ED Core provider for the detailed critical registry roles.
 5. Implement the detailed resolver and separate roll-bearing result ChatMessage.
-6. Convert a resolved detailed result into a real Actor-owned `criticalWound` Item using the already runtime-confirmed Psychika i zdrowie / Critical Wounds lifecycle.
-7. Generate only verified native ActiveEffects required by the exact resolved injury.
-8. Runtime-test before implementing recovery/removal automation.
+6. Feed the verified result into `CriticalWoundApplication` so the target receives exactly one persistent wound Item.
+7. Generate only the native ActiveEffects required by the exact verified injury row.
+8. Runtime-test the full lifecycle before implementing recovery/removal automation.
 
 ---
 
