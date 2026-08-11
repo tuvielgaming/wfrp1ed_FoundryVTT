@@ -1,0 +1,236 @@
+/******************************************************************/
+/*                 WFRP 1e Critical Wound Item                   */
+/******************************************************************/
+
+.critical-wound-item-sheet {
+	--critical-wound-gap: 14px;
+	--critical-wound-border: rgb(70 51 30 / 38%);
+	--critical-wound-field-background: #e8dfcc;
+	--critical-wound-text: #1c1812;
+
+	font-family:
+		"Book Antiqua",
+		"Times New Roman",
+		serif;
+	color: var(--critical-wound-text);
+}
+
+.critical-wound-item-sheet .window-content {
+	overflow-y: auto;
+}
+
+.critical-wound-item-sheet .critical-wound-sheet__content {
+	display: grid;
+	gap: var(--critical-wound-gap);
+	padding: 16px;
+}
+
+.critical-wound-item-sheet .critical-wound-sheet__header {
+	display: grid;
+	grid-template-columns: 52px minmax(0, 1fr);
+	align-items: center;
+	gap: 12px;
+}
+
+.critical-wound-item-sheet .critical-wound-sheet__image {
+	width: 52px;
+	height: 52px;
+	border: 1px solid var(--critical-wound-border);
+	border-radius: 4px;
+	object-fit: cover;
+}
+
+.critical-wound-item-sheet .critical-wound-sheet__name {
+	width: 100%;
+	height: 38px;
+	margin: 0;
+	padding: 5px 9px;
+	border: 1px solid var(--critical-wound-border);
+	border-radius: 3px;
+	background: var(--critical-wound-field-background);
+	font: inherit;
+	font-size: 20px;
+	font-weight: 700;
+	color: var(--critical-wound-text);
+}
+
+.critical-wound-item-sheet .critical-wound-sheet__facts {
+	display: grid;
+	grid-template-columns: minmax(0, 180px) minmax(0, 1fr);
+	gap: 12px;
+}
+
+.critical-wound-item-sheet .critical-wound-sheet__field,
+.critical-wound-item-sheet .critical-wound-sheet__description {
+	display: grid;
+	gap: 5px;
+	font-size: 13px;
+	font-weight: 700;
+}
+
+.critical-wound-item-sheet .critical-wound-sheet__field input,
+.critical-wound-item-sheet .critical-wound-sheet__description textarea {
+	width: 100%;
+	margin: 0;
+	border: 1px solid var(--critical-wound-border);
+	border-radius: 3px;
+	background: var(--critical-wound-field-background);
+	box-shadow: none;
+	font: inherit;
+	font-weight: 400;
+	color: var(--critical-wound-text);
+}
+
+.critical-wound-item-sheet .critical-wound-sheet__field input {
+	height: 34px;
+	padding: 4px 8px;
+}
+
+.critical-wound-item-sheet .critical-wound-sheet__description textarea {
+	min-height: 145px;
+	padding: 8px;
+	line-height: 1.35;
+	resize: vertical;
+}
+
+.critical-wound-item-sheet input:disabled,
+.critical-wound-item-sheet textarea:disabled {
+	opacity: 0.78;
+}
+
+/******************************************************************/
+/* Resolution provenance                                          */
+/******************************************************************/
+
+.critical-wound-item-sheet .critical-wound-sheet__provenance,
+.critical-wound-item-sheet .critical-wound-sheet__effects {
+	padding: 11px;
+	border: 1px solid var(--critical-wound-border);
+	border-radius: 5px;
+	background: rgb(255 250 231 / 42%);
+}
+
+.critical-wound-item-sheet .critical-wound-sheet__provenance > summary {
+	cursor: pointer;
+	font-size: 14px;
+	font-weight: 700;
+}
+
+.critical-wound-item-sheet .critical-wound-sheet__provenance dl {
+	display: grid;
+	gap: 5px;
+	margin: 10px 0 0;
+}
+
+.critical-wound-item-sheet .critical-wound-sheet__provenance-row {
+	display: grid;
+	grid-template-columns: 145px minmax(0, 1fr);
+	gap: 8px;
+	font-size: 11px;
+}
+
+.critical-wound-item-sheet .critical-wound-sheet__provenance-row dt {
+	font-weight: 700;
+}
+
+.critical-wound-item-sheet .critical-wound-sheet__provenance-row dd {
+	min-width: 0;
+	margin: 0;
+	overflow-wrap: anywhere;
+}
+
+/******************************************************************/
+/* Active Effects                                                 */
+/******************************************************************/
+
+.critical-wound-item-sheet .critical-wound-sheet__section-heading {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 12px;
+	padding-bottom: 9px;
+	border-bottom: 1px solid rgb(70 51 30 / 24%);
+}
+
+.critical-wound-item-sheet .critical-wound-sheet__section-heading h3 {
+	margin: 0 0 2px;
+	font-size: 17px;
+}
+
+.critical-wound-item-sheet .critical-wound-sheet__section-heading p,
+.critical-wound-item-sheet .critical-wound-sheet__empty {
+	margin: 0;
+	font-size: 11px;
+	line-height: 1.35;
+	color: rgb(28 24 18 / 72%);
+}
+
+.critical-wound-item-sheet .critical-wound-sheet__section-heading button {
+	flex: 0 0 auto;
+	width: auto;
+	min-height: 30px;
+	margin: 0;
+	padding: 4px 8px;
+	font-family: inherit;
+	font-size: 12px;
+}
+
+.critical-wound-item-sheet .critical-wound-sheet__effect-list {
+	display: grid;
+	gap: 6px;
+	margin: 10px 0 0;
+	padding: 0;
+	list-style: none;
+}
+
+.critical-wound-item-sheet .critical-wound-sheet__effect {
+	display: grid;
+	grid-template-columns: 34px minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 8px;
+	padding: 6px;
+	border: 1px solid rgb(70 51 30 / 24%);
+	border-radius: 4px;
+	background: rgb(255 255 255 / 18%);
+}
+
+.critical-wound-item-sheet .critical-wound-sheet__effect.is-disabled {
+	opacity: 0.62;
+}
+
+.critical-wound-item-sheet .critical-wound-sheet__effect > img {
+	width: 34px;
+	height: 34px;
+	border: 0;
+	object-fit: cover;
+}
+
+.critical-wound-item-sheet .critical-wound-sheet__effect-main {
+	display: grid;
+	min-width: 0;
+}
+
+.critical-wound-item-sheet .critical-wound-sheet__effect-main strong {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 13px;
+}
+
+.critical-wound-item-sheet .critical-wound-sheet__effect-main span {
+	font-size: 10px;
+	color: rgb(28 24 18 / 68%);
+}
+
+.critical-wound-item-sheet .critical-wound-sheet__effect-actions {
+	display: flex;
+	gap: 3px;
+}
+
+.critical-wound-item-sheet .critical-wound-sheet__effect-actions button {
+	width: 28px;
+	height: 28px;
+	margin: 0;
+	padding: 0;
+	font-family: inherit;
+}
