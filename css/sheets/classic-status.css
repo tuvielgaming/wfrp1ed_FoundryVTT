@@ -39,14 +39,22 @@
 }
 
 .wfrp1e-luck-result {
-	display: flex;
-	align-items: baseline;
-	justify-content: space-between;
-	gap: 0.6rem;
+	display: block;
 	margin-top: 0.45rem;
 	padding-top: 0.35rem;
 	border-top: 1px solid rgba(65, 70, 35, 0.35);
 	font-size: 0.82rem;
+}
+
+.wfrp1e-luck-result__row {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 0.6rem;
+}
+
+.wfrp1e-luck-result__row + .wfrp1e-luck-result__row {
+	margin-top: 0.2rem;
 }
 
 .wfrp1e-luck-result strong {
