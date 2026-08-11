@@ -50,10 +50,11 @@ export class WeaponItemSheet extends HandlebarsApplicationMixin(
 		context.system = system;
 		context.editable = this.isEditable;
 		context.ui = weaponUi();
+		context.isRanged = system?.kind === WEAPON_KIND.RANGED;
 		context.modeOptions = selectOptions(
 			[
 				[INVENTORY_MODE.CARRIED, localize("Carried", "Przenoszona")],
-				[INVENTORY_MODE.HELD, localize("Held / ready", "Trzymana / gotowa")],
+				[INVENTORY_MODE.HELD, localize("Used", "Używana")],
 			],
 			system?.state?.mode,
 		);
@@ -69,7 +70,7 @@ export class WeaponItemSheet extends HandlebarsApplicationMixin(
 		context.kindOptions = selectOptions(
 			[
 				[WEAPON_KIND.MELEE, localize("Melee", "Walka wręcz")],
-				[WEAPON_KIND.RANGED, localize("Ranged", "Broń dystansowa")],
+				[WEAPON_KIND.RANGED, localize("Ranged / thrown", "Dystansowa / rzucana")],
 			],
 			system?.kind,
 		);
@@ -111,6 +112,12 @@ function weaponUi() {
 		parry: localize("Parrying", "Parowanie"),
 		parrySuitable: localize("Suitable for parrying", "Nadaje się do parowania"),
 		parryBonus: localize("Main-rule parry bonus", "Premia do parowania z zasad podstawowych"),
+		rangedDetails: localize("Ranged / thrown weapon", "Broń dystansowa / rzucana"),
+		shortRange: localize("Short range", "Krótki zasięg"),
+		longRange: localize("Long range", "Daleki zasięg"),
+		maximumRange: localize("Maximum range", "Maksymalny zasięg"),
+		effectiveStrength: localize("Effective Strength", "Siła efektywna"),
+		reload: localize("Reload", "Ładowanie"),
 		optionalModifiers: localize("Optional Weapon Modifiers", "Opcjonalne modyfikatory broni"),
 		optionalHint: localize(
 			"Stored from the optional Core Weapon Modifiers table. These values are not applied unless the combat rules explicitly enable that optional rule.",
