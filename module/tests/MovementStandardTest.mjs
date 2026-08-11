@@ -11,6 +11,9 @@ import {
 	standardTestProcedureName,
 } from "./standard-test-procedures.mjs";
 
+const FLAG_SCOPE = "wfrp1ed";
+const MOVEMENT_STATE_FLAG_KEY = "movementResultState";
+const MOVEMENT_STATE_VERSION = 1;
 const TEMPLATE_PATH =
 	"systems/wfrp1ed/templates/chat/movement-test-result.hbs";
 const JUMP_EFFECT_TARGET =
@@ -27,19 +30,8 @@ const LEAP_EFFECT_TARGET =
  * - Polish Core Rulebook, printed p. 75, Zeskok/Upadek/Skok/Wspinaczka.
  * - English Skills, printed pp. 46 and 48, Acrobatics and Clown.
  * - Polish Skills, printed p. 46, Akrobatyka and Błaznowanie.
- *
- * Skill/item identities are not hardcoded here. Applicable bonuses arrive as
- * declarative Active Effect changes targeting stable movement parameters.
  */
 export class MovementStandardTest {
-	/**
-	 * Execute one registered movement procedure.
-	 *
-	 * @param {Actor} actor
-	 * @param {string} procedureId
-	 * @param {Object} options
-	 * @returns {Promise<ChatMessage>}
-	 */
 	static async execute(actor, procedureId, options = {}) {
 		if (!actor) {
 			throw new Error(
@@ -59,10 +51,8 @@ export class MovementStandardTest {
 		switch (id) {
 			case "jump":
 				return this._executeJump(actor, procedure, options);
-
 			case "leap":
 				return this._executeLeap(actor, procedure, options);
-
 			default:
 				throw new Error(
 					`Unsupported movement Standard Test procedure '${id}'.`,
@@ -73,18 +63,9 @@ export class MovementStandardTest {
 	/**
 	 * Resolve controlled vertical Jumping / Zeskok.
 	 *
-	 * Distance is rounded up to the next whole yard/metre. Roll 1d6, add all
-	 * selected effects which modify the jump damage-reduction die, then subtract
-	 * that effective die result from the rounded distance. A positive remainder
-	 * is Wounds suffered, ignoring armour and Toughness. If Wounds are suffered,
-	 * a separate 50% check determines whether held items are dropped.
-	 *
-	 * Calculating Zeskok never mutates Wounds automatically. When positive damage
-	 * is produced, the movement result ChatMessage receives a generic
-	 * DamagePacket so the GM or target Actor OWNER can explicitly use the shared
-	 * Apply Damage / Zastosuj obrażenia transaction.
-	 *
-	 * @protected
+	 * The resolved inputs are persisted on the ChatMessage so Luck/Szczęście can
+	 * change the d6 by +1 after the roll and safely rebuild both the presentation
+	 * and the still-unapplied generic DamagePacket without parsing rendered HTML.
 	 */
 	static async _executeJump(actor, procedure, options) {
 		const enteredHeight = this._positiveNumber(
@@ -98,32 +79,197 @@ export class MovementStandardTest {
 			options.ruleEffects,
 		);
 		const effectBonus = effects.total;
-
 		const roll = await new Roll("1d6").evaluate();
 		const die = this._finiteNumber(roll.total, "jump roll");
-		const effectiveDie = die + effectBonus;
-		const wounds = Math.max(0, height - effectiveDie);
-		const procedureName = standardTestProcedureName(procedure);
+		const initialWounds = Math.max(0, height - (die + effectBonus));
 
 		let dropRoll = null;
 		let dropsHeldItems = false;
 
-		if (wounds > 0) {
+		if (initialWounds > 0) {
 			dropRoll = await new Roll("1d100").evaluate();
 			dropsHeldItems =
 				this._finiteNumber(dropRoll.total, "drop roll") <= 50;
 		}
 
-		const message = await this._publish(actor, {
+		const procedureName = standardTestProcedureName(procedure);
+		const state = {
+			version: MOVEMENT_STATE_VERSION,
 			kind: "jump",
+			actorUuid: actor.uuid,
+			procedureId: procedure.id ?? "jump",
 			procedureName,
+			enteredHeight,
+			height,
+			effectBonus,
+			effects: effects.entries.map((effect) => ({
+				source: String(effect.source ?? ""),
+				value: this._finiteNumber(effect.value, "jump effect"),
+			})),
+			die,
+			dropRoll: dropRoll
+				? this._finiteNumber(dropRoll.total, "drop roll")
+				: null,
+			dropsHeldItems,
+			createdAt: Date.now(),
+			updatedAt: Date.now(),
+		};
+
+		const message = await this._publish(
+			actor,
+			this._jumpPresentation(state),
+			{
+				rolls: dropRoll ? [roll, dropRoll] : [roll],
+				flags: {
+					[FLAG_SCOPE]: {
+						[MOVEMENT_STATE_FLAG_KEY]: state,
+					},
+				},
+			},
+		);
+
+		await this._synchronizeJumpDamage(message, state);
+		return message;
+	}
+
+	/**
+	 * Return persisted movement state when the message supports post-roll
+	 * movement adjudication.
+	 */
+	static stateFor(message) {
+		const state = message?.getFlag?.(
+			FLAG_SCOPE,
+			MOVEMENT_STATE_FLAG_KEY,
+		);
+
+		return state && typeof state === "object" && !Array.isArray(state)
+			? state
+			: null;
+	}
+
+	/**
+	 * Whether Luck may modify this movement result.
+	 *
+	 * Current audited support is intentionally limited to controlled Jumping:
+	 * its single d6 is a direct result where +1 is always beneficial. Leaping
+	 * can use 1d6 or 2d6 and needs its own dedicated Luck audit before exposure.
+	 */
+	static canApplyLuck(message, delta) {
+		const state = this.stateFor(message);
+		return state?.kind === "jump" && Number(delta) === 1;
+	}
+
+	/**
+	 * Apply the audited +1 Luck adjustment to an unresolved Jump result.
+	 *
+	 * Damage must still be unapplied. The original Roll object remains attached
+	 * to the ChatMessage as the physical dice audit; the movement state records
+	 * the effective post-Luck d6 and the card is recalculated from that state.
+	 */
+	static async applyLuck(message, delta) {
+		if (!this.canApplyLuck(message, delta)) {
+			throw new Error(
+				"This movement result cannot be adjusted by Luck.",
+			);
+		}
+
+		const state = foundry.utils.deepClone(this.stateFor(message));
+		const originalRoll = this._finiteNumber(state.die, "jump roll");
+		const adjustedRoll = originalRoll + Number(delta);
+
+		state.die = adjustedRoll;
+		state.updatedAt = Date.now();
+
+		const content = await this._render(
+			this._jumpPresentation(state),
+		);
+
+		await message.update({
+			content,
+			[`flags.${FLAG_SCOPE}.${MOVEMENT_STATE_FLAG_KEY}`]: state,
+		});
+
+		await this._synchronizeJumpDamage(message, state);
+
+		return Object.freeze({
+			originalRoll,
+			adjustedRoll,
+			delta: Number(delta),
+		});
+	}
+
+	/**
+	 * Rebuild the generic damage attachment after a post-roll Jump adjustment.
+	 *
+	 * Polish note: nie modyfikujemy Żywotności tutaj. Zmieniamy wyłącznie
+	 * oczekujący DamagePacket; faktyczne obrażenia nadal wymagają jawnej akcji
+	 * „Zastosuj obrażenia”.
+	 */
+	static async _synchronizeJumpDamage(message, state) {
+		const { wounds } = this._jumpResolution(state);
+		const existingDamage = message?.getFlag?.(FLAG_SCOPE, "damageState");
+
+		if (wounds <= 0) {
+			if (existingDamage) {
+				await message.unsetFlag(FLAG_SCOPE, "damageState");
+			}
+			return;
+		}
+
+		const actor = await foundry.utils.fromUuid(state.actorUuid);
+		if (!(actor instanceof foundry.documents.Actor)) {
+			throw new Error(
+				`Jump Actor '${state.actorUuid}' is not available.`,
+			);
+		}
+
+		const packet = new DamagePacket({
+			rawAmount: wounds,
+			targetActorUuid: actor.uuid,
+			source: {
+				kind: "movement-procedure",
+				id: state.procedureId ?? "jump",
+				label: state.procedureName,
+			},
+			armour: DAMAGE_MITIGATION_POLICY.IGNORE,
+			toughness: DAMAGE_MITIGATION_POLICY.IGNORE,
+			criticalMode: DAMAGE_CRITICAL_MODE.SUDDEN_DEATH,
+		});
+		const resolution = DamageResolver.resolve(packet);
+
+		await DamageChat.attach(message, { packet, resolution });
+	}
+
+	static _jumpResolution(state) {
+		const die = this._finiteNumber(state.die, "jump roll");
+		const effectBonus = this._finiteNumber(
+			state.effectBonus ?? 0,
+			"jump effect bonus",
+		);
+		const height = this._positiveNumber(state.height, "jump height");
+		const effectiveDie = die + effectBonus;
+		const wounds = Math.max(0, height - effectiveDie);
+
+		return { die, effectBonus, effectiveDie, wounds };
+	}
+
+	static _jumpPresentation(state) {
+		const { die, effectiveDie, wounds } = this._jumpResolution(state);
+		const effects = Array.isArray(state.effects) ? state.effects : [];
+		const dropRoll = state.dropRoll === null || state.dropRoll === undefined
+			? null
+			: this._finiteNumber(state.dropRoll, "drop roll");
+
+		return {
+			kind: "jump",
+			procedureName: state.procedureName,
 			success: wounds === 0,
 			primaryLabel: this._localize(
 				"WFRP1ED.Movement.Height",
 				"Height",
 				"Wysokość",
 			),
-			primaryValue: `${height} ${this._distanceUnit()}`,
+			primaryValue: `${state.height} ${this._distanceUnit()}`,
 			metricLeftLabel: "K6",
 			metricLeftValue: die,
 			metricRightLabel: this._localize(
@@ -139,7 +285,7 @@ export class MovementStandardTest {
 						"Entered height",
 						"Podana wysokość",
 					),
-					value: `${enteredHeight} ${this._distanceUnit()}`,
+					value: `${state.enteredHeight} ${this._distanceUnit()}`,
 				},
 				{
 					label: this._localize(
@@ -147,7 +293,7 @@ export class MovementStandardTest {
 						"Rounded height",
 						"Wysokość po zaokrągleniu",
 					),
-					value: `${height} ${this._distanceUnit()}`,
+					value: `${state.height} ${this._distanceUnit()}`,
 				},
 				{
 					label: this._localize(
@@ -157,7 +303,7 @@ export class MovementStandardTest {
 					),
 					value: die,
 				},
-				...effects.entries.map((effect) => ({
+				...effects.map((effect) => ({
 					label: effect.source,
 					value: this._signed(effect.value),
 				})),
@@ -175,7 +321,7 @@ export class MovementStandardTest {
 						"Damage calculation",
 						"Obliczenie obrażeń",
 					),
-					value: `${height} - ${effectiveDie} = ${wounds}`,
+					value: `${state.height} - ${effectiveDie} = ${wounds}`,
 				},
 			],
 			note: wounds > 0
@@ -189,48 +335,14 @@ export class MovementStandardTest {
 					"No Wounds are suffered.",
 					"Bohater nie odnosi obrażeń.",
 				),
-		secondaryNote: wounds > 0
-				? this._dropNote(dropRoll, dropsHeldItems)
+			secondaryNote: wounds > 0 && dropRoll !== null
+				? this._dropNoteValue(dropRoll, state.dropsHeldItems === true)
 				: "",
-		fullRound: true,
-		rolls: dropRoll ? [roll, dropRoll] : [roll],
-		});
-
-		if (wounds > 0) {
-			const packet = new DamagePacket({
-				rawAmount: wounds,
-				targetActorUuid: actor.uuid,
-				source: {
-					kind: "movement-procedure",
-					id: procedure.id ?? "jump",
-					label: procedureName,
-				},
-				armour: DAMAGE_MITIGATION_POLICY.IGNORE,
-				toughness: DAMAGE_MITIGATION_POLICY.IGNORE,
-				criticalMode: DAMAGE_CRITICAL_MODE.SUDDEN_DEATH,
-			});
-			const resolution = DamageResolver.resolve(packet);
-
-			await DamageChat.attach(message, {
-				packet,
-				resolution,
-			});
-		}
-
-		return message;
+			fullRound: true,
+		};
 	}
 
-	/**
-	 * Resolve horizontal Leaping / Skok.
-	 *
-	 * With at least two yards/metres run-up the achieved distance is
-	 * 2 * Movement - 1d6. Without sufficient run-up it is 2 * Movement - 2d6.
-	 * The minimum result is one yard/metre. Selected effects which target Leap
-	 * distance are added before the one-yard/metre minimum is applied. A
-	 * character who does not reach the required gap falls.
-	 *
-	 * @protected
-	 */
+	/** Resolve horizontal Leaping / Skok. */
 	static async _executeLeap(actor, procedure, options) {
 		const gap = this._positiveNumber(
 			options.leapGap,
@@ -341,58 +453,60 @@ export class MovementStandardTest {
 					"The character does not reach the other side and falls. The GM determines the actual fall distance from the scene.",
 					"Bohater nie doskakuje na drugą stronę i spada. MG ustala rzeczywistą wysokość upadku na podstawie sytuacji.",
 				),
-		secondaryNote: "",
-		fullRound: true,
-		rolls: [roll],
-		});
+			secondaryNote: "",
+			fullRound: true,
+		}, { rolls: [roll] });
 	}
 
-	/** @protected */
-	static async _publish(actor, data) {
-		const content =
-			await foundry.applications.handlebars.renderTemplate(
-				TEMPLATE_PATH,
-				{
-					...data,
-					actorName: actor.name,
-					statusLabel: data.success
-						? this._localize(
-							"WFRP1ED.TestResult.Success",
-							"Success",
-							"Sukces",
-						)
-						: this._localize(
-							"WFRP1ED.TestResult.Failure",
-							"Failure",
-							"Porażka",
-						),
-					fullRoundLabel: this._localize(
-						"WFRP1ED.Movement.FullRound",
-						"Full-round action",
-						"Czynność na pełną rundę",
-					),
-					detailsHint: this._localize(
-						"WFRP1ED.Movement.DetailsHint",
-						"Click to show movement calculation",
-						"Kliknij, aby pokazać obliczenie ruchu",
-					),
-				},
-			);
+	static async _publish(actor, data, options = {}) {
+		const content = await this._render(data);
 
 		return ChatMessage.create({
 			speaker: ChatMessage.getSpeaker({ actor }),
 			content,
-			rolls: data.rolls ?? [],
+			rolls: options.rolls ?? [],
+			flags: options.flags ?? {},
 		});
 	}
 
-	/** @protected */
-	static _dropNote(dropRoll, dropsHeldItems) {
-		const roll = this._finiteNumber(
-			dropRoll?.total,
-			"drop roll",
+	static async _render(data) {
+		return foundry.applications.handlebars.renderTemplate(
+			TEMPLATE_PATH,
+			{
+				...data,
+				statusLabel: data.success
+					? this._localize(
+						"WFRP1ED.TestResult.Success",
+						"Success",
+						"Sukces",
+					)
+					: this._localize(
+						"WFRP1ED.TestResult.Failure",
+						"Failure",
+						"Porażka",
+					),
+				fullRoundLabel: this._localize(
+					"WFRP1ED.Movement.FullRound",
+					"Full-round action",
+					"Czynność na pełną rundę",
+				),
+				detailsHint: this._localize(
+					"WFRP1ED.Movement.DetailsHint",
+					"Click to show movement calculation",
+					"Kliknij, aby pokazać obliczenie ruchu",
+				),
+			},
 		);
+	}
 
+	static _dropNote(dropRoll, dropsHeldItems) {
+		return this._dropNoteValue(
+			this._finiteNumber(dropRoll?.total, "drop roll"),
+			dropsHeldItems,
+		);
+	}
+
+	static _dropNoteValue(roll, dropsHeldItems) {
 		return dropsHeldItems
 			? this._localize(
 				"WFRP1ED.Movement.DropHeldYes",
@@ -406,48 +520,38 @@ export class MovementStandardTest {
 			);
 	}
 
-	/** @protected */
 	static _distanceUnit() {
 		return game.i18n.lang === "pl" ? "m" : "yd";
 	}
 
-	/** @protected */
 	static _positiveNumber(value, label) {
 		const number = this._finiteNumber(value, label);
-
 		if (number <= 0) {
 			throw new Error(`${label} must be greater than zero.`);
 		}
-
 		return number;
 	}
 
-	/** @protected */
 	static _finiteNumber(value, label) {
 		const number = Number(value);
-
 		if (!Number.isFinite(number)) {
 			throw new Error(
 				`Movement Standard Test '${label}' must be finite: ${String(value)}.`,
 			);
 		}
-
 		return number;
 	}
 
-	/** @protected */
 	static _signed(value) {
-		return value >= 0 ? `+${value}` : String(value);
+		const number = Number(value);
+		return number >= 0 ? `+${number}` : String(number);
 	}
 
-	/** @protected */
 	static _localize(key, englishFallback, polishFallback) {
 		const localized = game.i18n.localize(key);
-
 		if (localized !== key) {
 			return localized;
 		}
-
 		return game.i18n.lang === "pl"
 			? polishFallback
 			: englishFallback;
