@@ -99,6 +99,18 @@
 }
 
 /******************************************************************/
+/* Armour location presentation                                   */
+/******************************************************************/
+
+.wfrp1ed-classic-sheet .armour-cell--location {
+	white-space: normal;
+	text-overflow: clip;
+	line-height: 1.05;
+	font-size: 12px;
+	overflow-wrap: anywhere;
+}
+
+/******************************************************************/
 /* Shield value in the printed Armour Points diagram              */
 /******************************************************************/
 
