@@ -1,0 +1,189 @@
+/******************************************************************/
+/* Critical Wounds Actor window                                   */
+/******************************************************************/
+
+.critical-wounds-window .window-content {
+	padding: 0;
+	overflow: hidden;
+}
+
+.critical-wounds-browser {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+
+	height: 100%;
+	min-height: 0;
+	padding: 16px;
+
+	font-family:
+		"Book Antiqua",
+		"Times New Roman",
+		serif;
+	color: #241b13;
+}
+
+.critical-wounds-browser__header {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 16px;
+
+	padding-bottom: 10px;
+	border-bottom: 1px solid rgb(75 48 30 / 34%);
+}
+
+.critical-wounds-browser__header h2,
+.critical-wounds-browser__header p {
+	margin: 0;
+}
+
+.critical-wounds-browser__header h2 {
+	font-size: 22px;
+	line-height: 1.1;
+}
+
+.critical-wounds-browser__header p {
+	margin-top: 3px;
+	font-size: 13px;
+	font-weight: 700;
+	color: rgb(36 27 19 / 72%);
+}
+
+.critical-wounds-browser__add {
+	flex: 0 0 auto;
+	width: auto;
+	min-height: 32px;
+	margin: 0;
+	padding: 5px 9px;
+
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+
+	font-family: inherit;
+	font-weight: 700;
+}
+
+.critical-wounds-browser__hint {
+	margin: 0;
+	font-size: 12px;
+	line-height: 1.35;
+	color: rgb(36 27 19 / 72%);
+}
+
+.critical-wounds-browser__list {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+
+	min-height: 0;
+	overflow-y: auto;
+	padding-right: 3px;
+}
+
+.critical-wounds-browser__row {
+	display: grid;
+	grid-template-columns: 44px minmax(0, 1fr) auto;
+	gap: 10px;
+	align-items: start;
+
+	padding: 9px;
+
+	border: 1px solid rgb(75 48 30 / 28%);
+	border-radius: 5px;
+	background: rgb(255 250 232 / 48%);
+}
+
+.critical-wounds-browser__image {
+	width: 44px;
+	height: 44px;
+	border: 1px solid rgb(75 48 30 / 42%);
+	border-radius: 3px;
+	object-fit: cover;
+}
+
+.critical-wounds-browser__main {
+	min-width: 0;
+}
+
+.critical-wounds-browser__name {
+	width: auto;
+	max-width: 100%;
+	height: auto;
+	margin: 0;
+	padding: 0;
+
+	border: 0;
+	background: transparent;
+	box-shadow: none;
+
+	font-family: inherit;
+	font-size: 16px;
+	font-weight: 700;
+	line-height: 1.2;
+	text-align: left;
+	color: #4f1717;
+
+	white-space: normal;
+	cursor: pointer;
+}
+
+.critical-wounds-browser__name:hover,
+.critical-wounds-browser__name:focus-visible {
+	text-decoration: underline;
+}
+
+.critical-wounds-browser__meta {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px 12px;
+
+	margin-top: 5px;
+	font-size: 11px;
+	line-height: 1.25;
+	color: rgb(36 27 19 / 76%);
+}
+
+.critical-wounds-browser__description {
+	margin: 6px 0 0;
+	font-size: 12px;
+	line-height: 1.35;
+}
+
+.critical-wounds-browser__actions {
+	display: flex;
+	gap: 4px;
+}
+
+.critical-wounds-browser__actions button {
+	width: 30px;
+	height: 30px;
+	margin: 0;
+	padding: 0;
+
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.critical-wounds-browser__remove {
+	color: #7a1414;
+}
+
+.critical-wounds-browser__empty {
+	display: flex;
+	flex: 1 1 auto;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+
+	min-height: 150px;
+	padding: 20px;
+
+	border: 1px dashed rgb(75 48 30 / 30%);
+	border-radius: 5px;
+	color: rgb(36 27 19 / 64%);
+	font-size: 13px;
+	text-align: center;
+}
