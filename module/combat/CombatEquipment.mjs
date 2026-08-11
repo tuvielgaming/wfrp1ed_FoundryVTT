@@ -84,16 +84,29 @@ export class CombatEquipment {
 
 	/**
 	 * Sum active Armour Points covering one canonical humanoid hit location.
+	 *
+	 * Combat callers use the default and therefore include an active Shield.
+	 * The Classic printed sheet records worn body armour in its six location
+	 * boxes and the Shield in its own shield symbol, so presentation may request
+	 * `includeShields: false` without changing the actual combat protection.
+	 *
 	 * Layer legality is intentionally audited/applied elsewhere; this function
 	 * only answers the value represented by the Actor's current Item state.
 	 */
-	static armourAt(actor, hitLocation) {
+	static armourAt(actor, hitLocation, { includeShields = true } = {}) {
 		assertActor(actor);
 		const location = normalizeHitLocation(hitLocation);
 		const sources = [];
 		let total = 0;
 
 		for (const item of this.activeArmour(actor)) {
+			if (
+				includeShields !== true &&
+				item.system?.armourClass === ARMOUR_CLASS.SHIELD
+			) {
+				continue;
+			}
+
 			if (item.system?.coverage?.[location] !== true) continue;
 
 			const points = nonNegativeInteger(item.system?.armourPoints);
