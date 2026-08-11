@@ -1,0 +1,99 @@
+/******************************************************************/
+/* Classic Weapon / Armour Item interaction                       */
+/******************************************************************/
+
+.wfrp1ed-classic-sheet .melee-cell--name,
+.wfrp1ed-classic-sheet .ranged-cell--name,
+.wfrp1ed-classic-sheet .armour-cell--name {
+	position: relative;
+	gap: 4px;
+	padding-right: 42px;
+}
+
+.wfrp1ed-classic-sheet .combat-sheet-item-name {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.wfrp1ed-classic-sheet .combat-sheet-item-controls {
+	position: absolute;
+	right: 2px;
+	top: 50%;
+	transform: translateY(-50%);
+
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+}
+
+.wfrp1ed-classic-sheet .combat-sheet-use-toggle,
+.wfrp1ed-classic-sheet .combat-sheet-delete-item {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 auto;
+
+	width: 17px;
+	height: 17px;
+	min-width: 17px;
+	margin: 0;
+	padding: 0;
+
+	border: 0;
+	background: transparent;
+	box-shadow: none;
+	color: #17120d;
+
+	font-size: 10px;
+	line-height: 1;
+
+	opacity: 0.3;
+	cursor: pointer;
+
+	transition: opacity 0.12s ease;
+}
+
+.wfrp1ed-classic-sheet .combat-sheet-use-toggle {
+	position: relative;
+	border: 1px solid currentColor;
+	border-radius: 50%;
+}
+
+.wfrp1ed-classic-sheet .combat-sheet-use-toggle.is-used::after {
+	content: "";
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: currentColor;
+}
+
+.wfrp1ed-classic-sheet .combat-sheet-use-toggle:disabled {
+	cursor: default;
+}
+
+.wfrp1ed-classic-sheet .melee-row:hover .combat-sheet-item-controls > button,
+.wfrp1ed-classic-sheet .ranged-row:hover .combat-sheet-item-controls > button,
+.wfrp1ed-classic-sheet .armour-row:hover .combat-sheet-item-controls > button,
+.wfrp1ed-classic-sheet .combat-sheet-item-controls > button:focus-visible,
+.wfrp1ed-classic-sheet .combat-sheet-use-toggle.is-used {
+	opacity: 0.88;
+}
+
+.wfrp1ed-classic-sheet .combat-sheet-item-controls > button:focus-visible {
+	outline: 1px solid var(--focus-color);
+	outline-offset: 1px;
+}
+
+.wfrp1ed-classic-sheet .melee-row.is-carried,
+.wfrp1ed-classic-sheet .ranged-row.is-carried,
+.wfrp1ed-classic-sheet .armour-row.is-carried {
+	opacity: 0.66;
+}
+
+.wfrp1ed-classic-sheet .melee-row.is-equipped,
+.wfrp1ed-classic-sheet .ranged-row.is-equipped,
+.wfrp1ed-classic-sheet .armour-row.is-equipped {
+	opacity: 1;
+}
