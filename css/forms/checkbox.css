@@ -7,8 +7,13 @@
  * The real checkbox remains in the document for native form semantics, but
  * the label draws the visible box/check so Foundry Accent Color does not alter
  * individual system sheets differently.
+ *
+ * Existing Standard Test effect rows are one of the canonical consumers; the
+ * combat Item sheets intentionally reuse the exact same artwork.
  */
-.wfrp1ed-checkbox {
+.wfrp1ed-checkbox,
+.wfrp-rule-effect-selection__row,
+.combat-item-sheet .combat-item-sheet__check {
 	position: relative;
 	display: flex;
 	align-items: baseline;
@@ -17,7 +22,9 @@
 	cursor: pointer;
 }
 
-.wfrp1ed-checkbox > input[type="checkbox"] {
+.wfrp1ed-checkbox > input[type="checkbox"],
+.wfrp-rule-effect-selection__row > input[type="checkbox"],
+.combat-item-sheet .combat-item-sheet__check > input[type="checkbox"] {
 	position: absolute !important;
 	width: 1px !important;
 	height: 1px !important;
@@ -30,7 +37,9 @@
 	pointer-events: none;
 }
 
-.wfrp1ed-checkbox::before {
+.wfrp1ed-checkbox::before,
+.wfrp-rule-effect-selection__row::before,
+.combat-item-sheet .combat-item-sheet__check::before {
 	content: "";
 	display: inline-grid;
 	place-items: center;
@@ -48,19 +57,27 @@
 	line-height: 1;
 }
 
-.wfrp1ed-checkbox:has(> input[type="checkbox"]:checked)::before {
+.wfrp1ed-checkbox:has(> input[type="checkbox"]:checked)::before,
+.wfrp-rule-effect-selection__row:has(> input[type="checkbox"]:checked)::before,
+.combat-item-sheet .combat-item-sheet__check:has(> input[type="checkbox"]:checked)::before {
 	content: "✓";
 }
 
-.wfrp1ed-checkbox:has(> input[type="checkbox"]:focus-visible)::before {
+.wfrp1ed-checkbox:has(> input[type="checkbox"]:focus-visible)::before,
+.wfrp-rule-effect-selection__row:has(> input[type="checkbox"]:focus-visible)::before,
+.combat-item-sheet .combat-item-sheet__check:has(> input[type="checkbox"]:focus-visible)::before {
 	outline: 2px solid currentColor;
 	outline-offset: 2px;
 }
 
-.wfrp1ed-checkbox:has(> input[type="checkbox"]:disabled) {
+.wfrp1ed-checkbox:has(> input[type="checkbox"]:disabled),
+.wfrp-rule-effect-selection__row:has(> input[type="checkbox"]:disabled),
+.combat-item-sheet .combat-item-sheet__check:has(> input[type="checkbox"]:disabled) {
 	cursor: default;
 }
 
-.wfrp1ed-checkbox:has(> input[type="checkbox"]:disabled)::before {
+.wfrp1ed-checkbox:has(> input[type="checkbox"]:disabled)::before,
+.wfrp-rule-effect-selection__row:has(> input[type="checkbox"]:disabled)::before,
+.combat-item-sheet .combat-item-sheet__check:has(> input[type="checkbox"]:disabled)::before {
 	opacity: 0.65;
 }
