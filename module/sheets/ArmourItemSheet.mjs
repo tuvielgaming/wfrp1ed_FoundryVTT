@@ -44,6 +44,12 @@ export class ArmourItemSheet extends HandlebarsApplicationMixin(
 	async _prepareContext(options) {
 		const context = await super._prepareContext(options);
 		const system = this.document.system;
+		const usedMode = system?.armourClass === ARMOUR_CLASS.SHIELD
+			? INVENTORY_MODE.HELD
+			: INVENTORY_MODE.WORN;
+		const displayedMode = system?.state?.mode === INVENTORY_MODE.CARRIED
+			? INVENTORY_MODE.CARRIED
+			: usedMode;
 
 		context.item = this.document;
 		context.system = system;
@@ -52,10 +58,9 @@ export class ArmourItemSheet extends HandlebarsApplicationMixin(
 		context.modeOptions = selectOptions(
 			[
 				[INVENTORY_MODE.CARRIED, localize("Carried", "Przenoszony")],
-				[INVENTORY_MODE.WORN, localize("Worn", "Założony")],
-				[INVENTORY_MODE.HELD, localize("Held", "Trzymany")],
+				[usedMode, localize("Used", "Używany")],
 			],
-			system?.state?.mode,
+			displayedMode,
 		);
 		context.handOptions = selectOptions(
 			[
