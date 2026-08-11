@@ -1,48 +1,43 @@
 const scrollPositions = new WeakMap();
 
 /**
- * ApplicationV2 replaces sheet content during document rerenders. The Classic
- * sheet itself is the scrolling element (`.wfrp1ed-classic-sheet`), not the
- * outer ApplicationV2 frame content. Preserve that inner scroll position
- * across Actor and owned-Item updates.
+ * ApplicationV2 replaces the Classic sheet's inner HTML during document
+ * rerenders. The actual scrolling element is `.wfrp1ed-classic-sheet`.
+ *
+ * Relying only on a pre-render hook proved too fragile because owned-Item and
+ * submit-on-change updates can enter the render cycle after the live scroller
+ * has already been replaced/reset. Instead, continuously remember the user's
+ * last scroll position from the live scroller itself and restore that remembered
+ * value whenever a new sheet body is rendered.
  *
  * The position belongs to the Application instance only and is never persisted
  * to Actor data.
  */
-Hooks.on("preRenderApplication", (application, _context, options) => {
-	if (!isClassicActorSheet(application) || options?.isFirstRender) {
-		return;
-	}
-
-	const scroller = currentScroller(application);
-	if (!(scroller instanceof HTMLElement)) return;
-
-	scrollPositions.set(application, {
-		top: scroller.scrollTop,
-		left: scroller.scrollLeft,
-	});
-});
-
 Hooks.on("renderApplicationV2", (application, element) => {
 	if (!isClassicActorSheet(application)) return;
 
-	const position = scrollPositions.get(application);
-	if (!position) return;
+	const remembered = scrollPositions.get(application);
+	const pendingScroller = findScroller(element);
+
+	if (pendingScroller) {
+		if (remembered) restore(pendingScroller, remembered);
+		attachTracker(application, pendingScroller);
+	}
 
 	/*
-	 * renderApplicationV2 receives the pending inner HTML before Foundry inserts
-	 * it into the live frame. Restore immediately where possible, then repeat on
-	 * the next animation frame after insertion/layout so a large vertical
-	 * position cannot be clamped to zero by detached-element geometry.
+	 * The render hook receives pending HTML. Repeat the operation after Foundry
+	 * has inserted/replaced the live HTML so detached-element geometry cannot
+	 * clamp a large scrollTop back to zero.
 	 */
-	const pendingScroller = findScroller(element);
-	if (pendingScroller) restore(pendingScroller, position);
-
 	requestAnimationFrame(() => {
 		if (!application.rendered) return;
 
 		const liveScroller = currentScroller(application);
-		if (liveScroller) restore(liveScroller, position);
+		if (!liveScroller) return;
+
+		const latest = scrollPositions.get(application);
+		if (latest) restore(liveScroller, latest);
+		attachTracker(application, liveScroller);
 	});
 });
 
@@ -51,6 +46,33 @@ Hooks.on("closeApplicationV2", (application) => {
 		scrollPositions.delete(application);
 	}
 });
+
+function attachTracker(application, scroller) {
+	if (scroller.dataset.wfrpScrollTracker === "true") return;
+
+	scroller.dataset.wfrpScrollTracker = "true";
+
+	/*
+	 * Seed first-render state without overriding a previously remembered value.
+	 */
+	if (!scrollPositions.has(application)) {
+		scrollPositions.set(application, {
+			top: scroller.scrollTop,
+			left: scroller.scrollLeft,
+		});
+	}
+
+	scroller.addEventListener(
+		"scroll",
+		() => {
+			scrollPositions.set(application, {
+				top: scroller.scrollTop,
+				left: scroller.scrollLeft,
+			});
+		},
+		{ passive: true },
+	);
+}
 
 function currentScroller(application) {
 	return findScroller(application?.element);
