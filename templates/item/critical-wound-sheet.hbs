@@ -1,0 +1,137 @@
+<section class="critical-wound-sheet__content">
+  <header class="critical-wound-sheet__header">
+    <img
+      class="critical-wound-sheet__image"
+      src="{{item.img}}"
+      alt="{{item.name}}"
+    />
+
+    <input
+      class="critical-wound-sheet__name"
+      type="text"
+      name="name"
+      value="{{item.name}}"
+      {{#unless editable}}disabled{{/unless}}
+    />
+  </header>
+
+  <section class="critical-wound-sheet__facts">
+    <label class="critical-wound-sheet__field">
+      <span>{{ui.criticalValue}}</span>
+      <input
+        type="number"
+        name="system.criticalValue"
+        min="0"
+        step="1"
+        value="{{system.criticalValue}}"
+        {{#unless editable}}disabled{{/unless}}
+      />
+    </label>
+
+    <label class="critical-wound-sheet__field">
+      <span>{{ui.hitLocation}}</span>
+      <input
+        type="text"
+        name="system.hitLocation"
+        value="{{system.hitLocation}}"
+        {{#unless editable}}disabled{{/unless}}
+      />
+    </label>
+  </section>
+
+  <label class="critical-wound-sheet__description">
+    <span>{{ui.description}}</span>
+    <textarea
+      name="system.description"
+      rows="8"
+      {{#unless editable}}disabled{{/unless}}
+    >{{system.description}}</textarea>
+  </label>
+
+  <details class="critical-wound-sheet__provenance">
+    <summary>{{ui.provenance}}</summary>
+
+    {{#if provenanceRows.length}}
+      <dl>
+        {{#each provenanceRows}}
+          <div class="critical-wound-sheet__provenance-row">
+            <dt>{{label}}</dt>
+            <dd>{{value}}</dd>
+          </div>
+        {{/each}}
+      </dl>
+    {{else}}
+      <p class="critical-wound-sheet__empty">{{ui.provenanceEmpty}}</p>
+    {{/if}}
+  </details>
+
+  <section class="critical-wound-sheet__effects">
+    <div class="critical-wound-sheet__section-heading">
+      <div>
+        <h3>{{ui.effects}}</h3>
+        <p>{{ui.effectsHint}}</p>
+      </div>
+
+      {{#if editable}}
+        <button
+          type="button"
+          data-action="createEffect"
+        >
+          <i class="fa-solid fa-plus" aria-hidden="true"></i>
+          {{ui.addEffect}}
+        </button>
+      {{/if}}
+    </div>
+
+    {{#if effects.length}}
+      <ol class="critical-wound-sheet__effect-list">
+        {{#each effects}}
+          <li
+            class="critical-wound-sheet__effect {{#if disabled}}is-disabled{{/if}}"
+            data-effect-id="{{id}}"
+          >
+            <img src="{{img}}" alt="" />
+
+            <div class="critical-wound-sheet__effect-main">
+              <strong>{{name}}</strong>
+              <span>{{stateLabel}}{{#if transfer}} · {{../ui.transfers}}{{/if}}</span>
+            </div>
+
+            <div class="critical-wound-sheet__effect-actions">
+              <button
+                type="button"
+                data-action="configureEffect"
+                title="{{../ui.configureEffect}}"
+                aria-label="{{../ui.configureEffect}}"
+              >
+                <i class="fa-solid fa-gear" aria-hidden="true"></i>
+              </button>
+
+              {{#if ../editable}}
+                <button
+                  type="button"
+                  data-action="toggleEffect"
+                  title="{{toggleLabel}}"
+                  aria-label="{{toggleLabel}}"
+                >
+                  <i class="fa-solid {{#if disabled}}fa-toggle-off{{else}}fa-toggle-on{{/if}}" aria-hidden="true"></i>
+                </button>
+
+                <button
+                  type="button"
+                  data-action="deleteEffect"
+                  title="{{../ui.deleteEffect}}"
+                  aria-label="{{../ui.deleteEffect}}"
+                >
+                  <i class="fa-solid fa-trash" aria-hidden="true"></i>
+                </button>
+              {{/if}}
+            </div>
+          </li>
+        {{/each}}
+      </ol>
+    {{else}}
+      <p class="critical-wound-sheet__empty">{{ui.noEffects}}</p>
+    {{/if}}
+  </section>
+</section>
