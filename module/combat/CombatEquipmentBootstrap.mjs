@@ -16,6 +16,7 @@ import {
 import { ArmourItemSheet } from "../sheets/ArmourItemSheet.mjs";
 import { WeaponItemSheet } from "../sheets/WeaponItemSheet.mjs";
 import { CombatEquipment } from "./CombatEquipment.mjs";
+import { CombatEquipmentState } from "./CombatEquipmentState.mjs";
 
 const { DocumentSheetConfig } = foundry.applications.apps;
 const { Item } = foundry.documents;
@@ -58,6 +59,7 @@ Hooks.once("init", () => {
 		...game.WFRP1ED,
 		equipment: Object.freeze({
 			resolver: CombatEquipment,
+			state: CombatEquipmentState,
 			inventoryMode: INVENTORY_MODE,
 			inventoryHand: INVENTORY_HAND,
 			weaponKind: WEAPON_KIND,
