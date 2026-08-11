@@ -85,6 +85,10 @@
 	grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.combat-item-sheet .combat-item-sheet__grid--5 {
+	grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
 .combat-item-sheet .combat-item-sheet__field {
 	display: grid;
 	gap: 5px;
@@ -180,7 +184,8 @@
 
 @media (max-width: 620px) {
 	.combat-item-sheet .combat-item-sheet__grid--3,
-	.combat-item-sheet .combat-item-sheet__grid--4 {
+	.combat-item-sheet .combat-item-sheet__grid--4,
+	.combat-item-sheet .combat-item-sheet__grid--5 {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
 	}
 }
