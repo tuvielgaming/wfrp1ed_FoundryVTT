@@ -175,6 +175,40 @@
 					</section>
 				{{/if}}
 
+				{{#if page.sections.psychology}}
+					<section
+						class="sheet-overlay sheet-overlay--psychology"
+						data-section="psychology"
+						style="
+							{{page.sections.psychology.cssVariables}};
+							position: absolute;
+							left: var(--section-x);
+							top: var(--section-y);
+							width: var(--section-width);
+							height: var(--section-height);
+						"
+					>
+						<div class="classic-health-categories">
+							<button
+								type="button"
+								class="classic-health-category"
+								data-wfrp1ed-health-category="criticalWound"
+							>
+								<i class="fas fa-heart-crack" aria-hidden="true"></i>
+								<span
+									class="classic-health-category__label"
+									data-health-category-label
+								></span>
+								<span
+									class="classic-health-category__count"
+									data-health-category-count
+									hidden
+								></span>
+							</button>
+						</div>
+					</section>
+				{{/if}}
+
 				{{#if page.sections.fate}}
 					<section
 						class="sheet-overlay sheet-overlay--fate"
