@@ -6,6 +6,8 @@ const PHYSICAL_ITEM_TYPES = new Set([
 	"equipment",
 ]);
 
+const CLASSIC_PORTRAIT_X_OFFSET = 7;
+
 /**
  * Restore Foundry v14's native DocumentSheetV2 image-edit action on the custom
  * physical Item sheets and expose the Actor portrait on the Classic sheet.
@@ -72,7 +74,17 @@ function insertClassicActorPortrait(application, root) {
 	);
 	overlay.dataset.section = "experiencePortrait";
 	overlay.dataset.wfrp1edActorPortrait = "";
-	overlay.style.setProperty("--section-x", `${geometry.x}px`);
+
+	/*
+	 * The portrait visually belongs to the Experience box but needs a small
+	 * rightward correction relative to that section's canonical scan geometry.
+	 * Keep the base Experience geometry untouched so future XP controls can use
+	 * it without inheriting a portrait-only alignment adjustment.
+	 */
+	overlay.style.setProperty(
+		"--section-x",
+		`${geometry.x + CLASSIC_PORTRAIT_X_OFFSET}px`,
+	);
 	overlay.style.setProperty("--section-y", `${geometry.y}px`);
 	overlay.style.setProperty("--section-width", `${geometry.width}px`);
 	overlay.style.setProperty("--section-height", `${geometry.height}px`);

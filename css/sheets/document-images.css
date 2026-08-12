@@ -28,19 +28,15 @@
 .wfrp1ed-classic-sheet .classic-actor-portrait {
 	position: absolute;
 	left: 50%;
-	bottom: 34px;
+	bottom: 3px;
 	transform: translateX(-50%);
 
 	display: block;
-	width: 184px;
-	height: 232px;
+	width: auto;
+	height: auto;
+	max-width: 100%;
+	max-height: calc(100% - 3px);
 	margin: 0;
-	padding: 5px;
-
-	border: 2px solid #1b1b1b;
-	border-radius: 0;
-	background: rgb(245 240 224 / 88%);
-	box-shadow: 0 1px 3px rgb(0 0 0 / 28%);
 
 	object-fit: cover;
 	object-position: center;
