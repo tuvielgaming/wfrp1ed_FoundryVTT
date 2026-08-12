@@ -177,6 +177,10 @@ function inferCorePiece(system) {
 			case "rightArm":
 			case "leftArm|rightArm":
 				return ARMOUR_PIECE.MAIL_ARM_BRACER;
+			case "leftLeg":
+			case "rightLeg":
+			case "leftLeg|rightLeg":
+				return ARMOUR_PIECE.LEGGINGS;
 			default:
 				break;
 		}
@@ -190,6 +194,10 @@ function inferCorePiece(system) {
 			case "rightArm":
 			case "leftArm|rightArm":
 				return ARMOUR_PIECE.PLATE_ARM_BRACER;
+			case "leftLeg":
+			case "rightLeg":
+			case "leftLeg|rightLeg":
+				return ARMOUR_PIECE.LEGGINGS;
 			default:
 				break;
 		}
