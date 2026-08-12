@@ -31,7 +31,7 @@ function renderInventory(host, actor, editable) {
 	if (editable) {
 		toolbar.append(
 			createButton(actor, "equipment", "fa-bag-shopping"),
-			createButton(actor, "weapon", "fa-sword"),
+			createButton(actor, "weapon", "fa-crosshairs"),
 			createButton(actor, "armour", "fa-shield-halved"),
 		);
 	}
@@ -276,7 +276,7 @@ function textCell(value) {
 
 function itemTypeIcon(type) {
 	switch (type) {
-		case "weapon": return "fa-sword";
+		case "weapon": return "fa-crosshairs";
 		case "armour": return "fa-shield-halved";
 		default: return "fa-bag-shopping";
 	}
