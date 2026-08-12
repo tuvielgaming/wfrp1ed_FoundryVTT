@@ -26,6 +26,7 @@ import { CombatEquipmentState } from "./CombatEquipmentState.mjs";
 import {
 	PARRY_ATTACK_COST_MODE,
 } from "./CombatParryRules.mjs";
+import { CombatParrySelection } from "./CombatParrySelection.mjs";
 import { HandEquipValidator } from "./HandEquipValidator.mjs";
 
 const { DocumentSheetConfig } = foundry.applications.apps;
@@ -84,6 +85,10 @@ Hooks.once("init", () => {
 
 	game.WFRP1ED = Object.freeze({
 		...game.WFRP1ED,
+		combat: Object.freeze({
+			...(game.WFRP1ED.combat ?? {}),
+			parrySelection: CombatParrySelection,
+		}),
 		equipment: Object.freeze({
 			resolver: CombatEquipment,
 			state: CombatEquipmentState,
