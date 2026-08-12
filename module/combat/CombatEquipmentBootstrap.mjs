@@ -23,6 +23,9 @@ import { ArmourEquipValidator } from "./ArmourEquipValidator.mjs";
 import { ArmourInitiativeRuleProvider } from "./ArmourInitiativeRuleProvider.mjs";
 import { CombatEquipment } from "./CombatEquipment.mjs";
 import { CombatEquipmentState } from "./CombatEquipmentState.mjs";
+import {
+	PARRY_ATTACK_COST_MODE,
+} from "./CombatParryRules.mjs";
 import { HandEquipValidator } from "./HandEquipValidator.mjs";
 
 const { DocumentSheetConfig } = foundry.applications.apps;
@@ -95,6 +98,7 @@ Hooks.once("init", () => {
 			armourClass: ARMOUR_CLASS,
 			armourPiece: ARMOUR_PIECE,
 			armourLocations: ARMOUR_LOCATIONS,
+			parryAttackCostMode: PARRY_ATTACK_COST_MODE,
 		}),
 	});
 });
