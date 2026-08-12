@@ -54,15 +54,15 @@ export class WeaponItemSheet extends HandlebarsApplicationMixin(
 		context.modeOptions = selectOptions(
 			[
 				[INVENTORY_MODE.CARRIED, localize("Carried", "Przenoszona")],
-				[INVENTORY_MODE.HELD, localize("Used", "Używana")],
+				[INVENTORY_MODE.HELD, localize("Equipped", "Używana")],
 			],
 			system?.state?.mode,
 		);
 		context.handOptions = selectOptions(
 			[
 				[INVENTORY_HAND.NONE, localize("None", "Brak")],
-				[INVENTORY_HAND.RIGHT, localize("Right hand", "Prawa dłoń")],
-				[INVENTORY_HAND.LEFT, localize("Left hand", "Lewa dłoń")],
+				[INVENTORY_HAND.MAIN, localize("Main hand", "Główna dłoń")],
+				[INVENTORY_HAND.OFF, localize("Off hand", "Druga dłoń")],
 				[INVENTORY_HAND.BOTH, localize("Both hands", "Obie dłonie")],
 			],
 			system?.state?.hand,
@@ -106,7 +106,7 @@ function weaponUi() {
 		specialistSkillId: localize("Specialist Skill ID", "ID umiejętności specjalistycznej"),
 		handedness: localize("Handedness", "Sposób trzymania"),
 		mode: localize("Current state", "Aktualny stan"),
-		hand: localize("Held in", "Trzymana w"),
+		hand: localize("Preferred hand", "Preferowana dłoń"),
 		quantity: localize("Quantity", "Ilość"),
 		encumbrance: localize("Encumbrance", "Obciążenie"),
 		parry: localize("Parrying", "Parowanie"),
