@@ -26,6 +26,21 @@ const OPTIONAL_INITIATIVE_PENALTY_PAIRS = Object.freeze(new Set([
 	pairKey(ARMOUR_PIECE.PLATE_ARM_BRACER, ARMOUR_PIECE.MAIL_ARM_BRACER),
 ]));
 
+const MAIL_PIECES = Object.freeze(new Set([
+	ARMOUR_PIECE.MAIL_SHIRT,
+	ARMOUR_PIECE.SLEEVED_MAIL_SHIRT,
+	ARMOUR_PIECE.MAIL_COAT,
+	ARMOUR_PIECE.SLEEVED_MAIL_COAT,
+	ARMOUR_PIECE.MAIL_COIF,
+	ARMOUR_PIECE.MAIL_ARM_BRACER,
+]));
+
+const PLATE_PIECES = Object.freeze(new Set([
+	ARMOUR_PIECE.BREASTPLATE,
+	ARMOUR_PIECE.PLATE_ARM_BRACER,
+	ARMOUR_PIECE.HELMET,
+]));
+
 /**
  * Validate a proposed WFRP 1e armour loadout before an Armour Item is worn.
  *
@@ -41,6 +56,13 @@ export class ArmourEquipValidator {
 		assertActor(actor);
 		assertArmour(candidate);
 
+		const identityProblem = coreIdentityProblem(candidate);
+		if (identityProblem) {
+			return invalidResult([
+				conflict("none", candidate, identityProblem),
+			]);
+		}
+
 		if (candidate.system?.armourClass === ARMOUR_CLASS.SHIELD) {
 			return validResult();
 		}
@@ -49,13 +71,13 @@ export class ArmourEquipValidator {
 		if (locations.length === 0) {
 			return invalidResult([
 				conflict(
-				"none",
-				candidate,
-				localize(
-					"This armour does not cover any body area.",
-					"Ten pancerz nie chroni żadnego obszaru ciała.",
+					"none",
+					candidate,
+					localize(
+						"This armour does not cover any body area.",
+						"Ten pancerz nie chroni żadnego obszaru ciała.",
+					),
 				),
-			),
 			]);
 		}
 
@@ -89,6 +111,17 @@ export class ArmourEquipValidator {
 			}
 
 			const existing = overlapping[0];
+			const existingIdentityProblem = coreIdentityProblem(existing);
+			if (existingIdentityProblem) {
+				conflicts.push(conflict(
+					location,
+					candidate,
+					existingIdentityProblem,
+					[existing],
+				));
+				continue;
+			}
+
 			const candidatePiece = piece(candidate);
 			const existingPiece = piece(existing);
 
@@ -165,6 +198,46 @@ function piece(item) {
 	return Object.values(ARMOUR_PIECE).includes(value)
 		? value
 		: ARMOUR_PIECE.CUSTOM;
+}
+
+function coreIdentityProblem(item) {
+	const armourPiece = piece(item);
+	const armourClass = String(item.system?.armourClass ?? "");
+
+	if (armourPiece === ARMOUR_PIECE.CUSTOM) return "";
+
+	if (armourPiece === ARMOUR_PIECE.SHIELD) {
+		return armourClass === ARMOUR_CLASS.SHIELD
+			? ""
+			: identityMessage(item);
+	}
+
+	if (MAIL_PIECES.has(armourPiece)) {
+		return armourClass === ARMOUR_CLASS.MAIL
+			? ""
+			: identityMessage(item);
+	}
+
+	if (PLATE_PIECES.has(armourPiece)) {
+		return armourClass === ARMOUR_CLASS.PLATE
+			? ""
+			: identityMessage(item);
+	}
+
+	if (armourPiece === ARMOUR_PIECE.LEGGINGS) {
+		return [ARMOUR_CLASS.MAIL, ARMOUR_CLASS.PLATE].includes(armourClass)
+			? ""
+			: identityMessage(item);
+	}
+
+	return "";
+}
+
+function identityMessage(item) {
+	return localize(
+		`The selected Core armour piece does not match the armour class on '${item.name}'.`,
+		`Wybrany element pancerza z zasad nie pasuje do rodzaju pancerza przedmiotu „${item.name}”.`,
+	);
 }
 
 function pairKey(left, right) {
