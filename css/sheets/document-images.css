@@ -1,0 +1,77 @@
+/******************************************************************/
+/* Foundry document image interaction                              */
+/******************************************************************/
+
+.combat-item-sheet .combat-item-sheet__image.wfrp1ed-document-image--editable {
+	cursor: pointer;
+	transition:
+		filter 0.12s ease,
+		outline-color 0.12s ease;
+}
+
+.combat-item-sheet .combat-item-sheet__image.wfrp1ed-document-image--editable:hover {
+	filter: brightness(1.06);
+	outline: 1px solid rgb(70 51 30 / 55%);
+	outline-offset: 2px;
+}
+
+/******************************************************************/
+/* Classic Actor portrait in the Experience panel                 */
+/******************************************************************/
+
+.wfrp1ed-classic-sheet .sheet-overlay--experience-portrait {
+	pointer-events: none;
+}
+
+.wfrp1ed-classic-sheet .classic-actor-portrait {
+	position: absolute;
+	left: 50%;
+	bottom: 34px;
+	transform: translateX(-50%);
+
+	display: block;
+	width: 184px;
+	height: 232px;
+	margin: 0;
+	padding: 5px;
+
+	border: 2px solid #1b1b1b;
+	border-radius: 0;
+	background: rgb(245 240 224 / 88%);
+	box-shadow: 0 1px 3px rgb(0 0 0 / 28%);
+
+	pointer-events: auto;
+	overflow: hidden;
+}
+
+.wfrp1ed-classic-sheet button.classic-actor-portrait {
+	cursor: pointer;
+}
+
+.wfrp1ed-classic-sheet .classic-actor-portrait > img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	margin: 0;
+	padding: 0;
+
+	border: 0;
+	object-fit: cover;
+	object-position: center;
+	background: rgb(255 255 255 / 55%);
+
+	pointer-events: none;
+	user-select: none;
+}
+
+.wfrp1ed-classic-sheet button.classic-actor-portrait:hover,
+.wfrp1ed-classic-sheet button.classic-actor-portrait:focus-visible {
+	outline: 2px solid var(--focus-color);
+	outline-offset: 2px;
+}
+
+@media print {
+	.wfrp1ed-classic-sheet .classic-actor-portrait {
+		box-shadow: none;
+	}
+}
