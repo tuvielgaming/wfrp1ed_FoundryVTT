@@ -10,8 +10,7 @@
 		outline-color 0.12s ease;
 }
 
-.combat-item-sheet .combat-item-sheet__image.wfrp1ed-document-image--editable:hover,
-.wfrp1ed-classic-sheet .classic-actor-portrait.wfrp1ed-document-image--editable:hover {
+.combat-item-sheet .combat-item-sheet__image.wfrp1ed-document-image--editable:hover {
 	filter: brightness(1.06);
 	outline: 1px solid rgb(70 51 30 / 55%);
 	outline-offset: 2px;
@@ -25,14 +24,32 @@
 	pointer-events: none;
 }
 
-.wfrp1ed-classic-sheet .classic-actor-portrait {
+.wfrp1ed-classic-sheet .classic-actor-portrait-frame {
 	position: absolute;
 	left: 2px;
 	bottom: 0;
 
-	display: block;
 	width: 244px;
 	height: 310px;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	overflow: hidden;
+
+	pointer-events: auto;
+	user-select: none;
+	touch-action: none;
+}
+
+.wfrp1ed-classic-sheet .classic-actor-portrait {
+	position: absolute;
+	left: 0;
+	top: 0;
+
+	display: block;
+	width: 100%;
+	height: 100%;
 	margin: 0;
 	padding: 0;
 	border: 0;
@@ -46,25 +63,29 @@
 	touch-action: none;
 }
 
-.wfrp1ed-classic-sheet .classic-actor-portrait.wfrp1ed-document-image--editable {
+.wfrp1ed-classic-sheet .classic-actor-portrait-frame--editable {
 	cursor: grab;
 }
 
-.wfrp1ed-classic-sheet .classic-actor-portrait--framing,
-.wfrp1ed-classic-sheet .classic-actor-portrait--framing:hover {
+.wfrp1ed-classic-sheet .classic-actor-portrait-frame--editable:hover {
+	outline: 1px solid rgb(70 51 30 / 55%);
+	outline-offset: -1px;
+}
+
+.wfrp1ed-classic-sheet .classic-actor-portrait-frame--framing,
+.wfrp1ed-classic-sheet .classic-actor-portrait-frame--framing:hover {
 	cursor: grabbing;
-	filter: none;
 	outline: 2px dashed rgb(70 51 30 / 72%);
 	outline-offset: -3px;
 }
 
 .wfrp1ed-classic-sheet .classic-actor-portrait.wfrp1ed-document-image--editable:focus-visible {
 	outline: 2px solid var(--focus-color);
-	outline-offset: 2px;
+	outline-offset: -2px;
 }
 
 @media print {
-	.wfrp1ed-classic-sheet .classic-actor-portrait {
-		box-shadow: none;
+	.wfrp1ed-classic-sheet .classic-actor-portrait-frame {
+		outline: none;
 	}
 }
