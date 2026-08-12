@@ -35,11 +35,11 @@ WFRP1ED.partialTemplates = [
 	"systems/wfrp1ed/templates/actors/classic/parts/skills-primary.hbs",
 	"systems/wfrp1ed/templates/actors/classic/parts/skills-secondary.hbs",
 	"systems/wfrp1ed/templates/actors/classic/parts/movement.hbs",
+	"systems/wfrp1ed/templates/actors/classic/parts/equipment.hbs",
 	"systems/wfrp1ed/templates/actors/classic/parts/fate.hbs",
 
 	// Future Classic-sheet sections are added here only after their
 	// corresponding partial exists and its data contract has been audited.
-	// "systems/wfrp1ed/templates/actors/classic/parts/equipment.hbs",
 	// "systems/wfrp1ed/templates/actors/classic/parts/notes.hbs",
 	// "systems/wfrp1ed/templates/actors/classic/parts/footer.hbs",
 ];
