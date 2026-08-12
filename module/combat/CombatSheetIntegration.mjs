@@ -12,8 +12,9 @@ const { DialogV2 } = foundry.applications.api;
  * Bridge the canonical Weapon/Armour Item contracts into the Classic-sheet
  * printed combat tables.
  *
- * This is presentation and direct Item interaction only. Combat calculations
- * continue to read Item state through CombatEquipment.
+ * Page-one combat tables are summaries of currently Used Items. Page-two
+ * Ekwipunek is the master inventory where carried Items remain accessible.
+ * Combat calculations continue to read Item state through CombatEquipment.
  */
 Hooks.on("renderApplicationV2", (application, element) => {
 	const actor = application?.document;
@@ -34,7 +35,9 @@ Hooks.on("renderApplicationV2", (application, element) => {
 
 function renderWeapons(root, actor, editable) {
 	const weapons = [...(actor.items ?? [])].filter(
-		(item) => item?.type === "weapon",
+		(item) =>
+			item?.type === "weapon" &&
+			CombatEquipmentState.isUsed(item),
 	);
 	const meleeBody = root.querySelector(".melee-table-body");
 	const rangedBody = root.querySelector(".ranged-table-body");
@@ -61,7 +64,9 @@ function renderArmour(root, actor, editable) {
 	if (!body) return;
 
 	const armour = [...(actor.items ?? [])].filter(
-		(item) => item?.type === "armour",
+		(item) =>
+			item?.type === "armour" &&
+			CombatEquipmentState.isUsed(item),
 	);
 
 	replaceRows(
