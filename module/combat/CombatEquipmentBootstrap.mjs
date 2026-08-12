@@ -15,10 +15,12 @@ import {
 	WEAPON_KIND,
 	WeaponData,
 } from "../data-models/item/WeaponData.mjs";
+import { RuleEffectResolver } from "../effects/RuleEffectResolver.mjs";
 import { ArmourItemSheet } from "../sheets/ArmourItemSheet.mjs";
 import { EquipmentItemSheet } from "../sheets/EquipmentItemSheet.mjs";
 import { WeaponItemSheet } from "../sheets/WeaponItemSheet.mjs";
 import { ArmourEquipValidator } from "./ArmourEquipValidator.mjs";
+import { ArmourInitiativeRuleProvider } from "./ArmourInitiativeRuleProvider.mjs";
 import { CombatEquipment } from "./CombatEquipment.mjs";
 import { CombatEquipmentState } from "./CombatEquipmentState.mjs";
 import { HandEquipValidator } from "./HandEquipValidator.mjs";
@@ -72,6 +74,11 @@ Hooks.once("init", () => {
 		},
 	);
 
+	RuleEffectResolver.registerCandidateProvider(
+		"armour-initiative",
+		(input) => ArmourInitiativeRuleProvider.candidates(input),
+	);
+
 	game.WFRP1ED = Object.freeze({
 		...game.WFRP1ED,
 		equipment: Object.freeze({
@@ -79,6 +86,7 @@ Hooks.once("init", () => {
 			state: CombatEquipmentState,
 			armourValidator: ArmourEquipValidator,
 			handValidator: HandEquipValidator,
+			initiativeRuleProvider: ArmourInitiativeRuleProvider,
 			inventoryMode: INVENTORY_MODE,
 			inventoryHand: INVENTORY_HAND,
 			weaponKind: WEAPON_KIND,
