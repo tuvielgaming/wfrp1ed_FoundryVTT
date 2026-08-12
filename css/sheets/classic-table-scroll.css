@@ -6,6 +6,10 @@
  * The scanned sheet has fixed writing areas, but Foundry Actors are not
  * limited to the number of rows printed on paper. Keep the original geometry
  * and make only the row viewport scroll when its content exceeds that area.
+ *
+ * Do not contain wheel overscroll here. When a nested table has no overflow,
+ * or when the user reaches its edge, wheel input should continue scrolling the
+ * complete Classic character sheet instead of feeling trapped in the table.
  */
 .wfrp1ed-classic-sheet .melee-table-body,
 .wfrp1ed-classic-sheet .ranged-table-body,
@@ -14,7 +18,7 @@
 .wfrp1ed-classic-sheet .classic-inventory__list {
 	overflow-x: hidden;
 	overflow-y: auto;
-	overscroll-behavior: contain;
+	overscroll-behavior-y: auto;
 	scrollbar-width: thin;
 	scrollbar-color: rgb(23 18 13 / 38%) transparent;
 }
@@ -34,10 +38,16 @@
 }
 
 /*
- * The primary skill panel has 13 printed rows, one of which is occupied by the
- * Standard Test launcher. The continuation therefore begins with Skill 13 and
- * may scroll beyond its 28 printed rows instead of dropping later Skills.
+ * The first Skills panel always remains a fixed, non-scrollable paper panel.
+ * It contains the Standard Test launcher plus the first 12 Skills.
+ *
+ * The second panel therefore starts with Skill 13. Its `overflow-y: auto`
+ * becomes an actual scrollbar only after its own 28 printed rows are filled.
  */
+.wfrp1ed-classic-sheet .skills-list--primary {
+	overflow: hidden;
+}
+
 .wfrp1ed-classic-sheet .skills--secondary .skill-row:nth-child(13),
 .wfrp1ed-classic-sheet .skills--secondary .skill-row:nth-child(n + 42) {
 	display: flex;
