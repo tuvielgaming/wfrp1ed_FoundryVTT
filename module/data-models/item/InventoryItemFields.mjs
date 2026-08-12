@@ -10,10 +10,18 @@ export const INVENTORY_MODE = Object.freeze({
 	WORN: "worn",
 });
 
+/**
+ * Relative hand slots used by WFRP combat.
+ *
+ * The Core rules care whether a weapon is used in the character's normal or
+ * wrong hand, not whether that physical hand is always left or right. `MAIN`
+ * therefore means the character's dominant hand and `OFF` the non-dominant
+ * hand. This also supports left-handed characters without changing combat code.
+ */
 export const INVENTORY_HAND = Object.freeze({
 	NONE: "none",
-	RIGHT: "right",
-	LEFT: "left",
+	MAIN: "main",
+	OFF: "off",
 	BOTH: "both",
 });
 
@@ -113,10 +121,8 @@ export function migrateInventoryData(
 			normalizedModes,
 			fallbackMode,
 		),
-		hand: normalizeAllowed(
+		hand: normalizeInventoryHand(
 			state.hand ?? migrated.hand,
-			ALL_HANDS,
-			INVENTORY_HAND.NONE,
 		),
 	};
 
@@ -131,9 +137,20 @@ export function normalizeInventoryMode(value, allowedModes, fallback) {
 	);
 }
 
+/**
+ * Normalize current and transitional physical-hand values.
+ *
+ * Earlier builds stored right/left. They assumed no character handedness, so
+ * map right -> main and left -> off during migration. New mechanics use only
+ * the relative main/off contract.
+ */
 export function normalizeInventoryHand(value) {
+	const normalized = normalizeText(value);
+	if (normalized === "right") return INVENTORY_HAND.MAIN;
+	if (normalized === "left") return INVENTORY_HAND.OFF;
+
 	return normalizeAllowed(
-		value,
+		normalized,
 		ALL_HANDS,
 		INVENTORY_HAND.NONE,
 	);
