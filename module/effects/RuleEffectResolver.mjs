@@ -5,24 +5,33 @@ import {
 
 const RULE_FLAG_SCOPE = "wfrp1ed";
 const RULE_FLAG_KEY = "ruleChanges";
-const DEFAULT_PRIORITY = 50;
+const DEFAULT_PROVIDER_PRIORITY = 50;
 
 /**
- * Discover declarative and runtime-provided WFRP rule effects for an Actor.
+ * Discover declarative WFRP rule effects from an Actor and its owned Items.
  *
- * Persistent ActiveEffects remain the normal authoring surface. Subsystems may
- * additionally register read-only candidate providers for rules which are
- * derived from live state rather than represented by a persistent Effect, such
- * as optional penalties created by a particular equipped armour combination.
+ * The resolver is deliberately Item-type agnostic. Skills are only the first
+ * authoring surface; weapons, equipment, spells, traits, diseases and future
+ * Item types can contribute the same rule language without consumer-specific
+ * Item-name checks.
+ *
+ * This layer discovers candidate effects only. It does not decide whether a
+ * contextual/manual effect applies in the current fictional situation and it
+ * never mutates the underlying ActiveEffect Document for one-roll choices.
  */
 export class RuleEffectResolver {
 	static #candidateProviders = new Map();
 
 	/**
-	 * Register one non-persistent candidate source.
+	 * Register one read-only runtime candidate source.
 	 *
-	 * A provider receives { actor, targetId, options } and returns candidate
-	 * objects in the same neutral shape as ActiveEffect-derived candidates.
+	 * Providers are for rule choices derived from current game state rather than
+	 * a persistent ActiveEffect. They return the same neutral candidate shape so
+	 * existing roll selection and audit code remains the single consumer.
+	 *
+	 * @param {string} id
+	 * @param {Function} provider
+	 * @returns {string}
 	 */
 	static registerCandidateProvider(id, provider) {
 		const normalizedId = String(id ?? "").trim();
@@ -44,6 +53,7 @@ export class RuleEffectResolver {
 		return normalizedId;
 	}
 
+	/** @returns {boolean} */
 	static unregisterCandidateProvider(id) {
 		return this.#candidateProviders.delete(String(id ?? "").trim());
 	}
@@ -64,6 +74,7 @@ export class RuleEffectResolver {
 		}
 
 		const requestedTarget = String(targetId ?? "").trim();
+
 		if (!requestedTarget) {
 			throw new Error(
 				"WFRP rule effect resolution requires a target id.",
@@ -72,7 +83,8 @@ export class RuleEffectResolver {
 
 		const includeActorEffects = options.includeActorEffects !== false;
 		const includeItemEffects = options.includeItemEffects !== false;
-		const includeCandidateProviders = options.includeCandidateProviders !== false;
+		const includeCandidateProviders =
+			options.includeCandidateProviders !== false;
 		const results = [];
 
 		if (includeActorEffects) {
@@ -89,7 +101,9 @@ export class RuleEffectResolver {
 
 		if (includeItemEffects) {
 			for (const item of actor.items ?? []) {
-				if (!this.#sourceItemAvailable(item, options)) continue;
+				if (!this.#sourceItemAvailable(item, options)) {
+					continue;
+				}
 
 				for (const effect of item.effects ?? []) {
 					this.#collectEffect({
@@ -125,6 +139,10 @@ export class RuleEffectResolver {
 	 * Missing selections use the safe defaults:
 	 * - automatic effects are selected;
 	 * - contextual/manual effects are not silently applied.
+	 *
+	 * @param {readonly Object[]} candidates
+	 * @param {Object|Map<string, boolean>} selections
+	 * @returns {readonly Object[]}
 	 */
 	static snapshot(candidates, selections = {}) {
 		const result = [];
@@ -167,13 +185,18 @@ export class RuleEffectResolver {
 		targetId,
 		results,
 	}) {
-		if (!effect || !this.#effectAvailable(effect)) return;
+		if (!effect || !this.#effectAvailable(effect)) {
+			return;
+		}
 
 		const changes = ruleChanges(effect);
 
 		for (let index = 0; index < changes.length; index += 1) {
 			const decoded = decodeRuleEffectChange(changes[index]);
-			if (!decoded || decoded.targetId !== targetId) continue;
+
+			if (!decoded || decoded.targetId !== targetId) {
+				continue;
+			}
 
 			results.push({
 				id: effectCandidateId(effect, index, sourceItem),
@@ -199,45 +222,82 @@ export class RuleEffectResolver {
 		}
 	}
 
-	static #collectProvidedCandidates({ actor, targetId, options, results }) {
+	static #collectProvidedCandidates({
+		actor,
+		targetId,
+		options,
+		results,
+	}) {
 		for (const [providerId, provider] of this.#candidateProviders.entries()) {
 			const provided = provider({ actor, targetId, options });
-			if (provided === undefined || provided === null) continue;
+
+			if (provided === undefined || provided === null) {
+				continue;
+			}
+
 			if (!Array.isArray(provided)) {
 				throw new Error(
 					`WFRP rule candidate provider '${providerId}' must return an array.`,
 				);
 			}
 
-			for (const raw of provided) {
-				const candidate = normalizeProvidedCandidate(raw, providerId, actor, targetId);
-				if (candidate) results.push(candidate);
+			for (const rawCandidate of provided) {
+				const candidate = normalizeProvidedCandidate(
+					rawCandidate,
+					providerId,
+					actor,
+					targetId,
+				);
+
+				if (candidate) {
+					results.push(candidate);
+				}
 			}
 		}
 	}
 
-	/** Persistent ActiveEffect state gates discovery. */
+	/**
+	 * Persistent ActiveEffect state gates discovery. Additional source-state
+	 * semantics (equipped/worn/active spell/disease stage/etc.) belong to the
+	 * source Item contract and can be supplied through `sourcePredicate` until
+	 * those Item types gain audited native data models.
+	 */
 	static #effectAvailable(effect) {
-		if (effect.disabled === true) return false;
-		if (effect.active === false) return false;
+		if (effect.disabled === true) {
+			return false;
+		}
+
+		if (effect.active === false) {
+			return false;
+		}
+
 		return true;
 	}
 
 	static #sourceItemAvailable(item, options) {
-		if (!item) return false;
+		if (!item) {
+			return false;
+		}
+
 		if (typeof options.sourcePredicate === "function") {
 			return options.sourcePredicate(item) !== false;
 		}
+
 		return true;
 	}
 }
 
 function normalizeProvidedCandidate(raw, providerId, actor, targetId) {
-	if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+	if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+		return null;
+	}
 
 	const id = String(raw.id ?? "").trim();
 	const candidateTarget = String(raw.targetId ?? targetId).trim();
-	if (!id || candidateTarget !== targetId) return null;
+
+	if (!id || candidateTarget !== targetId) {
+		return null;
+	}
 
 	return {
 		id,
@@ -251,7 +311,7 @@ function normalizeProvidedCandidate(raw, providerId, actor, targetId) {
 		condition: String(raw.condition ?? "").trim(),
 		priority: Number.isFinite(Number(raw.priority))
 			? Number(raw.priority)
-			: DEFAULT_PRIORITY,
+			: DEFAULT_PROVIDER_PRIORITY,
 		defaultSelected: raw.defaultSelected === true,
 		actorUuid: raw.actorUuid ?? actor.uuid,
 		effectUuid: raw.effectUuid ?? null,
@@ -259,18 +319,21 @@ function normalizeProvidedCandidate(raw, providerId, actor, targetId) {
 		itemUuid: raw.itemUuid ?? null,
 		itemName: raw.itemName ?? null,
 		itemType: raw.itemType ?? null,
-		providerId,
 	};
 }
 
 function ruleChanges(effect) {
 	const flagged = effect?.getFlag?.(RULE_FLAG_SCOPE, RULE_FLAG_KEY);
+
 	if (Array.isArray(flagged)) {
 		return foundry.utils.deepClone(flagged);
 	}
 
 	const system = effect?.system?.toObject?.() ?? {};
-	const changes = Array.isArray(system.changes) ? system.changes : [];
+	const changes = Array.isArray(system.changes)
+		? system.changes
+		: [];
+
 	return foundry.utils.deepClone(
 		changes.filter((change) => Boolean(decodeRuleEffectChange(change))),
 	);
@@ -297,7 +360,10 @@ function compareCandidates(first, second) {
 		{ sensitivity: "base" },
 	);
 
-	if (sourceName !== 0) return sourceName;
+	if (sourceName !== 0) {
+		return sourceName;
+	}
+
 	return first.id.localeCompare(second.id);
 }
 
