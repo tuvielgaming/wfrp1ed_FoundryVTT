@@ -7,6 +7,7 @@ import {
 	WEAPON_HANDEDNESS,
 	WEAPON_KIND,
 } from "../data-models/item/WeaponData.mjs";
+import { HandEquipValidator } from "../combat/HandEquipValidator.mjs";
 
 const { ItemSheetV2 } = foundry.applications.sheets;
 const { HandlebarsApplicationMixin } = foundry.applications.api;
@@ -45,6 +46,8 @@ export class WeaponItemSheet extends HandlebarsApplicationMixin(
 	async _prepareContext(options) {
 		const context = await super._prepareContext(options);
 		const system = this.document.system;
+		const allowedHands = HandEquipValidator.allowedHands(this.document);
+		const selectedHand = HandEquipValidator.preferredHand(this.document);
 
 		context.item = this.document;
 		context.system = system;
@@ -59,13 +62,8 @@ export class WeaponItemSheet extends HandlebarsApplicationMixin(
 			system?.state?.mode,
 		);
 		context.handOptions = selectOptions(
-			[
-				[INVENTORY_HAND.NONE, localize("None", "Brak")],
-				[INVENTORY_HAND.MAIN, localize("Main hand", "Główna dłoń")],
-				[INVENTORY_HAND.OFF, localize("Off hand", "Druga dłoń")],
-				[INVENTORY_HAND.BOTH, localize("Both hands", "Obie dłonie")],
-			],
-			system?.state?.hand,
+			handOptionEntries().filter(([value]) => allowedHands.includes(value)),
+			selectedHand,
 		);
 		context.kindOptions = selectOptions(
 			[
@@ -93,6 +91,14 @@ export class WeaponItemSheet extends HandlebarsApplicationMixin(
 
 		return context;
 	}
+}
+
+function handOptionEntries() {
+	return [
+		[INVENTORY_HAND.MAIN, localize("Main hand", "Główna dłoń")],
+		[INVENTORY_HAND.OFF, localize("Off hand", "Druga dłoń")],
+		[INVENTORY_HAND.BOTH, localize("Both hands", "Obie dłonie")],
+	];
 }
 
 function weaponUi() {
