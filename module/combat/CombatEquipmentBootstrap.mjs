@@ -3,6 +3,7 @@ import {
 	ARMOUR_LOCATIONS,
 	ArmourData,
 } from "../data-models/item/ArmourData.mjs";
+import { EquipmentData } from "../data-models/item/EquipmentData.mjs";
 import {
 	INVENTORY_HAND,
 	INVENTORY_MODE,
@@ -14,6 +15,7 @@ import {
 	WeaponData,
 } from "../data-models/item/WeaponData.mjs";
 import { ArmourItemSheet } from "../sheets/ArmourItemSheet.mjs";
+import { EquipmentItemSheet } from "../sheets/EquipmentItemSheet.mjs";
 import { WeaponItemSheet } from "../sheets/WeaponItemSheet.mjs";
 import { CombatEquipment } from "./CombatEquipment.mjs";
 import { CombatEquipmentState } from "./CombatEquipmentState.mjs";
@@ -23,7 +25,8 @@ const { Item } = foundry.documents;
 
 /**
  * Dependency-ordered bootstrap for the physical equipment contract required by
- * WFRP combat. This intentionally precedes attack/parry/action-economy code.
+ * WFRP combat and inventory procedures. This intentionally precedes
+ * attack/parry/action-economy code.
  */
 Hooks.once("init", () => {
 	if (!game.WFRP1ED) {
@@ -34,6 +37,7 @@ Hooks.once("init", () => {
 
 	CONFIG.Item.dataModels.weapon = WeaponData;
 	CONFIG.Item.dataModels.armour = ArmourData;
+	CONFIG.Item.dataModels.equipment = EquipmentData;
 
 	DocumentSheetConfig.registerSheet(
 		Item,
@@ -51,6 +55,16 @@ Hooks.once("init", () => {
 		ArmourItemSheet,
 		{
 			types: ["armour"],
+			makeDefault: true,
+		},
+	);
+
+	DocumentSheetConfig.registerSheet(
+		Item,
+		game.system.id,
+		EquipmentItemSheet,
+		{
+			types: ["equipment"],
 			makeDefault: true,
 		},
 	);
