@@ -9,7 +9,15 @@ const PHYSICAL_ITEM_TYPES = new Set([
 const CLASSIC_PORTRAIT_X_OFFSET = 7;
 const CLASSIC_PORTRAIT_FLAG = "classicPortrait";
 const CLASSIC_PORTRAIT_DRAG_THRESHOLD = 4;
-const CLASSIC_PORTRAIT_CENTER = Object.freeze({ x: 50, y: 50 });
+const CLASSIC_PORTRAIT_MIN_ZOOM = 0.25;
+const CLASSIC_PORTRAIT_MAX_ZOOM = 4;
+const CLASSIC_PORTRAIT_WHEEL_FACTOR = 1.1;
+const CLASSIC_PORTRAIT_WHEEL_SAVE_DELAY = 180;
+const CLASSIC_PORTRAIT_RESET = Object.freeze({
+	x: 50,
+	y: 50,
+	zoom: 1,
+});
 
 Hooks.on("renderApplicationV2", (application, element) => {
 	const root = element instanceof HTMLElement ? element : null;
@@ -66,50 +74,67 @@ function insertClassicActorPortrait(application, root) {
 	overlay.style.setProperty("--section-width", `${geometry.width}px`);
 	overlay.style.setProperty("--section-height", `${geometry.height}px`);
 
+	const frame = document.createElement("div");
+	frame.classList.add("classic-actor-portrait-frame");
+
 	const image = document.createElement("img");
 	image.classList.add("classic-actor-portrait");
 	image.src = String(application.document?.img ?? "");
 	image.alt = String(application.document?.name ?? "");
 	image.draggable = false;
-	applyPortraitPosition(
-		image,
-		readPortraitPosition(application.document),
-	);
+
+	const framing = readPortraitFraming(application.document);
+	preparePortraitLayout(image, framing);
 
 	if (application.isEditable) {
 		image.dataset.action = "editImage";
 		image.dataset.edit = "img";
 		image.dataset.field = "img";
 		image.classList.add("wfrp1ed-document-image--editable");
+		frame.classList.add("classic-actor-portrait-frame--editable");
 		image.title = localize(
-			"Click: change image. Drag: reposition. Right-click: center.",
-			"Kliknij: zmień obraz. Przeciągnij: przesuń kadr. Prawy klik: wyśrodkuj.",
+			"Click: change image. Drag: reposition. Shift + mouse wheel: zoom. Right-click: reset.",
+			"Kliknij: zmień obraz. Przeciągnij: przesuń kadr. Shift + kółko myszy: powiększ/pomniejsz. Prawy klik: reset.",
 		);
-		activatePortraitFraming(application.document, image);
+		activatePortraitFraming(
+			application.document,
+			frame,
+			image,
+			framing,
+		);
 	}
 
-	overlay.append(image);
+	frame.append(image);
+	overlay.append(frame);
 	page.append(overlay);
 }
 
-function activatePortraitFraming(actor, image) {
+/**
+ * Keep the fixed Classic portrait frame while allowing the player to position
+ * and scale the source artwork independently for each Actor.
+ *
+ * Normal wheel events are deliberately untouched so the character sheet keeps
+ * scrolling naturally while the pointer is over the portrait. Holding Shift
+ * turns the wheel into a portrait zoom gesture.
+ */
+function activatePortraitFraming(actor, frame, image, initialFraming) {
+	let current = { ...initialFraming };
 	let drag = null;
 	let suppressClick = false;
+	let wheelSaveTimer = null;
 
 	image.addEventListener("pointerdown", (event) => {
 		if (event.button !== 0) return;
 
-		const overflow = coverOverflow(image);
-		if (!overflow || (!overflow.x && !overflow.y)) return;
+		const metrics = portraitMetrics(frame, image, current.zoom);
+		if (!metrics) return;
 
-		const position = readPortraitPosition(actor);
 		drag = {
 			pointerId: event.pointerId,
 			startX: event.clientX,
 			startY: event.clientY,
-			position,
-			current: position,
-			overflow,
+			framing: { ...current },
+			metrics,
 			moved: false,
 		};
 
@@ -135,14 +160,24 @@ function activatePortraitFraming(actor, image) {
 		if (!drag.moved) {
 			drag.moved = true;
 			suppressClick = true;
-			image.classList.add("classic-actor-portrait--framing");
+			frame.classList.add("classic-actor-portrait-frame--framing");
 		}
 
-		drag.current = {
-			x: shiftedPercent(drag.position.x, dx, drag.overflow.x),
-			y: shiftedPercent(drag.position.y, dy, drag.overflow.y),
+		current = {
+			x: shiftedPercent(
+				drag.framing.x,
+				dx,
+				drag.metrics.overflowX,
+			),
+			y: shiftedPercent(
+				drag.framing.y,
+				dy,
+				drag.metrics.overflowY,
+			),
+			zoom: drag.framing.zoom,
 		};
-		applyPortraitPosition(image, drag.current);
+
+		applyPortraitLayout(frame, image, current);
 		event.preventDefault();
 	});
 
@@ -151,7 +186,7 @@ function activatePortraitFraming(actor, image) {
 
 		const completed = drag;
 		drag = null;
-		image.classList.remove("classic-actor-portrait--framing");
+		frame.classList.remove("classic-actor-portrait-frame--framing");
 
 		try {
 			image.releasePointerCapture(event.pointerId);
@@ -161,7 +196,7 @@ function activatePortraitFraming(actor, image) {
 
 		if (!completed.moved) return;
 		if (event.type === "pointercancel") suppressClick = false;
-		void persistPortraitPosition(actor, completed.current);
+		void persistPortraitFraming(actor, current);
 	};
 
 	image.addEventListener("pointerup", finishDrag);
@@ -178,17 +213,93 @@ function activatePortraitFraming(actor, image) {
 		true,
 	);
 
-	image.addEventListener("contextmenu", (event) => {
+	frame.addEventListener(
+		"wheel",
+		(event) => {
+			if (!event.shiftKey) return;
+
+			event.preventDefault();
+			event.stopPropagation();
+
+			const factor =
+				event.deltaY < 0
+					? CLASSIC_PORTRAIT_WHEEL_FACTOR
+					: 1 / CLASSIC_PORTRAIT_WHEEL_FACTOR;
+
+			current = {
+				...current,
+				zoom: clampZoom(current.zoom * factor),
+			};
+			applyPortraitLayout(frame, image, current);
+
+			if (wheelSaveTimer) clearTimeout(wheelSaveTimer);
+			wheelSaveTimer = setTimeout(
+				() => void persistPortraitFraming(actor, current),
+				CLASSIC_PORTRAIT_WHEEL_SAVE_DELAY,
+			);
+		},
+		{ passive: false },
+	);
+
+	frame.addEventListener("contextmenu", (event) => {
 		event.preventDefault();
 		event.stopPropagation();
-		applyPortraitPosition(image, CLASSIC_PORTRAIT_CENTER);
-		void persistPortraitPosition(actor, CLASSIC_PORTRAIT_CENTER);
+
+		if (wheelSaveTimer) {
+			clearTimeout(wheelSaveTimer);
+			wheelSaveTimer = null;
+		}
+
+		current = { ...CLASSIC_PORTRAIT_RESET };
+		applyPortraitLayout(frame, image, current);
+		void persistPortraitFraming(actor, current);
 	});
 }
 
-function coverOverflow(image) {
-	const frameWidth = image.clientWidth;
-	const frameHeight = image.clientHeight;
+function preparePortraitLayout(image, framing) {
+	const apply = () => {
+		const frame = image.parentElement;
+		if (!(frame instanceof HTMLElement)) return;
+		applyPortraitLayout(frame, image, framing);
+	};
+
+	if (image.complete && image.naturalWidth > 0) {
+		requestAnimationFrame(apply);
+	} else {
+		image.addEventListener("load", apply, { once: true });
+	}
+}
+
+/**
+ * Lay out the source image as a real scaled rectangle inside the fixed frame.
+ * Zoom 1.0 means the standard `cover` scale. Values below 1 zoom out and may
+ * intentionally reveal some of the underlying paper around unusually shaped
+ * source artwork; values above 1 zoom in further.
+ */
+function applyPortraitLayout(frame, image, framing) {
+	const metrics = portraitMetrics(frame, image, framing.zoom);
+	if (!metrics) return;
+
+	const left =
+		metrics.overflowX > 0
+			? -metrics.overflowX * clampPercent(framing.x) / 100
+			: (metrics.frameWidth - metrics.renderedWidth) / 2;
+
+	const top =
+		metrics.overflowY > 0
+			? -metrics.overflowY * clampPercent(framing.y) / 100
+			: (metrics.frameHeight - metrics.renderedHeight) / 2;
+
+	image.style.width = `${metrics.renderedWidth}px`;
+	image.style.height = `${metrics.renderedHeight}px`;
+	image.style.left = `${left}px`;
+	image.style.top = `${top}px`;
+	image.style.objectFit = "fill";
+}
+
+function portraitMetrics(frame, image, zoom) {
+	const frameWidth = frame.clientWidth;
+	const frameHeight = frame.clientHeight;
 	const sourceWidth = image.naturalWidth;
 	const sourceHeight = image.naturalHeight;
 
@@ -201,28 +312,36 @@ function coverOverflow(image) {
 		return null;
 	}
 
-	const scale = Math.max(
+	const coverScale = Math.max(
 		frameWidth / sourceWidth,
 		frameHeight / sourceHeight,
 	);
+	const scale = coverScale * clampZoom(zoom);
+	const renderedWidth = sourceWidth * scale;
+	const renderedHeight = sourceHeight * scale;
 
 	return {
-		x: Math.max(0, sourceWidth * scale - frameWidth),
-		y: Math.max(0, sourceHeight * scale - frameHeight),
+		frameWidth,
+		frameHeight,
+		renderedWidth,
+		renderedHeight,
+		overflowX: Math.max(0, renderedWidth - frameWidth),
+		overflowY: Math.max(0, renderedHeight - frameHeight),
 	};
 }
 
-function readPortraitPosition(actor) {
+function readPortraitFraming(actor) {
 	const framing =
 		actor?.getFlag?.("wfrp1ed", CLASSIC_PORTRAIT_FLAG) ?? {};
 
 	return {
 		x: normalizedPercent(framing.positionX),
 		y: normalizedPercent(framing.positionY),
+		zoom: normalizedZoom(framing.zoom),
 	};
 }
 
-async function persistPortraitPosition(actor, position) {
+async function persistPortraitFraming(actor, framing) {
 	try {
 		const previous =
 			actor.getFlag?.("wfrp1ed", CLASSIC_PORTRAIT_FLAG) ?? {};
@@ -232,8 +351,9 @@ async function persistPortraitPosition(actor, position) {
 			CLASSIC_PORTRAIT_FLAG,
 			{
 				...previous,
-				positionX: roundedPercent(position.x),
-				positionY: roundedPercent(position.y),
+				positionX: roundedPercent(framing.x),
+				positionY: roundedPercent(framing.y),
+				zoom: roundedZoom(framing.zoom),
 			},
 		);
 	} catch (error) {
@@ -255,10 +375,6 @@ function shiftedPercent(start, deltaPixels, overflowPixels) {
 	return clampPercent(start - deltaPixels / overflowPixels * 100);
 }
 
-function applyPortraitPosition(image, position) {
-	image.style.objectPosition = `${position.x}% ${position.y}%`;
-}
-
 function normalizedPercent(value) {
 	const numeric = Number(value);
 	return Number.isFinite(numeric)
@@ -266,12 +382,30 @@ function normalizedPercent(value) {
 		: 50;
 }
 
+function normalizedZoom(value) {
+	const numeric = Number(value);
+	return Number.isFinite(numeric)
+		? clampZoom(numeric)
+		: 1;
+}
+
 function roundedPercent(value) {
 	return Math.round(clampPercent(value) * 100) / 100;
 }
 
+function roundedZoom(value) {
+	return Math.round(clampZoom(value) * 1000) / 1000;
+}
+
 function clampPercent(value) {
 	return Math.min(100, Math.max(0, value));
+}
+
+function clampZoom(value) {
+	return Math.min(
+		CLASSIC_PORTRAIT_MAX_ZOOM,
+		Math.max(CLASSIC_PORTRAIT_MIN_ZOOM, value),
+	);
 }
 
 function isPhysicalItemSheet(application) {
