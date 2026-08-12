@@ -1,6 +1,7 @@
 import {
 	ARMOUR_CLASS,
 	ARMOUR_LOCATIONS,
+	ARMOUR_PIECE,
 	ArmourData,
 } from "../data-models/item/ArmourData.mjs";
 import { EquipmentData } from "../data-models/item/EquipmentData.mjs";
@@ -17,8 +18,10 @@ import {
 import { ArmourItemSheet } from "../sheets/ArmourItemSheet.mjs";
 import { EquipmentItemSheet } from "../sheets/EquipmentItemSheet.mjs";
 import { WeaponItemSheet } from "../sheets/WeaponItemSheet.mjs";
+import { ArmourEquipValidator } from "./ArmourEquipValidator.mjs";
 import { CombatEquipment } from "./CombatEquipment.mjs";
 import { CombatEquipmentState } from "./CombatEquipmentState.mjs";
+import { HandEquipValidator } from "./HandEquipValidator.mjs";
 
 const { DocumentSheetConfig } = foundry.applications.apps;
 const { Item } = foundry.documents;
@@ -74,12 +77,15 @@ Hooks.once("init", () => {
 		equipment: Object.freeze({
 			resolver: CombatEquipment,
 			state: CombatEquipmentState,
+			armourValidator: ArmourEquipValidator,
+			handValidator: HandEquipValidator,
 			inventoryMode: INVENTORY_MODE,
 			inventoryHand: INVENTORY_HAND,
 			weaponKind: WEAPON_KIND,
 			weaponGroup: WEAPON_GROUP,
 			weaponHandedness: WEAPON_HANDEDNESS,
 			armourClass: ARMOUR_CLASS,
+			armourPiece: ARMOUR_PIECE,
 			armourLocations: ARMOUR_LOCATIONS,
 		}),
 	});
