@@ -1,6 +1,7 @@
 import {
 	ARMOUR_CLASS,
 	ARMOUR_LOCATIONS,
+	ARMOUR_PIECE,
 } from "../data-models/item/ArmourData.mjs";
 import {
 	INVENTORY_HAND,
@@ -24,8 +25,8 @@ export class ArmourItemSheet extends HandlebarsApplicationMixin(
 			"wfrp1ed-parchment-window",
 		],
 		position: {
-			width: 660,
-			height: 760,
+			width: 680,
+			height: 780,
 		},
 		tag: "form",
 		form: {
@@ -58,15 +59,15 @@ export class ArmourItemSheet extends HandlebarsApplicationMixin(
 		context.modeOptions = selectOptions(
 			[
 				[INVENTORY_MODE.CARRIED, localize("Carried", "Przenoszony")],
-				[usedMode, localize("Used", "Używany")],
+				[usedMode, localize("Equipped", "Używany")],
 			],
 			displayedMode,
 		);
 		context.handOptions = selectOptions(
 			[
 				[INVENTORY_HAND.NONE, localize("None", "Brak")],
-				[INVENTORY_HAND.RIGHT, localize("Right hand", "Prawa dłoń")],
-				[INVENTORY_HAND.LEFT, localize("Left hand", "Lewa dłoń")],
+				[INVENTORY_HAND.MAIN, localize("Main hand", "Główna dłoń")],
+				[INVENTORY_HAND.OFF, localize("Off hand", "Druga dłoń")],
 				[INVENTORY_HAND.BOTH, localize("Both hands", "Obie dłonie")],
 			],
 			system?.state?.hand,
@@ -81,6 +82,7 @@ export class ArmourItemSheet extends HandlebarsApplicationMixin(
 			],
 			system?.armourClass,
 		);
+		context.pieceOptions = selectOptions(corePieceOptions(), system?.piece);
 		context.coverage = ARMOUR_LOCATIONS.map((location) => Object.freeze({
 			id: location,
 			label: locationLabel(location),
@@ -91,15 +93,33 @@ export class ArmourItemSheet extends HandlebarsApplicationMixin(
 	}
 }
 
+function corePieceOptions() {
+	return [
+		[ARMOUR_PIECE.SHIELD, localize("Shield", "Tarcza")],
+		[ARMOUR_PIECE.MAIL_SHIRT, localize("Mail shirt", "Koszulka kolcza")],
+		[ARMOUR_PIECE.SLEEVED_MAIL_SHIRT, localize("Sleeved mail shirt", "Koszulka kolcza z rękawami")],
+		[ARMOUR_PIECE.MAIL_COAT, localize("Mail coat", "Kaftan kolczy")],
+		[ARMOUR_PIECE.SLEEVED_MAIL_COAT, localize("Sleeved mail coat", "Kaftan kolczy z rękawami")],
+		[ARMOUR_PIECE.MAIL_COIF, localize("Mail coif", "Czepiec kolczy")],
+		[ARMOUR_PIECE.BREASTPLATE, localize("Breastplate", "Napierśnik")],
+		[ARMOUR_PIECE.MAIL_ARM_BRACER, localize("Mail arm bracer", "Kolczy ochraniacz ramienia")],
+		[ARMOUR_PIECE.PLATE_ARM_BRACER, localize("Plate arm bracer", "Metalowy naramiennik")],
+		[ARMOUR_PIECE.LEGGINGS, localize("Leggings", "Nagolennice")],
+		[ARMOUR_PIECE.HELMET, localize("Helmet", "Hełm")],
+		[ARMOUR_PIECE.CUSTOM, localize("Custom", "Niestandardowy")],
+	];
+}
+
 function armourUi() {
 	return Object.freeze({
 		name: localize("Name", "Nazwa"),
 		description: localize("Description", "Opis"),
 		rulesId: localize("Rules ID", "Identyfikator zasad"),
 		armourClass: localize("Armour class", "Rodzaj pancerza"),
+		armourPiece: localize("Core armour piece", "Element pancerza z zasad") ,
 		armourPoints: localize("Armour Points", "Punkty pancerza"),
 		mode: localize("Current state", "Aktualny stan"),
-		hand: localize("Held in", "Trzymany w"),
+		hand: localize("Preferred hand", "Preferowana dłoń"),
 		quantity: localize("Quantity", "Ilość"),
 		encumbrance: localize("Encumbrance", "Obciążenie"),
 		coverage: localize("Body areas covered", "Chronione obszary ciała"),
@@ -107,8 +127,8 @@ function armourUi() {
 		parrySuitable: localize("Suitable for parrying", "Nadaje się do parowania"),
 		parryBonus: localize("Main-rule parry bonus", "Premia do parowania z zasad podstawowych"),
 		shieldHint: localize(
-			"Core shields are held armour: AP 1 to all body areas and +20 WS when used to parry. The Item stores those facts explicitly instead of inferring them from its localized name.",
-			"Tarcza z zasad podstawowych jest trzymanym pancerzem: 1 PP na wszystkie obszary ciała i +20 WW podczas parowania. Przedmiot zapisuje te fakty jawnie zamiast rozpoznawać je po zlokalizowanej nazwie.",
+			"Core p.121 permits armour layering only for specific named pieces. Choose the Core armour piece so the equip validator can enforce those combinations. Custom pieces cannot overlap other worn armour unless a future rule provider defines them.",
+			"Zasady podstawowe na s. 121 dopuszczają nakładanie pancerza tylko dla konkretnych elementów. Wybierz element z zasad, aby system mógł sprawdzić dozwolone kombinacje. Niestandardowy element nie może nakładać się z innym noszonym pancerzem bez zdefiniowanej reguły.",
 		),
 		inventory: localize("Inventory", "Ekwipunek"),
 		protection: localize("Protection", "Ochrona"),
