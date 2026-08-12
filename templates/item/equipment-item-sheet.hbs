@@ -1,0 +1,89 @@
+<section class="combat-item-sheet__content">
+	<header class="combat-item-sheet__header">
+		<img
+			class="combat-item-sheet__image"
+			src="{{item.img}}"
+			alt=""
+		>
+
+		<label class="combat-item-sheet__field combat-item-sheet__field--name">
+			<span>{{ui.name}}</span>
+			<input
+				type="text"
+				name="name"
+				value="{{item.name}}"
+				autocomplete="off"
+				{{#unless editable}}disabled{{/unless}}
+			>
+		</label>
+	</header>
+
+	<section class="combat-item-sheet__panel">
+		<h3>{{ui.inventory}}</h3>
+
+		<div class="combat-item-sheet__grid combat-item-sheet__grid--4">
+			<label class="combat-item-sheet__field">
+				<span>{{ui.mode}}</span>
+				<select name="system.state.mode" {{#unless editable}}disabled{{/unless}}>
+					{{#each modeOptions as |option|}}
+						<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>
+					{{/each}}
+				</select>
+			</label>
+
+			<label class="combat-item-sheet__field">
+				<span>{{ui.hand}}</span>
+				<select name="system.state.hand" {{#unless editable}}disabled{{/unless}}>
+					{{#each handOptions as |option|}}
+						<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>
+					{{/each}}
+				</select>
+			</label>
+
+			<label class="combat-item-sheet__field">
+				<span>{{ui.quantity}}</span>
+				<input type="number" min="0" step="1" name="system.quantity" value="{{system.quantity}}" {{#unless editable}}disabled{{/unless}}>
+			</label>
+
+			<label class="combat-item-sheet__field">
+				<span>{{ui.encumbrance}}</span>
+				<input type="number" min="0" step="0.01" name="system.encumbrance" value="{{system.encumbrance}}" {{#unless editable}}disabled{{/unless}}>
+			</label>
+		</div>
+
+		<div class="combat-item-sheet__grid combat-item-sheet__grid--2">
+			<label class="combat-item-sheet__field">
+				<span>{{ui.storageLocation}}</span>
+				<input type="text" name="system.storageLocation" value="{{system.storageLocation}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}>
+			</label>
+
+			<label class="combat-item-sheet__field">
+				<span>{{ui.availability}}</span>
+				<input type="text" name="system.availability" value="{{system.availability}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}>
+			</label>
+		</div>
+	</section>
+
+	<section class="combat-item-sheet__panel">
+		<h3>{{ui.price}}</h3>
+		<div class="combat-item-sheet__grid combat-item-sheet__grid--3">
+			<label class="combat-item-sheet__field">
+				<span>{{ui.gc}}</span>
+				<input type="number" min="0" step="1" name="system.price.gc" value="{{system.price.gc}}" {{#unless editable}}disabled{{/unless}}>
+			</label>
+			<label class="combat-item-sheet__field">
+				<span>{{ui.ss}}</span>
+				<input type="number" min="0" step="1" name="system.price.ss" value="{{system.price.ss}}" {{#unless editable}}disabled{{/unless}}>
+			</label>
+			<label class="combat-item-sheet__field">
+				<span>{{ui.bp}}</span>
+				<input type="number" min="0" step="1" name="system.price.bp" value="{{system.price.bp}}" {{#unless editable}}disabled{{/unless}}>
+			</label>
+		</div>
+	</section>
+
+	<label class="combat-item-sheet__field combat-item-sheet__description">
+		<span>{{ui.description}}</span>
+		<textarea name="system.description" {{#unless editable}}disabled{{/unless}}>{{system.description}}</textarea>
+	</label>
+</section>
