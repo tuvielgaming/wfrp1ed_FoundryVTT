@@ -1,0 +1,74 @@
+/******************************************************************/
+/* Scrollable Classic-sheet dynamic row areas                     */
+/******************************************************************/
+
+/*
+ * The scanned sheet has fixed writing areas, but Foundry Actors are not
+ * limited to the number of rows printed on paper. Keep the original geometry
+ * and make only the row viewport scroll when its content exceeds that area.
+ */
+.wfrp1ed-classic-sheet .melee-table-body,
+.wfrp1ed-classic-sheet .ranged-table-body,
+.wfrp1ed-classic-sheet .armour-table-body,
+.wfrp1ed-classic-sheet .skills-list--secondary,
+.wfrp1ed-classic-sheet .classic-inventory__list {
+	overflow-x: hidden;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	scrollbar-width: thin;
+	scrollbar-color: rgb(23 18 13 / 38%) transparent;
+}
+
+.wfrp1ed-classic-sheet .melee-table-body,
+.wfrp1ed-classic-sheet .ranged-table-body,
+.wfrp1ed-classic-sheet .armour-table-body,
+.wfrp1ed-classic-sheet .classic-inventory__list {
+	align-content: start;
+}
+
+/* Undo the old hard row cut-offs. The fixed-height body now owns overflow. */
+.wfrp1ed-classic-sheet .melee-row:nth-child(n + 6),
+.wfrp1ed-classic-sheet .ranged-row:nth-child(n + 7),
+.wfrp1ed-classic-sheet .armour-row:nth-child(n + 8) {
+	display: grid;
+}
+
+/*
+ * The primary skill panel has 13 printed rows, one of which is occupied by the
+ * Standard Test launcher. The continuation therefore begins with Skill 13 and
+ * may scroll beyond its 28 printed rows instead of dropping later Skills.
+ */
+.wfrp1ed-classic-sheet .skills--secondary .skill-row:nth-child(13),
+.wfrp1ed-classic-sheet .skills--secondary .skill-row:nth-child(n + 42) {
+	display: flex;
+}
+
+/* Header consumes 20px inside the page-two inventory writing area. */
+.wfrp1ed-classic-sheet .classic-inventory__list {
+	height: calc(100% - 20px);
+}
+
+.wfrp1ed-classic-sheet .melee-table-body::-webkit-scrollbar,
+.wfrp1ed-classic-sheet .ranged-table-body::-webkit-scrollbar,
+.wfrp1ed-classic-sheet .armour-table-body::-webkit-scrollbar,
+.wfrp1ed-classic-sheet .skills-list--secondary::-webkit-scrollbar,
+.wfrp1ed-classic-sheet .classic-inventory__list::-webkit-scrollbar {
+	width: 4px;
+}
+
+.wfrp1ed-classic-sheet .melee-table-body::-webkit-scrollbar-thumb,
+.wfrp1ed-classic-sheet .ranged-table-body::-webkit-scrollbar-thumb,
+.wfrp1ed-classic-sheet .armour-table-body::-webkit-scrollbar-thumb,
+.wfrp1ed-classic-sheet .skills-list--secondary::-webkit-scrollbar-thumb,
+.wfrp1ed-classic-sheet .classic-inventory__list::-webkit-scrollbar-thumb {
+	border-radius: 999px;
+	background: rgb(23 18 13 / 38%);
+}
+
+.wfrp1ed-classic-sheet .melee-table-body::-webkit-scrollbar-track,
+.wfrp1ed-classic-sheet .ranged-table-body::-webkit-scrollbar-track,
+.wfrp1ed-classic-sheet .armour-table-body::-webkit-scrollbar-track,
+.wfrp1ed-classic-sheet .skills-list--secondary::-webkit-scrollbar-track,
+.wfrp1ed-classic-sheet .classic-inventory__list::-webkit-scrollbar-track {
+	background: transparent;
+}
