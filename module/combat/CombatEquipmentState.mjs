@@ -4,19 +4,21 @@ import { INVENTORY_MODE } from "../data-models/item/InventoryItemFields.mjs";
 const SUPPORTED_ITEM_TYPES = new Set([
 	"weapon",
 	"armour",
+	"equipment",
 ]);
 
 /**
  * User-facing two-state view over the more precise physical Item state.
  *
- * The Classic sheet only needs to answer whether combat equipment is currently
- * in use. Persistent data remains more exact because other rules need to know
- * whether an Item is held or worn:
+ * The Classic sheet only needs to answer whether physical equipment is
+ * currently in use. Persistent data remains more exact because other rules
+ * need to know whether an Item is held or worn:
  *
- * weapon used  -> held
- * shield used  -> held
- * armour used  -> worn
- * not used     -> carried
+ * weapon used    -> held
+ * shield used    -> held
+ * armour used    -> worn
+ * equipment used -> held
+ * not used       -> carried
  *
  * This keeps the simple Carried / Used interaction without throwing away the
  * distinction required by effects such as dropping held Items.
@@ -33,7 +35,7 @@ export class CombatEquipmentState {
 	static usedMode(item) {
 		assertSupportedItem(item);
 
-		if (item.type === "weapon") {
+		if (item.type === "weapon" || item.type === "equipment") {
 			return INVENTORY_MODE.HELD;
 		}
 
@@ -57,12 +59,11 @@ export class CombatEquipmentState {
 		/*
 		 * Update the complete TypeDataModel source, not only a dotted state key.
 		 *
-		 * WeaponData/ArmourData still contain compatibility migrations which are
+		 * Physical Item models still contain compatibility migrations which are
 		 * allowed to receive candidate system data during Foundry's update
 		 * cleaning workflow. Supplying only `system.state.mode` can therefore
 		 * make omitted authored fields look like legacy/missing data and reset
-		 * them to migration defaults. That showed up at runtime as Armour Points
-		 * and coverage disappearing after a Carried/Used toggle.
+		 * them to migration defaults.
 		 *
 		 * Keeping the whole current source in this explicit state transaction
 		 * makes the operation lossless while the legacy migration layer exists.
@@ -99,7 +100,7 @@ function assertSupportedItem(item) {
 		!SUPPORTED_ITEM_TYPES.has(item.type)
 	) {
 		throw new Error(
-			"Combat equipment state requires a Weapon or Armour Item.",
+			"Inventory state requires a Weapon, Armour, or Equipment Item.",
 		);
 	}
 }
@@ -110,6 +111,6 @@ function assertEditPermission(item) {
 	}
 
 	throw new Error(
-		"Only the GM or an Item owner may change combat equipment state.",
+		"Only the GM or an Item owner may change equipment state.",
 	);
 }
