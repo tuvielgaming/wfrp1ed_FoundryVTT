@@ -1,12 +1,7 @@
 import { CombatEquipmentState } from "../combat/CombatEquipmentState.mjs";
+import { InventoryManagerWindow } from "./InventoryManagerWindow.mjs";
 
 const { DialogV2 } = foundry.applications.api;
-
-const PHYSICAL_ITEM_TYPES = new Set([
-	"equipment",
-	"weapon",
-	"armour",
-]);
 
 Hooks.on("renderApplicationV2", (application, element) => {
 	const actor = application?.document;
@@ -22,6 +17,15 @@ Hooks.on("renderApplicationV2", (application, element) => {
 	renderInventory(host, actor, application.isEditable === true);
 });
 
+for (const hookName of ["createItem", "updateItem", "deleteItem"]) {
+	Hooks.on(hookName, (item) => {
+		const actor = item?.actor ?? item?.parent;
+		if (actor?.documentName === "Actor") {
+			void InventoryManagerWindow.refresh(actor);
+		}
+	});
+}
+
 function renderInventory(host, actor, editable) {
 	host.replaceChildren();
 
@@ -29,12 +33,9 @@ function renderInventory(host, actor, editable) {
 	toolbar.className = "classic-inventory__toolbar";
 
 	if (editable) {
-		toolbar.append(
-			createButton(actor, "equipment", "fa-bag-shopping"),
-			createButton(actor, "weapon", "fa-crosshairs"),
-			createButton(actor, "armour", "fa-shield-halved"),
-		);
+		toolbar.append(createEquipmentButton(actor));
 	}
+	toolbar.append(createManagerButton(actor));
 
 	const header = document.createElement("div");
 	header.className = "classic-inventory__header";
@@ -49,7 +50,7 @@ function renderInventory(host, actor, editable) {
 	list.className = "classic-inventory__list";
 
 	const items = [...(actor.items ?? [])].filter(
-		(item) => PHYSICAL_ITEM_TYPES.has(item?.type),
+		(item) => item?.type === "equipment",
 	);
 
 	for (const item of items) {
@@ -60,8 +61,8 @@ function renderInventory(host, actor, editable) {
 		const empty = document.createElement("div");
 		empty.className = "classic-inventory__empty";
 		empty.textContent = localize(
-			"No physical equipment.",
-			"Brak ekwipunku.",
+			"No ordinary equipment. Weapons and armour remain in their combat tables.",
+			"Brak zwykłego ekwipunku. Broń i zbroja pozostają w swoich tabelach bojowych.",
 		);
 		list.append(empty);
 	}
@@ -69,27 +70,46 @@ function renderInventory(host, actor, editable) {
 	host.append(toolbar, header, list);
 }
 
-function createButton(actor, type, iconClass) {
+function createEquipmentButton(actor) {
 	const button = document.createElement("button");
 	button.type = "button";
 	button.className = "classic-inventory__create";
-
-	const label = itemTypeLabel(type);
-	button.title = localize(
-		`Add ${label.english}.`,
-		`Dodaj: ${label.polish}.`,
-	);
+	button.title = localize("Add Equipment.", "Dodaj ekwipunek.");
 	button.setAttribute("aria-label", button.title);
 
 	const icon = document.createElement("i");
-	icon.className = `fas ${iconClass}`;
+	icon.className = "fas fa-bag-shopping";
 	icon.setAttribute("aria-hidden", "true");
 	button.append(icon);
 
 	button.addEventListener("click", (event) => {
 		event.preventDefault();
 		event.stopPropagation();
-		void createItem(actor, type);
+		void createEquipment(actor);
+	});
+
+	return button;
+}
+
+function createManagerButton(actor) {
+	const button = document.createElement("button");
+	button.type = "button";
+	button.className = "classic-inventory__create classic-inventory__manager";
+	button.title = localize(
+		"Open full Inventory Manager.",
+		"Otwórz pełny menedżer ekwipunku.",
+	);
+	button.setAttribute("aria-label", button.title);
+
+	const icon = document.createElement("i");
+	icon.className = "fas fa-box-open";
+	icon.setAttribute("aria-hidden", "true");
+	button.append(icon);
+
+	button.addEventListener("click", (event) => {
+		event.preventDefault();
+		event.stopPropagation();
+		void InventoryManagerWindow.open(actor);
 	});
 
 	return button;
@@ -117,10 +137,8 @@ function inventoryRow(item, editable) {
 	name.className = "classic-inventory__name";
 
 	const typeIcon = document.createElement("i");
-	typeIcon.className = `fas ${itemTypeIcon(item.type)}`;
-	typeIcon.title = localizedTypeLabel(item.type);
-	typeIcon.setAttribute("aria-label", typeIcon.title);
-
+	typeIcon.className = "fas fa-bag-shopping";
+	typeIcon.title = localize("Equipment", "Ekwipunek");
 	const label = document.createElement("span");
 	label.className = "classic-inventory__name-label";
 	label.textContent = String(item.name ?? "");
@@ -153,8 +171,8 @@ function inventoryRow(item, editable) {
 			"Używany — kliknij, aby oznaczyć jako przenoszony.",
 		)
 		: localize(
-			"Carried — click to mark as used.",
-			"Przenoszony — kliknij, aby oznaczyć jako używany.",
+			"Carried — click to mark as used/held.",
+			"Przenoszony — kliknij, aby oznaczyć jako używany/trzymany.",
 		);
 	stateButton.disabled = !editable;
 	stopRowActionPropagation(stateButton);
@@ -193,30 +211,17 @@ function inventoryRow(item, editable) {
 	return row;
 }
 
-async function createItem(actor, type) {
-	const label = itemTypeLabel(type);
-	const name = localize(
-		`New ${label.english}`,
-		`Nowy: ${label.polish}`,
-	);
-
+async function createEquipment(actor) {
 	try {
 		const created = await actor.createEmbeddedDocuments("Item", [{
-			name,
-			type,
+			name: localize("New Equipment", "Nowy przedmiot"),
+			type: "equipment",
 		}]);
 		const item = created?.[0];
-		if (item) {
-			await item.sheet?.render?.({ force: true });
-		}
+		if (item) await item.sheet?.render?.({ force: true });
 	} catch (error) {
 		console.error("WFRP1ED | Unable to create inventory Item.", error);
-		ui.notifications.error(
-			error.message ?? localize(
-				"Unable to create the Item.",
-				"Nie udało się utworzyć przedmiotu.",
-			),
-		);
+		ui.notifications.error(error.message);
 	}
 }
 
@@ -227,21 +232,14 @@ async function toggleUsed(item, button) {
 		await CombatEquipmentState.toggleUsed(item);
 	} catch (error) {
 		console.error("WFRP1ED | Unable to change inventory state.", error);
-		ui.notifications.error(
-			error.message ?? localize(
-				"Unable to change equipment state.",
-				"Nie udało się zmienić stanu wyposażenia.",
-			),
-		);
+		ui.notifications.warn(error.message);
 		button.disabled = false;
 	}
 }
 
 async function deleteItem(item) {
 	const confirmed = await DialogV2.confirm({
-		window: {
-			title: localize("Delete Item", "Usuń przedmiot"),
-		},
+		window: { title: localize("Delete Item", "Usuń przedmiot") },
 		content: localize(
 			`Delete '${item.name}' from this character?`,
 			`Usunąć „${item.name}” z tej postaci?`,
@@ -262,9 +260,7 @@ async function deleteItem(item) {
 
 function stopRowActionPropagation(element) {
 	for (const eventName of ["pointerdown", "dblclick"]) {
-		element.addEventListener(eventName, (event) => {
-			event.stopPropagation();
-		});
+		element.addEventListener(eventName, (event) => event.stopPropagation());
 	}
 }
 
@@ -274,35 +270,9 @@ function textCell(value) {
 	return span;
 }
 
-function itemTypeIcon(type) {
-	switch (type) {
-		case "weapon": return "fa-crosshairs";
-		case "armour": return "fa-shield-halved";
-		default: return "fa-bag-shopping";
-	}
-}
-
-function itemTypeLabel(type) {
-	switch (type) {
-		case "weapon":
-			return Object.freeze({ english: "Weapon", polish: "Broń" });
-		case "armour":
-			return Object.freeze({ english: "Armour", polish: "Zbroja" });
-		default:
-			return Object.freeze({ english: "Equipment", polish: "Ekwipunek" });
-	}
-}
-
-function localizedTypeLabel(type) {
-	const label = itemTypeLabel(type);
-	return localize(label.english, label.polish);
-}
-
 function nonNegativeInteger(value) {
 	const number = Number(value);
-	return Number.isFinite(number)
-		? Math.max(0, Math.trunc(number))
-		: 0;
+	return Number.isFinite(number) ? Math.max(0, Math.trunc(number)) : 0;
 }
 
 function nonNegativeNumber(value) {
