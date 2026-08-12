@@ -7,6 +7,7 @@ import {
 	INVENTORY_HAND,
 	INVENTORY_MODE,
 } from "../data-models/item/InventoryItemFields.mjs";
+import { HandEquipValidator } from "../combat/HandEquipValidator.mjs";
 
 const { ItemSheetV2 } = foundry.applications.sheets;
 const { HandlebarsApplicationMixin } = foundry.applications.api;
@@ -51,6 +52,10 @@ export class ArmourItemSheet extends HandlebarsApplicationMixin(
 		const displayedMode = system?.state?.mode === INVENTORY_MODE.CARRIED
 			? INVENTORY_MODE.CARRIED
 			: usedMode;
+		const allowedHands = HandEquipValidator.allowedHands(this.document);
+		const selectedHand = allowedHands.includes(INVENTORY_HAND.NONE)
+			? INVENTORY_HAND.NONE
+			: HandEquipValidator.preferredHand(this.document);
 
 		context.item = this.document;
 		context.system = system;
@@ -64,13 +69,8 @@ export class ArmourItemSheet extends HandlebarsApplicationMixin(
 			displayedMode,
 		);
 		context.handOptions = selectOptions(
-			[
-				[INVENTORY_HAND.NONE, localize("None", "Brak")],
-				[INVENTORY_HAND.MAIN, localize("Main hand", "Główna dłoń")],
-				[INVENTORY_HAND.OFF, localize("Off hand", "Druga dłoń")],
-				[INVENTORY_HAND.BOTH, localize("Both hands", "Obie dłonie")],
-			],
-			system?.state?.hand,
+			handOptionEntries().filter(([value]) => allowedHands.includes(value)),
+			selectedHand,
 		);
 		context.classOptions = selectOptions(
 			[
@@ -91,6 +91,15 @@ export class ArmourItemSheet extends HandlebarsApplicationMixin(
 
 		return context;
 	}
+}
+
+function handOptionEntries() {
+	return [
+		[INVENTORY_HAND.NONE, localize("None", "Brak")],
+		[INVENTORY_HAND.MAIN, localize("Main hand", "Główna dłoń")],
+		[INVENTORY_HAND.OFF, localize("Off hand", "Druga dłoń")],
+		[INVENTORY_HAND.BOTH, localize("Both hands", "Obie dłonie")],
+	];
 }
 
 function corePieceOptions() {
@@ -116,7 +125,7 @@ function armourUi() {
 		description: localize("Description", "Opis"),
 		rulesId: localize("Rules ID", "Identyfikator zasad"),
 		armourClass: localize("Armour class", "Rodzaj pancerza"),
-		armourPiece: localize("Core armour piece", "Element pancerza z zasad") ,
+		armourPiece: localize("Core armour piece", "Element pancerza z zasad"),
 		armourPoints: localize("Armour Points", "Punkty pancerza"),
 		mode: localize("Current state", "Aktualny stan"),
 		hand: localize("Preferred hand", "Preferowana dłoń"),
