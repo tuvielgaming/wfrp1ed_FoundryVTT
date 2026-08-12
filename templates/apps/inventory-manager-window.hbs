@@ -1,0 +1,55 @@
+<section class="inventory-manager__content">
+	<header class="inventory-manager__summary">
+		<strong>{{ui.totalEncumbrance}}:</strong>
+		<span>{{totalEncumbrance}}</span>
+	</header>
+
+	{{#if items.length}}
+		<div class="inventory-manager__table">
+			<div class="inventory-manager__row inventory-manager__row--header">
+				<span>{{ui.item}}</span>
+				<span>{{ui.type}}</span>
+				<span>{{ui.quantity}}</span>
+				<span>{{ui.encumbrance}}</span>
+				<span>{{ui.storage}}</span>
+				<span>{{ui.state}}</span>
+				<span>{{ui.hand}}</span>
+				<span>{{ui.actions}}</span>
+			</div>
+
+			{{#each items as |item|}}
+				<div class="inventory-manager__row {{#if item.used}}is-used{{/if}}" data-item-id="{{item.id}}">
+					<button type="button" class="inventory-manager__name" data-action="openItem" title="{{../ui.open}}">
+						{{item.name}}
+					</button>
+					<span>{{item.type}}</span>
+					<span>{{item.quantity}}</span>
+					<span>{{item.encumbrance}}</span>
+					<span class="inventory-manager__storage" title="{{item.storageLocation}}">{{item.storageLocation}}</span>
+					<button type="button" class="inventory-manager__state" data-action="toggleUsed" {{#unless ../editable}}disabled{{/unless}}>
+						{{item.stateLabel}}
+					</button>
+					{{#if item.showHand}}
+						<button type="button" class="inventory-manager__hand" data-action="nextHand" title="{{item.handLabel}}" {{#unless ../editable}}disabled{{/unless}}>
+							{{item.handLabel}}
+						</button>
+					{{else}}
+						<span>—</span>
+					{{/if}}
+					<span class="inventory-manager__actions">
+						<button type="button" data-action="openItem" title="{{../ui.open}}">
+							<i class="fas fa-pen-to-square" aria-hidden="true"></i>
+						</button>
+						{{#if ../editable}}
+							<button type="button" data-action="removeItem" title="{{../ui.remove}}">
+								<i class="fas fa-trash" aria-hidden="true"></i>
+							</button>
+						{{/if}}
+					</span>
+				</div>
+			{{/each}}
+		</div>
+	{{else}}
+		<p class="inventory-manager__empty">{{ui.empty}}</p>
+	{{/if}}
+</section>
