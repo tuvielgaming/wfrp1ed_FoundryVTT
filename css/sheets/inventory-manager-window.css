@@ -1,0 +1,114 @@
+.inventory-manager-window .window-content {
+	overflow: auto;
+}
+
+.inventory-manager__content {
+	display: grid;
+	gap: 10px;
+	padding: 12px;
+	font-family: "Book Antiqua", "Times New Roman", serif;
+	color: #1b1711;
+}
+
+.inventory-manager__summary {
+	display: flex;
+	justify-content: flex-end;
+	gap: 6px;
+	font-size: 13px;
+}
+
+.inventory-manager__table {
+	display: grid;
+	gap: 1px;
+	border: 1px solid rgb(55 39 23 / 35%);
+	background: rgb(55 39 23 / 22%);
+}
+
+.inventory-manager__row {
+	display: grid;
+	grid-template-columns: minmax(150px, 1.8fr) minmax(80px, 0.8fr) 48px 56px minmax(90px, 1fr) 82px 62px 56px;
+	align-items: center;
+	gap: 6px;
+	min-height: 30px;
+	padding: 3px 6px;
+	background: rgb(246 237 213 / 96%);
+	font-size: 12px;
+}
+
+.inventory-manager__row--header {
+	min-height: 28px;
+	font-weight: 700;
+	background: rgb(221 207 176 / 96%);
+}
+
+.inventory-manager__row.is-used {
+	font-weight: 600;
+}
+
+.inventory-manager__name,
+.inventory-manager__state,
+.inventory-manager__hand,
+.inventory-manager__actions button {
+	margin: 0;
+	border: 0;
+	background: transparent;
+	box-shadow: none;
+	color: inherit;
+	font: inherit;
+	cursor: pointer;
+}
+
+.inventory-manager__name {
+	min-width: 0;
+	padding: 0;
+	text-align: left;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.inventory-manager__state,
+.inventory-manager__hand {
+	padding: 2px 4px;
+	border: 1px solid rgb(55 39 23 / 35%);
+	border-radius: 3px;
+	background: rgb(255 250 235 / 58%);
+}
+
+.inventory-manager__storage {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.inventory-manager__actions {
+	display: inline-flex;
+	justify-content: flex-end;
+	gap: 4px;
+}
+
+.inventory-manager__actions button {
+	width: 22px;
+	height: 22px;
+	padding: 0;
+	opacity: 0.65;
+}
+
+.inventory-manager__actions button:hover,
+.inventory-manager__name:hover {
+	opacity: 1;
+	text-decoration: underline;
+}
+
+.inventory-manager__state:disabled,
+.inventory-manager__hand:disabled {
+	cursor: default;
+	opacity: 0.7;
+}
+
+.inventory-manager__empty {
+	margin: 0;
+	padding: 18px;
+	text-align: center;
+	font-style: italic;
+}
