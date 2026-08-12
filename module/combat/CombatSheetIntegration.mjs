@@ -2,6 +2,7 @@ import {
 	ARMOUR_CLASS,
 	ARMOUR_LOCATIONS,
 } from "../data-models/item/ArmourData.mjs";
+import { INVENTORY_HAND } from "../data-models/item/InventoryItemFields.mjs";
 import { WEAPON_KIND } from "../data-models/item/WeaponData.mjs";
 import { CombatEquipment } from "./CombatEquipment.mjs";
 import { CombatEquipmentState } from "./CombatEquipmentState.mjs";
@@ -9,12 +10,12 @@ import { CombatEquipmentState } from "./CombatEquipmentState.mjs";
 const { DialogV2 } = foundry.applications.api;
 
 /**
- * Bridge the canonical Weapon/Armour Item contracts into the Classic-sheet
- * printed combat tables.
+ * Bridge canonical Weapon/Armour Items into the printed Classic combat tables.
  *
- * Page-one combat tables are summaries of currently Used Items. Page-two
- * Ekwipunek is the master inventory where carried Items remain accessible.
- * Combat calculations continue to read Item state through CombatEquipment.
+ * The printed tables remain the primary Weapon/Armour browser. Every owned Item
+ * stays visible there; compact controls mark whether it is equipped and, where
+ * relevant, which relative hand slot it uses. Page-two Ekwipunek is reserved
+ * for ordinary gear, while a separate manager can provide an unrestricted view.
  */
 Hooks.on("renderApplicationV2", (application, element) => {
 	const actor = application?.document;
@@ -35,9 +36,7 @@ Hooks.on("renderApplicationV2", (application, element) => {
 
 function renderWeapons(root, actor, editable) {
 	const weapons = [...(actor.items ?? [])].filter(
-		(item) =>
-			item?.type === "weapon" &&
-			CombatEquipmentState.isUsed(item),
+		(item) => item?.type === "weapon",
 	);
 	const meleeBody = root.querySelector(".melee-table-body");
 	const rangedBody = root.querySelector(".ranged-table-body");
@@ -64,9 +63,7 @@ function renderArmour(root, actor, editable) {
 	if (!body) return;
 
 	const armour = [...(actor.items ?? [])].filter(
-		(item) =>
-			item?.type === "armour" &&
-			CombatEquipmentState.isUsed(item),
+		(item) => item?.type === "armour",
 	);
 
 	replaceRows(
@@ -127,14 +124,11 @@ function makeDerivedArmourInput(input, value, title) {
 
 function meleeRow(item, editable) {
 	const used = CombatEquipmentState.isUsed(item);
-	const row = baseRow("melee-row", item);
+	const row = baseRow("melee-row", item, used);
 	const optional = item.system?.optionalModifiers ?? {};
 
-	if (used) row.classList.add("is-equipped");
-	else row.classList.add("is-carried");
-
 	row.append(
-		itemNameCell("melee-cell melee-cell--name", item, used, editable),
+		itemNameCell("melee-cell melee-cell--name", item, editable),
 		cell("melee-cell melee-cell--initiative", modifierDisplay(optional.initiative)),
 		cell("melee-cell melee-cell--weapon-skill", modifierDisplay(optional.toHit)),
 		cell("melee-cell melee-cell--damage", modifierDisplay(optional.damage)),
@@ -146,14 +140,11 @@ function meleeRow(item, editable) {
 
 function rangedRow(item, editable) {
 	const used = CombatEquipmentState.isUsed(item);
-	const row = baseRow("ranged-row", item);
+	const row = baseRow("ranged-row", item, used);
 	const range = item.system?.range ?? {};
 
-	if (used) row.classList.add("is-equipped");
-	else row.classList.add("is-carried");
-
 	row.append(
-		itemNameCell("ranged-cell ranged-cell--name", item, used, editable),
+		itemNameCell("ranged-cell ranged-cell--name", item, editable),
 		cell("ranged-cell ranged-cell--short-range", nonNegativeInteger(range.short)),
 		cell("ranged-cell ranged-cell--long-range", nonNegativeInteger(range.long)),
 		cell("ranged-cell ranged-cell--maximum-range", nonNegativeInteger(range.max)),
@@ -169,15 +160,11 @@ function rangedRow(item, editable) {
 
 function armourRow(item, editable) {
 	const used = CombatEquipmentState.isUsed(item);
-	const row = baseRow("armour-row", item);
-
-	if (used) row.classList.add("is-equipped");
-	else row.classList.add("is-carried");
-
+	const row = baseRow("armour-row", item, used);
 	const coverage = armourCoverageDisplay(item);
 
 	row.append(
-		itemNameCell("armour-cell armour-cell--name", item, used, editable),
+		itemNameCell("armour-cell armour-cell--name", item, editable),
 		cell(
 			"armour-cell armour-cell--location",
 			coverage.label,
@@ -198,10 +185,7 @@ function armourCoverageDisplay(item) {
 	);
 
 	if (covered.length === 0) {
-		return Object.freeze({
-			label: "—",
-			title: "—",
-		});
+		return Object.freeze({ label: "—", title: "—" });
 	}
 
 	const full = covered.map((location) => hitLocationLabel(location)).join(", ");
@@ -213,23 +197,19 @@ function armourCoverageDisplay(item) {
 		});
 	}
 
-	return Object.freeze({
-		label: full,
-		title: full,
-	});
+	return Object.freeze({ label: full, title: full });
 }
 
 function replaceRows(container, items, rowFactory) {
 	container.replaceChildren();
-
-	for (const item of items) {
-		container.append(rowFactory(item));
-	}
+	for (const item of items) container.append(rowFactory(item));
 }
 
-function baseRow(className, item) {
+function baseRow(className, item, used) {
 	const row = document.createElement("div");
 	row.className = className;
+	row.classList.toggle("is-equipped", used);
+	row.classList.toggle("is-carried", !used);
 	row.dataset.itemId = String(item.id ?? "");
 	row.setAttribute("role", "row");
 	row.title = localize(
@@ -244,7 +224,8 @@ function baseRow(className, item) {
 	return row;
 }
 
-function itemNameCell(classNames, item, used, editable) {
+function itemNameCell(classNames, item, editable) {
+	const used = CombatEquipmentState.isUsed(item);
 	const span = document.createElement("span");
 	span.className = classNames;
 	span.setAttribute("role", "cell");
@@ -266,17 +247,17 @@ function itemNameCell(classNames, item, used, editable) {
 	stateButton.setAttribute(
 		"aria-label",
 		used
-			? localize("Used", "Używany")
+			? localize("Equipped", "Używany")
 			: localize("Carried", "Przenoszony"),
 	);
 	stateButton.title = used
 		? localize(
-			"Used — click to mark as carried.",
+			"Equipped — click to carry it instead.",
 			"Używany — kliknij, aby oznaczyć jako przenoszony.",
 		)
 		: localize(
-			"Carried — click to mark as used.",
-			"Przenoszony — kliknij, aby oznaczyć jako używany.",
+			"Carried — click to equip it.",
+			"Przenoszony — kliknij, aby użyć/założyć.",
 		);
 	stateButton.disabled = !editable;
 	stopRowActionPropagation(stateButton);
@@ -286,6 +267,9 @@ function itemNameCell(classNames, item, used, editable) {
 		void toggleUsed(item, stateButton);
 	});
 	controls.append(stateButton);
+
+	const handButton = createHandButton(item, editable);
+	if (handButton) controls.append(handButton);
 
 	if (editable) {
 		const deleteButton = document.createElement("button");
@@ -318,11 +302,68 @@ function itemNameCell(classNames, item, used, editable) {
 	return span;
 }
 
+function createHandButton(item, editable) {
+	const allowed = CombatEquipmentState.allowedHands(item);
+	if (
+		allowed.length === 1 &&
+		allowed[0] === INVENTORY_HAND.NONE
+	) {
+		return null;
+	}
+
+	const hand = CombatEquipmentState.preferredHand(item);
+	const button = document.createElement("button");
+	button.type = "button";
+	button.className = "combat-sheet-hand-toggle";
+	button.dataset.hand = hand;
+	button.textContent = handMarker(hand);
+	button.title = handTitle(hand);
+	button.setAttribute("aria-label", handTitle(hand));
+	button.disabled = !editable;
+	stopRowActionPropagation(button);
+
+	button.addEventListener("click", (event) => {
+		event.preventDefault();
+		event.stopPropagation();
+		void cycleHand(item, button, 1);
+	});
+	button.addEventListener("contextmenu", (event) => {
+		event.preventDefault();
+		event.stopPropagation();
+		void cycleHand(item, button, -1);
+	});
+
+	return button;
+}
+
+function handMarker(hand) {
+	const polish = game.i18n.lang === "pl";
+	switch (hand) {
+		case INVENTORY_HAND.MAIN: return polish ? "G" : "M";
+		case INVENTORY_HAND.OFF: return polish ? "D" : "O";
+		case INVENTORY_HAND.BOTH: return "2";
+		default: return "–";
+	}
+}
+
+function handTitle(hand) {
+	const label = (() => {
+		switch (hand) {
+			case INVENTORY_HAND.MAIN: return localize("Main hand", "Główna dłoń");
+			case INVENTORY_HAND.OFF: return localize("Off hand", "Druga dłoń");
+			case INVENTORY_HAND.BOTH: return localize("Both hands", "Obie dłonie");
+			default: return localize("No hand", "Brak dłoni");
+		}
+	})();
+	return localize(
+		`${label}. Left-click: next; right-click: previous.`,
+		`${label}. Lewy przycisk: następna; prawy przycisk: poprzednia.`,
+	);
+}
+
 function stopRowActionPropagation(element) {
 	for (const eventName of ["pointerdown", "dblclick"]) {
-		element.addEventListener(eventName, (event) => {
-			event.stopPropagation();
-		});
+		element.addEventListener(eventName, (event) => event.stopPropagation());
 	}
 }
 
@@ -332,11 +373,8 @@ async function toggleUsed(item, button) {
 	try {
 		await CombatEquipmentState.toggleUsed(item);
 	} catch (error) {
-		console.error(
-			"WFRP1ED | Unable to change combat equipment state.",
-			error,
-		);
-		ui.notifications.error(
+		console.error("WFRP1ED | Unable to change combat equipment state.", error);
+		ui.notifications.warn(
 			error.message ?? localize(
 				"Unable to change equipment state.",
 				"Nie udało się zmienić stanu wyposażenia.",
@@ -346,11 +384,26 @@ async function toggleUsed(item, button) {
 	}
 }
 
+async function cycleHand(item, button, direction) {
+	button.disabled = true;
+
+	try {
+		await CombatEquipmentState.cycleHand(item, direction);
+	} catch (error) {
+		console.error("WFRP1ED | Unable to change hand slot.", error);
+		ui.notifications.warn(
+			error.message ?? localize(
+				"Unable to change the hand slot.",
+				"Nie udało się zmienić dłoni.",
+			),
+		);
+		button.disabled = false;
+	}
+}
+
 async function deleteItem(item) {
 	const confirmed = await DialogV2.confirm({
-		window: {
-			title: localize("Delete Item", "Usuń przedmiot"),
-		},
+		window: { title: localize("Delete Item", "Usuń przedmiot") },
 		content: localize(
 			`Delete '${item.name}' from this character?`,
 			`Usunąć „${item.name}” z tej postaci?`,
@@ -439,7 +492,6 @@ function hitLocationLabel(location) {
 
 function modifierDisplay(value) {
 	const number = integer(value);
-
 	if (number > 0) return `+${number}`;
 	if (number < 0) return String(number);
 	return "-";
