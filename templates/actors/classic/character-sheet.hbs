@@ -175,6 +175,26 @@
 					</section>
 				{{/if}}
 
+				{{#if page.sections.equipment}}
+					<section
+						class="sheet-overlay sheet-overlay--equipment"
+						data-section="equipment"
+						style="
+							{{page.sections.equipment.cssVariables}};
+							position: absolute;
+							left: var(--section-x);
+							top: var(--section-y);
+							width: var(--section-width);
+							height: var(--section-height);
+						"
+					>
+						{{>
+							"systems/wfrp1ed/templates/actors/classic/parts/equipment.hbs"
+							@root
+						}}
+					</section>
+				{{/if}}
+
 				{{#if page.sections.psychology}}
 					<section
 						class="sheet-overlay sheet-overlay--psychology"
