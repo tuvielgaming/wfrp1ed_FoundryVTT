@@ -35,9 +35,9 @@ function activatePhysicalItemImage(application, root) {
 	if (!application.isEditable) return;
 
 	/*
-	 * DocumentSheetV2 owns the native `editImage` action. `data-edit` is the
-	 * canonical document property used by the handler; `data-field` is supplied
-	 * as a compatibility hint for Foundry ApplicationV2 image-edit patterns.
+	 * DocumentSheetV2 owns the native `editImage` action. Foundry v14 requires
+	 * the action target itself to be an IMG element, so the action is attached
+	 * directly to the rendered document image.
 	 */
 	image.dataset.action = "editImage";
 	image.dataset.edit = "img";
@@ -77,30 +77,29 @@ function insertClassicActorPortrait(application, root) {
 	overlay.style.setProperty("--section-width", `${geometry.width}px`);
 	overlay.style.setProperty("--section-height", `${geometry.height}px`);
 
-	const portrait = application.isEditable
-		? document.createElement("button")
-		: document.createElement("div");
+	/*
+	 * Foundry's native editImage action explicitly requires the action target to
+	 * be an IMG element. Do not wrap the image in an actionable button: doing so
+	 * causes DocumentSheetV2 to reject the click before opening FilePicker.
+	 */
+	const image = document.createElement("img");
+	image.classList.add("classic-actor-portrait");
+	image.src = String(application.document?.img ?? "");
+	image.alt = String(application.document?.name ?? "");
+	image.draggable = false;
 
-	portrait.classList.add("classic-actor-portrait");
-
-	if (portrait instanceof HTMLButtonElement) {
-		portrait.type = "button";
-		portrait.dataset.action = "editImage";
-		portrait.dataset.edit = "img";
-		portrait.dataset.field = "img";
-		portrait.title = localize(
+	if (application.isEditable) {
+		image.dataset.action = "editImage";
+		image.dataset.edit = "img";
+		image.dataset.field = "img";
+		image.classList.add("wfrp1ed-document-image--editable");
+		image.title = localize(
 			"Change character image",
 			"Zmień obraz postaci",
 		);
 	}
 
-	const image = document.createElement("img");
-	image.src = String(application.document?.img ?? "");
-	image.alt = String(application.document?.name ?? "");
-	image.draggable = false;
-
-	portrait.append(image);
-	overlay.append(portrait);
+	overlay.append(image);
 	page.append(overlay);
 }
 
