@@ -53,7 +53,7 @@
 
 	<section class="combat-item-sheet__panel">
 		<h3>{{ui.protection}}</h3>
-		<div class="combat-item-sheet__grid combat-item-sheet__grid--3">
+		<div class="combat-item-sheet__grid combat-item-sheet__grid--4">
 			<label class="combat-item-sheet__field">
 				<span>{{ui.rulesId}}</span>
 				<input type="text" name="system.rulesId" value="{{system.rulesId}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}>
@@ -63,6 +63,15 @@
 				<span>{{ui.armourClass}}</span>
 				<select name="system.armourClass" {{#unless editable}}disabled{{/unless}}>
 					{{#each classOptions as |option|}}
+						<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>
+					{{/each}}
+				</select>
+			</label>
+
+			<label class="combat-item-sheet__field">
+				<span>{{ui.armourPiece}}</span>
+				<select name="system.piece" {{#unless editable}}disabled{{/unless}}>
+					{{#each pieceOptions as |option|}}
 						<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>
 					{{/each}}
 				</select>
