@@ -1,3 +1,11 @@
+import { ARMOUR_CLASS } from "../data-models/item/ArmourData.mjs";
+import {
+	INVENTORY_MODE,
+	normalizeInventoryHand,
+} from "../data-models/item/InventoryItemFields.mjs";
+import { ArmourEquipValidator } from "../combat/ArmourEquipValidator.mjs";
+import { HandEquipValidator } from "../combat/HandEquipValidator.mjs";
+
 export class Wfrp1edItem extends Item {
 	/**
 	 * Reject duplicate Actor-owned Skills at the batch creation boundary.
@@ -70,30 +78,39 @@ export class Wfrp1edItem extends Item {
 		}
 
 		if (
-			this.type !== "skill" ||
-			!this.actor ||
-			!skillIdentityChanged(changes)
+			this.type === "skill" &&
+			this.actor &&
+			skillIdentityChanged(changes)
 		) {
-			return result;
+			const identity = skillIdentity({
+				name: changedValue(changes, "name", this.name),
+				rulesId: changedValue(
+					changes,
+					"system.rulesId",
+					this.system?.rulesId,
+				),
+				specialisation: changedValue(
+					changes,
+					"system.specialisation",
+					this.system?.specialisation,
+				),
+			});
+
+			if (wouldDuplicateActorSkill(this, identity)) {
+				warnDuplicateSkill(identity, this.name);
+				return false;
+			}
 		}
 
-		const identity = skillIdentity({
-			name: changedValue(changes, "name", this.name),
-			rulesId: changedValue(
-				changes,
-				"system.rulesId",
-				this.system?.rulesId,
-			),
-			specialisation: changedValue(
-				changes,
-				"system.specialisation",
-				this.system?.specialisation,
-			),
-		});
-
-		if (wouldDuplicateActorSkill(this, identity)) {
-			warnDuplicateSkill(identity, this.name);
-			return false;
+		if (
+			this.actor &&
+			PHYSICAL_ITEM_TYPES.has(this.type) &&
+			options?.wfrp1edValidatedEquipmentState !== true
+		) {
+			const equipmentResult = validatePhysicalItemUpdate(this, changes);
+			if (equipmentResult === false) {
+				return false;
+			}
 		}
 
 		return result;
@@ -102,6 +119,124 @@ export class Wfrp1edItem extends Item {
 	prepareData() {
 		super.prepareData();
 	}
+}
+
+const PHYSICAL_ITEM_TYPES = new Set([
+	"weapon",
+	"armour",
+	"equipment",
+]);
+
+function validatePhysicalItemUpdate(item, changes) {
+	const currentMode = String(item.system?.state?.mode ?? INVENTORY_MODE.CARRIED);
+	const proposedMode = String(changedValue(
+		changes,
+		"system.state.mode",
+		currentMode,
+	));
+
+	if (
+		currentMode !== INVENTORY_MODE.CARRIED &&
+		wouldChangeUsedLoadoutDefinition(item, changes)
+	) {
+		ui.notifications.warn(
+			game.i18n.lang === "pl"
+				? "Najpierw oznacz przedmiot jako przenoszony, zanim zmienisz dane wpływające na sposób jego używania."
+				: "Mark the Item as carried before changing data which defines how it is equipped.",
+		);
+		return false;
+	}
+
+	if (proposedMode === INVENTORY_MODE.CARRIED) {
+		return true;
+	}
+
+	if (proposedMode === INVENTORY_MODE.WORN) {
+		if (
+			item.type !== "armour" ||
+			item.system?.armourClass === ARMOUR_CLASS.SHIELD
+		) {
+			warnInvalidEquipmentState();
+			return false;
+		}
+
+		const validation = ArmourEquipValidator.validate(item.actor, item);
+		if (!validation.valid) {
+			warnValidation(validation);
+			return false;
+		}
+		return true;
+	}
+
+	if (proposedMode === INVENTORY_MODE.HELD) {
+		if (
+			item.type === "armour" &&
+			item.system?.armourClass !== ARMOUR_CLASS.SHIELD
+		) {
+			warnInvalidEquipmentState();
+			return false;
+		}
+
+		let proposedHand = normalizeInventoryHand(changedValue(
+			changes,
+			"system.state.hand",
+			item.system?.state?.hand,
+		));
+		const allowed = HandEquipValidator.allowedHands(item);
+		if (!allowed.includes(proposedHand)) {
+			proposedHand = HandEquipValidator.defaultHand(item);
+			foundry.utils.setProperty(changes, "system.state.hand", proposedHand);
+		}
+
+		const validation = HandEquipValidator.validate(
+			item.actor,
+			item,
+			proposedHand,
+		);
+		if (!validation.valid) {
+			warnValidation(validation);
+			return false;
+		}
+		return true;
+	}
+
+	warnInvalidEquipmentState();
+	return false;
+}
+
+function wouldChangeUsedLoadoutDefinition(item, changes) {
+	if (item.type === "weapon") {
+		return hasChangedPath(changes, "system.handedness");
+	}
+
+	if (item.type === "armour") {
+		return [
+			"system.armourClass",
+			"system.piece",
+			"system.coverage",
+		].some((path) => hasChangedPath(changes, path));
+	}
+
+	return false;
+}
+
+function warnValidation(validation) {
+	const first = validation?.conflicts?.[0];
+	ui.notifications.warn(
+		first?.message || (
+			game.i18n.lang === "pl"
+				? "Nie można użyć przedmiotu w tej konfiguracji."
+				: "The Item cannot be equipped in that configuration."
+		),
+	);
+}
+
+function warnInvalidEquipmentState() {
+	ui.notifications.warn(
+		game.i18n.lang === "pl"
+			? "Ten stan wyposażenia nie jest prawidłowy dla tego typu przedmiotu."
+			: "That equipment state is not valid for this Item type.",
+	);
 }
 
 function wouldDuplicateActorSkill(item, identity = skillIdentityFromItem(item)) {
