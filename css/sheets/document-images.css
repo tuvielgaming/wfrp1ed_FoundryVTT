@@ -27,21 +27,35 @@
 
 .wfrp1ed-classic-sheet .classic-actor-portrait {
 	position: absolute;
-	left: 50%;
-	bottom: 3px;
-	transform: translateX(-50%);
+	left: 2px;
+	bottom: 0;
 
 	display: block;
-	width: auto;
-	height: auto;
-	max-width: 100%;
-	max-height: calc(100% - 3px);
+	width: 244px;
+	height: 310px;
 	margin: 0;
+	padding: 0;
+	border: 0;
 
 	object-fit: cover;
-	object-position: center;
+	object-position: 50% 50%;
+	background: transparent;
+
 	pointer-events: auto;
 	user-select: none;
+	touch-action: none;
+}
+
+.wfrp1ed-classic-sheet .classic-actor-portrait.wfrp1ed-document-image--editable {
+	cursor: grab;
+}
+
+.wfrp1ed-classic-sheet .classic-actor-portrait--framing,
+.wfrp1ed-classic-sheet .classic-actor-portrait--framing:hover {
+	cursor: grabbing;
+	filter: none;
+	outline: 2px dashed rgb(70 51 30 / 72%);
+	outline-offset: -3px;
 }
 
 .wfrp1ed-classic-sheet .classic-actor-portrait.wfrp1ed-document-image--editable:focus-visible {
