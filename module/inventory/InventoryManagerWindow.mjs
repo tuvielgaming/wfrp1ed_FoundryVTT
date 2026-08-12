@@ -14,8 +14,8 @@ const PHYSICAL_ITEM_TYPES = new Set(["equipment", "weapon", "armour"]);
  *
  * The printed page keeps Weapons and Armour in their historical combat tables
  * and ordinary gear in Ekwipunek. This window is the common management surface
- * for quantity, encumbrance, storage, equip state and hand assignment without
- * forcing extra columns into the scanned paper layout.
+ * for authored quantity, encumbrance, storage, equip state and hand assignment
+ * without forcing extra columns into the scanned paper layout.
  */
 export class InventoryManagerWindow extends HandlebarsApplicationMixin(
 	ApplicationV2,
@@ -112,10 +112,6 @@ export class InventoryManagerWindow extends HandlebarsApplicationMixin(
 		};
 		context.editable = this.canEdit;
 		context.items = items.map(itemPresentation);
-		context.totalEncumbrance = items.reduce(
-			(total, item) => total + itemEncumbrance(item),
-			0,
-		);
 		context.ui = {
 			item: localize("Item", "Przedmiot"),
 			type: localize("Type", "Typ"),
@@ -125,9 +121,6 @@ export class InventoryManagerWindow extends HandlebarsApplicationMixin(
 			state: localize("State", "Stan"),
 			hand: localize("Hand", "Dłoń"),
 			actions: localize("Actions", "Akcje"),
-			carried: localize("Carried", "Przenoszony"),
-			equipped: localize("Equipped", "Używany"),
-			totalEncumbrance: localize("Total encumbrance", "Łączne obciążenie"),
 			empty: localize("No physical equipment.", "Brak ekwipunku."),
 			open: localize("Open Item", "Otwórz przedmiot"),
 			remove: localize("Delete Item", "Usuń przedmiot"),
@@ -224,7 +217,7 @@ function itemPresentation(item) {
 		name: item.name,
 		type: localizedType(item.type),
 		quantity: nonNegativeInteger(item.system?.quantity),
-		encumbrance: itemEncumbrance(item),
+		encumbrance: nonNegativeNumber(item.system?.encumbrance),
 		storageLocation: String(item.system?.storageLocation ?? "") || "—",
 		used,
 		stateLabel: used
@@ -233,12 +226,6 @@ function itemPresentation(item) {
 		showHand,
 		handLabel: handLabel(hand),
 	});
-}
-
-function itemEncumbrance(item) {
-	const quantity = nonNegativeInteger(item.system?.quantity);
-	const each = nonNegativeNumber(item.system?.encumbrance);
-	return quantity * each;
 }
 
 function handLabel(hand) {
