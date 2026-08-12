@@ -55,8 +55,8 @@ export class EquipmentItemSheet extends HandlebarsApplicationMixin(
 		context.handOptions = selectOptions(
 			[
 				[INVENTORY_HAND.NONE, localize("None", "Brak")],
-				[INVENTORY_HAND.RIGHT, localize("Right hand", "Prawa dłoń")],
-				[INVENTORY_HAND.LEFT, localize("Left hand", "Lewa dłoń")],
+				[INVENTORY_HAND.MAIN, localize("Main hand", "Główna dłoń")],
+				[INVENTORY_HAND.OFF, localize("Off hand", "Druga dłoń")],
 				[INVENTORY_HAND.BOTH, localize("Both hands", "Obie dłonie")],
 			],
 			system?.state?.hand,
@@ -71,7 +71,7 @@ function equipmentUi() {
 		name: localize("Name", "Nazwa"),
 		inventory: localize("Inventory", "Ekwipunek"),
 		mode: localize("Current state", "Aktualny stan"),
-		hand: localize("Used in", "Używany w"),
+		hand: localize("Preferred hand", "Preferowana dłoń"),
 		quantity: localize("Quantity", "Ilość"),
 		encumbrance: localize("Encumbrance", "Obciążenie"),
 		storageLocation: localize("Stored at", "Miejsce przechowywania"),
