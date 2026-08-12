@@ -1,0 +1,180 @@
+/******************************************************************/
+/* Classic page-2 master inventory                                */
+/******************************************************************/
+
+.wfrp1ed-classic-sheet .classic-inventory {
+	position: relative;
+	width: 100%;
+	height: 100%;
+	padding: 52px 10px 10px;
+	overflow: hidden;
+	font-variant-numeric: tabular-nums;
+}
+
+.wfrp1ed-classic-sheet .classic-inventory__toolbar {
+	position: absolute;
+	top: 9px;
+	right: 11px;
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+}
+
+.wfrp1ed-classic-sheet .classic-inventory__create,
+.wfrp1ed-classic-sheet .classic-inventory__use-toggle,
+.wfrp1ed-classic-sheet .classic-inventory__delete {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 auto;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	box-shadow: none;
+	color: #17120d;
+	line-height: 1;
+	cursor: pointer;
+}
+
+.wfrp1ed-classic-sheet .classic-inventory__create {
+	width: 20px;
+	height: 20px;
+	font-size: 11px;
+	opacity: 0.48;
+}
+
+.wfrp1ed-classic-sheet .classic-inventory__create:hover,
+.wfrp1ed-classic-sheet .classic-inventory__create:focus-visible {
+	opacity: 0.95;
+}
+
+.wfrp1ed-classic-sheet .classic-inventory__header,
+.wfrp1ed-classic-sheet .classic-inventory__row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 34px 38px 40px;
+	align-items: center;
+	column-gap: 3px;
+}
+
+.wfrp1ed-classic-sheet .classic-inventory__header {
+	height: 20px;
+	padding: 0 2px 2px;
+	border-bottom: 1px solid rgb(25 20 15 / 35%);
+	font-size: 9px;
+	font-weight: 700;
+	text-transform: uppercase;
+}
+
+.wfrp1ed-classic-sheet .classic-inventory__header > span:not(:first-child) {
+	text-align: center;
+}
+
+.wfrp1ed-classic-sheet .classic-inventory__list {
+	display: grid;
+	grid-auto-rows: 27px;
+	align-content: start;
+	overflow: hidden;
+}
+
+.wfrp1ed-classic-sheet .classic-inventory__row {
+	min-width: 0;
+	height: 27px;
+	padding: 0 2px;
+	border-bottom: 1px solid rgb(25 20 15 / 13%);
+	font-size: 11px;
+	transition: opacity 0.12s ease;
+}
+
+.wfrp1ed-classic-sheet .classic-inventory__row.is-carried {
+	opacity: 0.64;
+}
+
+.wfrp1ed-classic-sheet .classic-inventory__row.is-used {
+	opacity: 1;
+}
+
+.wfrp1ed-classic-sheet .classic-inventory__name {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	min-width: 0;
+	font-weight: 700;
+}
+
+.wfrp1ed-classic-sheet .classic-inventory__name > i {
+	flex: 0 0 13px;
+	width: 13px;
+	font-size: 9px;
+	text-align: center;
+	opacity: 0.7;
+}
+
+.wfrp1ed-classic-sheet .classic-inventory__name-label {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.wfrp1ed-classic-sheet .classic-inventory__number {
+	text-align: center;
+}
+
+.wfrp1ed-classic-sheet .classic-inventory__controls {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 3px;
+}
+
+.wfrp1ed-classic-sheet .classic-inventory__use-toggle,
+.wfrp1ed-classic-sheet .classic-inventory__delete {
+	width: 16px;
+	height: 16px;
+	min-width: 16px;
+	font-size: 9px;
+}
+
+.wfrp1ed-classic-sheet .classic-inventory__use-toggle {
+	position: relative;
+	border: 1px solid currentColor;
+	border-radius: 50%;
+	opacity: 0.65;
+}
+
+.wfrp1ed-classic-sheet .classic-inventory__use-toggle.is-used::after {
+	content: "";
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: currentColor;
+}
+
+.wfrp1ed-classic-sheet .classic-inventory__use-toggle:disabled {
+	cursor: default;
+}
+
+.wfrp1ed-classic-sheet .classic-inventory__delete {
+	opacity: 0.22;
+}
+
+.wfrp1ed-classic-sheet .classic-inventory__row:hover .classic-inventory__delete,
+.wfrp1ed-classic-sheet .classic-inventory__delete:focus-visible,
+.wfrp1ed-classic-sheet .classic-inventory__use-toggle:focus-visible {
+	opacity: 0.9;
+}
+
+.wfrp1ed-classic-sheet .classic-inventory__create:focus-visible,
+.wfrp1ed-classic-sheet .classic-inventory__delete:focus-visible,
+.wfrp1ed-classic-sheet .classic-inventory__use-toggle:focus-visible {
+	outline: 1px solid var(--focus-color);
+	outline-offset: 1px;
+}
+
+.wfrp1ed-classic-sheet .classic-inventory__empty {
+	padding: 8px 2px;
+	font-size: 11px;
+	font-style: italic;
+	opacity: 0.48;
+}
