@@ -26,6 +26,29 @@ export const ARMOUR_CLASS = Object.freeze({
 	OTHER: "other",
 });
 
+/**
+ * Core armour-piece identities from the Body Areas and Armour table.
+ *
+ * Layering legality in WFRP 1e is defined by specific pieces, not by a generic
+ * "one leather + one mail + one plate" stack. Keeping this identity explicit
+ * lets the equip validator enforce exactly the combinations named by the Core
+ * rules while still allowing custom armour through CUSTOM.
+ */
+export const ARMOUR_PIECE = Object.freeze({
+	SHIELD: "shield",
+	MAIL_SHIRT: "mailShirt",
+	SLEEVED_MAIL_SHIRT: "sleevedMailShirt",
+	MAIL_COAT: "mailCoat",
+	SLEEVED_MAIL_COAT: "sleevedMailCoat",
+	MAIL_COIF: "mailCoif",
+	BREASTPLATE: "breastplate",
+	MAIL_ARM_BRACER: "mailArmBracer",
+	PLATE_ARM_BRACER: "plateArmBracer",
+	LEGGINGS: "leggings",
+	HELMET: "helmet",
+	CUSTOM: "custom",
+});
+
 export const ARMOUR_LOCATIONS = Object.freeze([
 	"head",
 	"body",
@@ -39,8 +62,8 @@ export const ARMOUR_LOCATIONS = Object.freeze([
  * Native Foundry v14 data model for WFRP 1e armour.
  *
  * Armour Points and body-area coverage are stored per Item because WFRP armour
- * is location-based and may be layered. Whether a particular combination may
- * legally be layered is a combat/equipment rule, not a template calculation.
+ * is location-based and may be layered only in the explicit Core combinations.
+ * The equip validator owns that legality; this model stores the authored facts.
  *
  * Shields are represented as armour because their main-rule function is AP 1
  * over all body areas. A shield may additionally be authored as a parrying
@@ -59,6 +82,7 @@ export class ArmourData extends TypeDataModel {
 
 			rulesId: textField(),
 			armourClass: textField(ARMOUR_CLASS.OTHER),
+			piece: textField(ARMOUR_PIECE.CUSTOM),
 			armourPoints: nonNegativeIntegerField(),
 
 			coverage: new SchemaField({
@@ -116,6 +140,11 @@ export class ArmourData extends TypeDataModel {
 					: coveredAreas.includes(location),
 			]),
 		);
+		migrated.piece = normalizeAllowed(
+			sourceObject.piece,
+			Object.values(ARMOUR_PIECE),
+			inferCorePiece(migrated),
+		);
 		migrated.parry = {
 			suitable: toBoolean(parry.suitable),
 			bonus: toInteger(parry.bonus),
@@ -123,6 +152,50 @@ export class ArmourData extends TypeDataModel {
 
 		return super.migrateData(migrated, options);
 	}
+}
+
+function inferCorePiece(system) {
+	const armourClass = String(system?.armourClass ?? "");
+	const coverage = system?.coverage ?? {};
+	const locations = ARMOUR_LOCATIONS.filter(
+		(location) => coverage[location] === true,
+	);
+	const key = [...locations].sort().join("|");
+
+	if (armourClass === ARMOUR_CLASS.SHIELD) {
+		return ARMOUR_PIECE.SHIELD;
+	}
+
+	if (armourClass === ARMOUR_CLASS.MAIL) {
+		switch (key) {
+			case "body": return ARMOUR_PIECE.MAIL_SHIRT;
+			case "body|leftArm|rightArm": return ARMOUR_PIECE.SLEEVED_MAIL_SHIRT;
+			case "body|leftLeg|rightLeg": return ARMOUR_PIECE.MAIL_COAT;
+			case "body|leftArm|leftLeg|rightArm|rightLeg": return ARMOUR_PIECE.SLEEVED_MAIL_COAT;
+			case "head": return ARMOUR_PIECE.MAIL_COIF;
+			case "leftArm":
+			case "rightArm":
+			case "leftArm|rightArm":
+				return ARMOUR_PIECE.MAIL_ARM_BRACER;
+			default:
+				break;
+		}
+	}
+
+	if (armourClass === ARMOUR_CLASS.PLATE) {
+		switch (key) {
+			case "body": return ARMOUR_PIECE.BREASTPLATE;
+			case "head": return ARMOUR_PIECE.HELMET;
+			case "leftArm":
+			case "rightArm":
+			case "leftArm|rightArm":
+				return ARMOUR_PIECE.PLATE_ARM_BRACER;
+			default:
+				break;
+		}
+	}
+
+	return ARMOUR_PIECE.CUSTOM;
 }
 
 function textField(initial = "") {
