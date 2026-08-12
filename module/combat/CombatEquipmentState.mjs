@@ -94,7 +94,10 @@ export class CombatEquipmentState {
 
 		await item.update({ system }, { wfrp1edValidatedEquipmentState: true });
 
+		const seenWarnings = new Set();
 		for (const warning of armourValidation?.warnings ?? []) {
+			if (seenWarnings.has(warning.message)) continue;
+			seenWarnings.add(warning.message);
 			ui.notifications.warn(warning.message);
 		}
 
