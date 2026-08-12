@@ -3,6 +3,7 @@ import {
 	ARMOUR_LOCATIONS,
 } from "../data-models/item/ArmourData.mjs";
 import {
+	INVENTORY_HAND,
 	INVENTORY_MODE,
 	normalizeInventoryHand,
 } from "../data-models/item/InventoryItemFields.mjs";
@@ -11,12 +12,12 @@ import { HandEquipValidator } from "../combat/HandEquipValidator.mjs";
 
 export class Wfrp1edItem extends Item {
 	/**
-	 * Reject duplicate Actor-owned Skills at the batch creation boundary.
+	 * Reject duplicate Actor-owned Skills and normalize newly embedded physical
+	 * Items before they enter an Actor inventory.
 	 *
-	 * Foundry constructs pending embedded Items with their Actor parent before
-	 * this hook runs. Mutating the pending documents array therefore covers
-	 * drag/drop, Actor-sheet creation, macros, and other Item creation paths
-	 * without depending on Item.actor being available during _preCreate.
+	 * A World/Compendium Item may carry an equipped state which was valid for a
+	 * different Actor. Resetting every newly embedded physical Item to Carried
+	 * prevents drag/drop from bypassing armour-layer and hand-slot validation.
 	 */
 	static async _preCreateOperation(documents, operation, user) {
 		const result = await super._preCreateOperation(
@@ -24,8 +25,16 @@ export class Wfrp1edItem extends Item {
 			operation,
 			user,
 		);
-
 		if (result === false) return false;
+
+		for (const item of documents) {
+			if (
+				item?.actor &&
+				PHYSICAL_ITEM_TYPES.has(item.type)
+			) {
+				resetPendingPhysicalItemState(item);
+			}
+		}
 
 		const acceptedByActor = new Map();
 
@@ -103,6 +112,20 @@ export class Wfrp1edItem extends Item {
 }
 
 const PHYSICAL_ITEM_TYPES = new Set(["weapon", "armour", "equipment"]);
+
+function resetPendingPhysicalItemState(item) {
+	const system = typeof item.system?.toObject === "function"
+		? item.system.toObject(true)
+		: foundry.utils.deepClone(item.system ?? {});
+
+	system.state = {
+		...(system.state ?? {}),
+		mode: INVENTORY_MODE.CARRIED,
+		hand: INVENTORY_HAND.NONE,
+	};
+
+	item.updateSource({ system });
+}
 
 function validatePhysicalItemUpdate(item, changes) {
 	const currentMode = String(item.system?.state?.mode ?? INVENTORY_MODE.CARRIED);
