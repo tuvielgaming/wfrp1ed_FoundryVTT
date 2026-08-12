@@ -1,4 +1,7 @@
-import { ARMOUR_CLASS } from "../data-models/item/ArmourData.mjs";
+import {
+	ARMOUR_CLASS,
+	ARMOUR_LOCATIONS,
+} from "../data-models/item/ArmourData.mjs";
 import {
 	INVENTORY_MODE,
 	normalizeInventoryHand,
@@ -22,48 +25,35 @@ export class Wfrp1edItem extends Item {
 			user,
 		);
 
-		if (result === false) {
-			return false;
-		}
+		if (result === false) return false;
 
 		const acceptedByActor = new Map();
 
 		for (let index = documents.length - 1; index >= 0; index -= 1) {
 			const item = documents[index];
 			const actor = item?.actor;
-
-			if (item?.type !== "skill" || !actor) {
-				continue;
-			}
+			if (item?.type !== "skill" || !actor) continue;
 
 			const identity = skillIdentityFromItem(item);
-
-			if (!identity) {
-				continue;
-			}
+			if (!identity) continue;
 
 			let accepted = acceptedByActor.get(actor.uuid);
-
 			if (!accepted) {
 				accepted = new Set(
 					[...(actor.items ?? [])]
 						.filter((existing) => existing.type === "skill")
-						.map((existing) => skillIdentityKey(
-							skillIdentityFromItem(existing),
-						))
+						.map((existing) => skillIdentityKey(skillIdentityFromItem(existing)))
 						.filter(Boolean),
 				);
 				acceptedByActor.set(actor.uuid, accepted);
 			}
 
 			const key = skillIdentityKey(identity);
-
 			if (accepted.has(key)) {
 				documents.splice(index, 1);
 				warnDuplicateSkill(identity, item.name);
 				continue;
 			}
-
 			accepted.add(key);
 		}
 
@@ -72,10 +62,7 @@ export class Wfrp1edItem extends Item {
 
 	async _preUpdate(changes, options, user) {
 		const result = await super._preUpdate(changes, options, user);
-
-		if (result === false) {
-			return false;
-		}
+		if (result === false) return false;
 
 		if (
 			this.type === "skill" &&
@@ -84,11 +71,7 @@ export class Wfrp1edItem extends Item {
 		) {
 			const identity = skillIdentity({
 				name: changedValue(changes, "name", this.name),
-				rulesId: changedValue(
-					changes,
-					"system.rulesId",
-					this.system?.rulesId,
-				),
+				rulesId: changedValue(changes, "system.rulesId", this.system?.rulesId),
 				specialisation: changedValue(
 					changes,
 					"system.specialisation",
@@ -108,9 +91,7 @@ export class Wfrp1edItem extends Item {
 			options?.wfrp1edValidatedEquipmentState !== true
 		) {
 			const equipmentResult = validatePhysicalItemUpdate(this, changes);
-			if (equipmentResult === false) {
-				return false;
-			}
+			if (equipmentResult === false) return false;
 		}
 
 		return result;
@@ -121,11 +102,7 @@ export class Wfrp1edItem extends Item {
 	}
 }
 
-const PHYSICAL_ITEM_TYPES = new Set([
-	"weapon",
-	"armour",
-	"equipment",
-]);
+const PHYSICAL_ITEM_TYPES = new Set(["weapon", "armour", "equipment"]);
 
 function validatePhysicalItemUpdate(item, changes) {
 	const currentMode = String(item.system?.state?.mode ?? INVENTORY_MODE.CARRIED);
@@ -147,9 +124,7 @@ function validatePhysicalItemUpdate(item, changes) {
 		return false;
 	}
 
-	if (proposedMode === INVENTORY_MODE.CARRIED) {
-		return true;
-	}
+	if (proposedMode === INVENTORY_MODE.CARRIED) return true;
 
 	if (proposedMode === INVENTORY_MODE.WORN) {
 		if (
@@ -188,11 +163,7 @@ function validatePhysicalItemUpdate(item, changes) {
 			foundry.utils.setProperty(changes, "system.state.hand", proposedHand);
 		}
 
-		const validation = HandEquipValidator.validate(
-			item.actor,
-			item,
-			proposedHand,
-		);
+		const validation = HandEquipValidator.validate(item.actor, item, proposedHand);
 		if (!validation.valid) {
 			warnValidation(validation);
 			return false;
@@ -206,15 +177,39 @@ function validatePhysicalItemUpdate(item, changes) {
 
 function wouldChangeUsedLoadoutDefinition(item, changes) {
 	if (item.type === "weapon") {
-		return hasChangedPath(changes, "system.handedness");
+		return String(changedValue(
+			changes,
+			"system.handedness",
+			item.system?.handedness,
+		)) !== String(item.system?.handedness ?? "");
 	}
 
 	if (item.type === "armour") {
-		return [
-			"system.armourClass",
-			"system.piece",
-			"system.coverage",
-		].some((path) => hasChangedPath(changes, path));
+		if (
+			String(changedValue(
+				changes,
+				"system.armourClass",
+				item.system?.armourClass,
+			)) !== String(item.system?.armourClass ?? "")
+		) return true;
+
+		if (
+			String(changedValue(
+				changes,
+				"system.piece",
+				item.system?.piece,
+			)) !== String(item.system?.piece ?? "")
+		) return true;
+
+		return ARMOUR_LOCATIONS.some((location) => {
+			const current = item.system?.coverage?.[location] === true;
+			const proposed = Boolean(changedValue(
+				changes,
+				`system.coverage.${location}`,
+				current,
+			));
+			return proposed !== current;
+		});
 	}
 
 	return false;
@@ -241,31 +236,16 @@ function warnInvalidEquipmentState() {
 
 function wouldDuplicateActorSkill(item, identity = skillIdentityFromItem(item)) {
 	const actor = item?.actor;
-
-	if (item?.type !== "skill" || !actor || !identity) {
-		return false;
-	}
+	if (item?.type !== "skill" || !actor || !identity) return false;
 
 	return [...(actor.items ?? [])].some((existing) => {
-		if (
-			existing.type !== "skill" ||
-			existing.id === item.id
-		) {
-			return false;
-		}
-
-		return sameSkillIdentity(
-			identity,
-			skillIdentityFromItem(existing),
-		);
+		if (existing.type !== "skill" || existing.id === item.id) return false;
+		return sameSkillIdentity(identity, skillIdentityFromItem(existing));
 	});
 }
 
 function skillIdentityFromItem(item) {
-	if (!item) {
-		return null;
-	}
-
+	if (!item) return null;
 	return skillIdentity({
 		name: item.name,
 		rulesId: item.system?.rulesId,
@@ -277,10 +257,7 @@ function skillIdentity({ name, rulesId, specialisation }) {
 	const normalizedRulesId = normalizeIdentityText(rulesId);
 	const normalizedName = normalizeIdentityText(name);
 	const normalizedSpecialisation = normalizeIdentityText(specialisation);
-
-	if (!normalizedRulesId && !normalizedName) {
-		return null;
-	}
+	if (!normalizedRulesId && !normalizedName) return null;
 
 	return Object.freeze({
 		kind: normalizedRulesId ? "rules" : "name",
@@ -292,15 +269,8 @@ function skillIdentity({ name, rulesId, specialisation }) {
 }
 
 function skillIdentityKey(identity) {
-	if (!identity) {
-		return "";
-	}
-
-	return [
-		identity.kind,
-		identity.value,
-		identity.specialisation,
-	].join("::");
+	if (!identity) return "";
+	return [identity.kind, identity.value, identity.specialisation].join("::");
 }
 
 function sameSkillIdentity(first, second) {
@@ -320,26 +290,14 @@ function skillIdentityChanged(changes) {
 }
 
 function hasChangedPath(changes, path) {
-	if (!changes || typeof changes !== "object") {
-		return false;
-	}
-
-	if (Object.hasOwn(changes, path)) {
-		return true;
-	}
-
+	if (!changes || typeof changes !== "object") return false;
+	if (Object.hasOwn(changes, path)) return true;
 	return foundry.utils.getProperty(changes, path) !== undefined;
 }
 
 function changedValue(changes, path, fallback) {
-	if (!changes || typeof changes !== "object") {
-		return fallback;
-	}
-
-	if (Object.hasOwn(changes, path)) {
-		return changes[path];
-	}
-
+	if (!changes || typeof changes !== "object") return fallback;
+	if (Object.hasOwn(changes, path)) return changes[path];
 	const nested = foundry.utils.getProperty(changes, path);
 	return nested === undefined ? fallback : nested;
 }
@@ -357,15 +315,11 @@ function warnDuplicateSkill(identity, fallbackName) {
 	const message = game.i18n.lang === "pl"
 		? `Postać posiada już Umiejętność „${label}”. Duplikat nie został dodany.`
 		: `This Actor already has the Skill “${label}”. The duplicate was not added.`;
-
 	ui.notifications.warn(message);
 }
 
 function skillIdentityLabel(identity, fallbackName) {
 	const name = identity?.displayName || String(fallbackName ?? "").trim();
 	const specialisation = identity?.displaySpecialisation || "";
-
-	return specialisation
-		? `${name} (${specialisation})`
-		: name;
+	return specialisation ? `${name} (${specialisation})` : name;
 }
