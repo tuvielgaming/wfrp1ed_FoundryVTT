@@ -8,6 +8,9 @@ import {
 import {
 	weaponOptionalModifierSnapshot,
 } from "../data-models/item/WeaponData.mjs";
+import {
+	PARRY_ATTACK_COST_MODE,
+} from "./CombatParryRules.mjs";
 
 /**
  * Read-only combat view over Actor-owned physical Items.
@@ -133,6 +136,10 @@ export class CombatEquipment {
 	 *
 	 * Main-rule parry bonuses are always included. Optional Weapon Modifiers are
 	 * included only when the caller explicitly enables that optional rule.
+	 *
+	 * `attackCostMode` is part of the Core parry contract: ordinary suitable
+	 * weapons consume one Attack, while a shield parry consumes all remaining
+	 * Attacks in the round in exchange for its +20 WS main-rule bonus.
 	 */
 	static parryOptions(actor, { optionalWeaponModifiers = false } = {}) {
 		assertActor(actor);
@@ -155,6 +162,7 @@ export class CombatEquipment {
 					baseBonus,
 					optionalBonus,
 					totalBonus: baseBonus + optionalBonus,
+					attackCostMode: PARRY_ATTACK_COST_MODE.ONE_ATTACK,
 				}));
 				continue;
 			}
@@ -172,6 +180,8 @@ export class CombatEquipment {
 					baseBonus,
 					optionalBonus: 0,
 					totalBonus: baseBonus,
+					attackCostMode:
+						PARRY_ATTACK_COST_MODE.ALL_REMAINING_ATTACKS,
 				}));
 			}
 		}
