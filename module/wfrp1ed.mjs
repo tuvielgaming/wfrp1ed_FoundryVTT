@@ -1,7 +1,9 @@
+import { CombatAttackEconomy } from "./combat/CombatAttackEconomy.mjs";
 import { CharacterData } from "./data-models/actor/CharacterData.mjs";
 import { CriticalWoundData } from "./data-models/item/CriticalWoundData.mjs";
 import { SkillData } from "./data-models/item/SkillData.mjs";
 import { Wfrp1edActor } from "./documents/Wfrp1edActor.mjs";
+import { Wfrp1edCombat } from "./documents/Wfrp1edCombat.mjs";
 import { Wfrp1edItem } from "./documents/Wfrp1edItem.mjs";
 import {
 	configureWfrpRuleEffectType,
@@ -65,8 +67,9 @@ Hooks.once("init", async () => {
  * Configure the system's custom Documents and native Foundry v14 data models.
  *
  * Character, Skill, and Critical Wound now have explicit native TypeDataModels.
- * Other Actor and Item subtypes remain on their temporary data contracts until
- * their own dependency-ordered audits are complete.
+ * Combat uses a custom document only for audited WFRP round/turn lifecycle
+ * state. Other Actor and Item subtypes remain on their temporary data contracts
+ * until their own dependency-ordered audits are complete.
  *
  * @returns {void}
  */
@@ -74,6 +77,7 @@ function configureSystem() {
 	CONFIG.WFRP1ED = WFRP1ED;
 
 	CONFIG.Actor.documentClass = Wfrp1edActor;
+	CONFIG.Combat.documentClass = Wfrp1edCombat;
 	CONFIG.Item.documentClass = Wfrp1edItem;
 
 	CONFIG.Actor.dataModels.character = CharacterData;
@@ -289,7 +293,12 @@ function exposeSystemApi() {
 
 		documents: Object.freeze({
 			Actor: Wfrp1edActor,
+			Combat: Wfrp1edCombat,
 			Item: Wfrp1edItem,
+		}),
+
+		combat: Object.freeze({
+			attacks: CombatAttackEconomy,
 		}),
 
 		effects: Object.freeze({
