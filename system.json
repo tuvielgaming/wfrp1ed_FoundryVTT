@@ -33,6 +33,7 @@
 		"css/sheets/classic.css",
 		"css/sheets/classic-combat-equipment.css",
 		"css/sheets/classic-inventory.css",
+		"css/sheets/inventory-manager-window.css",
 		"css/sheets/classic-wounds.css",
 		"css/sheets/classic-status.css",
 		"css/sheets/classic-health.css",
