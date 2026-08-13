@@ -5,14 +5,65 @@ const { DialogV2 } = foundry.applications.api;
  * progressively, other target-dependent workflows.
  *
  * Mechanics do not belong here. This service only answers which Actor the
- * current user targeted, lets a GM choose a world Actor, and resolves standard
- * Foundry Actor/Token drag data.
+ * current user targeted, exposes visible scene tokens as explicit target
+ * choices, lets a GM choose a world Actor, and resolves standard Foundry
+ * Actor/Token drag data.
  */
 export class ActorTargetResolver {
 	static singleTargetActor() {
 		const targets = [...(game.user?.targets ?? [])];
 		if (targets.length !== 1) return null;
 		return targets[0].actor ?? null;
+	}
+
+	/**
+	 * Return target choices from tokens which are actually visible to this
+	 * client on the active canvas.
+	 *
+	 * This gives modal combat/test UIs a target picker which does not depend on
+	 * the Foundry `T` hotkey retaining canvas focus. Hidden tokens are never
+	 * exposed to non-GM users. The returned Actor UUID preserves synthetic-token
+	 * Actor identity where Foundry provides it.
+	 */
+	static sceneTokenTargets() {
+		const tokens = [...(canvas?.tokens?.placeables ?? [])]
+			.filter((token) => token?.actor?.documentName === "Actor")
+			.filter((token) => {
+				if (game.user?.isGM) return true;
+				if (token.document?.hidden === true) return false;
+				return token.visible !== false;
+			})
+			.map((token) => ({
+				tokenId: String(token.id ?? token.document?.id ?? ""),
+				tokenUuid: String(token.document?.uuid ?? ""),
+				actorUuid: String(token.actor?.uuid ?? ""),
+				name: String(token.name ?? token.document?.name ?? token.actor?.name ?? ""),
+				actor: token.actor,
+			}))
+			.filter((entry) => entry.actorUuid && entry.name)
+			.sort((first, second) =>
+				first.name.localeCompare(
+					second.name,
+					game.i18n.lang,
+					{ sensitivity: "base" },
+				),
+			);
+
+		return Object.freeze(
+			tokens.map((entry) => Object.freeze(entry)),
+		);
+	}
+
+	static actorFromUuidSync(uuid) {
+		const id = String(uuid ?? "").trim();
+		if (!id) return null;
+
+		try {
+			const document = foundry.utils.fromUuidSync(id);
+			return this.actorFromDocument(document);
+		} catch (_error) {
+			return null;
+		}
 	}
 
 	static async chooseActor() {
