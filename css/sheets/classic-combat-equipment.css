@@ -206,29 +206,47 @@
 	padding: 0;
 	border: 0;
 	border-radius: 2px;
-	background: transparent;
+	background: rgb(189 42 42 / 10%);
 	box-shadow: none;
-	color: #e21010;
+	color: #b51f1f;
 	font-size: 0.62em;
 	line-height: 0.9em;
 	cursor: pointer;
 	z-index: 1;
 }
 
+/* Red closed lock = player editing disabled. Green open lock = enabled. */
 .wfrp1ed-classic-sheet
-	.characteristic-current-attacks-permission.is-enabled {
-	background: rgba(210, 74, 99, 0.14);
-	color: #c92f4c;
+	.characteristic-current-attacks-permission.is-locked {
+	background: rgb(189 42 42 / 10%);
+	color: #b51f1f;
 }
 
 .wfrp1ed-classic-sheet
-	.characteristic-current-attacks-permission:hover,
+	.characteristic-current-attacks-permission.is-enabled {
+	background: rgb(44 126 58 / 12%);
+	color: #267a36;
+}
+
 .wfrp1ed-classic-sheet
-	.characteristic-current-attacks-permission:focus-visible {
-	background: rgba(210, 74, 99, 0.18);
-	color: #a91f3a;
+	.characteristic-current-attacks-permission.is-locked:hover,
+.wfrp1ed-classic-sheet
+	.characteristic-current-attacks-permission.is-locked:focus-visible {
+	background: rgb(189 42 42 / 18%);
+	color: #921717;
 	text-shadow: none;
-	outline: 1px solid rgba(169, 31, 58, 0.35);
+	outline: 1px solid rgb(146 23 23 / 34%);
+	outline-offset: 1px;
+}
+
+.wfrp1ed-classic-sheet
+	.characteristic-current-attacks-permission.is-enabled:hover,
+.wfrp1ed-classic-sheet
+	.characteristic-current-attacks-permission.is-enabled:focus-visible {
+	background: rgb(44 126 58 / 20%);
+	color: #185c27;
+	text-shadow: none;
+	outline: 1px solid rgb(24 92 39 / 34%);
 	outline-offset: 1px;
 }
 
