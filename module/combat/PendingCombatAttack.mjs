@@ -11,14 +11,16 @@ const TEMPLATE_PATH =
 	"systems/wfrp1ed/templates/chat/pending-combat-attack.hbs";
 
 /**
- * Defer a configured melee attack until a GM resolves its defender context.
+ * Defer a configured melee attack until its defender context is resolved.
  *
- * This mirrors the established PendingStandardTest UX: current canvas target,
- * world Actor chooser, and Actor/Token drag-and-drop. Combat additionally
- * offers an explicit No defender / object mode for doors, obstacles and other
- * cases where a defending Actor is intentionally absent.
+ * The attacker/Actor owner may resolve the request with their current canvas
+ * target, an Actor dragged from the sidebar, or No defender / object. The GM
+ * has the same controls plus the world-Actor chooser and remains authoritative
+ * over the later attack/Test adjudication.
  *
- * No Attack is spent while this card is pending.
+ * No Attack is spent while this card is pending. Therefore a pending request
+ * can legitimately become stale if the Combatant spends its last A elsewhere
+ * before the target is resolved.
  */
 export class PendingCombatAttack {
 	static async create(actor, weapon, configuration) {
@@ -64,8 +66,10 @@ export class PendingCombatAttack {
 
 		const controls = card.querySelector("[data-pending-attack-gm-controls]");
 		const waiting = card.querySelector("[data-pending-attack-player-status]");
+		const actor = actorFromUuidSync(request.actorUuid);
+		const canResolve = canResolveRequest(actor, game.user);
 
-		if (!game.user?.isGM) {
+		if (!canResolve) {
 			if (controls) controls.hidden = true;
 			if (waiting) waiting.hidden = false;
 			return;
@@ -73,6 +77,13 @@ export class PendingCombatAttack {
 
 		if (controls) controls.hidden = false;
 		if (waiting) waiting.hidden = true;
+
+		const chooseActorButton = card.querySelector(
+			'[data-pending-attack-action="choose-actor"]',
+		);
+		if (chooseActorButton) {
+			chooseActorButton.hidden = !game.user?.isGM;
+		}
 
 		for (const button of card.querySelectorAll("[data-pending-attack-action]")) {
 			button.addEventListener("click", (event) => {
@@ -104,6 +115,14 @@ export class PendingCombatAttack {
 
 	static async #handleAction(message, request, action) {
 		try {
+			const actor = actorFromUuidSync(request.actorUuid);
+			if (!canResolveRequest(actor, game.user)) {
+				throw new Error(localize(
+					"Only the attacker owner or a GM can resolve this target.",
+					"Tylko właściciel atakującego albo MG może rozstrzygnąć ten cel.",
+				));
+			}
+
 			switch (action) {
 				case "current-target": {
 					const target = ActorTargetResolver.singleTargetActor();
@@ -121,6 +140,12 @@ export class PendingCombatAttack {
 					return;
 				}
 				case "choose-actor": {
+					if (!game.user?.isGM) {
+						throw new Error(localize(
+							"Only a GM can choose from the world Actor directory here.",
+							"Tylko MG może tutaj wybierać z katalogu Aktorów świata.",
+						));
+					}
 					const target = await ActorTargetResolver.chooseActor();
 					if (!target) return;
 					await this.#execute(message, request, {
@@ -146,11 +171,19 @@ export class PendingCombatAttack {
 
 	static async #handleDrop(message, request, event) {
 		try {
+			const actor = actorFromUuidSync(request.actorUuid);
+			if (!canResolveRequest(actor, game.user)) {
+				throw new Error(localize(
+					"Only the attacker owner or a GM can resolve this target.",
+					"Tylko właściciel atakującego albo MG może rozstrzygnąć ten cel.",
+				));
+			}
+
 			const target = await ActorTargetResolver.actorFromDropEvent(event);
 			if (!target) {
 				throw new Error(localize(
-					"Drop an Actor or a Token with an Actor here.",
-					"Upuść tutaj Aktora albo token powiązany z Aktorem.",
+					"Drop an Actor from the sidebar here, or use the current-target button for a canvas token.",
+					"Upuść tutaj Aktora z panelu bocznego albo użyj przycisku aktualnego celu dla tokenu na mapie.",
 				));
 			}
 			await this.#execute(message, request, {
@@ -195,8 +228,8 @@ export class PendingCombatAttack {
 				"Oczekuje na wybór obrońcy",
 			),
 			dropPrompt: localize(
-				"Drop an Actor or Token here",
-				"Upuść tutaj Aktora lub token",
+				"Drop an Actor from the sidebar here",
+				"Upuść tutaj Aktora z panelu bocznego",
 			),
 			useCurrentTargetLabel: localize(
 				"Use current target",
@@ -208,8 +241,8 @@ export class PendingCombatAttack {
 				"Bez obrońcy / obiekt",
 			),
 			waitingGmLabel: localize(
-				"Waiting for the GM to resolve the attack target.",
-				"Oczekiwanie na MG, który rozstrzygnie cel ataku.",
+				"Waiting for the attacker owner or GM to resolve the target.",
+				"Oczekiwanie na właściciela atakującego albo MG, aby rozstrzygnąć cel.",
 			),
 		};
 	}
@@ -236,6 +269,30 @@ function serializeConfiguration(configuration = {}) {
 		distance: Number(configuration.distance ?? 0) || 0,
 		manualDamageModifier: Number(configuration.manualDamageModifier ?? 0) || 0,
 	};
+}
+
+function actorFromUuidSync(uuid) {
+	const id = String(uuid ?? "").trim();
+	if (!id) return null;
+	try {
+		const document = foundry.utils.fromUuidSync(id);
+		return document?.documentName === "Actor"
+			? document
+			: document?.actor?.documentName === "Actor"
+				? document.actor
+				: null;
+	} catch (_error) {
+		return null;
+	}
+}
+
+function canResolveRequest(actor, user) {
+	if (!actor || !user) return false;
+	if (user.isGM) return true;
+	return actor.testUserPermission?.(
+		user,
+		CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER,
+	) === true;
 }
 
 function asElement(html) {
