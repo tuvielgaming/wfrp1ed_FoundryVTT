@@ -23,11 +23,17 @@ Hooks.once("ready", () => {
  * spending belongs to the Combatant so multiple tokens of the same Actor can
  * maintain independent combat state.
  *
- * Core p.118 treats Attacks as a round resource for both blows and parries:
- * every ordinary parry consumes one Attack, while a shield parry consumes all
- * following Attacks. There is no next-round parry debt. Unspent Attacks remain
- * available for defensive parries after the Combatant's own turn, but attacks
- * themselves may only be made during that Combatant's active turn.
+ * Core p.118: an ordinary parry loses the character's next attack whether the
+ * parry succeeds or fails. Core p.126 explicitly allows a parry even after the
+ * character has already taken their individual turn, so an attack loss which
+ * cannot be paid immediately must carry forward as parry debt. A shield parry
+ * loses all following attacks; when no attacks remain in the current attack
+ * window, that penalty therefore suppresses the next attack window through the
+ * same debt mechanism.
+ *
+ * `parriesThisRound` is independent of attack availability. The Core limit is
+ * at most A parry attempts in one round, even when all current attacks have
+ * already been used.
  */
 export class CombatAttackEconomy {
 	/**
@@ -56,9 +62,13 @@ export class CombatAttackEconomy {
 	/**
 	 * Return an immutable, presentation-safe snapshot of one Combatant state.
 	 *
-	 * `remaining` means unspent A for the current round. After the Combatant's
-	 * own turn it can still pay for parries, but it can no longer be converted
-	 * back into attacks because the attack window has closed.
+	 * `remaining` means attacks available in the current attack window, or - if
+	 * the Combatant's turn has not yet started - the attacks projected to remain
+	 * when that turn starts after already accumulated parry debt is paid.
+	 *
+	 * A completed turn has `remaining = 0`, but the Combatant may still parry if
+	 * the per-round parry-attempt limit permits it. Such parries create debt for
+	 * a future attack window.
 	 *
 	 * @param {Combatant} combatant
 	 * @returns {Object}
@@ -72,19 +82,35 @@ export class CombatAttackEconomy {
 			combatant.getFlag(FLAG_SCOPE, FLAG_KEY),
 			combat?.round ?? 0,
 		);
-		const remaining = Math.max(0, allowance - state.spent);
 		const attackWindowOpen = Boolean(
 			combat?.started &&
 			combat.combatant?.id === combatant.id &&
 			state.turnStarted &&
 			!state.turnCompleted,
 		);
+		const currentAttackRemaining = state.turnStarted && !state.turnCompleted
+			? Math.max(0, allowance - state.spent)
+			: 0;
+		const projectedNextTurnAttacks = Math.max(
+			0,
+			allowance - Math.min(allowance, state.parryDebt),
+		);
+
+		let remaining;
+		if (state.turnCompleted) {
+			remaining = 0;
+		} else if (state.turnStarted) {
+			remaining = currentAttackRemaining;
+		} else {
+			remaining = projectedNextTurnAttacks;
+		}
+
 		const parryAttemptsRemaining = Math.max(
 			0,
-			Math.min(
-				remaining,
-				allowance - state.parriesThisRound,
-			),
+			allowance - state.parriesThisRound,
+		);
+		const combatStarted = Boolean(
+			combat?.started && nonNegativeInteger(combat?.round) > 0,
 		);
 
 		return Object.freeze({
@@ -95,21 +121,75 @@ export class CombatAttackEconomy {
 			allowance,
 			spent: state.spent,
 			remaining,
+			currentAttackRemaining,
+			projectedNextTurnAttacks,
+			parryDebt: state.parryDebt,
 			parriesThisRound: state.parriesThisRound,
 			parryAttemptsRemaining,
 			turnStarted: state.turnStarted,
 			turnCompleted: state.turnCompleted,
 			attackWindowOpen,
-			canAttack: attackWindowOpen && remaining > 0,
-			canParry: parryAttemptsRemaining > 0,
+			canAttack: attackWindowOpen && currentAttackRemaining > 0,
+			canParry: combatStarted && parryAttemptsRemaining > 0,
+		});
+	}
+
+	/**
+	 * Preview the attack-resource consequences of one parry without mutating the
+	 * Combatant. The future defence UI uses this for tactical weapon/shield choice
+	 * presentation, while the authoritative commit recalculates the same plan.
+	 *
+	 * @param {Combatant} combatant
+	 * @param {Object} [options]
+	 * @param {string} [options.costMode]
+	 * @returns {Object}
+	 */
+	static previewParry(
+		combatant,
+		{
+			costMode = PARRY_ATTACK_COST_MODE.ONE_ATTACK,
+		} = {},
+	) {
+		assertCombatant(combatant);
+		const combat = assertStartedCombat(combatant);
+		const allowance = this.allowance(combatant);
+		const state = stateForCurrentRound(combatant, combat);
+
+		assertParryAttemptAvailable(state, allowance);
+
+		const normalizedCostMode = normalizeParryAttackCostMode(costMode);
+		const plan = planParry(state, allowance, normalizedCostMode);
+		const before = this.snapshot(combatant);
+		const remainingAfter = projectedRemainingForState(
+			plan.nextState,
+			allowance,
+		);
+		const projectedNextTurnAttacksAfter = Math.max(
+			0,
+			allowance - Math.min(allowance, plan.nextState.parryDebt),
+		);
+
+		return Object.freeze({
+			parryCostMode: normalizedCostMode,
+			parryAttackCost: plan.immediateAttackCost + plan.parryDebtAdded,
+			parryImmediateAttackCost: plan.immediateAttackCost,
+			parryDebtAdded: plan.parryDebtAdded,
+			parryDebtBefore: state.parryDebt,
+			parryDebtAfter: plan.nextState.parryDebt,
+			remainingAttacksBefore: before.remaining,
+			remainingAttacksAfter: remainingAfter,
+			projectedNextTurnAttacksBefore: before.projectedNextTurnAttacks,
+			projectedNextTurnAttacksAfter,
 		});
 	}
 
 	/**
 	 * Begin a new Combat round for every Combatant.
 	 *
-	 * Attacks are a round resource. Nothing carries forward from the previous
-	 * round, including unused Attacks or parry costs.
+	 * The per-round parry-attempt counter and current-turn spending reset. Parry
+	 * debt survives into the new round because Core p.126 allows a late parry to
+	 * cost an attack from the defender's next attack opportunity. Rewinding to an
+	 * earlier round clears future debt rather than leaking state backward in time.
 	 *
 	 * @param {Combat} combat
 	 * @returns {Promise<void>}
@@ -121,11 +201,20 @@ export class CombatAttackEconomy {
 		const updates = [];
 
 		for (const combatant of combat.combatants) {
+			const previous = normalizeState(
+				combatant.getFlag(FLAG_SCOPE, FLAG_KEY),
+				round,
+			);
+			const parryDebt = previous.round > round
+				? 0
+				: previous.parryDebt;
+
 			updates.push({
 				_id: combatant.id,
 				[`flags.${FLAG_SCOPE}.${FLAG_KEY}`]: {
 					round,
 					spent: 0,
+					parryDebt,
 					parriesThisRound: 0,
 					turnStarted: false,
 					turnCompleted: false,
@@ -152,6 +241,7 @@ export class CombatAttackEconomy {
 		await writeState(combatant, {
 			round: nonNegativeInteger(combat.round),
 			spent: 0,
+			parryDebt: 0,
 			parriesThisRound: 0,
 			turnStarted: false,
 			turnCompleted: false,
@@ -159,8 +249,12 @@ export class CombatAttackEconomy {
 	}
 
 	/**
-	 * Start one Combatant turn without resetting resources already spent on
-	 * parries earlier in the same round.
+	 * Start one Combatant turn and pay as much accumulated parry debt as the
+	 * current Attacks allowance permits.
+	 *
+	 * Debt can exceed A when an ordinary parry follows a shield parry whose
+	 * penalty already suppresses the whole next attack window. In that case the
+	 * excess correctly carries into a later attack opportunity.
 	 *
 	 * @param {Combatant} combatant
 	 * @returns {Promise<Object>}
@@ -168,10 +262,14 @@ export class CombatAttackEconomy {
 	static async startTurn(combatant) {
 		assertCombatant(combatant);
 		const combat = assertStartedCombat(combatant);
+		const allowance = this.allowance(combatant);
 		const state = stateForCurrentRound(combatant, combat);
+		const paidDebt = Math.min(allowance, state.parryDebt);
 
 		await writeState(combatant, {
 			...state,
+			spent: paidDebt,
+			parryDebt: Math.max(0, state.parryDebt - paidDebt),
 			turnStarted: true,
 			turnCompleted: false,
 		});
@@ -182,8 +280,8 @@ export class CombatAttackEconomy {
 	/**
 	 * Mark a Combatant turn as completed.
 	 *
-	 * Unspent Attacks remain available for later parries in this round. They may
-	 * not be spent as attacks because the character's own turn has ended.
+	 * Later parries remain legal up to the per-round A limit. Their attack losses
+	 * cannot alter the already-finished attack window and therefore become debt.
 	 *
 	 * @param {Combatant} combatant
 	 * @returns {Promise<Object>}
@@ -225,12 +323,10 @@ export class CombatAttackEconomy {
 	/**
 	 * Spend the Attacks resource required by one parry attempt.
 	 *
-	 * Ordinary weapon parry: one Attack.
-	 * Shield parry: all Attacks which remain in this round.
-	 *
-	 * The eventual defensive-response flow supplies the cost mode from the
-	 * selected held parry Item. The default remains one Attack for console/macros
-	 * which explicitly model an ordinary weapon parry.
+	 * Ordinary weapon parry: lose the next Attack, immediately when possible or
+	 * as debt when the attack cannot be paid now.
+	 * Shield parry: lose all following Attacks. If no attack window remains, the
+	 * next attack window is suppressed through debt.
 	 *
 	 * @param {Combatant} combatant
 	 * @param {Object} [options]
@@ -324,36 +420,96 @@ export class CombatAttackEconomy {
 		const combat = assertStartedCombat(combatant);
 		const allowance = this.allowance(combatant);
 		const state = stateForCurrentRound(combatant, combat);
-		const remaining = Math.max(0, allowance - state.spent);
 
-		if (remaining <= 0) {
-			throw new Error(
-				"No Attacks remain to spend on a parry this round.",
-			);
-		}
+		assertParryAttemptAvailable(state, allowance);
 
-		if (state.parriesThisRound >= allowance) {
-			throw new Error(
-				`Parry limit reached (0 of ${allowance} attempts remain this round).`,
-			);
-		}
-
-		const attackCost = costMode ===
-			PARRY_ATTACK_COST_MODE.ALL_REMAINING_ATTACKS
-			? remaining
-			: 1;
+		const plan = planParry(state, allowance, costMode);
 
 		await writeState(combatant, {
-			...state,
-			spent: state.spent + attackCost,
+			...plan.nextState,
 			parriesThisRound: state.parriesThisRound + 1,
 		});
 
 		return Object.freeze({
 			...this.snapshot(combatant),
 			parryCostMode: costMode,
-			parryAttackCost: attackCost,
+			parryAttackCost: plan.immediateAttackCost + plan.parryDebtAdded,
+			parryImmediateAttackCost: plan.immediateAttackCost,
+			parryDebtAdded: plan.parryDebtAdded,
 		});
+	}
+}
+
+/**
+ * Plan one Core parry cost without mutating persistent state.
+ *
+ * Ordinary parry:
+ * - consume one attack immediately if the attack window is active and has room;
+ * - otherwise add one point of debt.
+ *
+ * Shield parry:
+ * - if attacks remain in the active attack window, consume all of them;
+ * - otherwise ensure at least one full A-sized future attack window is already
+ *   forfeited. Existing debt can already cover some/all of that penalty.
+ *
+ * The ordering matters. An ordinary parry made *after* a shield parry can add
+ * debt beyond the shield-suppressed window, while a shield parry made after
+ * existing ordinary debt subsumes that debt into the "all following attacks"
+ * penalty rather than automatically erasing an additional later round.
+ */
+function planParry(state, allowance, costMode) {
+	const normalized = normalizeParryAttackCostMode(costMode);
+	const activeAttackWindow = state.turnStarted && !state.turnCompleted;
+	const remainingNow = activeAttackWindow
+		? Math.max(0, allowance - state.spent)
+		: 0;
+	let spentAfter = state.spent;
+	let parryDebtAfter = state.parryDebt;
+	let immediateAttackCost = 0;
+
+	if (normalized === PARRY_ATTACK_COST_MODE.ALL_REMAINING_ATTACKS) {
+		if (remainingNow > 0) {
+			immediateAttackCost = remainingNow;
+			spentAfter = state.spent + immediateAttackCost;
+		} else {
+			parryDebtAfter = Math.max(parryDebtAfter, allowance);
+		}
+	} else if (remainingNow > 0) {
+		immediateAttackCost = 1;
+		spentAfter = state.spent + 1;
+	} else {
+		parryDebtAfter += 1;
+	}
+
+	const parryDebtAdded = Math.max(0, parryDebtAfter - state.parryDebt);
+
+	return {
+		immediateAttackCost,
+		parryDebtAdded,
+		nextState: {
+			...state,
+			spent: spentAfter,
+			parryDebt: parryDebtAfter,
+		},
+	};
+}
+
+function projectedRemainingForState(state, allowance) {
+	if (state.turnCompleted) return 0;
+	if (state.turnStarted) {
+		return Math.max(0, allowance - state.spent);
+	}
+	return Math.max(
+		0,
+		allowance - Math.min(allowance, state.parryDebt),
+	);
+}
+
+function assertParryAttemptAvailable(state, allowance) {
+	if (state.parriesThisRound >= allowance) {
+		throw new Error(
+			`Parry limit reached (0 of ${allowance} attempts remain this round).`,
+		);
 	}
 }
 
@@ -535,6 +691,7 @@ function stateForCurrentRound(combatant, combat) {
 	return {
 		round,
 		spent: 0,
+		parryDebt: raw.round > round ? 0 : raw.parryDebt,
 		parriesThisRound: 0,
 		turnStarted: false,
 		turnCompleted: false,
@@ -547,6 +704,7 @@ function normalizeState(raw, fallbackRound) {
 	return {
 		round: nonNegativeInteger(source.round ?? fallbackRound),
 		spent: nonNegativeInteger(source.spent),
+		parryDebt: nonNegativeInteger(source.parryDebt),
 		parriesThisRound: nonNegativeInteger(source.parriesThisRound),
 		turnStarted: Boolean(source.turnStarted),
 		turnCompleted: Boolean(source.turnCompleted),
