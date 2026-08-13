@@ -32,30 +32,30 @@
 	height: 310px;
 	margin: 0;
 	padding: 0;
-	border: 1px dashed rgb(70 51 30 / 24%);
-	background: rgb(255 255 255 / 8%);
+	border: 0;
+	background: transparent;
 	overflow: hidden;
 	pointer-events: auto;
 	user-select: none;
 	touch-action: none;
 }
 
+/*
+ * Placeholder lives underneath the real image. A normal portrait hides it
+ * completely; an empty/unavailable image leaves a clear image slot with a +.
+ */
 .wfrp1ed-classic-sheet .classic-actor-portrait-frame::before {
 	content: "+";
 	position: absolute;
-	left: 50%;
-	top: 50%;
-	transform: translate(-50%, -50%);
-	display: inline-flex;
+	inset: 0;
+	display: flex;
 	align-items: center;
 	justify-content: center;
-	width: 38px;
-	height: 38px;
-	border: 1px solid rgb(45 34 22 / 42%);
-	border-radius: 50%;
-	background: rgb(247 239 218 / 74%);
-	color: rgb(45 34 22 / 58%);
-	font-size: 28px;
+	box-sizing: border-box;
+	border: 1px dashed rgb(70 51 30 / 28%);
+	background: rgb(247 239 218 / 16%);
+	color: rgb(45 34 22 / 52%);
+	font-size: 36px;
 	font-weight: 700;
 	line-height: 1;
 	pointer-events: none;
