@@ -1,3 +1,4 @@
+import "./CombatAttackSheetStatus.mjs";
 import { CombatAttackLauncher } from "./CombatAttackLauncher.mjs";
 import { CombatAttackRangeRules } from "./CombatAttackRangeRules.mjs";
 import { CombatAttackResultChat } from "./CombatAttackResultChat.mjs";
