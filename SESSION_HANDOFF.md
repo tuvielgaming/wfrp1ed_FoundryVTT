@@ -1,117 +1,108 @@
 # Session Handoff
 
 **Date:** 2026-08-13  
-**Purpose:** Current implementation/architecture checkpoint. Keep this as the single current handoff instead of creating overlapping progress documents.
+**Purpose:** Single current implementation/architecture checkpoint. Do not create competing progress documents.
 
-## Current working source
+## Source of truth
 
 Repository: `tuvielgaming/wfrp1ed_FoundryVTT`  
-Primary branch: `master`
+Branch: `master`
 
-GitHub/current `master` is the implementation source of truth. Fetch the exact current file and blob SHA before every write. Preserve unrelated/user-authored changes.
+GitHub/current `master` is authoritative. Fetch the exact current file + blob SHA before every write and preserve user commits.
 
-Latest implementation commit before this handoff save:
+Latest implementation commit before this save:
 
 ```text
 805bfde7544aca16be3e1a445d60efbbf605d354
 Use stateful owner edit icons
 ```
 
-Important recent user-authored visual commit which must be preserved:
+Recent user-authored visual commit to preserve:
 
 ```text
 84108b417bcae42666182e45292b3efb051fca3f
 Player edit togle style update.
 ```
 
-Earlier user-authored visual commits still to preserve:
+Earlier user-authored visual commits to preserve:
 
 ```text
-308b5fdd996a3683e67dd4eba8e46ab00673cc23  (old handoff typo risk: always inspect GitHub history before relying on this line)
+308b5fdd996a3683e67da68e096f0eb9c79cc347  Adjust melee wepon table top display
 39a9b2bb288e74f5e451fcde9e08780b67806ec6  Crit wound placement
 91b3fd95b3d4300b51ef1cd0a45fecff19249892  Small Wound lock marker alignment
 ```
 
 ---
 
-# Immediate continuation checkpoint
+# Immediate continuation
 
 The session ended after runtime-confirming the first real melee-attack UX/foundation and its sheet/chat adjudication refinements.
 
-The next implementation step should be:
+Next implementation step:
 
 ```text
 successful real melee attack
-→ create pending defence response for the actual target
+→ pending defence bound to that attack/target
 → defender chooses exactly ONE:
       Parry
       Dodge
       None
 → if Parry: choose actual currently legal held parrying Item
-→ resolve audited defensive test/effect
-→ continue the same attack transaction into hit location/damage if defence does not negate/reduce it
+→ resolve audited defence
+→ continue same attack into hit location/damage if appropriate
 ```
 
-Do **not** continue building defence as a disconnected console-only subsystem. It must now be attached to the real attack transaction/chat lifecycle.
+Do not continue building defence as a disconnected console subsystem.
 
-If exact new WFRP 1e mechanics beyond the already-audited Parry/Dodge/ordinary melee slice are needed, re-upload/read the English and Polish Core Rulebooks before encoding them. English mechanics are authoritative; Polish is terminology/localization unless a real edition difference is found.
+If new WFRP 1e mechanics beyond already-audited Parry/Dodge/ordinary melee are needed, re-read/re-upload the English + Polish Core books before coding. English controls mechanics; Polish controls terminology/localization unless a real edition difference exists.
 
 ---
 
-# Rulebook audit conclusions that now control combat design
+# Core combat conclusions already audited
 
 ## Parry / Parowanie
 
-The earlier no-debt interpretation was corrected. `parryDebt` is required.
-
-Core conclusions already audited this session:
+`parryDebt` is required. Do not remove it again.
 
 - Parry is a WS test.
-- A successful Parry reduces the incoming damaging blow by `1d6`; it does not simply turn the hit into a miss.
-- An ordinary parry costs the character their **next Attack whether the parry succeeds or fails**.
-- A character may attempt at most `A` parries per round.
-- The parry-attempt limit and attack-cost timing are separate concepts.
-- A character may parry after their own turn/after current attacks are exhausted; the lost Attack then becomes future debt.
-- Shield parry gives its Core bonus and loses all following attacks; if no current attack window remains, that cost suppresses the next attack window through debt.
-- The system must never interpret available A + possible debt as extra parry attempts. Example `A=2` means at most 2 parry attempts in the round, not 4.
+- Successful Parry reduces the damaging blow by `1d6`; it does not simply turn the hit into a miss.
+- Ordinary Parry loses the character's **next Attack**, success or failure.
+- Maximum Parry attempts per round = Actor `A`.
+- Parry-attempt limit and Attack-cost timing are separate.
+- Parry after own turn / after current attacks are gone is legal; lost Attack becomes future debt.
+- Shield Parry uses its Core bonus and loses all following attacks; if no current attack window exists, the cost suppresses the next one through debt.
 
-Canonical conceptual separation:
+Canonical separation:
 
 ```text
-parriesThisRound
-    → permission limit
-    → maximum = Actor A
-
-parryDebt
-    → future Attack cost timing
+parriesThisRound → permission limit, max A
+parryDebt        → future Attack-cost timing
 ```
 
-Do not remove `parryDebt` again.
+`A=2` means at most **2** parries in the round, never `2 current + 2 debt = 4`.
 
 ## Dodge Blow / Uniki
 
-Audited Core conclusions:
+- Initiative test.
+- Success ignores all damage from that blow.
+- One attempt per combat round.
+- Only against a blow seen coming.
+- Hand-to-hand only; not normal missile fire.
+- Does not spend A.
 
-- Dodge Blow uses an Initiative test.
-- A successful Dodge ignores all damage from that blow.
-- At most one Dodge Blow attempt per combat round.
-- Only against a blow the character sees coming.
-- Hand-to-hand only; not against normal missile fire.
-- Dodge does not spend A.
-
-For one incoming blow, defence selection is explicitly **mutually exclusive** by project decision:
+Project decision for one incoming blow:
 
 ```text
 Parry OR Dodge OR None
 ```
 
-No `failed Dodge → Parry` and no `failed Parry → Dodge` against the same attack.
+No failed-Dodge-then-Parry or failed-Parry-then-Dodge path.
 
 ---
 
-# Defence foundation — IMPLEMENTED, QUERY LAYER RUNTIME-CONFIRMED
+# Defence query foundation — implemented + runtime-confirmed
 
-Existing public APIs:
+Public APIs:
 
 ```text
 game.WFRP1ED.combat.dodge
@@ -119,51 +110,37 @@ game.WFRP1ED.combat.defence
 game.WFRP1ED.combat.parrySelection
 ```
 
-`CombatDefenceOpportunity.melee(combatant, { seenComing })` returns exactly-one response choices and combines current Parry and Dodge availability.
+`CombatDefenceOpportunity.melee(combatant, { seenComing })` returns mutually exclusive response availability.
 
-Runtime-confirmed before moving to real attacks:
-
-```text
-Parry  available
-Dodge  available
-None   available
-selectionMode = exactlyOne
-```
-
-and with `seenComing = false`:
+Runtime-confirmed:
 
 ```text
-Dodge.available = false
-reason = not-seen-coming
-Parry unchanged
-None available
+seenComing=true:
+  Parry true
+  Dodge true
+  None true
+  selectionMode exactlyOne
+
+seenComing=false:
+  Dodge false / not-seen-coming
+  Parry unchanged
+  None true
 ```
 
-Parry choice runtime-confirmation with `A=2`, no current attack window, `Topór` + `Shield` held:
+Parry choice with `A=2`, no current attack window, Topór + Shield held:
 
 ```text
-Topór
-  bonus 0
-  immediate cost 0
-  debtAdded 1
-  next attack window 2 → 1
-
-Shield
-  bonus +20
-  immediate cost 0
-  debtAdded 2
-  next attack window 2 → 0
+Topór  bonus 0   immediate 0   debt +1   next window 2→1
+Shield bonus +20 immediate 0   debt +2   next window 2→0
 ```
 
-This is a rules/query foundation only. The next step is to let a real successful attack own the pending defence transaction.
+Never auto-pick weapon vs Shield.
 
 ---
 
-# Real melee attack vertical slice — IMPLEMENTED AND RUNTIME-CONFIRMED
+# Real melee attack slice — implemented + runtime-confirmed
 
-The attack mechanism now exists through real Foundry sheet/chat UI.
-
-Key modules include:
+Key modules:
 
 ```text
 module/combat/CombatAttackLauncher.mjs
@@ -176,91 +153,65 @@ module/targets/ActorTargetResolver.mjs
 module/combat/CombatAttackRangeRules.mjs
 ```
 
-Relevant first-slice commits include:
+Interaction convention:
 
 ```text
-474681f92f771fa5f4a13042696513d5a8b031c9  Add pending melee attack chat card
-832a8867604185ddde28de7e78ad5ca5973d33e8  Style combat attack dialogs and chat context
-7d1abe5fed4186ddaa9c61cb697f4558ccf05308  Match melee attack hover to rollable UX
-1c6a50ea33915fbdea6aeb8a0141e40621796aa0  Load combat attack transaction modules
-c63ac304ae8924df172b4275377d47970b4b0b89  Let attackers resolve target in attack dialog
-```
-
-## Weapon sheet UX
-
-Equipped/held melee weapons are rollable with the same visual language as rollable characteristics.
-
-Canonical interaction:
-
-```text
-Left click          → initiate attack
+Left click          → primary action / attack
 Shift + left click  → open/edit Item
 ```
 
-Avoid adding permanent edit icons to every row. Right-click is intentionally not the universal edit gesture; keep it available for context-specific behavior.
+Equipped melee weapon rows use the same rollable visual language as characteristics.
 
-Ranged weapons are intentionally not yet executable through the melee A-spending path.
+## Target UX
 
-## Targeting UX
+Attack popup allows the user to select/verify/change target before Roll, including a modal-friendly visible-token selector so Foundry `T` focus quirks are not required.
 
-Combat targeting reuses the Standard-Test philosophy rather than inventing an unrelated target model.
-
-The attack dialog supports target selection before rolling, including a modal-friendly visible-token picker so the user does not need to remove dialog focus and press Foundry `T`.
-
-Player/owner attack dialog can:
+Owner/player controls:
 
 ```text
-select visible token
-use current Foundry target
-clear target
-choose No defender / object
+visible token selector
+Use current target
+Clear target
+No defender / object
 ```
 
-GM additionally may choose a world Actor.
+GM additionally can choose a world Actor.
 
-The pending chat target card follows the same staged behavior:
+Pending chat target card uses the same staged contract:
 
 ```text
-choose/fill target first
+choose/fill target
 → verify displayed target
-→ press explicit Roll/Rzuć
+→ explicit Roll/Rzuć
 ```
 
-Selecting a target in the pending card must NOT immediately execute the attack.
+Selecting a target must not immediately roll.
 
-Players should not see Actor-sidebar drag/chooser controls that they normally cannot use. Sidebar Actor selection/drop remains GM-facing. Canvas tokens should be selected/targeted, not dragged around as a pseudo-drop workflow.
+Player pending cards should not render Actor-sidebar drag/chooser controls they normally cannot use. Canvas token interaction is selection/targeting, not dragging the token.
 
-`No defender / object` is a valid target mode for doors/obstacles and other abstract attacks where a defending Actor is intentionally absent.
+## Combat Tracker is optional
 
-## Combat Tracker is optional for making an attack
+Runtime-confirmed design:
 
-Runtime-confirmed current contract:
+- Actor participating in started Combat → active-turn/A automation applies.
+- Actor not participating / no started Combat → equipped melee weapon may still roll an attack.
+- Out-of-combat attack does **not** automatically consume manual Actor A.
 
-- If the Actor is part of a started Combat, Combatant turn/A automation applies.
-- If the Actor is **not** a participant in the started Combat (or there is no started Combat), an equipped melee weapon can still roll an attack normally.
-- Out-of-combat attacks do not automatically spend the Actor-level manual A value.
+Combat Tracker enhances automation; it is not required for basic weapon tests.
 
-This is intentional: Combat Tracker automation enhances play but is not required for basic weapon tests.
-
-## Attack chat result
-
-Attack result uses the existing generic WS Test engine/card, augmented with combat context such as weapon, target and Attacks spent.
-
-Do not create a second d100/WS test implementation for combat.
-
-The generic Test engine owns physical d100, target value, modifiers/effects and GM adjudication; the attack transaction owns attacker, weapon, target mode, Combatant resource spending and future defence/damage state.
+Attack result reuses the existing generic WS Test card/engine. Do not create a second d100/WS system.
 
 ---
 
-# Attacks / A current value and Combatant economy — CURRENT CONTRACT
+# Attacks / A current contract
 
-Actor characteristic `A` remains the permanent allowance.
+Permanent Actor `A` = allowance.
 
-Inside a started Combat, temporary rule state belongs to the Combatant and includes real attack spending, parry attempt count and `parryDebt`.
+Inside Combat: Combatant owns runtime spending, parry count and `parryDebt`.
 
-Outside Combat, the Classic sheet exposes an Actor-level manual current-A value for abstract play/adjudication. It is editable like Wounds when owner editing is allowed, but attack rolls outside Combat do not automatically consume it.
+Outside Combat: Classic sheet exposes Actor-level manual current A for abstract play/adjudication. It is editable under the same owner-edit permission as Wounds; out-of-combat attacks do not spend it automatically.
 
-Classic display remains simple:
+Display remains simple:
 
 ```text
 2/2
@@ -270,76 +221,65 @@ Classic display remains simple:
 
 No `↻` prefix.
 
-Manual values are validated/clamped to `0..A`; entering e.g. `32` for `A=2` is set to `2` with a user-facing notification.
+Manual values are clamped to `0..A` with a user notification.
 
-## Reset timing
-
-Important corrected project requirement:
+## Reset timing — important
 
 ```text
-Next Turn          → do NOT reset A
-Next Turn          → do NOT reset A
-Next Combat Round  → normal round reset
+Next Turn          → DO NOT reset A
+Next Turn          → DO NOT reset A
+Next Combat Round  → normal reset
 ```
 
-Starting a Combatant's turn only opens its attack window and pays real accumulated parry debt. Ordinary A refresh is a **round-start** operation.
+Starting a turn opens the attack window and pays real parry debt. Ordinary refresh is round-start only.
 
-Adding a Combatant to an already running Combat initializes its combat Attack state cleanly from permanent A. It must not reset Wounds.
+Adding a Combatant to a running Combat initializes Attack state from permanent A; it must not reset Wounds.
 
-Manual same-round adjudication must not be encoded as fake parry debt. Preserve real rules state separately.
+Do not encode a manual same-round correction as fake parry debt.
 
 ---
 
-# Shared owner-edit permission — IMPLEMENTED AND RUNTIME-CONFIRMED
+# Shared owner-edit permission — implemented + runtime-confirmed
 
-Wounds and A no longer use separate visible permission toggles.
-
-There is one Actor-level switch for manually managed sheet values:
+Central Actor-level permission:
 
 ```text
 module/sheets/ActorOwnerEditPermission.mjs
 ```
 
-GM always retains manual adjudication. A non-GM must be an explicit OWNER and the shared switch must be enabled.
+GM always retains adjudication. Non-GM must be explicit Actor OWNER and the shared switch must be enabled.
 
-The central switch synchronizes legacy Wounds/Attack permission flags for compatibility with existing guards.
+The switch controls current Wounds, current A, and is the reusable pattern for future managed sheet values. Legacy Wounds/Attack permission flags are synchronized for compatibility.
 
-User-authored positioning/CSS from commit `84108b417...` must be preserved.
+Preserve the user's current positioning/CSS from commit `84108b417...`.
 
-Current icon state, requested and runtime-approved:
-
-```text
-editing OFF → red user-lock icon
-editing ON  → green user-check icon
-```
-
-Latest icon commit:
+Current approved icon states:
 
 ```text
-805bfde7544aca16be3e1a445d60efbbf605d354
-Use stateful owner edit icons
+editing OFF → red user-lock
+editing ON  → green user-check
 ```
 
-This shared mechanism should be reused for future manually managed sheet fields rather than adding more local lock buttons.
+Latest icon commit: `805bfde7544aca16be3e1a445d60efbbf605d354`.
 
 ---
 
-# TestResult post-roll editing — IMPLEMENTED AND RUNTIME-CONFIRMED
+# TestResult post-roll adjudication — implemented + runtime-confirmed
 
 ## General modifier
 
-Blank, `+`, or `-` in the chat `Modyfikator testu / Test modifier` input normalizes to `0` instead of throwing an error.
+Blank, `+`, or `-` in `Test modifier / Modyfikator testu` normalizes to `0` instead of throwing.
 
-Relevant commit:
+Commit:
 
 ```text
 eb434ea365a8796a8c2ed033f2638c30944b92d5
 Normalize incomplete GM modifier edits
 ```
 
-## Manual/physical d100 result
+## Manual/physical d100 Roll
 
-Completed Test cards expose the Roll/Rzut value as editable for:
+Completed Test cards allow Roll/Rzut editing for:
 
 ```text
 GM
@@ -347,15 +287,13 @@ OR
 OWNER of the Actor represented by the ChatMessage speaker
 ```
 
-Permission follows the Actor, not whichever user clicked the roll button.
+Permission follows the Actor, not whichever user clicked Roll.
 
-For synthetic/token Actors, resolve the speaker Token Actor before falling back to the world Actor.
+For token/synthetic Actors resolve speaker Token Actor before world prototype.
 
-An Actor OWNER can edit even a result originally generated by the GM. Non-GM edits are committed through the active GM socket so ChatMessage author ownership does not block the correction.
+An OWNER can edit even a GM-created result; non-GM changes are committed through the active GM socket. Existing TestResult snapshot is recalculated without rerolling. The original Foundry Roll remains preserved for audit/Luck semantics.
 
-Changing Roll/Rzut recalculates the existing Test snapshot/result without rerolling. The original Foundry Roll remains preserved as the physical/original roll for audit/Luck semantics.
-
-Relevant commit:
+Commit:
 
 ```text
 5572949afdafc0790ffb5eef18d28856103ec267
@@ -364,9 +302,9 @@ Update test roll edit permissions
 
 ---
 
-# Classic portrait placeholder — IMPLEMENTED AND RUNTIME-CONFIRMED
+# Classic portrait placeholder — implemented + runtime-confirmed
 
-A character with no custom portrait now shows a discoverable placeholder in the Classic portrait slot. Foundry's default mystery-man image is treated as no custom portrait. A real portrait covers the placeholder while preserving the existing editable/framing behavior.
+A character without a custom portrait now shows a discoverable placeholder. Foundry default mystery-man counts as no custom portrait. A real portrait covers the placeholder while retaining existing image editing/framing.
 
 Relevant commits:
 
@@ -378,86 +316,49 @@ Relevant commits:
 
 ---
 
-# Ranged attack architecture decisions — DESIGNED, NOT YET END-TO-END IMPLEMENTED
+# Ranged attack direction — designed, not end-to-end implemented
 
-Do not force ranged/firearm/spell attacks through the melee resolver.
-
-Current high-level direction:
-
-```text
-Combat Action
-    weapon melee
-    weapon ranged
-    spell
-```
-
-Mounted/flying/cover/etc. are combat context/modifiers, not separate attack families.
+Do not force ranged/firearm/spell attacks through melee resolution.
 
 For ordinary ranged attacks:
 
-- use BS, not WS;
-- normal missile attacks do not enter the ordinary Parry/Dodge melee-defence stage;
-- range can affect BS and damage;
-- firearms have additional traits/rules such as reload/misfire but should not be invented as a completely separate range table without Core audit;
-- thrown weapons may use Actor Strength semantics rather than fixed ES depending on authored weapon data.
+- use BS;
+- normal missile fire does not use ordinary Parry/Dodge;
+- range may modify BS and damage;
+- firearm reload/misfire and thrown-weapon ES semantics require exact Core handling;
+- mounted/flying/cover/etc. are context, not separate attack families.
 
-## Automatic Range Effects project decision
+## Automatic Range Effects decision
 
-Range automation belongs to the **attack transaction**, not the Weapon Item.
-
-Desired ranged attack option:
+Per-attack option, not Weapon property:
 
 ```text
 [✓] Automatically apply range effects
     Distance: [0]
 ```
 
-When enabled, derive range band and apply rule-derived BS + damage effects. When disabled, do no automatic range mechanics; GM/player can use ordinary test modifier and a separate damage modifier.
+Enabled → derive range band + rule BS/damage effects.  
+Disabled → no automatic range mechanics; use ordinary test modifier and separate damage modifier.
 
-The GM must be able to change Automatic Range Effects/distance on the chat card **after the roll**, recalculating the existing test using the same physical d100 rather than forcing a repeat test.
+GM must be able to edit Automatic Range Effects/distance in chat **after the roll** and recalculate using the same physical d100. Manual mode should expose Damage modifier.
 
-Manual mode should expose a chat Damage modifier input.
+`CombatAttackRangeRules.mjs` and attack-result range-editing foundation exist, but ranged attack execution is intentionally disabled. Do not call ranged end-to-end behavior runtime-confirmed.
 
-`CombatAttackRangeRules.mjs` and attack-result range editing foundation exist, but ranged attack execution is intentionally disabled until its own correct lifecycle is implemented. Do not call ranged end-to-end behavior runtime-confirmed yet.
-
----
-
-# Magic / mounted / flying future architecture cautions
-
-Magic must not be implemented as merely another Weapon kind. Spells may use completely different casting, automatic-hit, target and mitigation procedures.
-
-Mounted/flying combat should modify context rather than create combinatorial attack types. Future attack context may need facts such as:
-
-```text
-attackerMounted
-targetMounted
-attackerMoving
-attackerFlying
-targetFlying
-horizontal/vertical distance
-cover
-firing into melee
-size
-```
-
-Before encoding any of these special rules, audit the exact English Core pages and Polish terminology.
+Magic is not merely another Weapon kind. Special mounted/flying/magic rules require exact Core audit before implementation.
 
 ---
 
-# Existing runtime-confirmed foundations to preserve
+# Existing foundations to preserve
 
 ## Wounds / damage
 
-- Remaining Wounds persist and stop at zero.
-- Per-hit overflow is `criticalValue`; negative Wounds are never critical-state storage.
-- Classic sheet remaining/max Wounds and manual edit guard work.
+- Remaining Wounds stop at zero.
+- Overflow = `criticalValue`; never store negative Wounds as critical state.
 - Generic immutable `DamagePacket` + `DamageResolver`.
-- Damage explicitly applied from ChatMessage state.
-- Permission GM or target Actor OWNER.
-- Double application protected.
-- Critical modes: `unspecified`, `detailed`, `sudden-death`.
-
-Canonical:
+- Explicit Apply Damage from ChatMessage state.
+- GM or target Actor OWNER permission.
+- Double application protection.
+- Critical modes `unspecified`, `detailed`, `sudden-death`.
 
 ```text
 woundsAfter = max(0, woundsBefore - damage)
@@ -466,28 +367,13 @@ criticalValue = max(0, damage - woundsBefore)
 
 ## Sudden Death / Fate
 
-Runtime-confirmed:
-
-```text
-damage applied
-→ pending Sudden Death
-→ explicit Resolve Critical
-→ real d100
-→ Actor-authoritative critical resolution
-→ separate result ChatMessage
-```
-
-Fatal result applies defeated/dead overlay. GM or target OWNER may spend one Fate Point; Fate decreases and defeated status is removed. Fate spend does not heal.
+Runtime-confirmed fatal-result → defeated state → GM/OWNER Fate spend. Fate spend removes defeated and decrements Fate; it does not heal.
 
 ## Luck / Szczęście
 
-Stable rules ID `luck`; English `Luck`, Polish `Szczęście`.
-
-Runtime-confirmed hidden daily d6 allowance, d100 ±10 / exposed d6 ±1, repeated useful use, append-only history, and preservation of original physical Roll.
+Stable `rulesId=luck`; hidden daily d6 allowance, d100 ±10 / exposed d6 ±1, repeated useful use, append-only history, original physical Roll preserved.
 
 ## Movement
-
-Audited terminology:
 
 ```text
 Jumping = Zeskok
@@ -495,30 +381,24 @@ Falling = Upadek
 Leaping = Skok
 ```
 
-Runtime-confirmed Zeskok/Skok, Zeskok damage integration, Luck re-resolution and held-items check.
+Zeskok/Skok, Zeskok damage, Luck re-resolution and held-items check runtime-confirmed. Open: standalone Upadek + actual drop-held-items.
 
-Open: standalone Upadek and actual drop-held-items application.
+## Critical Wounds / Detailed Criticals
 
-## Critical Wound Item / Detailed Criticals
+Persistent `criticalWound` Item + Classic launcher/window runtime-confirmed. Detailed Core tables/resolver implemented; full real-combat detailed-critical end-to-end test remains deferred until actual combat damage reaches it.
 
-Persistent `criticalWound` Item and Classic Critical Wounds launcher/window are runtime-confirmed.
+## Inventory/equipment
 
-Detailed Critical Core tables/resolver are implemented, but full real-combat end-to-end detailed-critical test remains deferred until the actual combat damage path reaches it.
-
-## Physical inventory/equipment
-
-Canonical internal state remains:
+Canonical internal state:
 
 ```text
 state.mode = carried | held | worn
 state.hand = none | right | left | both
 ```
 
-Do not collapse internal held/worn state even though user-facing UI simplifies it.
+Page-2 Ekwipunek = master physical inventory. Page-1 weapon/armour tables = combat summaries. Do not create a second inventory architecture.
 
-Unified page-two Ekwipunek is the master physical inventory; page-one weapon/armour tables are combat summaries. Do not create a second inventory architecture.
-
-Current resolver APIs include:
+Resolver APIs:
 
 ```text
 game.WFRP1ED.equipment.resolver.armourAt(actor, location)
@@ -528,9 +408,9 @@ game.WFRP1ED.equipment.resolver.parryOptions(actor)
 
 ---
 
-# Immediate next implementation path
+# Next implementation path
 
-1. Inspect CURRENT GitHub before writing, especially:
+Inspect CURRENT GitHub first, especially:
 
 ```text
 module/combat/CombatAttackLauncher.mjs
@@ -550,57 +430,54 @@ module/tests/TestResultModifierToggle.mjs
 module/documents/Wfrp1edCombat.mjs
 ```
 
-2. Attach defence only to a **successful real melee attack with a defending Actor**.
-3. Persist one pending defence decision tied to that attack/chat state.
-4. Defender gets exactly one choice: Parry / Dodge / None.
-5. If Parry, use current tactical `CombatParrySelection`; never auto-pick weapon vs Shield.
-6. Spend Parry/Dodge resources only on confirmed declaration, not merely opening UI.
-7. Resolve audited defence against the same attack transaction.
-8. Then continue surviving hit into:
+Then:
+
+1. Attach pending defence only to a successful real melee attack with a defending Actor.
+2. Persist one defence decision tied to that attack/chat state.
+3. Defender chooses exactly Parry / Dodge / None.
+4. Parry uses current tactical Item selection; never auto-pick weapon vs Shield.
+5. Spend defence resources only on confirmed declaration, not opening UI.
+6. Resolve defence against the same transaction.
+7. Continue surviving hit:
 
 ```text
-hit location from reversed attack d100
-→ weapon/Strength damage
+reverse attack d100 → hit location
+→ Strength/weapon damage
 → Toughness + armour by location
 → existing DamagePacket
 → Apply Damage
 → detailed/Sudden Death critical pipeline
 ```
 
-9. After stable melee end-to-end path, implement ranged attack lifecycle and runtime-test GM-editable Automatic Range Effects.
-10. Later special contexts: charge, reload/misfire, surprise, fleeing, mounted/flying combat, optional Weapon Modifiers, spells.
+8. After stable melee end-to-end, implement ranged lifecycle and runtime-test GM-editable Automatic Range Effects.
+9. Later: charge, reload/misfire, surprise, fleeing, mounted/flying, optional Weapon Modifiers, spells.
 
 ---
 
-# Persistent project cautions
+# Persistent cautions / open work
 
-- User Foundry runtime validation is definitive; do not claim runtime confirmation without it.
-- Fetch exact current GitHub files before every edit and preserve user commits.
+- User Foundry runtime validation is definitive.
+- Fetch exact GitHub source before every edit.
 - Foundry v14 native APIs/Documents; JavaScript only.
-- Verify Core rules before encoding mechanics. English mechanics / Polish terminology.
-- Do not build duplicate Test/target/inventory architectures.
-- Do not apply irreversible damage at attack-roll time.
-- Preserve original physical rolls for post-roll adjudication/Luck.
-- Resolve synthetic/token Actor before world prototype when ChatMessage identifies a token.
+- Verify Core mechanics before coding; English mechanics / Polish terminology.
+- Preserve original physical rolls before post-roll edits/Luck.
+- Resolve token/synthetic Actor before world prototype where appropriate.
 - Stable IDs/flags, not localized names, for mechanical identity.
 - Never auto-select weapon vs Shield for Parry.
-- Never remove the currently required `parryDebt` model based on the old stale handoff wording.
-- `RULEBOOK_IMPLEMENTATION.md` contains stale status material; update the existing document at a stable combat checkpoint rather than creating a competing audit/status file.
+- Keep `parryDebt`.
+- `RULEBOOK_IMPLEMENTATION.md` is stale; update that existing file at a stable combat checkpoint rather than creating another status doc.
 
----
-
-# Open work
+Open work:
 
 1. Real successful melee attack → pending Parry/Dodge/None transaction.
-2. Defence result integration with the attack/damage continuation.
-3. Hit location + real melee damage through existing DamagePacket.
-4. End-to-end detailed critical test through real combat damage.
-5. Ranged attack lifecycle, range automation and chat adjudication.
-6. Firearm reload/misfire and thrown-weapon semantics after exact Core audit.
-7. Mounted/flying/special combat context.
-8. Spell/magic combat architecture and implementation.
-9. Detailed Critical consequence/ActiveEffect contracts/recovery.
-10. Standalone Upadek/Falling and actual drop-held-items.
-11. Fate internal `{value,max}` cleanup/migration.
-12. Whole Classic sheet scroll reset only if still reproducible.
-13. Remaining Actor/Item types/classic sheet sections for MVP.
+2. Defence → hit location → melee damage → DamagePacket.
+3. Real-combat detailed critical end-to-end test.
+4. Ranged lifecycle/range automation.
+5. Firearm/thrown special rules after exact Core audit.
+6. Mounted/flying/special combat context.
+7. Spell/magic combat.
+8. Detailed Critical consequence/ActiveEffect contracts/recovery.
+9. Standalone Upadek and actual drop-held-items.
+10. Fate internal `{value,max}` cleanup/migration.
+11. Whole Classic sheet scroll reset only if still reproducible.
+12. Remaining Actor/Item/classic-sheet MVP sections.
