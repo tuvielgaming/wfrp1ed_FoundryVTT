@@ -35,7 +35,7 @@ export class CombatAttackSheetStatus {
 		);
 
 		if (game.user?.isGM) {
-			return this.#commitRemaining(combatant, value, game.user);
+			return this.commitRemaining(combatant, value, game.user);
 		}
 
 		if (!this.canUserEdit(combatant, game.user)) {
@@ -157,7 +157,8 @@ export class CombatAttackSheetStatus {
 		cell.append(wrapper);
 	}
 
-	static async #commitRemaining(combatant, remaining, requestingUser) {
+	/** GM-authoritative commit used by direct GM edits and socket requests. */
+	static async commitRemaining(combatant, remaining, requestingUser) {
 		assertCombatant(combatant);
 		if (!this.canUserEdit(combatant, requestingUser)) {
 			throw new Error(localize(
@@ -361,7 +362,7 @@ function registerSocket() {
 			const user = game.users?.get(String(payload.requestUserId ?? ""));
 			if (!combatant) throw new Error("Requested Combatant is not available.");
 			if (!user?.active) throw new Error("Requesting user is not active.");
-			response.result = await CombatAttackSheetStatus.#commitRemaining(
+			response.result = await CombatAttackSheetStatus.commitRemaining(
 				combatant,
 				payload.remaining,
 				user,
