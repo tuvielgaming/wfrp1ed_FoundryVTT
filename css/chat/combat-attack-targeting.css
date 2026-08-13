@@ -1,0 +1,41 @@
+.wfrp1ed-pending-combat-attack .pending-combat-attack__controls,
+.wfrp1ed-pending-combat-attack .pending-combat-attack__gm-only {
+	display: grid;
+	gap: 8px;
+}
+
+.wfrp1ed-pending-combat-attack .pending-combat-attack__scene-target {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr);
+	align-items: center;
+	gap: 7px;
+	font-size: 12px;
+	font-weight: 700;
+}
+
+.wfrp1ed-pending-combat-attack .pending-combat-attack__scene-target select {
+	width: 100%;
+	min-width: 0;
+	height: 30px;
+	margin: 0;
+}
+
+.wfrp1ed-pending-combat-attack .pending-combat-attack__gm-only {
+	padding-top: 7px;
+	border-top: 1px solid rgb(89 65 35 / 20%);
+}
+
+.wfrp1ed-pending-combat-attack .pending-combat-attack__roll {
+	font-weight: 800;
+}
+
+.wfrp1ed-pending-combat-attack .pending-combat-attack__roll:disabled {
+	opacity: 0.45;
+	cursor: default;
+}
+
+@media (max-width: 500px) {
+	.wfrp1ed-pending-combat-attack .pending-combat-attack__scene-target {
+		grid-template-columns: 1fr;
+	}
+}
