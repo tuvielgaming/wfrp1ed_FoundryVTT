@@ -20,7 +20,7 @@ const { DialogV2 } = foundry.applications.api;
  *
  * Equipped melee weapons also expose the Classic sheet's normal rollable UX:
  * left-click starts an attack, while Shift + left-click opens the underlying
- * Item. Double-click remains a temporary compatibility shortcut for opening.
+ * Item. Shift + left-click is also the edit/open gesture for other combat rows.
  */
 Hooks.on("renderApplicationV2", (application, element) => {
 	const actor = application?.document;
@@ -261,12 +261,6 @@ function baseRow(className, item, used, { attackable = false } = {}) {
 		});
 	}
 
-	/* Temporary compatibility while Shift + click becomes the shared edit UX. */
-	row.addEventListener("dblclick", (event) => {
-		event.preventDefault();
-		event.stopPropagation();
-		void item.sheet?.render?.({ force: true });
-	});
 	return row;
 }
 
