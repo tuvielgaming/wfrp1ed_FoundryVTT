@@ -166,6 +166,26 @@ export class CombatAttackDialog {
 		targetUuid.name = "targetUuid";
 		targetUuid.value = String(initialTarget?.uuid ?? "");
 
+		const sceneTarget = document.createElement("select");
+		sceneTarget.name = "sceneTargetUuid";
+		sceneTarget.dataset.attackSceneTarget = "";
+		const emptyOption = document.createElement("option");
+		emptyOption.value = "";
+		emptyOption.textContent = localize(
+			"Choose visible token…",
+			"Wybierz widoczny token…",
+		);
+		sceneTarget.append(emptyOption);
+
+		for (const entry of ActorTargetResolver.sceneTokenTargets()) {
+			const option = document.createElement("option");
+			option.value = entry.actorUuid;
+			option.textContent = entry.name;
+			option.dataset.targetName = entry.name;
+			if (initialTarget?.uuid === entry.actorUuid) option.selected = true;
+			sceneTarget.append(option);
+		}
+
 		const status = document.createElement("div");
 		status.classList.add("combat-attack-context-value", "combat-attack-target-status");
 		status.dataset.attackTargetStatus = "";
@@ -196,7 +216,7 @@ export class CombatAttackDialog {
 			);
 		}
 
-		wrapper.append(mode, targetUuid, status, actions);
+		wrapper.append(mode, targetUuid, sceneTarget, status, actions);
 		group.control.append(wrapper);
 		return group.root;
 	}
@@ -239,12 +259,24 @@ export class CombatAttackDialog {
 	static #activateTargetPicker(root) {
 		const mode = root.querySelector('[name="targetMode"]');
 		const uuid = root.querySelector('[name="targetUuid"]');
+		const sceneTarget = root.querySelector('[name="sceneTargetUuid"]');
 		const status = root.querySelector("[data-attack-target-status]");
 		const actions = root.querySelector(".combat-attack-target-actions");
-		if (!mode || !uuid || !status || !actions) return;
+		if (!mode || !uuid || !sceneTarget || !status || !actions) return;
+
+		const setTarget = (target) => {
+			uuid.value = String(target?.uuid ?? "");
+			status.dataset.targetName = String(target?.name ?? "");
+			mode.value = TARGET_MODE_DEFENDER;
+			const matching = [...sceneTarget.options].find(
+				(option) => option.value === uuid.value,
+			);
+			sceneTarget.value = matching ? uuid.value : "";
+		};
 
 		const refresh = () => {
 			const noDefender = mode.value === TARGET_MODE_NONE;
+			sceneTarget.hidden = noDefender;
 			actions.hidden = noDefender;
 			if (noDefender) {
 				status.textContent = localize(
@@ -255,12 +287,27 @@ export class CombatAttackDialog {
 			}
 
 			status.textContent = status.dataset.targetName || localize(
-				"No target selected — choose one now or resolve it in chat after Roll.",
-				"Nie wybrano celu — wybierz go teraz albo rozstrzygnij w czacie po rzucie.",
+				"No target selected — choose a visible token, use Foundry target, or resolve it in chat after Roll.",
+				"Nie wybrano celu — wybierz widoczny token, użyj celu Foundry albo rozstrzygnij go w czacie po rzucie.",
 			);
 		};
 
 		mode.addEventListener("change", refresh);
+		sceneTarget.addEventListener("change", () => {
+			const target = ActorTargetResolver.actorFromUuidSync(sceneTarget.value);
+			if (!target) {
+				uuid.value = "";
+				status.dataset.targetName = "";
+				refresh();
+				return;
+			}
+			setTarget(target);
+			const selected = sceneTarget.selectedOptions?.[0];
+			if (selected?.dataset?.targetName) {
+				status.dataset.targetName = selected.dataset.targetName;
+			}
+			refresh();
+		});
 
 		for (const button of actions.querySelectorAll("[data-attack-target-action]")) {
 			button.addEventListener("click", async (event) => {
@@ -270,6 +317,7 @@ export class CombatAttackDialog {
 				if (action === "clear-target") {
 					uuid.value = "";
 					status.dataset.targetName = "";
+					sceneTarget.value = "";
 					refresh();
 					return;
 				}
@@ -289,9 +337,7 @@ export class CombatAttackDialog {
 				}
 
 				if (!target) return;
-				uuid.value = String(target.uuid ?? "");
-				status.dataset.targetName = String(target.name ?? "");
-				mode.value = TARGET_MODE_DEFENDER;
+				setTarget(target);
 				refresh();
 			});
 		}
@@ -310,7 +356,7 @@ export class CombatAttackDialog {
 			form?.elements?.targetMode?.value ?? TARGET_MODE_DEFENDER,
 		);
 		const target = targetMode === TARGET_MODE_DEFENDER
-			? actorFromUuidSync(form?.elements?.targetUuid?.value)
+			? ActorTargetResolver.actorFromUuidSync(form?.elements?.targetUuid?.value)
 			: null;
 
 		return {
@@ -389,21 +435,6 @@ function assertAttackInputs(actor, weapon) {
 	}
 	if (weapon.parent?.uuid !== actor.uuid) {
 		throw new Error("The selected Weapon is not owned by this Actor.");
-	}
-}
-
-function actorFromUuidSync(uuid) {
-	const id = String(uuid ?? "").trim();
-	if (!id) return null;
-	try {
-		const document = foundry.utils.fromUuidSync(id);
-		return document?.documentName === "Actor"
-			? document
-			: document?.actor?.documentName === "Actor"
-				? document.actor
-				: null;
-	} catch (_error) {
-		return null;
 	}
 }
 
