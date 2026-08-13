@@ -3,14 +3,16 @@ import { TestResultChat } from "./TestResultChat.mjs";
 const FLAG_SCOPE = "wfrp1ed";
 const FLAG_KEY = "testResultState";
 const ACTIVE_EFFECT_TYPE = "active-effect";
+const GENERAL_MODIFIER_SELECTOR = "[data-wfrp-test-general-modifier]";
 
 /**
- * GM-only post-roll adjudication for Active Effect test modifiers.
+ * GM-only post-roll adjudication for Test modifiers.
  *
  * The chat snapshot already owns the resolved numeric modifier values and the
- * original d100 roll. Toggling one modifier therefore changes only its enabled
- * flag and re-renders TestResultChat from that immutable snapshot. The Actor,
- * Item, ActiveEffect and formula inputs are never re-read or mutated here.
+ * original d100 roll. Toggling one Active Effect therefore changes only its
+ * enabled flag and re-renders TestResultChat from that immutable snapshot. The
+ * same card also normalizes incomplete edits of the GM's general modifier so a
+ * blank field or lone +/- is treated as zero instead of producing an error.
  */
 export class TestResultModifierToggle {
 	static activateListeners(message, html) {
@@ -31,6 +33,15 @@ export class TestResultModifierToggle {
 
 		if (!card) {
 			return;
+		}
+
+		const generalModifier = card.querySelector(GENERAL_MODIFIER_SELECTOR);
+		if (generalModifier instanceof HTMLInputElement) {
+			generalModifier.addEventListener(
+				"change",
+				() => normalizeGeneralModifierInput(generalModifier),
+				true,
+			);
 		}
 
 		const toggles = card.querySelectorAll(
@@ -133,6 +144,13 @@ export class TestResultModifierToggle {
 					"Unable to change the Active Effect modifier.",
 			);
 		}
+	}
+}
+
+function normalizeGeneralModifierInput(input) {
+	const raw = String(input?.value ?? "").trim();
+	if (raw === "" || raw === "+" || raw === "-") {
+		input.value = "0";
 	}
 }
 
