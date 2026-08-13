@@ -7,7 +7,7 @@ import {
 
 const FLAG_SCOPE = "wfrp1ed";
 const FLAG_KEY = "pendingCombatAttack";
-const TEMPLATE_PATH = "systems/wfrp1ed/templates/chat/pending-combat-attack.hbs";
+const TEMPLATE_PATH = "systems/wfrp1ed/templates/chat/pending-combat-attack-v2.hbs";
 
 /** Pending configured melee roll awaiting a confirmed defender context. */
 export class PendingCombatAttack {
@@ -64,6 +64,11 @@ export class PendingCombatAttack {
 
 		for (const gmOnly of card.querySelectorAll("[data-pending-attack-gm-only]")) {
 			gmOnly.hidden = !game.user?.isGM;
+		}
+
+		const rollButton = card.querySelector('[data-pending-attack-action="roll"]');
+		if (rollButton instanceof HTMLButtonElement) {
+			rollButton.disabled = rollButton.dataset.targetResolved !== "true";
 		}
 
 		const sceneSelect = card.querySelector("[data-pending-attack-scene-target]");
