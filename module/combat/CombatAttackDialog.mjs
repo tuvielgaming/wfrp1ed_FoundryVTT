@@ -5,6 +5,8 @@ import { TestManager } from "../tests/TestManager.mjs";
 import { ActorTargetResolver } from "../targets/ActorTargetResolver.mjs";
 
 const { DialogV2 } = foundry.applications.api;
+const TARGET_MODE_DEFENDER = "defender";
+const TARGET_MODE_NONE = "none";
 
 /**
  * Compose attack-specific inputs around the existing generic Test contract.
@@ -81,17 +83,7 @@ export class CombatAttackDialog {
 				localize("Test", "Test"),
 				test.name,
 			).root,
-		);
-
-		const target = ActorTargetResolver.singleTargetActor();
-		body.append(
-			this.#valueGroup(
-				localize("Target", "Cel"),
-				target?.name ?? localize(
-					"No single canvas target. Roll to resolve it in chat.",
-					"Brak jednego celu na mapie. Kliknij Rzuć, aby wybrać go w czacie.",
-				),
-			).root,
+			this.#targetGroup(),
 		);
 
 		const modifier = this.#numberGroup(
@@ -148,20 +140,162 @@ export class CombatAttackDialog {
 		return content;
 	}
 
+	static #targetGroup() {
+		const group = this.#formGroup(localize("Target", "Cel"));
+		group.root.dataset.attackTargetGroup = "";
+
+		const wrapper = document.createElement("div");
+		wrapper.classList.add("combat-attack-target-picker");
+
+		const mode = document.createElement("select");
+		mode.name = "targetMode";
+		mode.dataset.attackTargetMode = "";
+		for (const [value, label] of [
+			[TARGET_MODE_DEFENDER, localize("Defender", "Obrońca")],
+			[TARGET_MODE_NONE, localize("No defender / object", "Bez obrońcy / obiekt")],
+		]) {
+			const option = document.createElement("option");
+			option.value = value;
+			option.textContent = label;
+			mode.append(option);
+		}
+
+		const initialTarget = ActorTargetResolver.singleTargetActor();
+		const targetUuid = document.createElement("input");
+		targetUuid.type = "hidden";
+		targetUuid.name = "targetUuid";
+		targetUuid.value = String(initialTarget?.uuid ?? "");
+
+		const status = document.createElement("div");
+		status.classList.add("combat-attack-context-value", "combat-attack-target-status");
+		status.dataset.attackTargetStatus = "";
+		status.dataset.targetName = String(initialTarget?.name ?? "");
+
+		const actions = document.createElement("div");
+		actions.classList.add("combat-attack-target-actions");
+		actions.append(
+			this.#targetButton(
+				"current-target",
+				localize("Use current target", "Użyj aktualnego celu"),
+				"fa-solid fa-bullseye",
+			),
+			this.#targetButton(
+				"clear-target",
+				localize("Clear", "Usuń cel"),
+				"fa-solid fa-xmark",
+			),
+		);
+
+		if (game.user?.isGM) {
+			actions.append(
+				this.#targetButton(
+					"choose-actor",
+					localize("Choose Actor", "Wybierz Aktora"),
+					"fa-solid fa-user",
+				),
+			);
+		}
+
+		wrapper.append(mode, targetUuid, status, actions);
+		group.control.append(wrapper);
+		return group.root;
+	}
+
+	static #targetButton(action, label, iconClass) {
+		const button = document.createElement("button");
+		button.type = "button";
+		button.dataset.attackTargetAction = action;
+		const icon = document.createElement("i");
+		icon.className = iconClass;
+		icon.setAttribute("aria-hidden", "true");
+		const text = document.createElement("span");
+		text.textContent = label;
+		button.append(icon, text);
+		return button;
+	}
+
 	static #activate(dialog) {
 		const root = dialog?.element;
-		const checkbox = root?.querySelector?.(
+		if (!root) return;
+
+		this.#activateTargetPicker(root);
+
+		const checkbox = root.querySelector(
 			'input[name="automaticRangeEffects"]',
 		);
-		const distance = root?.querySelector?.(
+		const distance = root.querySelector(
 			"[data-attack-range-distance]",
 		);
 
-		if (!checkbox || !distance) return;
+		if (checkbox && distance) {
+			const refresh = () => {
+				distance.hidden = checkbox.checked !== true;
+			};
+			checkbox.addEventListener("change", refresh);
+			refresh();
+		}
+	}
+
+	static #activateTargetPicker(root) {
+		const mode = root.querySelector('[name="targetMode"]');
+		const uuid = root.querySelector('[name="targetUuid"]');
+		const status = root.querySelector("[data-attack-target-status]");
+		const actions = root.querySelector(".combat-attack-target-actions");
+		if (!mode || !uuid || !status || !actions) return;
+
 		const refresh = () => {
-			distance.hidden = checkbox.checked !== true;
+			const noDefender = mode.value === TARGET_MODE_NONE;
+			actions.hidden = noDefender;
+			if (noDefender) {
+				status.textContent = localize(
+					"No defender / object",
+					"Bez obrońcy / obiekt",
+				);
+				return;
+			}
+
+			status.textContent = status.dataset.targetName || localize(
+				"No target selected — choose one now or resolve it in chat after Roll.",
+				"Nie wybrano celu — wybierz go teraz albo rozstrzygnij w czacie po rzucie.",
+			);
 		};
-		checkbox.addEventListener("change", refresh);
+
+		mode.addEventListener("change", refresh);
+
+		for (const button of actions.querySelectorAll("[data-attack-target-action]")) {
+			button.addEventListener("click", async (event) => {
+				event.preventDefault();
+				const action = button.dataset.attackTargetAction;
+
+				if (action === "clear-target") {
+					uuid.value = "";
+					status.dataset.targetName = "";
+					refresh();
+					return;
+				}
+
+				let target = null;
+				if (action === "current-target") {
+					target = ActorTargetResolver.singleTargetActor();
+					if (!target) {
+						ui.notifications.warn(localize(
+							"Target exactly one token on the canvas, then press this button again.",
+							"Wskaż dokładnie jeden token na mapie, a następnie ponownie naciśnij ten przycisk.",
+						));
+						return;
+					}
+				} else if (action === "choose-actor" && game.user?.isGM) {
+					target = await ActorTargetResolver.chooseActor();
+				}
+
+				if (!target) return;
+				uuid.value = String(target.uuid ?? "");
+				status.dataset.targetName = String(target.name ?? "");
+				mode.value = TARGET_MODE_DEFENDER;
+				refresh();
+			});
+		}
+
 		refresh();
 	}
 
@@ -172,6 +306,12 @@ export class CombatAttackDialog {
 		const distance = automaticRangeEffects
 			? finiteNonNegative(form?.elements?.distance?.value ?? 0, "Distance")
 			: 0;
+		const targetMode = String(
+			form?.elements?.targetMode?.value ?? TARGET_MODE_DEFENDER,
+		);
+		const target = targetMode === TARGET_MODE_DEFENDER
+			? actorFromUuidSync(form?.elements?.targetUuid?.value)
+			: null;
 
 		return {
 			confirmed: true,
@@ -182,7 +322,8 @@ export class CombatAttackDialog {
 				effectTarget,
 				form,
 			),
-			target: ActorTargetResolver.singleTargetActor(),
+			targetMode,
+			target,
 			automaticRangeEffects,
 			distance,
 			manualDamageModifier: 0,
@@ -248,6 +389,21 @@ function assertAttackInputs(actor, weapon) {
 	}
 	if (weapon.parent?.uuid !== actor.uuid) {
 		throw new Error("The selected Weapon is not owned by this Actor.");
+	}
+}
+
+function actorFromUuidSync(uuid) {
+	const id = String(uuid ?? "").trim();
+	if (!id) return null;
+	try {
+		const document = foundry.utils.fromUuidSync(id);
+		return document?.documentName === "Actor"
+			? document
+			: document?.actor?.documentName === "Actor"
+				? document.actor
+				: null;
+	} catch (_error) {
+		return null;
 	}
 }
 
