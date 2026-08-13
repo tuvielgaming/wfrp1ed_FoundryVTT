@@ -78,8 +78,28 @@ export class TestResultModifierToggle {
 	}
 
 	static #activateRollEditor(message, state, card) {
-		const input = card.querySelector(ROLL_SELECTOR);
-		if (!(input instanceof HTMLInputElement)) return;
+		let input = card.querySelector(ROLL_SELECTOR);
+		if (!(input instanceof HTMLInputElement)) {
+			const metrics = card.querySelector(".wfrp1e-test-card__metrics");
+			const rollMetric = metrics?.querySelector(
+				":scope > .wfrp1e-test-card__metric:first-child",
+			);
+			const value = rollMetric?.querySelector("strong");
+			if (!(value instanceof HTMLElement)) return;
+
+			input = document.createElement("input");
+			input.type = "number";
+			input.min = "1";
+			input.max = "100";
+			input.step = "1";
+			input.inputMode = "numeric";
+			input.autocomplete = "off";
+			input.readOnly = true;
+			input.value = String(state.roll ?? value.textContent ?? "");
+			input.dataset.wfrpTestRollValue = "";
+			input.classList.add("wfrp1e-test-card__roll-input");
+			value.replaceWith(input);
+		}
 
 		if (!canEditRoll(message, state, game.user)) {
 			input.readOnly = true;
