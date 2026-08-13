@@ -21,6 +21,7 @@ import { EquipmentItemSheet } from "../sheets/EquipmentItemSheet.mjs";
 import { WeaponItemSheet } from "../sheets/WeaponItemSheet.mjs";
 import { ArmourEquipValidator } from "./ArmourEquipValidator.mjs";
 import { ArmourInitiativeRuleProvider } from "./ArmourInitiativeRuleProvider.mjs";
+import { CombatDodgeEconomy } from "./CombatDodgeEconomy.mjs";
 import { CombatEquipment } from "./CombatEquipment.mjs";
 import { CombatEquipmentState } from "./CombatEquipmentState.mjs";
 import {
@@ -88,6 +89,7 @@ Hooks.once("init", () => {
 		combat: Object.freeze({
 			...(game.WFRP1ED.combat ?? {}),
 			parrySelection: CombatParrySelection,
+			dodge: CombatDodgeEconomy,
 		}),
 		equipment: Object.freeze({
 			resolver: CombatEquipment,
