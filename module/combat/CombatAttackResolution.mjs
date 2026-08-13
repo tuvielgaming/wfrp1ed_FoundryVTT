@@ -8,15 +8,33 @@ export const COMBAT_ATTACK_TARGET_MODE = Object.freeze({
 	NONE: "none",
 });
 
-/**
- * Execute one committed weapon attack against already-resolved target context.
- *
- * This first vertical slice intentionally enables only Core melee attacks.
- * Missile attacks have different Draw/Load/Aim/Fire cadence and are not allowed
- * to inherit the melee Attacks-resource model merely because their BS test is
- * already available.
- */
+/** Execute one configured melee weapon Test with optional Combat automation. */
 export class CombatAttackResolution {
+	/**
+	 * Resolve whether this Actor is governed by the currently started Combat.
+	 *
+	 * No started encounter, or an Actor which is not a participant in it, means
+	 * an unmanaged attack: the Test is legal and no Combatant A is spent. An
+	 * Actor which *is* a participant must still be the active Combatant.
+	 */
+	static combatantFor(actor) {
+		const combat = game.combat;
+		if (!combat?.started) return null;
+
+		const matches = matchingCombatants(combat, actor);
+		if (matches.length === 0) return null;
+
+		const active = combat.combatant;
+		if (active && matches.some((entry) => entry.id === active.id)) {
+			return active;
+		}
+
+		throw new Error(localize(
+			"This Actor is a Combat participant but is not the Combatant whose turn is currently active.",
+			"Ten Aktor jest uczestnikiem walki, ale nie jest uczestnikiem, którego tura jest aktualnie aktywna.",
+		));
+	}
+
 	static async execute(
 		actor,
 		weapon,
@@ -28,22 +46,23 @@ export class CombatAttackResolution {
 	) {
 		this.#validate(actor, weapon, targetMode, target);
 
-		const combatant = this.#activeCombatant(actor);
-		const before = CombatAttackEconomy.snapshot(combatant);
-		if (!before.canAttack) {
-			throw new Error(localize(
-				"This Combatant has no Attack available in the current attack window.",
-				"Ten uczestnik walki nie ma dostępnego Ataku w bieżącym oknie ataku.",
-			));
-		}
+		const combatant = this.combatantFor(actor);
+		let economy = null;
+		let attackCost = 0;
 
-		/*
-		 * Spending occurs only after the player has confirmed the attack dialog
-		 * and any deferred target has been resolved. The authoritative spend is
-		 * performed before rolling so stale clients cannot publish an attack after
-		 * their last A was consumed elsewhere.
-		 */
-		const economy = await CombatAttackEconomy.spendAttack(combatant, 1);
+		if (combatant) {
+			const before = CombatAttackEconomy.snapshot(combatant);
+			if (!before.canAttack) {
+				throw new Error(localize(
+					"This Combatant has no Attack available in the current attack window.",
+					"Ten uczestnik walki nie ma dostępnego Ataku w bieżącym oknie ataku.",
+				));
+			}
+
+			/* Revalidate and spend authoritatively at the moment of execution. */
+			economy = await CombatAttackEconomy.spendAttack(combatant, 1);
+			attackCost = 1;
+		}
 
 		const options = {
 			modifier: finiteNumber(configuration?.modifier ?? 0, "Attack modifier"),
@@ -63,13 +82,14 @@ export class CombatAttackResolution {
 		}
 
 		const attackState = {
-			version: 1,
+			version: 2,
 			family: WEAPON_KIND.MELEE,
 			status: "rolled",
+			managedByCombat: Boolean(combatant),
 			attacker: {
 				uuid: actor.uuid,
 				name: String(actor.name ?? ""),
-				combatantId: String(combatant.id ?? ""),
+				combatantId: String(combatant?.id ?? ""),
 			},
 			weapon: {
 				uuid: weapon.uuid,
@@ -83,7 +103,7 @@ export class CombatAttackResolution {
 					name: String(target?.name ?? ""),
 				}
 				: null,
-			attackCost: 1,
+			attackCost,
 			createdBy: game.user?.id ?? "",
 			createdAt: Date.now(),
 		};
@@ -132,25 +152,23 @@ export class CombatAttackResolution {
 			throw new Error("A defended melee attack requires a target Actor.");
 		}
 	}
+}
 
-	static #activeCombatant(actor) {
-		const combat = game.combat;
-		if (!combat?.started || !combat.combatant) {
-			throw new Error(localize(
-				"A weapon attack requires an active Foundry Combat turn.",
-				"Atak bronią wymaga aktywnej tury w walce Foundry.",
-			));
-		}
+function matchingCombatants(combat, actor) {
+	if (!actor) return [];
+	const combatants = [...(combat?.combatants ?? [])];
+	const exact = combatants.filter(
+		(combatant) => combatant.actor?.uuid === actor.uuid,
+	);
+	if (exact.length) return exact;
 
-		const combatant = combat.combatant;
-		if (combatant.actor?.uuid !== actor.uuid) {
-			throw new Error(localize(
-				"This Actor is not the Combatant whose turn is currently active.",
-				"Ten Aktor nie jest uczestnikiem, którego tura jest aktualnie aktywna.",
-			));
-		}
-		return combatant;
-	}
+	const sameId = combatants.filter(
+		(combatant) =>
+			combatant.actor?.id &&
+			actor.id &&
+			combatant.actor.id === actor.id,
+	);
+	return sameId.length === 1 ? sameId : [];
 }
 
 function mutableRuleEffects(value) {

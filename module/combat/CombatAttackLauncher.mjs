@@ -11,10 +11,10 @@ import { PendingCombatAttack } from "./PendingCombatAttack.mjs";
 /**
  * User-facing entry point for weapon attacks.
  *
- * Only the audited melee vertical slice is executable today. Ranged Weapon
- * Items deliberately remain non-rollable until their Draw/Load/Aim/Fire
- * lifecycle is implemented; Core p.126 explicitly says the Attacks
- * characteristic does not determine missile firing rate.
+ * A started Combat encounter adds turn/resource automation when this Actor is a
+ * participant. It is not a prerequisite for the basic weapon Test: an Actor
+ * outside the active encounter may still roll an equipped melee weapon and no
+ * Combatant Attacks are spent automatically.
  */
 export class CombatAttackLauncher {
 	static canLaunch(weapon) {
@@ -37,18 +37,19 @@ export class CombatAttackLauncher {
 		}
 
 		/*
-		 * Reject impossible declarations before opening any UI. This does not
-		 * reserve/spend A; the authoritative spend still happens only when a fully
-		 * configured attack is actually executed. A pending target card can still
-		 * become stale if another action spends the last A before it is resolved.
+		 * If this Actor participates in the started encounter, enforce the active
+		 * turn before opening UI. If it does not participate, this is an unmanaged
+		 * out-of-combat attack and no A availability check applies.
 		 */
-		const combatant = activeCombatantFor(actor);
-		const economy = CombatAttackEconomy.snapshot(combatant);
-		if (!economy.canAttack) {
-			throw new Error(localize(
-				"This Combatant has no Attack available in the current attack window.",
-				"Ten uczestnik walki nie ma dostępnego Ataku w bieżącym oknie ataku.",
-			));
+		const combatant = CombatAttackResolution.combatantFor(actor);
+		if (combatant) {
+			const economy = CombatAttackEconomy.snapshot(combatant);
+			if (!economy.canAttack) {
+				throw new Error(localize(
+					"This Combatant has no Attack available in the current attack window.",
+					"Ten uczestnik walki nie ma dostępnego Ataku w bieżącym oknie ataku.",
+				));
+			}
 		}
 
 		const configuration = await CombatAttackDialog.configure(actor, weapon);
@@ -80,25 +81,6 @@ export class CombatAttackLauncher {
 
 		return PendingCombatAttack.create(actor, weapon, configuration);
 	}
-}
-
-function activeCombatantFor(actor) {
-	const combat = game.combat;
-	if (!combat?.started || !combat.combatant) {
-		throw new Error(localize(
-			"A weapon attack requires an active Foundry Combat turn.",
-			"Atak bronią wymaga aktywnej tury w walce Foundry.",
-		));
-	}
-
-	const combatant = combat.combatant;
-	if (combatant.actor?.uuid !== actor?.uuid) {
-		throw new Error(localize(
-			"This Actor is not the Combatant whose turn is currently active.",
-			"Ten Aktor nie jest uczestnikiem, którego tura jest aktualnie aktywna.",
-		));
-	}
-	return combatant;
 }
 
 function localize(english, polish) {

@@ -38,6 +38,68 @@
 	cursor: default;
 }
 
+/*
+ * One sheet-level GM control gates owner editing of all manually managed
+ * Character values. The person silhouette stays constant; red/green carries
+ * the permission state. Former per-Wounds/per-A permission buttons are hidden.
+ */
+.wfrp1ed-classic-sheet {
+	position: relative;
+}
+
+.wfrp1ed-classic-sheet .characteristic-current-wounds-permission,
+.wfrp1ed-classic-sheet .characteristic-current-attacks-permission {
+	display: none !important;
+}
+
+.wfrp1ed-classic-sheet .classic-owner-edit-toggle {
+	position: absolute;
+	top: 8px;
+	right: 8px;
+	z-index: 100;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 30px;
+	min-width: 30px;
+	height: 30px;
+	min-height: 30px;
+	margin: 0;
+	padding: 0;
+	border: 1px solid currentColor;
+	border-radius: 50%;
+	box-shadow: 0 1px 3px rgb(0 0 0 / 22%);
+	font-size: 14px;
+	line-height: 1;
+	cursor: pointer;
+}
+
+.wfrp1ed-classic-sheet .classic-owner-edit-toggle.is-locked {
+	background: rgb(255 238 238 / 94%);
+	color: #b51f1f;
+}
+
+.wfrp1ed-classic-sheet .classic-owner-edit-toggle.is-enabled {
+	background: rgb(238 250 239 / 94%);
+	color: #267a36;
+}
+
+.wfrp1ed-classic-sheet .classic-owner-edit-toggle.is-locked:hover,
+.wfrp1ed-classic-sheet .classic-owner-edit-toggle.is-locked:focus-visible {
+	background: rgb(255 224 224 / 98%);
+	color: #921717;
+	outline: 2px solid rgb(146 23 23 / 30%);
+	outline-offset: 1px;
+}
+
+.wfrp1ed-classic-sheet .classic-owner-edit-toggle.is-enabled:hover,
+.wfrp1ed-classic-sheet .classic-owner-edit-toggle.is-enabled:focus-visible {
+	background: rgb(225 247 228 / 98%);
+	color: #185c27;
+	outline: 2px solid rgb(24 92 39 / 30%);
+	outline-offset: 1px;
+}
+
 .wfrp1e-luck-result {
 	display: block;
 	margin-top: 0.45rem;
