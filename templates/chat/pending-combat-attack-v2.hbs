@@ -1,0 +1,21 @@
+<section class="wfrp1ed-pending-combat-attack" data-wfrp-pending-combat-attack>
+	<header class="pending-combat-attack__header">
+		<div><h3>{{title}}</h3><div class="pending-combat-attack__weapon">{{weaponName}}</div></div>
+		<div class="pending-combat-attack__actor">{{actorName}}</div>
+	</header>
+	<div class="pending-combat-attack__target-status"><strong>{{targetLabel}}:</strong><span>{{pendingLabel}}</span></div>
+	<div class="pending-combat-attack__controls" data-pending-attack-controls hidden>
+		<label class="pending-combat-attack__scene-target"><span>{{visibleTokenLabel}}</span><select data-pending-attack-scene-target></select></label>
+		<div class="pending-combat-attack__actions">
+			<button type="button" data-pending-attack-action="current-target"><i class="fa-solid fa-bullseye"></i>{{useCurrentTargetLabel}}</button>
+			<button type="button" data-pending-attack-action="clear-target"><i class="fa-solid fa-xmark"></i>{{clearTargetLabel}}</button>
+			<button type="button" class="pending-combat-attack__no-defender" data-pending-attack-action="no-defender"><i class="fa-solid fa-door-closed"></i>{{noDefenderLabel}}</button>
+		</div>
+		<div class="pending-combat-attack__gm-only" data-pending-attack-gm-only hidden>
+			<div class="pending-combat-attack__drop" data-pending-attack-drop tabindex="0"><i class="fa-solid fa-arrow-down-to-bracket"></i><span>{{dropPrompt}}</span></div>
+			<button type="button" data-pending-attack-action="choose-actor"><i class="fa-solid fa-user"></i>{{chooseActorLabel}}</button>
+		</div>
+		<button type="button" class="pending-combat-attack__roll" data-pending-attack-action="roll" data-target-resolved="{{targetResolved}}"><i class="fa-solid fa-dice-d100"></i>{{rollLabel}}</button>
+	</div>
+	<p class="pending-combat-attack__waiting" data-pending-attack-player-status>{{waitingGmLabel}}</p>
+</section>
