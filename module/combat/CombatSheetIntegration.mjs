@@ -4,6 +4,7 @@ import {
 } from "../data-models/item/ArmourData.mjs";
 import { INVENTORY_HAND } from "../data-models/item/InventoryItemFields.mjs";
 import { WEAPON_KIND } from "../data-models/item/WeaponData.mjs";
+import { CombatAttackLauncher } from "./CombatAttackLauncher.mjs";
 import { CombatEquipment } from "./CombatEquipment.mjs";
 import { CombatEquipmentState } from "./CombatEquipmentState.mjs";
 
@@ -16,6 +17,10 @@ const { DialogV2 } = foundry.applications.api;
  * stays visible there; compact controls mark whether it is equipped and, where
  * relevant, which relative hand slot it uses. Page-two Ekwipunek is reserved
  * for ordinary gear, while a separate manager can provide an unrestricted view.
+ *
+ * Equipped melee weapons also expose the Classic sheet's normal rollable UX:
+ * left-click starts an attack, while Shift + left-click opens the underlying
+ * Item. Double-click remains a temporary compatibility shortcut for opening.
  */
 Hooks.on("renderApplicationV2", (application, element) => {
 	const actor = application?.document;
@@ -124,11 +129,17 @@ function makeDerivedArmourInput(input, value, title) {
 
 function meleeRow(item, editable) {
 	const used = CombatEquipmentState.isUsed(item);
-	const row = baseRow("melee-row", item, used);
+	const attackable = CombatAttackLauncher.canLaunch(item);
+	const row = baseRow("melee-row", item, used, { attackable });
 	const optional = item.system?.optionalModifiers ?? {};
 
 	row.append(
-		itemNameCell("melee-cell melee-cell--name", item, editable),
+		itemNameCell(
+			"melee-cell melee-cell--name",
+			item,
+			editable,
+			{ attackable },
+		),
 		cell("melee-cell melee-cell--initiative", modifierDisplay(optional.initiative)),
 		cell("melee-cell melee-cell--weapon-skill", modifierDisplay(optional.toHit)),
 		cell("melee-cell melee-cell--damage", modifierDisplay(optional.damage)),
@@ -205,17 +216,52 @@ function replaceRows(container, items, rowFactory) {
 	for (const item of items) container.append(rowFactory(item));
 }
 
-function baseRow(className, item, used) {
+function baseRow(className, item, used, { attackable = false } = {}) {
 	const row = document.createElement("div");
 	row.className = className;
 	row.classList.toggle("is-equipped", used);
 	row.classList.toggle("is-carried", !used);
+	row.classList.toggle("rollable", attackable);
+	row.classList.toggle("combat-sheet-attack-rollable", attackable);
 	row.dataset.itemId = String(item.id ?? "");
 	row.setAttribute("role", "row");
-	row.title = localize(
-		`Double-click to open ${item.name}.`,
-		`Kliknij dwukrotnie, aby otworzyć ${item.name}.`,
-	);
+
+	if (attackable) {
+		row.tabIndex = 0;
+	}
+
+	row.title = itemInteractionTitle(item, attackable);
+
+	row.addEventListener("click", (event) => {
+		if (event.shiftKey) {
+			event.preventDefault();
+			event.stopPropagation();
+			void item.sheet?.render?.({ force: true });
+			return;
+		}
+
+		if (!attackable) return;
+		event.preventDefault();
+		event.stopPropagation();
+		void launchAttack(item);
+	});
+
+	if (attackable) {
+		row.addEventListener("keydown", (event) => {
+			if (event.key !== "Enter" && event.key !== " ") return;
+			event.preventDefault();
+			event.stopPropagation();
+
+			if (event.shiftKey) {
+				void item.sheet?.render?.({ force: true });
+				return;
+			}
+
+			void launchAttack(item);
+		});
+	}
+
+	/* Temporary compatibility while Shift + click becomes the shared edit UX. */
 	row.addEventListener("dblclick", (event) => {
 		event.preventDefault();
 		event.stopPropagation();
@@ -224,12 +270,17 @@ function baseRow(className, item, used) {
 	return row;
 }
 
-function itemNameCell(classNames, item, editable) {
+function itemNameCell(
+	classNames,
+	item,
+	editable,
+	{ attackable = false } = {},
+) {
 	const used = CombatEquipmentState.isUsed(item);
 	const span = document.createElement("span");
 	span.className = classNames;
 	span.setAttribute("role", "cell");
-	span.title = String(item.name ?? "");
+	span.title = itemInteractionTitle(item, attackable);
 
 	const label = document.createElement("span");
 	label.classList.add("combat-sheet-item-name");
@@ -361,9 +412,37 @@ function handTitle(hand) {
 	);
 }
 
+function itemInteractionTitle(item, attackable) {
+	const name = String(item?.name ?? "");
+	return attackable
+		? localize(
+			`Left-click to attack with ${name}. Shift-click to open.`,
+			`Lewy przycisk: zaatakuj bronią ${name}. Shift+klik: otwórz.`,
+		)
+		: localize(
+			`Shift-click to open ${name}.`,
+			`Shift+klik, aby otworzyć ${name}.`,
+		);
+}
+
 function stopRowActionPropagation(element) {
 	for (const eventName of ["pointerdown", "dblclick"]) {
 		element.addEventListener(eventName, (event) => event.stopPropagation());
+	}
+}
+
+async function launchAttack(item) {
+	try {
+		const actor = item.actor ?? item.parent;
+		await CombatAttackLauncher.launch(actor, item);
+	} catch (error) {
+		console.error("WFRP1ED | Unable to launch combat attack.", error);
+		ui.notifications.error(
+			error?.message ?? localize(
+				"Unable to launch the combat attack.",
+				"Nie udało się rozpocząć ataku.",
+			),
+		);
 	}
 }
 
