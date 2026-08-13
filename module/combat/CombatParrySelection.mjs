@@ -1,8 +1,5 @@
 import { CombatAttackEconomy } from "./CombatAttackEconomy.mjs";
 import { CombatEquipment } from "./CombatEquipment.mjs";
-import {
-	PARRY_ATTACK_COST_MODE,
-} from "./CombatParryRules.mjs";
 
 /**
  * Build and validate the tactical parry choices for one Combatant.
@@ -13,14 +10,15 @@ import {
  * both its WS modifier and its Core Attacks-resource cost mode.
  *
  * This service does not render UI and does not roll WS. The future pending
- * defence transaction consumes this contract when it asks the defender to
- * choose Parry / Dodge / no defence.
+ * defence transaction consumes this contract after the defender has chosen the
+ * mutually exclusive Parry response instead of Dodge or no defence.
  */
 export class CombatParrySelection {
 	/**
 	 * Return presentation-safe parry choices for the Combatant's current state.
 	 *
-	 * `attackCost` is a preview calculated from the current remaining Attacks.
+	 * Attack-cost previews come from CombatAttackEconomy itself so the Item list
+	 * cannot drift away from the Core "lose next attack" / shield-debt rules.
 	 * The authoritative cost is recalculated when the choice is committed.
 	 *
 	 * @param {Combatant} combatant
@@ -37,7 +35,6 @@ export class CombatParrySelection {
 		assertCombatant(combatant);
 		const actor = assertActor(combatant.actor);
 		const economy = CombatAttackEconomy.snapshot(combatant);
-		const remainingAttacks = economy.remaining;
 
 		const parryOptions = economy.canParry
 			? CombatEquipment.parryOptions(actor, {
@@ -46,19 +43,26 @@ export class CombatParrySelection {
 			: [];
 
 		const choices = parryOptions.map((option) => {
-			const attackCost = previewAttackCost(
-				option.attackCostMode,
-				remainingAttacks,
+			const preview = CombatAttackEconomy.previewParry(
+				combatant,
+				{
+					costMode: option.attackCostMode,
+				},
 			);
 
 			return Object.freeze({
 				...option,
-				attackCost,
-				remainingAttacksBefore: remainingAttacks,
-				remainingAttacksAfter: Math.max(
-					0,
-					remainingAttacks - attackCost,
-				),
+				attackCost: preview.parryAttackCost,
+				immediateAttackCost: preview.parryImmediateAttackCost,
+				parryDebtAdded: preview.parryDebtAdded,
+				parryDebtBefore: preview.parryDebtBefore,
+				parryDebtAfter: preview.parryDebtAfter,
+				remainingAttacksBefore: preview.remainingAttacksBefore,
+				remainingAttacksAfter: preview.remainingAttacksAfter,
+				projectedNextTurnAttacksBefore:
+					preview.projectedNextTurnAttacksBefore,
+				projectedNextTurnAttacksAfter:
+					preview.projectedNextTurnAttacksAfter,
 			});
 		});
 
@@ -66,7 +70,10 @@ export class CombatParrySelection {
 			combatId: economy.combatId,
 			combatantId: economy.combatantId,
 			actorUuid: economy.actorUuid,
-			remainingAttacks,
+			remainingAttacks: economy.remaining,
+			currentAttackRemaining: economy.currentAttackRemaining,
+			projectedNextTurnAttacks: economy.projectedNextTurnAttacks,
+			parryDebt: economy.parryDebt,
 			parryAttemptsRemaining: economy.parryAttemptsRemaining,
 			resourceCanParry: economy.canParry,
 			canParry: economy.canParry && choices.length > 0,
@@ -100,7 +107,7 @@ export class CombatParrySelection {
 
 		if (!selection.resourceCanParry) {
 			throw new Error(
-				"No Attacks remain to spend on a parry this round.",
+				"The Combatant has reached the Core parry-attempt limit for this round.",
 			);
 		}
 
@@ -126,9 +133,9 @@ export class CombatParrySelection {
 	 * is mutated, so a client does not get to submit an arbitrary cheaper cost
 	 * mode for a shield parry.
 	 *
-	 * This method spends the resource only. It intentionally does not make the
-	 * WS roll; that belongs to the pending defence transaction which owns the
-	 * complete attack/defence resolution.
+	 * This method spends/defers the resource cost only. It intentionally does not
+	 * make the WS roll or roll the D6 damage stopped by a successful parry; those
+	 * belong to the pending defence transaction which owns the full blow.
 	 *
 	 * @param {Combatant} combatant
 	 * @param {string} itemUuid
@@ -169,17 +176,13 @@ export class CombatParrySelection {
 			selected,
 			economy,
 			parryAttackCost: economy.parryAttackCost,
+			parryImmediateAttackCost: economy.parryImmediateAttackCost,
+			parryDebtAdded: economy.parryDebtAdded,
+			parryDebt: economy.parryDebt,
 			remainingAttacks: economy.remaining,
+			projectedNextTurnAttacks: economy.projectedNextTurnAttacks,
 		});
 	}
-}
-
-function previewAttackCost(costMode, remainingAttacks) {
-	if (remainingAttacks <= 0) return 0;
-
-	return costMode === PARRY_ATTACK_COST_MODE.ALL_REMAINING_ATTACKS
-		? remainingAttacks
-		: 1;
 }
 
 function assertCombatant(combatant) {
