@@ -3,11 +3,11 @@
  * implemented system mechanics.
  *
  * This file historically began with Standard Test skills only, which is why
- * its filename is retained for compatibility. `luck` is now included because
- * the Skill Item sheet needs one stable rulesId for the dedicated Luck
- * subsystem. StandardTestSkillResolver still consumes only rulesIds which have
- * entries in standard-test-skill-rules.mjs, so adding Luck here does not make
- * it a Standard Test modifier.
+ * its filename is retained for compatibility. `luck` and `dodgeBlow` are now
+ * also included because dedicated rule subsystems need stable Skill identities.
+ * StandardTestSkillResolver still consumes only rulesIds which have entries in
+ * standard-test-skill-rules.mjs, so adding these identities does not make them
+ * generic Standard Test modifiers.
  *
  * Mechanics authority:
  * - English Core Rulebook, Skills index and descriptions, printed pp. 45-58.
@@ -39,6 +39,7 @@ export const STANDARD_TEST_SKILL_IDENTITIES = deepFreeze({
 	concealmentUrban: identity("Concealment Urban"),
 	contortionist: identity("Contortionist"),
 	dance: identity("Dance"),
+	dodgeBlow: localizedIdentity("Dodge Blow", "Uniki"),
 	engineer: identity("Engineer"),
 	escapology: identity("Escapology"),
 	etiquette: identity("Etiquette"),
