@@ -13,10 +13,10 @@ const pendingRequests = new Map();
  * Classic-sheet presentation and explicit GM adjudication for the temporary
  * Combatant Attacks resource.
  *
- * Actor A remains the permanent allowance. The editable value belongs only to
- * the Combatant. During an unfinished turn it means remaining Attacks in that
- * turn; after the turn is completed it shows the projected next attack window
- * after parry debt, marked with a return arrow.
+ * Actor A remains the permanent allowance. Manual editing is deliberately a
+ * current attack-window correction only: it adjusts this Combatant's current
+ * `spent` value and never writes future parry debt or permanent Actor A. The
+ * next attack window is therefore initialized normally by CombatAttackEconomy.
  */
 export class CombatAttackSheetStatus {
 	static canUserEdit(combatant, user = game.user) {
@@ -116,13 +116,14 @@ export class CombatAttackSheetStatus {
 		cell.querySelector("[data-wfrp-current-attacks]")?.remove();
 		const wrapper = document.createElement("span");
 		wrapper.classList.add("characteristic-current-attacks");
-		wrapper.classList.toggle("is-projected", display.projected);
 		wrapper.dataset.wfrpCurrentAttacks = "";
 		wrapper.title = statusTitle(snapshot, display.projected);
 
-		if (display.projected) wrapper.append(projectedMarker());
+		const editable =
+			snapshot.attackWindowOpen &&
+			this.canUserEdit(combatant);
 
-		if (this.canUserEdit(combatant)) {
+		if (editable) {
 			const input = document.createElement("input");
 			input.type = "number";
 			input.classList.add("characteristic-current-attacks-input");
@@ -132,15 +133,10 @@ export class CombatAttackSheetStatus {
 			input.step = "1";
 			input.inputMode = "numeric";
 			input.autocomplete = "off";
-			input.title = display.projected
-				? localize(
-					"Edit projected Attacks for the next attack window.",
-					"Edytuj przewidywane Ataki w następnym oknie ataku.",
-				)
-				: localize(
-					"Edit remaining Attacks for this attack window.",
-					"Edytuj pozostałe Ataki w tym oknie ataku.",
-				);
+			input.title = localize(
+				"Edit remaining Attacks for this attack window.",
+				"Edytuj pozostałe Ataki w tym oknie ataku.",
+			);
 			input.setAttribute("aria-label", input.title);
 			input.addEventListener("change", () => {
 				void updateRemaining(combatant, input);
@@ -171,27 +167,23 @@ export class CombatAttackSheetStatus {
 		}
 
 		const snapshot = CombatAttackEconomy.snapshot(combatant);
+		if (!snapshot.attackWindowOpen) {
+			throw new Error(localize(
+				"Remaining Attacks can only be edited during this Combatant's active attack window.",
+				"Pozostałe Ataki można edytować tylko podczas aktywnego okna ataku tego uczestnika.",
+			));
+		}
+
 		const desired = normalizedRemaining(remaining, snapshot.allowance);
 		const raw = combatant.getFlag(FLAG_SCOPE, ECONOMY_FLAG_KEY) ?? {};
 		const state = {
 			round: nonNegativeInteger(raw.round ?? snapshot.round),
-			spent: nonNegativeInteger(raw.spent),
+			spent: snapshot.allowance - desired,
 			parryDebt: nonNegativeInteger(raw.parryDebt),
 			parriesThisRound: nonNegativeInteger(raw.parriesThisRound),
-			turnStarted: raw.turnStarted === true,
-			turnCompleted: raw.turnCompleted === true,
+			turnStarted: true,
+			turnCompleted: false,
 		};
-
-		if (state.turnStarted && !state.turnCompleted) {
-			state.spent = snapshot.allowance - desired;
-		} else {
-			/*
-			 * Before a turn, or after it has finished, the meaningful editable
-			 * value is the next attack window after debt. Setting it is an explicit
-			 * adjudication of that debt, not a rewrite of permanent Actor A.
-			 */
-			state.parryDebt = snapshot.allowance - desired;
-		}
 
 		await combatant.update({
 			[`flags.${FLAG_SCOPE}.${ECONOMY_FLAG_KEY}`]: state,
@@ -231,13 +223,25 @@ async function updateRemaining(combatant, input) {
 	try {
 		const raw = String(input?.value ?? "").trim();
 		const requested = raw === "" || raw === "+" || raw === "-" ? 0 : Number(raw);
-		if (!Number.isFinite(requested)) {
+		if (!Number.isFinite(requested) || !Number.isInteger(requested)) {
 			throw new Error(localize(
-				"Enter a valid number of remaining Attacks.",
-				"Wprowadź prawidłową liczbę pozostałych Ataków.",
+				"Enter a whole number of remaining Attacks.",
+				"Wprowadź całkowitą liczbę pozostałych Ataków.",
 			));
 		}
-		await CombatAttackSheetStatus.setRemaining(combatant, requested);
+
+		const allowance = CombatAttackEconomy.allowance(combatant);
+		const value = Math.min(allowance, Math.max(0, requested));
+		if (value !== requested) {
+			input.value = String(value);
+			ui.notifications.warn(localize(
+				`Remaining Attacks must be between 0 and A (${allowance}). The value was set to ${value}.`,
+				`Pozostałe Ataki muszą mieścić się w zakresie od 0 do A (${allowance}). Wartość ustawiono na ${value}.`,
+			));
+		}
+
+		await CombatAttackSheetStatus.setRemaining(combatant, value);
+		input.value = String(value);
 	} catch (error) {
 		console.error("WFRP1ED | Unable to edit remaining Attacks.", error);
 		ui.notifications.error(error?.message ?? String(error));
@@ -265,7 +269,7 @@ function permissionButton(actor) {
 	button.setAttribute("aria-label", button.title);
 	button.setAttribute("aria-pressed", String(enabled));
 	const icon = document.createElement("i");
-	icon.className = enabled ? "fa-solid fa-user-check" : "fa-solid fa-user-lock";
+	icon.className = enabled ? "fa-solid fa-lock-open" : "fa-solid fa-lock";
 	button.append(icon);
 	button.addEventListener("click", async (event) => {
 		event.preventDefault();
@@ -295,17 +299,6 @@ function displayState(snapshot) {
 	};
 }
 
-function projectedMarker() {
-	const span = document.createElement("span");
-	span.classList.add("characteristic-current-attacks-projected");
-	span.textContent = "↻";
-	span.title = localize(
-		"Projected for next attack window",
-		"Prognoza na następne okno ataku",
-	);
-	return span;
-}
-
 function combatantForActor(actor) {
 	const combat = game.combat;
 	if (!combat?.started) return null;
@@ -331,8 +324,8 @@ function statusTitle(snapshot, projected) {
 	const lines = [
 		projected
 			? localize(
-				`Displayed value is next-window projection: ${snapshot.projectedNextTurnAttacks}/${snapshot.allowance}`,
-				`Wyświetlana wartość to prognoza następnego okna: ${snapshot.projectedNextTurnAttacks}/${snapshot.allowance}`,
+				`Next attack window: ${snapshot.projectedNextTurnAttacks}/${snapshot.allowance}`,
+				`Następne okno ataku: ${snapshot.projectedNextTurnAttacks}/${snapshot.allowance}`,
 			)
 			: localize(
 				`Remaining Attacks: ${snapshot.remaining}/${snapshot.allowance}`,
