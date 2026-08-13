@@ -121,7 +121,7 @@ function weaponUi() {
 		rangedDetails: localize("Ranged / thrown weapon", "Broń dystansowa / rzucana"),
 		shortRange: localize("Short range", "Krótki zasięg"),
 		longRange: localize("Long range", "Daleki zasięg"),
-		maximumRange: localize("Maximum range", "Maksymalny zasięg"),
+		maximumRange: localize("Extreme range", "Maksymalny zasięg"),
 		effectiveStrength: localize("Effective Strength", "Siła efektywna"),
 		reload: localize("Reload", "Ładowanie"),
 		optionalModifiers: localize("Optional Weapon Modifiers", "Opcjonalne modyfikatory broni"),
