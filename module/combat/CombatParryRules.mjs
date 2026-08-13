@@ -4,11 +4,13 @@ export const PARRY_ATTACK_COST_MODE = Object.freeze({
 });
 
 /**
- * Normalize the resource cost attached to one parry option.
+ * Normalize the attack-loss mode attached to one parry option.
  *
- * Ordinary weapon parries consume one Attack. Core shield parries consume all
- * following Attacks, represented by all Attacks which remain unspent in the
- * current round when the shield parry is declared.
+ * Ordinary weapon parries lose the character's next Attack. Core shield parries
+ * lose all following Attacks. The historical internal value
+ * `allRemainingAttacks` is retained for API compatibility, but the actual
+ * timing is resolved by CombatAttackEconomy: the loss is paid immediately when
+ * possible and otherwise carries forward as parry debt.
  *
  * @param {string} value
  * @returns {string}
