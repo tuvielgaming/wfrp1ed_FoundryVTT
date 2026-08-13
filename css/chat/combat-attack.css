@@ -1,0 +1,282 @@
+/******************************************************************/
+/* WFRP 1e combat attack configuration                            */
+/******************************************************************/
+
+.wfrp1ed-combat-attack-dialog .combat-attack-dialog-body {
+	display: grid;
+	gap: 10px;
+	min-width: 370px;
+	padding: 6px 4px 2px;
+}
+
+.wfrp1ed-combat-attack-dialog .combat-attack-form-group {
+	display: grid;
+	grid-template-columns: 155px minmax(0, 1fr);
+	align-items: center;
+	gap: 10px;
+	margin: 0;
+}
+
+.wfrp1ed-combat-attack-dialog .combat-attack-form-group > label {
+	font-weight: 700;
+	line-height: 1.2;
+}
+
+.wfrp1ed-combat-attack-dialog .combat-attack-form-group .form-fields {
+	min-width: 0;
+}
+
+.wfrp1ed-combat-attack-dialog .combat-attack-form-group input,
+.wfrp1ed-combat-attack-dialog .combat-attack-form-group select {
+	width: 100%;
+	min-width: 0;
+	height: 34px;
+	margin: 0;
+	padding: 4px 8px;
+}
+
+.wfrp1ed-combat-attack-dialog .combat-attack-form-group input[type="checkbox"] {
+	width: auto;
+	height: auto;
+	margin: 0;
+}
+
+.wfrp1ed-combat-attack-dialog .combat-attack-context-value {
+	min-height: 34px;
+	padding: 7px 8px;
+	border: 1px solid var(--wfrp-parchment-border-soft);
+	border-radius: 3px;
+	background: rgb(247 239 218 / 74%);
+	color: var(--wfrp-parchment-ink-soft);
+	font-size: 13px;
+	line-height: 1.25;
+}
+
+.wfrp1ed-combat-attack-dialog [hidden] {
+	display: none !important;
+}
+
+/******************************************************************/
+/* Pending melee attack target card                               */
+/******************************************************************/
+
+.wfrp1ed-pending-combat-attack {
+	display: grid;
+	gap: 9px;
+	padding: 9px;
+	border: 1px solid rgb(89 65 35 / 46%);
+	border-radius: 4px;
+	background:
+		linear-gradient(
+			180deg,
+			rgb(255 250 231 / 94%),
+			rgb(237 222 184 / 92%)
+		);
+	color: #2b2115;
+	font-family: "Book Antiqua", "Times New Roman", serif;
+	line-height: 1.25;
+	box-shadow:
+		inset 0 0 0 1px rgb(255 255 255 / 38%),
+		0 1px 2px rgb(0 0 0 / 16%);
+}
+
+.wfrp1ed-pending-combat-attack [hidden] {
+	display: none !important;
+}
+
+.wfrp1ed-pending-combat-attack .pending-combat-attack__header {
+	display: flex;
+	align-items: start;
+	justify-content: space-between;
+	gap: 8px;
+	padding-bottom: 5px;
+	border-bottom: 1px solid rgb(89 65 35 / 24%);
+}
+
+.wfrp1ed-pending-combat-attack .pending-combat-attack__header h3 {
+	margin: 0;
+	font-size: 15px;
+	font-weight: 800;
+}
+
+.wfrp1ed-pending-combat-attack .pending-combat-attack__weapon {
+	margin-top: 2px;
+	font-size: 12px;
+	font-weight: 700;
+}
+
+.wfrp1ed-pending-combat-attack .pending-combat-attack__actor {
+	min-width: 0;
+	overflow: hidden;
+	font-size: 12px;
+	font-style: italic;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.wfrp1ed-pending-combat-attack .pending-combat-attack__target-status {
+	display: flex;
+	gap: 5px;
+	align-items: baseline;
+	font-size: 13px;
+}
+
+.wfrp1ed-pending-combat-attack .pending-combat-attack__target-status span {
+	font-style: italic;
+}
+
+.wfrp1ed-pending-combat-attack .pending-combat-attack__gm-controls {
+	display: grid;
+	gap: 8px;
+}
+
+.wfrp1ed-pending-combat-attack .pending-combat-attack__drop {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	min-height: 44px;
+	padding: 7px;
+	border: 1px dashed rgb(89 65 35 / 56%);
+	border-radius: 3px;
+	background: rgb(255 255 255 / 28%);
+	font-size: 12px;
+	font-weight: 700;
+	text-align: center;
+	transition:
+		background-color 0.12s ease,
+		border-color 0.12s ease;
+}
+
+.wfrp1ed-pending-combat-attack .pending-combat-attack__drop.is-dragover {
+	border-color: rgb(122 0 25 / 76%);
+	background: rgb(122 0 25 / 9%);
+}
+
+.wfrp1ed-pending-combat-attack .pending-combat-attack__actions {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 6px;
+}
+
+.wfrp1ed-pending-combat-attack .pending-combat-attack__no-defender {
+	grid-column: 1 / -1;
+}
+
+.wfrp1ed-pending-combat-attack button {
+	min-width: 0;
+	min-height: 30px;
+	margin: 0;
+	padding: 4px 7px;
+	font-family: inherit;
+	font-size: 12px;
+	line-height: 1.15;
+}
+
+.wfrp1ed-pending-combat-attack .pending-combat-attack__waiting {
+	margin: 0;
+	font-size: 12px;
+	font-style: italic;
+	text-align: center;
+}
+
+/******************************************************************/
+/* Attack context appended to the generic TestResult card         */
+/******************************************************************/
+
+.wfrp1e-combat-attack-context {
+	display: grid;
+	gap: 5px;
+	margin: 7px 0 9px;
+	padding: 7px 8px;
+	border: 1px solid rgb(89 65 35 / 28%);
+	border-radius: 3px;
+	background: rgb(255 255 255 / 23%);
+}
+
+.wfrp1e-combat-attack-context .combat-attack-context__heading {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 8px;
+	padding-bottom: 4px;
+	border-bottom: 1px solid rgb(89 65 35 / 20%);
+}
+
+.wfrp1e-combat-attack-context .combat-attack-context__heading strong {
+	font-size: 13px;
+}
+
+.wfrp1e-combat-attack-context .combat-attack-context__heading span {
+	min-width: 0;
+	overflow: hidden;
+	font-size: 12px;
+	font-weight: 700;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.wfrp1e-combat-attack-context .combat-attack-context__row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 8px;
+	font-size: 12px;
+}
+
+.wfrp1e-combat-attack-context .combat-attack-context__row.is-control input {
+	width: 78px;
+	height: 25px;
+	margin: 0;
+	padding: 2px 5px;
+	text-align: right;
+}
+
+.wfrp1e-combat-attack-context .combat-attack-range {
+	display: grid;
+	gap: 5px;
+	margin-top: 3px;
+	padding-top: 6px;
+	border-top: 1px solid rgb(89 65 35 / 20%);
+}
+
+.wfrp1e-combat-attack-context .combat-attack-range__control {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	font-size: 12px;
+	font-weight: 700;
+}
+
+.wfrp1e-combat-attack-context .combat-attack-range__control input {
+	width: auto;
+	margin: 0;
+}
+
+.wfrp1e-combat-attack-context .combat-attack-range__warning {
+	padding: 4px 6px;
+	border: 1px solid rgb(122 0 25 / 40%);
+	border-radius: 3px;
+	background: rgb(122 0 25 / 7%);
+	font-size: 11px;
+	font-weight: 700;
+}
+
+@media (max-width: 500px) {
+	.wfrp1ed-combat-attack-dialog .combat-attack-dialog-body {
+		min-width: 0;
+	}
+
+	.wfrp1ed-combat-attack-dialog .combat-attack-form-group {
+		grid-template-columns: 1fr;
+		gap: 5px;
+	}
+
+	.wfrp1ed-pending-combat-attack .pending-combat-attack__actions {
+		grid-template-columns: 1fr;
+	}
+
+	.wfrp1ed-pending-combat-attack .pending-combat-attack__no-defender {
+		grid-column: auto;
+	}
+}
