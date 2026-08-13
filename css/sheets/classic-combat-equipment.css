@@ -17,6 +17,32 @@
 	white-space: nowrap;
 }
 
+/*
+ * Equipped melee weapons deliberately reuse the same Classic-sheet rollable
+ * background variables as characteristic tests. This makes "can be rolled"
+ * visually consistent without adding another permanent action icon.
+ */
+.wfrp1ed-classic-sheet .combat-sheet-attack-rollable {
+	cursor: pointer;
+	transition:
+		background-color 0.15s ease,
+		outline-color 0.15s ease;
+}
+
+.wfrp1ed-classic-sheet .combat-sheet-attack-rollable:hover {
+	background-color: var(--rollable-hover-background);
+}
+
+.wfrp1ed-classic-sheet .combat-sheet-attack-rollable:active {
+	background-color: var(--rollable-active-background);
+}
+
+.wfrp1ed-classic-sheet .combat-sheet-attack-rollable:focus-visible {
+	outline: 1px solid var(--focus-color);
+	outline-offset: -2px;
+	background-color: var(--rollable-hover-background);
+}
+
 .wfrp1ed-classic-sheet .combat-sheet-item-controls {
 	position: absolute;
 	right: 2px;
