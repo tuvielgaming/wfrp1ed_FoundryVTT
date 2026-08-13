@@ -138,8 +138,9 @@ export class CombatEquipment {
 	 * included only when the caller explicitly enables that optional rule.
 	 *
 	 * `attackCostMode` is part of the Core parry contract: ordinary suitable
-	 * weapons consume one Attack, while a shield parry consumes all remaining
-	 * Attacks in the round in exchange for its +20 WS main-rule bonus.
+	 * weapons lose the defender's next Attack, while a shield parry loses all
+	 * following Attacks in exchange for its +20 WS main-rule bonus. Exact timing
+	 * of those losses is owned by CombatAttackEconomy, including carried debt.
 	 */
 	static parryOptions(actor, { optionalWeaponModifiers = false } = {}) {
 		assertActor(actor);
