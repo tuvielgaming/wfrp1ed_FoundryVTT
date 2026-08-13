@@ -42,7 +42,8 @@
 
 /*
  * Placeholder lives underneath the real image. A normal portrait hides it
- * completely; an empty/unavailable image leaves a clear image slot with a +.
+ * completely. Empty images and Foundry's default generic Actor image expose a
+ * clear portrait slot with a + instead.
  */
 .wfrp1ed-classic-sheet .classic-actor-portrait-frame::before {
 	content: "+";
@@ -79,6 +80,10 @@
 	user-select: none;
 	touch-action: none;
 	z-index: 1;
+}
+
+.wfrp1ed-classic-sheet .classic-actor-portrait[src*="/icons/svg/mystery-man.svg"] {
+	opacity: 0;
 }
 
 .wfrp1ed-classic-sheet .classic-actor-portrait-frame--editable {
