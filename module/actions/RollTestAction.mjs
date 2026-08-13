@@ -57,6 +57,11 @@ export class RollTestAction {
 	 * can prepare a context independently without duplicating roll logic.
 	 * TestResultChat owns only the persistent interactive chat presentation.
 	 *
+	 * The published ChatMessage is retained on `result.chatMessage`. Generic
+	 * callers may ignore it; higher-level transactions such as combat can attach
+	 * their own separate context flag to the exact same physical roll/card
+	 * without searching the ChatLog or publishing a duplicate result.
+	 *
 	 * Selected declarative Active Effects are normalized into ordinary
 	 * TestModifier entries here, immediately before the test target is resolved.
 	 * This keeps one target/modifier pipeline and makes the existing result
@@ -82,7 +87,7 @@ export class RollTestAction {
 
 		const result = await context.test.roll(context);
 
-		await TestResultChat.publish(result);
+		result.chatMessage = await TestResultChat.publish(result);
 
 		return result;
 	}
