@@ -28,39 +28,57 @@
 	position: absolute;
 	left: 2px;
 	bottom: 0;
-
 	width: 244px;
 	height: 310px;
 	margin: 0;
 	padding: 0;
-	border: 0;
-	background: transparent;
+	border: 1px dashed rgb(70 51 30 / 24%);
+	background: rgb(255 255 255 / 8%);
 	overflow: hidden;
-
 	pointer-events: auto;
 	user-select: none;
 	touch-action: none;
+}
+
+.wfrp1ed-classic-sheet .classic-actor-portrait-frame::before {
+	content: "+";
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	transform: translate(-50%, -50%);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 38px;
+	height: 38px;
+	border: 1px solid rgb(45 34 22 / 42%);
+	border-radius: 50%;
+	background: rgb(247 239 218 / 74%);
+	color: rgb(45 34 22 / 58%);
+	font-size: 28px;
+	font-weight: 700;
+	line-height: 1;
+	pointer-events: none;
+	z-index: 0;
 }
 
 .wfrp1ed-classic-sheet .classic-actor-portrait {
 	position: absolute;
 	left: 0;
 	top: 0;
-
 	display: block;
 	width: 100%;
 	height: 100%;
 	margin: 0;
 	padding: 0;
 	border: 0;
-
 	object-fit: cover;
 	object-position: 50% 50%;
 	background: transparent;
-
 	pointer-events: auto;
 	user-select: none;
 	touch-action: none;
+	z-index: 1;
 }
 
 .wfrp1ed-classic-sheet .classic-actor-portrait-frame--editable {
