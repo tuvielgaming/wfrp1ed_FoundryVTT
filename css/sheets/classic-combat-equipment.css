@@ -134,6 +134,105 @@
 }
 
 /******************************************************************/
+/* Remaining Attacks in the printed A characteristic cell         */
+/******************************************************************/
+
+.wfrp1ed-classic-sheet
+	.characteristic-cell--current[data-characteristic="a"] {
+	position: relative;
+}
+
+.wfrp1ed-classic-sheet
+	.characteristic-cell--current[data-characteristic="a"]
+	.characteristic-current-attacks {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 100%;
+	box-sizing: border-box;
+	padding-right: 0.58em;
+	gap: 0.08em;
+	font-size: 0.82em;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.wfrp1ed-classic-sheet .characteristic-current-attacks-input {
+	width: 1.7em;
+	min-width: 0;
+	height: 1.3em;
+	padding: 0;
+	border: 0;
+	border-bottom: 1px dotted currentColor;
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+	color: inherit;
+	font: inherit;
+	font-variant-numeric: tabular-nums;
+	line-height: 1;
+	text-align: right;
+}
+
+.wfrp1ed-classic-sheet .characteristic-current-attacks-input:focus {
+	outline: 1px solid currentColor;
+	outline-offset: 1px;
+	border-bottom-color: transparent;
+}
+
+.wfrp1ed-classic-sheet
+	.characteristic-current-attacks-input::-webkit-outer-spin-button,
+.wfrp1ed-classic-sheet
+	.characteristic-current-attacks-input::-webkit-inner-spin-button {
+	margin: 0;
+	-webkit-appearance: none;
+}
+
+.wfrp1ed-classic-sheet
+	.characteristic-current-attacks-input[type="number"] {
+	appearance: textfield;
+	-moz-appearance: textfield;
+}
+
+.wfrp1ed-classic-sheet .characteristic-current-attacks-permission {
+	position: absolute;
+	top: 0.5em;
+	right: 0.5em;
+	width: 0.9em;
+	min-width: 0.9em;
+	height: 0.9em;
+	min-height: 0.9em;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	border-radius: 2px;
+	background: transparent;
+	box-shadow: none;
+	color: #e21010;
+	font-size: 0.62em;
+	line-height: 0.9em;
+	cursor: pointer;
+	z-index: 1;
+}
+
+.wfrp1ed-classic-sheet
+	.characteristic-current-attacks-permission.is-enabled {
+	background: rgba(210, 74, 99, 0.14);
+	color: #c92f4c;
+}
+
+.wfrp1ed-classic-sheet
+	.characteristic-current-attacks-permission:hover,
+.wfrp1ed-classic-sheet
+	.characteristic-current-attacks-permission:focus-visible {
+	background: rgba(210, 74, 99, 0.18);
+	color: #a91f3a;
+	text-shadow: none;
+	outline: 1px solid rgba(169, 31, 58, 0.35);
+	outline-offset: 1px;
+}
+
+/******************************************************************/
 /* Armour location presentation                                   */
 /******************************************************************/
 
