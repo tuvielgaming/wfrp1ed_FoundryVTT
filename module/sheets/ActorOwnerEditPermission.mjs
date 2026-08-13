@@ -129,7 +129,9 @@ export class ActorOwnerEditPermission {
 		button.setAttribute("aria-pressed", String(enabled));
 
 		const icon = document.createElement("i");
-		icon.className = "fa-solid fa-user";
+		icon.className = enabled
+			? "fa-solid fa-user-check"
+			: "fa-solid fa-user-lock";
 		icon.setAttribute("aria-hidden", "true");
 		button.append(icon);
 
