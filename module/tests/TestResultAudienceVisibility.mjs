@@ -78,3 +78,26 @@ function applyAudienceVisibility(message, html) {
  * second competing visibility pass or a broad rewrite of TestResultChat.
  */
 TestResultChat.applyClientVisibility = applyAudienceVisibility;
+
+/*
+ * The persisted value remains `gm-only` for compatibility, but its UI meaning
+ * is now GM + Actor OWNER. Rename the existing context-menu entry after the core
+ * TestResultChat hook has populated it so the GM is not shown stale wording.
+ */
+Hooks.once("init", () => {
+	Hooks.on("getChatMessageContextOptions", (_application, menuItems) => {
+		if (!game.user?.isGM || !Array.isArray(menuItems)) return;
+		const restricted = menuItems.find((entry) =>
+			String(entry?.icon ?? "").includes("fa-eye-slash"),
+		);
+		if (!restricted) return;
+		restricted.name = localize(
+			"Test details: restrict to GM & Actor owner",
+			"Szczegóły testu: tylko MG i właściciel Aktora",
+		);
+	});
+});
+
+function localize(english, polish) {
+	return game.i18n.lang === "pl" ? polish : english;
+}
