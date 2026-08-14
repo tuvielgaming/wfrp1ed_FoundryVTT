@@ -9,9 +9,9 @@ const PARRY_DEBT_REMINDER_FLAG_KEY = "parryDebtReminder";
  * WFRP 1e Combat document.
  *
  * Round start is the only ordinary reset point for the Attacks pool. Starting a
- * Combatant turn only opens its attack window and converts accumulated parry
- * debt into spent Attacks; it must not erase a GM/player manual correction made
- * earlier in the same round.
+ * Combatant turn only opens its attack window and pays any bounded carried
+ * parry debt; it must not erase a GM/player manual correction or an optional
+ * shield defensive commitment made earlier in the same round.
  *
  * `parryDebtReminder` is presentation-only. When debt is paid at turn start we
  * retain the paid amount through that Combatant's active turn so the A-cell
@@ -41,7 +41,10 @@ export class Wfrp1edCombat extends foundry.documents.Combat {
 			[`flags.${FLAG_SCOPE}.${ATTACK_ECONOMY_FLAG_KEY}`]: {
 				...raw,
 				round: nonNegativeInteger(this.round),
-				spent: snapshot.spent + paidDebt,
+				spent: Math.min(
+					snapshot.allowance,
+					snapshot.spent + paidDebt,
+				),
 				parryDebt: Math.max(0, snapshot.parryDebt - paidDebt),
 				parriesThisRound: snapshot.parriesThisRound,
 				turnStarted: true,
