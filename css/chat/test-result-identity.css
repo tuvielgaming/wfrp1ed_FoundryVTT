@@ -4,10 +4,14 @@
 
 .wfrp1e-test-card__header.has-test-identity {
 	display: grid;
-	grid-template-columns: minmax(0, 1fr) auto;
+	grid-template-columns: minmax(0, 1fr);
 	align-items: center;
-	gap: 8px;
+	gap: 5px;
 	padding: 7px 8px;
+}
+
+.wfrp1e-test-card__header.has-test-identity .wfrp1e-test-card__status {
+	justify-self: end;
 }
 
 .wfrp1e-test-card__identity {
