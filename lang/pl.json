@@ -190,6 +190,11 @@
 	"WFRP1ED.TestResult.Failure": "Porażka",
 	"WFRP1ED.TestResult.Margin": "Margines",
 
+	"WFRP1ED.Settings.ParryEconomy.Name": "Koszt Ataków za parowanie",
+	"WFRP1ED.Settings.ParryEconomy.Hint": "Wybierz, jak parowanie wpływa na Ataki. Domyślna zasada traci kolejne Ataki i może przenieść koszt jako dług. Kontrakt rundy zamyka wszystkie koszty parowania w bieżącej rundzie: parowanie bronią zmniejsza pozostałe Ataki o 1, parowanie tarczą ustawia pozostałe Ataki na 0, jeżeli w tej rundzie nie wykonano jeszcze ataku ofensywnego, a żaden dług nie przechodzi do następnej rundy.",
+	"WFRP1ED.Settings.ParryEconomy.Core": "Domyślna — kolejne Ataki i dług",
+	"WFRP1ED.Settings.ParryEconomy.RoundContract": "Opcjonalna — kontrakt rundy, bez długu",
+
 	"WFRP1ED.SkillSheet.Name": "Nazwa",
 	"WFRP1ED.SkillSheet.RulesId": "Powiązanie z zasadami",
 	"WFRP1ED.SkillSheet.RulesIdHint": "Łączy tę umiejętność z mechaniką testów standardowych bez uzależniania zasad od jej nazwy.",
