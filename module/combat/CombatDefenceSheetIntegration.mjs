@@ -12,13 +12,19 @@ const pendingSheetRequests = new Set();
  * Optional second entry point for an already-pending melee defence.
  *
  * The Chat card remains authoritative and always offers the explicit dropdown +
- * confirmation workflow. While exactly one successful melee attack is waiting
- * for this Actor's defence, the target Actor's open Classic sheet also exposes
- * the currently legal response objects as rollable controls:
+ * confirmation workflow. While one or more successful melee attacks are waiting
+ * for this Actor's defence, the target Actor's open Classic sheet exposes the
+ * currently legal response objects for the latest unresolved attack as rollable
+ * controls:
  *
  * - Dodge Blow Skill -> Dodge response;
  * - each legal held parry Weapon -> Parry with that exact Item;
  * - each legal held Shield -> Parry with that exact Item.
+ *
+ * After the latest attack is resolved, the sheet refreshes and the same controls
+ * automatically bind to the next-latest unresolved attack. Repeated clicks can
+ * therefore resolve a backlog in reverse chronological order without selecting
+ * individual Chat cards.
  *
  * These shortcuts call CombatDefenceTransaction.requestResponse(), so they do
  * not duplicate any resource, permission, socket, roll, or chat-state logic.
@@ -35,22 +41,16 @@ Hooks.on("renderApplicationV2", (application, element) => {
 	}
 
 	const pending = pendingDefencesFor(actor);
-	if (pending.length !== 1) {
-		/*
-		 * Never guess which blow the player means when several attack cards are
-		 * simultaneously waiting for the same defender. The Chat cards remain
-		 * usable and unambiguous in that unusual case.
-		 */
-		return;
-	}
+	if (pending.length === 0) return;
 
-	decoratePendingDefence(element, actor, pending[0]);
+	decoratePendingDefence(element, actor, pending[0], pending.length);
 });
 
 /*
  * Attack/defence flags live on the attack ChatMessage. Refresh only the target
  * Actor's already-open sheet when those flags change so shortcuts appear when
- * defence becomes pending and disappear immediately after it is committed.
+ * defence becomes pending and move immediately to the next unresolved attack
+ * after the current latest one is committed.
  */
 Hooks.on("updateChatMessage", (message, changes) => {
 	if (!combatAttackStateChanged(changes) && !testStateChanged(changes)) return;
@@ -61,11 +61,17 @@ Hooks.on("deleteChatMessage", (message) => {
 	void refreshTargetSheet(message);
 });
 
-function decoratePendingDefence(root, actor, pending) {
+function decoratePendingDefence(root, actor, pending, pendingCount) {
 	const { message, attackState, opportunity } = pending;
+	const backlogSuffix = pendingCount > 1
+		? localize(
+			` This is the latest of ${pendingCount} unresolved attacks; after it is resolved, the sheet will switch to the previous unresolved attack.`,
+			` To najnowszy z ${pendingCount} nierozstrzygniętych ataków; po jego rozstrzygnięciu karta postaci przełączy się na poprzedni nierozstrzygnięty atak.`,
+		)
+		: "";
 	const contextTitle = localize(
-		`Defend against ${attackState.attacker?.name ?? "attacker"} — ${attackState.weapon?.name ?? "melee attack"}. Clicking this control immediately selects and confirms that defence on the pending attack card.`,
-		`Obrona przed ${attackState.attacker?.name ?? "atakującym"} — ${attackState.weapon?.name ?? "atak wręcz"}. Kliknięcie natychmiast wybiera i zatwierdza tę obronę na oczekującej karcie ataku.`,
+		`Defend against ${attackState.attacker?.name ?? "attacker"} — ${attackState.weapon?.name ?? "melee attack"}. Clicking this control immediately selects and confirms that defence on the latest pending attack card.${backlogSuffix}`,
+		`Obrona przed ${attackState.attacker?.name ?? "atakującym"} — ${attackState.weapon?.name ?? "atak wręcz"}. Kliknięcie natychmiast wybiera i zatwierdza tę obronę na najnowszej oczekującej karcie ataku.${backlogSuffix}`,
 	);
 
 	const dodgeResponse = opportunity.responses.find(
@@ -210,7 +216,9 @@ function pendingDefencesFor(actor) {
 	if (!actorUuid) return [];
 
 	const pending = [];
+	let sequence = 0;
 	for (const message of game.messages ?? []) {
+		sequence += 1;
 		const attackState = message.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY);
 		const testState = message.getFlag?.(FLAG_SCOPE, TEST_FLAG_KEY);
 		if (!attackState || !testState) continue;
@@ -229,10 +237,14 @@ function pendingDefencesFor(actor) {
 			createdAt: finiteTimestamp(
 				attackState.createdAt ?? message.timestamp ?? 0,
 			),
+			sequence,
 		});
 	}
 
-	pending.sort((first, second) => second.createdAt - first.createdAt);
+	pending.sort((first, second) =>
+		(second.createdAt - first.createdAt) ||
+		(second.sequence - first.sequence),
+	);
 	return pending;
 }
 
