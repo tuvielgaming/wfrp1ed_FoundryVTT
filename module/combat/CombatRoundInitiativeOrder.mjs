@@ -87,7 +87,9 @@ export class CombatRoundInitiativeOrder {
 		}
 
 		await this.captureCombatBaselines(combat);
-		const activeBeforeId = String(combat.combatant?.id ?? "");
+		const activeBeforeId = String(
+			combat.current?.combatantId ?? combat.combatant?.id ?? "",
+		);
 
 		/*
 		 * Anchor synthetic values to the stable baseline rather than to previous
@@ -119,24 +121,32 @@ export class CombatRoundInitiativeOrder {
 		);
 
 		/*
-		 * Initiative is sortable data while Combat.turn is a numeric index. After
-		 * reordering we must explicitly choose which Combatant owns the turn.
-		 *
+		 * First synchronize the lifecycle's existing active Combatant with its new
+		 * numeric index. Bulk initiative updates can make `combat.combatant` point
+		 * at another row even though `combat.current.combatantId` still records the
+		 * previous turn owner. Synchronizing first guarantees that any subsequent
+		 * focus transfer fires Foundry's normal End Turn / Start Turn workflow.
+		 */
+		const activeBefore = activeBeforeId
+			? combat.combatants.get(activeBeforeId) ?? null
+			: null;
+		if (activeBefore) {
+			await CombatRoundTurnState.focus(combat, activeBefore);
+		}
+
+		/*
 		 * - Moving a non-active row preserves the current Combatant.
 		 * - Moving the active row is a postponement: focus the first unfinished
 		 *   Combatant from the top of the new order. If everyone else has already
-		 *   finished, the postponed Combatant keeps focus.
+		 *   finished, the postponed Combatant remains first unfinished and keeps
+		 *   focus.
 		 */
 		const movedActive =
 			activeBeforeId && String(movedCombatantId) === activeBeforeId;
-		let focus = null;
-		if (movedActive) {
-			focus = CombatRoundTurnState.firstUnfinished(combat);
-		} else if (activeBeforeId) {
-			focus = combat.combatants.get(activeBeforeId) ?? null;
-		}
-		if (!focus) focus = CombatRoundTurnState.firstUnfinished(combat);
-		if (focus) await CombatRoundTurnState.focus(combat, focus);
+		if (!movedActive) return;
+
+		const next = CombatRoundTurnState.firstUnfinished(combat);
+		if (next) await CombatRoundTurnState.focus(combat, next);
 	}
 }
 
