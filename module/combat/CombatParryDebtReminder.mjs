@@ -1,3 +1,4 @@
+import { WfrpRuleSettings } from "../settings/WfrpRuleSettings.mjs";
 import { CombatAttackEconomy } from "./CombatAttackEconomy.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
@@ -5,15 +6,15 @@ const ECONOMY_FLAG_KEY = "attackEconomy";
 const DEBT_REMINDER_FLAG_KEY = "parryDebtReminder";
 
 /**
- * Presentation-only reminders for carried Parry costs.
+ * Presentation-only reminders for the Core/default carried Parry cost model.
  *
- * The attack economy remains authoritative. This module never mutates debt.
- * Before the Combatant's turn the marker shows pending debt. When that debt is
- * paid at turn start, Wfrp1edCombat keeps the paid amount in the separate
- * `parryDebtReminder` flag until the Combatant ends the turn, so a reduced A
- * value remains understandable throughout the actual attack window.
+ * The optional round contract has no debt by definition. When that world rule
+ * is active this module is completely silent, including for stale legacy flags
+ * which may still exist on Combatants created under the default interpretation.
  */
 Hooks.on("renderApplicationV2", (application, element) => {
+	if (WfrpRuleSettings.usesRoundDefenceContract()) return;
+
 	const actor = application?.document;
 	if (
 		actor?.documentName !== "Actor" ||
@@ -73,11 +74,9 @@ Hooks.on("renderApplicationV2", (application, element) => {
 	cell.append(marker);
 });
 
-/**
- * Foundry updates Combat.round once per round transition. Debt survives the
- * ordinary round reset, so it is safe to summarize it after that update.
- */
+/** Summarize debt carried into a new round only for the default interpretation. */
 Hooks.on("updateCombat", (combat, changes) => {
+	if (WfrpRuleSettings.usesRoundDefenceContract()) return;
 	if (!game.user?.isGM || !Object.hasOwn(changes ?? {}, "round")) return;
 	const round = nonNegativeInteger(combat?.round);
 	if (round <= 1) return;
