@@ -131,11 +131,6 @@ export class CombatAttackEconomy {
 		});
 	}
 
-	/**
-	 * Return whether one parry-cost mode is currently legal before previewing it.
-	 * This is primarily needed by the optional shield commitment rule so an
-	 * illegal shield choice can be omitted without hiding other parry Items.
-	 */
 	static parryCostAvailability(
 		combatant,
 		{
@@ -283,7 +278,7 @@ export class CombatAttackEconomy {
 
 		await writeState(combatant, {
 			...state,
-			spent: paidDebt,
+			spent: Math.min(allowance, state.spent + paidDebt),
 			parryDebt: Math.max(0, debt - paidDebt),
 			turnStarted: true,
 			turnCompleted: false,
@@ -456,9 +451,9 @@ function planParry(state, allowance, costMode) {
 		normalized === PARRY_ATTACK_COST_MODE.ALL_REMAINING_ATTACKS
 	) {
 		shieldDefenceCommitted = true;
+		spentAfter = allowance;
 		if (remainingNow > 0) {
 			immediateAttackCost = remainingNow;
-			spentAfter = allowance;
 		}
 		/* No future debt: this optional interpretation forfeits this round's offence. */
 	} else if (normalized === PARRY_ATTACK_COST_MODE.ALL_REMAINING_ATTACKS) {
@@ -684,7 +679,11 @@ function assertStartedCombat(combatant) {
 	return combat;
 }
 
-function stateForCurrentRound(combatant, combat, allowance = CombatAttackEconomy.allowance(combatant)) {
+function stateForCurrentRound(
+	combatant,
+	combat,
+	allowance = CombatAttackEconomy.allowance(combatant),
+) {
 	const round = nonNegativeInteger(combat.round);
 	const raw = normalizeState(
 		combatant.getFlag(FLAG_SCOPE, FLAG_KEY),
