@@ -1,0 +1,127 @@
+/******************************************************************/
+/* Defence transaction embedded in the attack Test card           */
+/******************************************************************/
+
+.wfrp1e-combat-attack-context .combat-defence-transaction {
+	display: grid;
+	gap: 6px;
+	margin-top: 5px;
+	padding-top: 7px;
+	border-top: 1px solid rgb(89 65 35 / 24%);
+}
+
+.wfrp1e-combat-attack-context .combat-defence-pending,
+.wfrp1e-combat-attack-context .combat-defence-resolved {
+	display: grid;
+	gap: 6px;
+}
+
+.wfrp1e-combat-attack-context .combat-defence-pending__heading,
+.wfrp1e-combat-attack-context .combat-defence-resolved__heading {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 8px;
+	font-size: 12px;
+}
+
+.wfrp1e-combat-attack-context .combat-defence-pending__responses {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 4px;
+}
+
+.wfrp1e-combat-attack-context .combat-defence-pending__responses button,
+.wfrp1e-combat-attack-context .combat-defence-pending__confirm {
+	min-width: 0;
+	min-height: 28px;
+	margin: 0;
+	padding: 4px 5px;
+	font-family: inherit;
+	font-size: 11px;
+	line-height: 1.1;
+}
+
+.wfrp1e-combat-attack-context .combat-defence-pending__responses button.is-selected {
+	outline: 2px solid rgb(89 65 35 / 48%);
+	outline-offset: -2px;
+	background: rgb(89 65 35 / 10%);
+	font-weight: 700;
+}
+
+.wfrp1e-combat-attack-context .combat-defence-pending__parry-item {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr);
+	align-items: center;
+	gap: 6px;
+	font-size: 11px;
+	font-weight: 700;
+}
+
+.wfrp1e-combat-attack-context .combat-defence-pending__parry-item[hidden] {
+	display: none !important;
+}
+
+.wfrp1e-combat-attack-context .combat-defence-pending__parry-item select {
+	width: 100%;
+	min-width: 0;
+	height: 28px;
+	margin: 0;
+	padding: 2px 5px;
+	font-size: 11px;
+}
+
+.wfrp1e-combat-attack-context .combat-defence-status {
+	font-size: 11px;
+	font-style: italic;
+	line-height: 1.25;
+}
+
+/******************************************************************/
+/* Context attached to Parry / Dodge generic Test cards           */
+/******************************************************************/
+
+.wfrp1e-combat-defence-result {
+	display: grid;
+	gap: 4px;
+	margin: 7px 0 9px;
+	padding: 7px 8px;
+	border: 1px solid rgb(89 65 35 / 28%);
+	border-radius: 3px;
+	background: rgb(255 255 255 / 23%);
+}
+
+.wfrp1e-combat-defence-result .combat-defence-result__heading {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 8px;
+	padding-bottom: 4px;
+	border-bottom: 1px solid rgb(89 65 35 / 20%);
+	font-size: 12px;
+}
+
+.wfrp1e-combat-defence-result .combat-defence-result__heading span {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.wfrp1e-combat-defence-result .combat-defence-result__row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 8px;
+	font-size: 11px;
+}
+
+@media (max-width: 500px) {
+	.wfrp1e-combat-attack-context .combat-defence-pending__responses {
+		grid-template-columns: 1fr;
+	}
+
+	.wfrp1e-combat-attack-context .combat-defence-pending__parry-item {
+		grid-template-columns: 1fr;
+	}
+}
