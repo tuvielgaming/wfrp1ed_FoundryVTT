@@ -37,6 +37,7 @@
 	],
 	"styles": [
 		"css/myOwn.css",
+		"css/combat-tracker-initiative.css",
 		"css/sheets/classic.css",
 		"css/sheets/classic-combat-equipment.css",
 		"css/sheets/classic-combat-debt.css",
