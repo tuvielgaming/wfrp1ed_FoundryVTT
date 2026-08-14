@@ -1,4 +1,5 @@
 import { TestResultChat } from "../tests/TestResultChat.mjs";
+import { canSeeFullTestDetails } from "../tests/TestResultAudienceVisibility.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
 const FLAG_KEY = "combatDefenceResult";
@@ -9,6 +10,10 @@ const FLAG_KEY = "combatDefenceResult";
  * The generic Test remains authoritative for the d100, modifiers, manual roll
  * edits and success/failure. This layer only explains why that Test was rolled
  * and which incoming attack it belongs to.
+ *
+ * Defence-specific details follow the defender Test's audience policy: GM and
+ * defender OWNER see them by default. If the GM explicitly publishes the Test
+ * result as full/public, the same defence context becomes public as well.
  */
 export class CombatDefenceResultChat {
 	static async attach(message, defenceState) {
@@ -26,7 +31,7 @@ export class CombatDefenceResultChat {
 
 	static activateListeners(message, html) {
 		const state = message?.getFlag?.(FLAG_SCOPE, FLAG_KEY);
-		if (!state) return;
+		if (!state || !canSeeFullTestDetails(message)) return;
 
 		const rendered = TestResultChat._asElement(html);
 		const card = rendered?.matches?.(".wfrp1e-test-card")
