@@ -1,5 +1,7 @@
 import { CombatAttackEconomy } from "./CombatAttackEconomy.mjs";
 import { CombatEquipment } from "./CombatEquipment.mjs";
+import { PARRY_ATTACK_COST_MODE } from "./CombatParryRules.mjs";
+import { WfrpRuleSettings } from "../settings/WfrpRuleSettings.mjs";
 
 /**
  * Build and validate the tactical parry choices for one Combatant.
@@ -8,6 +10,12 @@ import { CombatEquipment } from "./CombatEquipment.mjs";
  * one-handed weapon and a shield must choose which Item performs the parry;
  * the system must not silently prefer either option. The selected Item carries
  * both its WS modifier and its current Attacks-resource cost contract.
+ *
+ * Under the optional round contract a normal weapon parry is paid directly from
+ * the current-round Attack pool and therefore requires at least 1 A remaining.
+ * Shield Full Defence is different: after it is legally declared, repeated
+ * shield parries rely on the separate Core parry-attempt cap, so they remain
+ * possible even though offensive Attacks have been reduced to 0.
  */
 export class CombatParrySelection {
 	static choices(
@@ -27,10 +35,22 @@ export class CombatParrySelection {
 			: [];
 
 		const choices = parryOptions
-			.filter((option) => CombatAttackEconomy.parryCostAvailability(
-				combatant,
-				{ costMode: option.attackCostMode },
-			).available)
+			.filter((option) => {
+				const availability = CombatAttackEconomy.parryCostAvailability(
+					combatant,
+					{ costMode: option.attackCostMode },
+				);
+				if (!availability.available) return false;
+
+				if (
+					WfrpRuleSettings.usesRoundDefenceContract() &&
+					option.attackCostMode === PARRY_ATTACK_COST_MODE.ONE_ATTACK &&
+					economy.remaining <= 0
+				) {
+					return false;
+				}
+				return true;
+			})
 			.map((option) => {
 				const preview = CombatAttackEconomy.previewParry(
 					combatant,
