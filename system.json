@@ -41,6 +41,7 @@
 		"css/combat-tracker-initiative.css",
 		"css/sheets/classic.css",
 		"css/sheets/classic-combat-equipment.css",
+		"css/sheets/classic-combat-defence.css",
 		"css/sheets/classic-combat-debt.css",
 		"css/sheets/classic-inventory.css",
 		"css/sheets/classic-table-scroll.css",
