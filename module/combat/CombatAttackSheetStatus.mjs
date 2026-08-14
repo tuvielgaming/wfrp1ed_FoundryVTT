@@ -166,7 +166,10 @@ export class CombatAttackSheetStatus {
 			...raw,
 			round: nonNegativeInteger(raw.round ?? snapshot.round),
 			spent: nonNegativeInteger(raw.spent ?? snapshot.spent),
-			parryDebt: nonNegativeInteger(raw.parryDebt ?? snapshot.parryDebt),
+			parryDebt: Math.min(
+				snapshot.allowance,
+				nonNegativeInteger(raw.parryDebt ?? snapshot.parryDebt),
+			),
 			parriesThisRound: nonNegativeInteger(
 				raw.parriesThisRound ?? snapshot.parriesThisRound,
 			),
