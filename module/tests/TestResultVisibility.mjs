@@ -6,9 +6,14 @@ export const TEST_RESULT_VISIBILITY = Object.freeze({
 /**
  * Normalize one result-detail visibility value.
  *
- * This setting controls only whether non-GM clients may inspect the detailed
- * target calculation on a completed test card. It does not alter Foundry's
- * ChatMessage roll mode or document visibility.
+ * The persisted `gm-only` identifier is retained for backward compatibility,
+ * but its current presentation contract is "restricted": the GM and an OWNER
+ * of the Actor who made the Test may inspect full details. Other players receive
+ * only the compact identity/target/result summary unless the GM explicitly
+ * changes the result to PUBLIC.
+ *
+ * This setting does not alter Foundry's ChatMessage roll mode or document
+ * visibility.
  *
  * @param {*} value
  * @returns {"gm-only"|"public"}
@@ -34,8 +39,8 @@ export function testResultVisibilityOptions() {
 			value: TEST_RESULT_VISIBILITY.GM_ONLY,
 			label: localize(
 				"WFRP1ED.TestResult.Visibility.GMOnly",
-				"GM only",
-				"Tylko MG",
+				"Restricted (GM & Actor owner)",
+				"Ograniczone (MG i właściciel Aktora)",
 			),
 		},
 		{
