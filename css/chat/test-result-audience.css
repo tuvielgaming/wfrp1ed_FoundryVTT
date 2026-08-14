@@ -1,0 +1,29 @@
+/******************************************************************/
+/* Viewer-specific TestResult presentation                        */
+/******************************************************************/
+
+/*
+ * Restricted viewers receive no threshold/roll/margin DOM. The shared identity
+ * block is therefore the complete compact card body together with the final
+ * Success/Failure status row.
+ */
+.wfrp1e-test-card.is-audience-restricted .wfrp1e-test-card__header {
+	margin-bottom: 0;
+}
+
+.wfrp1e-test-card__identity-fields {
+	gap: 3px;
+}
+
+/*
+ * Combat attacks keep an empty shell so defender-only controls can be appended
+ * asynchronously after Foundry mounts the card. Unrelated viewers never receive
+ * those controls, so their empty shell must not create a blank parchment box.
+ */
+.wfrp1e-combat-attack-context.is-audience-shell:empty {
+	display: none;
+}
+
+.wfrp1e-combat-attack-context.is-audience-shell:not(:empty) {
+	margin-top: 6px;
+}
