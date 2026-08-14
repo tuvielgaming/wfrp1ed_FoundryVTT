@@ -82,7 +82,7 @@ export class CombatDefenceResultChat {
 			}
 		}
 
-		if (state.response === "dodge") {
+		if (state.response === "dodge" && state.managedByCombat === true) {
 			panel.append(
 				row(
 					localize("Round resource", "Zasób rundy"),
