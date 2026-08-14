@@ -3,6 +3,7 @@ import { CombatDodgeEconomy } from "../combat/CombatDodgeEconomy.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
 const ATTACK_ECONOMY_FLAG_KEY = "attackEconomy";
+const PARRY_DEBT_REMINDER_FLAG_KEY = "parryDebtReminder";
 
 /**
  * WFRP 1e Combat document.
@@ -11,6 +12,12 @@ const ATTACK_ECONOMY_FLAG_KEY = "attackEconomy";
  * Combatant turn only opens its attack window and converts accumulated parry
  * debt into spent Attacks; it must not erase a GM/player manual correction made
  * earlier in the same round.
+ *
+ * `parryDebtReminder` is presentation-only. When debt is paid at turn start we
+ * retain the paid amount through that Combatant's active turn so the A-cell
+ * badge can still explain why the character has fewer Attacks. The reminder is
+ * cleared when that Combatant ends the turn; it never participates in resource
+ * calculations.
  */
 export class Wfrp1edCombat extends foundry.documents.Combat {
 	/** @inheritDoc */
@@ -40,6 +47,7 @@ export class Wfrp1edCombat extends foundry.documents.Combat {
 				turnStarted: true,
 				turnCompleted: false,
 			},
+			[`flags.${FLAG_SCOPE}.${PARRY_DEBT_REMINDER_FLAG_KEY}`]: paidDebt,
 		});
 	}
 
@@ -47,6 +55,11 @@ export class Wfrp1edCombat extends foundry.documents.Combat {
 	async _onEndTurn(combatant, context) {
 		await super._onEndTurn(combatant, context);
 		await CombatAttackEconomy.endTurn(combatant);
+		await combatant.setFlag(
+			FLAG_SCOPE,
+			PARRY_DEBT_REMINDER_FLAG_KEY,
+			0,
+		);
 	}
 
 	/** @inheritDoc */
@@ -54,6 +67,11 @@ export class Wfrp1edCombat extends foundry.documents.Combat {
 		await super._onEnter(combatant);
 		await CombatAttackEconomy.initializeCombatant(combatant);
 		await CombatDodgeEconomy.initializeCombatant(combatant);
+		await combatant.setFlag(
+			FLAG_SCOPE,
+			PARRY_DEBT_REMINDER_FLAG_KEY,
+			0,
+		);
 	}
 }
 
