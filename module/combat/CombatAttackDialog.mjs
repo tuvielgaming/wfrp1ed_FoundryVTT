@@ -7,13 +7,16 @@ import { ActorTargetResolver } from "../targets/ActorTargetResolver.mjs";
 const { DialogV2 } = foundry.applications.api;
 const TARGET_MODE_DEFENDER = "defender";
 const TARGET_MODE_NONE = "none";
+const TARGET_SELECTION_PENDING = "__pending__";
+const TARGET_SELECTION_NONE = "__none__";
 
 /**
  * Compose attack-specific inputs around the existing generic Test contract.
  *
- * The dialog does not roll, spend Attacks, or resolve combat. It gathers one
- * generic test modifier/effect snapshot plus target and, for future ranged
- * execution, the per-shot Automatic Range Effects choice.
+ * Target mode and visible-token choice deliberately share one selector. This
+ * avoids the previous two-dropdown interaction while preserving three distinct
+ * states: unresolved/deferred target, an explicit no-defender/object attack,
+ * and a concrete defending Actor.
  */
 export class CombatAttackDialog {
 	static async configure(actor, weapon) {
@@ -147,43 +150,37 @@ export class CombatAttackDialog {
 		const wrapper = document.createElement("div");
 		wrapper.classList.add("combat-attack-target-picker");
 
-		const mode = document.createElement("select");
-		mode.name = "targetMode";
-		mode.dataset.attackTargetMode = "";
-		for (const [value, label] of [
-			[TARGET_MODE_DEFENDER, localize("Defender", "Obrońca")],
-			[TARGET_MODE_NONE, localize("No defender / object", "Bez obrońcy / obiekt")],
-		]) {
-			const option = document.createElement("option");
-			option.value = value;
-			option.textContent = label;
-			mode.append(option);
-		}
-
 		const initialTarget = ActorTargetResolver.singleTargetActor();
 		const targetUuid = document.createElement("input");
 		targetUuid.type = "hidden";
 		targetUuid.name = "targetUuid";
 		targetUuid.value = String(initialTarget?.uuid ?? "");
 
-		const sceneTarget = document.createElement("select");
-		sceneTarget.name = "sceneTargetUuid";
-		sceneTarget.dataset.attackSceneTarget = "";
-		const emptyOption = document.createElement("option");
-		emptyOption.value = "";
-		emptyOption.textContent = localize(
-			"Choose visible token…",
-			"Wybierz widoczny token…",
+		const selection = document.createElement("select");
+		selection.name = "targetSelection";
+		selection.dataset.attackTargetSelection = "";
+
+		appendTargetOption(
+			selection,
+			TARGET_SELECTION_PENDING,
+			localize(
+				"Choose target / resolve after Roll…",
+				"Wybierz cel / rozstrzygnij po rzucie…",
+			),
 		);
-		sceneTarget.append(emptyOption);
+		appendTargetOption(
+			selection,
+			TARGET_SELECTION_NONE,
+			localize("No defender / object", "Bez obrońcy / obiekt"),
+		);
 
 		for (const entry of ActorTargetResolver.sceneTokenTargets()) {
-			const option = document.createElement("option");
-			option.value = entry.actorUuid;
-			option.textContent = entry.name;
-			option.dataset.targetName = entry.name;
-			if (initialTarget?.uuid === entry.actorUuid) option.selected = true;
-			sceneTarget.append(option);
+			appendTargetOption(selection, entry.actorUuid, entry.name, entry.name);
+		}
+
+		if (initialTarget) {
+			ensureTargetOption(selection, initialTarget);
+			selection.value = initialTarget.uuid;
 		}
 
 		const status = document.createElement("div");
@@ -216,7 +213,7 @@ export class CombatAttackDialog {
 			);
 		}
 
-		wrapper.append(mode, targetUuid, sceneTarget, status, actions);
+		wrapper.append(selection, targetUuid, status, actions);
 		group.control.append(wrapper);
 		return group.root;
 	}
@@ -257,28 +254,24 @@ export class CombatAttackDialog {
 	}
 
 	static #activateTargetPicker(root) {
-		const mode = root.querySelector('[name="targetMode"]');
+		const selection = root.querySelector('[name="targetSelection"]');
 		const uuid = root.querySelector('[name="targetUuid"]');
-		const sceneTarget = root.querySelector('[name="sceneTargetUuid"]');
 		const status = root.querySelector("[data-attack-target-status]");
 		const actions = root.querySelector(".combat-attack-target-actions");
-		if (!mode || !uuid || !sceneTarget || !status || !actions) return;
+		if (!selection || !uuid || !status || !actions) return;
 
 		const setTarget = (target) => {
-			uuid.value = String(target?.uuid ?? "");
-			status.dataset.targetName = String(target?.name ?? "");
-			mode.value = TARGET_MODE_DEFENDER;
-			const matching = [...sceneTarget.options].find(
-				(option) => option.value === uuid.value,
-			);
-			sceneTarget.value = matching ? uuid.value : "";
+			if (!target) return;
+			uuid.value = String(target.uuid ?? "");
+			status.dataset.targetName = String(target.name ?? "");
+			ensureTargetOption(selection, target);
+			selection.value = uuid.value;
 		};
 
 		const refresh = () => {
-			const noDefender = mode.value === TARGET_MODE_NONE;
-			sceneTarget.hidden = noDefender;
-			actions.hidden = noDefender;
-			if (noDefender) {
+			if (selection.value === TARGET_SELECTION_NONE) {
+				uuid.value = "";
+				status.dataset.targetName = "";
 				status.textContent = localize(
 					"No defender / object",
 					"Bez obrońcy / obiekt",
@@ -286,28 +279,32 @@ export class CombatAttackDialog {
 				return;
 			}
 
+			if (selection.value === TARGET_SELECTION_PENDING) {
+				uuid.value = "";
+				status.dataset.targetName = "";
+				status.textContent = localize(
+					"No target selected — the target can still be resolved in chat after Roll.",
+					"Nie wybrano celu — cel można nadal rozstrzygnąć w czacie po rzucie.",
+				);
+				return;
+			}
+
+			const target = ActorTargetResolver.actorFromUuidSync(selection.value);
+			if (target) {
+				uuid.value = String(target.uuid ?? "");
+				status.dataset.targetName = String(
+					selection.selectedOptions?.[0]?.dataset?.targetName ??
+					target.name ??
+					"",
+				);
+			}
 			status.textContent = status.dataset.targetName || localize(
-				"No target selected — choose a visible token, use Foundry target, or resolve it in chat after Roll.",
-				"Nie wybrano celu — wybierz widoczny token, użyj celu Foundry albo rozstrzygnij go w czacie po rzucie.",
+				"Selected defender",
+				"Wybrany obrońca",
 			);
 		};
 
-		mode.addEventListener("change", refresh);
-		sceneTarget.addEventListener("change", () => {
-			const target = ActorTargetResolver.actorFromUuidSync(sceneTarget.value);
-			if (!target) {
-				uuid.value = "";
-				status.dataset.targetName = "";
-				refresh();
-				return;
-			}
-			setTarget(target);
-			const selected = sceneTarget.selectedOptions?.[0];
-			if (selected?.dataset?.targetName) {
-				status.dataset.targetName = selected.dataset.targetName;
-			}
-			refresh();
-		});
+		selection.addEventListener("change", refresh);
 
 		for (const button of actions.querySelectorAll("[data-attack-target-action]")) {
 			button.addEventListener("click", async (event) => {
@@ -315,9 +312,7 @@ export class CombatAttackDialog {
 				const action = button.dataset.attackTargetAction;
 
 				if (action === "clear-target") {
-					uuid.value = "";
-					status.dataset.targetName = "";
-					sceneTarget.value = "";
+					selection.value = TARGET_SELECTION_PENDING;
 					refresh();
 					return;
 				}
@@ -352,10 +347,14 @@ export class CombatAttackDialog {
 		const distance = automaticRangeEffects
 			? finiteNonNegative(form?.elements?.distance?.value ?? 0, "Distance")
 			: 0;
-		const targetMode = String(
-			form?.elements?.targetMode?.value ?? TARGET_MODE_DEFENDER,
+		const selection = String(
+			form?.elements?.targetSelection?.value ?? TARGET_SELECTION_PENDING,
 		);
-		const target = targetMode === TARGET_MODE_DEFENDER
+		const targetMode = selection === TARGET_SELECTION_NONE
+			? TARGET_MODE_NONE
+			: TARGET_MODE_DEFENDER;
+		const target = targetMode === TARGET_MODE_DEFENDER &&
+			selection !== TARGET_SELECTION_PENDING
 			? ActorTargetResolver.actorFromUuidSync(form?.elements?.targetUuid?.value)
 			: null;
 
@@ -417,6 +416,28 @@ export class CombatAttackDialog {
 		root.append(label, control);
 		return { root, control };
 	}
+}
+
+function appendTargetOption(select, value, label, targetName = "") {
+	const option = document.createElement("option");
+	option.value = String(value);
+	option.textContent = String(label);
+	if (targetName) option.dataset.targetName = String(targetName);
+	select.append(option);
+	return option;
+}
+
+function ensureTargetOption(select, target) {
+	const uuid = String(target?.uuid ?? "");
+	if (!uuid) return;
+	const existing = [...select.options].find((option) => option.value === uuid);
+	if (existing) return existing;
+	return appendTargetOption(
+		select,
+		uuid,
+		String(target?.name ?? "—"),
+		String(target?.name ?? ""),
+	);
 }
 
 function attackTest(weapon) {
