@@ -1,3 +1,4 @@
+import { CombatEquipment } from "./CombatEquipment.mjs";
 import { CombatDodgeEconomy } from "./CombatDodgeEconomy.mjs";
 import { CombatParrySelection } from "./CombatParrySelection.mjs";
 
@@ -7,6 +8,8 @@ export const COMBAT_DEFENCE_RESPONSE = Object.freeze({
 	NONE: "none",
 });
 
+const DODGE_BLOW_RULES_ID = "dodgeBlow";
+
 /**
  * Read-only WFRP 1e response choices for one incoming hand-to-hand blow.
  *
@@ -14,29 +17,15 @@ export const COMBAT_DEFENCE_RESPONSE = Object.freeze({
  *
  *   Parry OR Dodge OR None
  *
- * There is deliberately no sequence which permits a failed Dodge to fall back
- * to Parry, or a failed Parry to fall back to Dodge, against that same blow.
- * The eventual pending-defence transaction persists and enforces that one-shot
- * response choice. This service only derives which buttons/options may be
- * offered from current Combatant state.
+ * Managed mode uses Combatant round resources. Unmanaged mode is used outside
+ * Combat Tracker: the same mechanical response tests remain available, but the
+ * system deliberately does not automate per-round parry/Dodge limits or future
+ * Attack losses because there is no authoritative round lifecycle to attach
+ * those resources to.
  */
 export class CombatDefenceOpportunity {
 	/**
-	 * Build the currently legal choices for an incoming melee blow.
-	 *
-	 * Dodge Blow additionally requires that the blow was seen coming, per Core.
-	 * The caller owns that fact because it comes from the attack transaction
-	 * (surprise/visibility), not from the defender's persistent Actor state.
-	 *
-	 * Parry availability comes from the already-audited parry attempt/equipment
-	 * contract. Item choice remains nested under the Parry response and is never
-	 * automatically resolved by this service.
-	 *
-	 * @param {Combatant} combatant
-	 * @param {Object} [options]
-	 * @param {boolean} [options.seenComing=true]
-	 * @param {boolean} [options.optionalWeaponModifiers=false]
-	 * @returns {Object}
+	 * Build currently legal managed choices for a Combatant.
 	 */
 	static melee(
 		combatant,
@@ -55,40 +44,131 @@ export class CombatDefenceOpportunity {
 			seenComing && dodge.canAttemptThisRound,
 		);
 
-		const responses = [
-			Object.freeze({
-				id: COMBAT_DEFENCE_RESPONSE.PARRY,
-				available: parry.canParry,
-				reason: parry.canParry
-					? null
-					: parryUnavailableReason(parry),
-			}),
-			Object.freeze({
-				id: COMBAT_DEFENCE_RESPONSE.DODGE,
-				available: dodgeAvailable,
-				reason: dodgeAvailable
-					? null
-					: dodgeUnavailableReason(dodge, seenComing),
-			}),
-			Object.freeze({
-				id: COMBAT_DEFENCE_RESPONSE.NONE,
-				available: true,
-				reason: null,
-			}),
-		];
-
 		return foundry.utils.deepFreeze({
+			mode: "managed",
 			combatId: String(combatant.parent?.id ?? ""),
 			combatantId: String(combatant.id ?? ""),
 			actorUuid: String(combatant.actor?.uuid ?? ""),
 			kind: "melee",
 			seenComing: Boolean(seenComing),
 			selectionMode: "exactlyOne",
-			responses,
+			responses: responseView({
+				parryAvailable: parry.canParry,
+				parryReason: parry.canParry
+					? null
+					: parryUnavailableReason(parry),
+				dodgeAvailable,
+				dodgeReason: dodgeAvailable
+					? null
+					: dodgeUnavailableReason(dodge, seenComing),
+			}),
 			parry,
 			dodge,
 		});
 	}
+
+	/**
+	 * Build defence choices for an Actor outside Combat Tracker.
+	 *
+	 * The Actor still needs a legal held parry Item and Dodge Blow still needs
+	 * the stable Dodge Blow Skill rules ID. What is intentionally absent is
+	 * automated round-resource accounting; callers/GM may manage those values
+	 * manually when resolving an abstract or out-of-combat exchange.
+	 */
+	static unmanagedMelee(
+		actor,
+		{
+			seenComing = true,
+			optionalWeaponModifiers = false,
+		} = {},
+	) {
+		assertActor(actor);
+
+		const rawParryChoices = CombatEquipment.parryOptions(actor, {
+			optionalWeaponModifiers,
+		});
+		const choices = rawParryChoices.map((choice) => Object.freeze({
+			...choice,
+			attackCost: 0,
+			immediateAttackCost: 0,
+			parryDebtAdded: 0,
+			parryDebtBefore: 0,
+			parryDebtAfter: 0,
+			remainingAttacksBefore: null,
+			remainingAttacksAfter: null,
+			projectedNextTurnAttacksBefore: null,
+			projectedNextTurnAttacksAfter: null,
+		}));
+		const hasSkill = actorHasDodgeBlow(actor);
+		const dodgeAvailable = Boolean(seenComing && hasSkill);
+
+		const parry = {
+			actorUuid: String(actor.uuid ?? ""),
+			managed: false,
+			remainingAttacks: null,
+			currentAttackRemaining: null,
+			projectedNextTurnAttacks: null,
+			parryDebt: null,
+			parryAttemptsRemaining: null,
+			resourceCanParry: choices.length > 0,
+			canParry: choices.length > 0,
+			choices,
+		};
+		const dodge = {
+			actorUuid: String(actor.uuid ?? ""),
+			managed: false,
+			hasSkill,
+			usedThisRound: false,
+			canAttemptThisRound: hasSkill,
+		};
+
+		return foundry.utils.deepFreeze({
+			mode: "unmanaged",
+			combatId: "",
+			combatantId: "",
+			actorUuid: String(actor.uuid ?? ""),
+			kind: "melee",
+			seenComing: Boolean(seenComing),
+			selectionMode: "exactlyOne",
+			responses: responseView({
+				parryAvailable: choices.length > 0,
+				parryReason: choices.length > 0 ? null : "no-parry-item",
+				dodgeAvailable,
+				dodgeReason: dodgeAvailable
+					? null
+					: (!seenComing
+						? "not-seen-coming"
+						: "missing-dodge-blow-skill"),
+			}),
+			parry,
+			dodge,
+		});
+	}
+}
+
+function responseView({
+	parryAvailable,
+	parryReason,
+	dodgeAvailable,
+	dodgeReason,
+}) {
+	return [
+		Object.freeze({
+			id: COMBAT_DEFENCE_RESPONSE.PARRY,
+			available: Boolean(parryAvailable),
+			reason: parryAvailable ? null : parryReason,
+		}),
+		Object.freeze({
+			id: COMBAT_DEFENCE_RESPONSE.DODGE,
+			available: Boolean(dodgeAvailable),
+			reason: dodgeAvailable ? null : dodgeReason,
+		}),
+		Object.freeze({
+			id: COMBAT_DEFENCE_RESPONSE.NONE,
+			available: true,
+			reason: null,
+		}),
+	];
 }
 
 function parryUnavailableReason(parry) {
@@ -114,8 +194,21 @@ function dodgeUnavailableReason(dodge, seenComing) {
 	return "unavailable";
 }
 
+function actorHasDodgeBlow(actor) {
+	return [...(actor.items ?? [])].some((item) =>
+		item?.type === "skill" &&
+		String(item.system?.rulesId ?? "").trim() === DODGE_BLOW_RULES_ID,
+	);
+}
+
 function assertCombatant(combatant) {
 	if (!(combatant instanceof foundry.documents.Combatant)) {
 		throw new TypeError("A Foundry Combatant is required.");
+	}
+}
+
+function assertActor(actor) {
+	if (!(actor instanceof foundry.documents.Actor)) {
+		throw new TypeError("A Foundry Actor is required.");
 	}
 }
