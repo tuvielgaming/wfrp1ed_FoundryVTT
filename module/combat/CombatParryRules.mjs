@@ -6,11 +6,11 @@ export const PARRY_ATTACK_COST_MODE = Object.freeze({
 /**
  * Normalize the attack-loss mode attached to one parry option.
  *
- * Ordinary weapon parries lose the character's next Attack. Core shield parries
- * lose all following Attacks. The historical internal value
- * `allRemainingAttacks` is retained for API compatibility, but the actual
- * timing is resolved by CombatAttackEconomy: the loss is paid immediately when
- * possible and otherwise carries forward as parry debt.
+ * Ordinary weapon parries lose the character's next Attack. Core shield text
+ * says the character loses all following Attacks. The historical internal
+ * value `allRemainingAttacks` is retained as the stable Item/API identity for a
+ * shield cost; CombatAttackEconomy decides how that text is applied under the
+ * world's selected WFRP optional-rule interpretation.
  *
  * @param {string} value
  * @returns {string}
