@@ -28,6 +28,7 @@
 		"module/movement/HeldItemsCheck.mjs",
 		"module/luck/LuckIntegration.mjs",
 		"module/chat/ChatClientLocalization.mjs",
+		"module/chat/TestResultIdentityChat.mjs",
 		"module/tests/TestResultModifierToggle.mjs"
 	],
 	"styles": [
@@ -49,6 +50,7 @@
 		"css/sheets/combat-item.css",
 		"css/sheets/standard-test.css",
 		"css/chat/test-result.css",
+		"css/chat/test-result-identity.css",
 		"css/chat/test-result-effects.css",
 		"css/chat/combat-attack.css",
 		"css/chat/combat-attack-targeting.css",
