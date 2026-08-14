@@ -104,6 +104,10 @@ export class CombatRoundTurnState {
 	 * and next Combatant economy states. The reconciliation is idempotent: if
 	 * Foundry already fired the normal _onEndTurn/_onStartTurn lifecycle, the
 	 * resulting state is detected and no duplicate spend/reset occurs.
+	 *
+	 * A focus change caused by initiative reordering is not a completed WFRP
+	 * turn. Presentation-only parry-debt reminders therefore survive such focus
+	 * changes and are cleared only after roundTurnState.completed becomes true.
 	 */
 	static async focus(combat, combatant) {
 		assertCombat(combat);
@@ -150,11 +154,13 @@ async function reconcileAttackWindows(previous, next) {
 		if (previousEconomy.turnStarted && !previousEconomy.turnCompleted) {
 			await CombatAttackEconomy.endTurn(previous);
 		}
-		await previous.setFlag(
-			FLAG_SCOPE,
-			PARRY_DEBT_REMINDER_FLAG_KEY,
-			0,
-		);
+		if (CombatRoundTurnState.isCompleted(previous)) {
+			await previous.setFlag(
+				FLAG_SCOPE,
+				PARRY_DEBT_REMINDER_FLAG_KEY,
+				0,
+			);
+		}
 	}
 
 	const before = CombatAttackEconomy.snapshot(next);
@@ -162,11 +168,13 @@ async function reconcileAttackWindows(previous, next) {
 
 	const after = await CombatAttackEconomy.startTurn(next);
 	const paidDebt = Math.max(0, after.spent - before.spent);
-	await next.setFlag(
-		FLAG_SCOPE,
-		PARRY_DEBT_REMINDER_FLAG_KEY,
-		paidDebt,
-	);
+	if (paidDebt > 0) {
+		await next.setFlag(
+			FLAG_SCOPE,
+			PARRY_DEBT_REMINDER_FLAG_KEY,
+			paidDebt,
+		);
+	}
 }
 
 function assertCombatant(combatant) {
