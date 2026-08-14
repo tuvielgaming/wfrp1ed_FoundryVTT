@@ -1,4 +1,5 @@
 import { ActorOwnerEditPermission } from "../sheets/ActorOwnerEditPermission.mjs";
+import { WfrpRuleSettings } from "../settings/WfrpRuleSettings.mjs";
 import { CombatAttackEconomy } from "./CombatAttackEconomy.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
@@ -162,22 +163,42 @@ export class CombatAttackSheetStatus {
 		const snapshot = CombatAttackEconomy.snapshot(combatant);
 		const desired = normalizedRemaining(remaining, snapshot.allowance);
 		const raw = combatant.getFlag(FLAG_SCOPE, ECONOMY_FLAG_KEY) ?? {};
+		const roundContract = WfrpRuleSettings.usesRoundDefenceContract();
 		const state = {
 			...raw,
 			round: nonNegativeInteger(raw.round ?? snapshot.round),
 			spent: nonNegativeInteger(raw.spent ?? snapshot.spent),
-			parryDebt: Math.min(
-				snapshot.allowance,
-				nonNegativeInteger(raw.parryDebt ?? snapshot.parryDebt),
-			),
+			parryDebt: roundContract
+				? 0
+				: Math.min(
+					snapshot.allowance,
+					nonNegativeInteger(raw.parryDebt ?? snapshot.parryDebt),
+				),
 			parriesThisRound: nonNegativeInteger(
 				raw.parriesThisRound ?? snapshot.parriesThisRound,
 			),
+			attacksMadeThisRound: nonNegativeInteger(
+				raw.attacksMadeThisRound ?? snapshot.attacksMadeThisRound,
+			),
+			shieldDefenceCommitted:
+				raw.shieldDefenceCommitted === true,
 			turnStarted: raw.turnStarted === true,
 			turnCompleted: raw.turnCompleted === true,
 		};
 
-		if (state.turnStarted) {
+		if (roundContract) {
+			/*
+			 * Optional round contract has one current-round Attack pool only. A
+			 * manual correction therefore maps directly to `spent` and can never
+			 * manufacture or preserve debt.
+			 */
+			state.spent = snapshot.allowance - desired;
+			state.parryDebt = 0;
+			if (desired > 0) {
+				/* A deliberate GM increase also releases a manual Full Defence lock. */
+				state.shieldDefenceCommitted = false;
+			}
+		} else if (state.turnStarted) {
 			state.spent = snapshot.allowance - desired;
 		} else {
 			/*
