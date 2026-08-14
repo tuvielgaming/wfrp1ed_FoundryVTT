@@ -12,7 +12,8 @@ import { WfrpRuleSettings } from "../settings/WfrpRuleSettings.mjs";
  * both its WS modifier and its current Attacks-resource cost contract.
  *
  * Under the optional round contract a normal weapon parry is paid directly from
- * the current-round Attack pool and therefore requires at least 1 A remaining.
+ * the current-round Attack pool and therefore requires at least 1 A remaining
+ * anywhere in that round pool, even after the Combatant's own turn has ended.
  * Shield Full Defence is different: after it is legally declared, repeated
  * shield parries rely on the separate Core parry-attempt cap, so they remain
  * possible even though offensive Attacks have been reduced to 0.
@@ -45,7 +46,7 @@ export class CombatParrySelection {
 				if (
 					WfrpRuleSettings.usesRoundDefenceContract() &&
 					option.attackCostMode === PARRY_ATTACK_COST_MODE.ONE_ATTACK &&
-					economy.remaining <= 0
+					economy.projectedNextTurnAttacks <= 0
 				) {
 					return false;
 				}
