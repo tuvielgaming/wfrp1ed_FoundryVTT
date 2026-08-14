@@ -1,13 +1,14 @@
 import { PARRY_ATTACK_COST_MODE } from "./CombatParryRules.mjs";
 import { CombatEquipment } from "./CombatEquipment.mjs";
+import { WfrpRuleSettings } from "../settings/WfrpRuleSettings.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
 const ATTACK_FLAG_KEY = "combatAttackResult";
 
 /**
  * Outside Combat Tracker the defence transaction intentionally does not mutate
- * round resources. Keep the Core costs visible anyway so an abstract/manual
- * exchange still reminds the table what must be tracked by hand.
+ * round resources. Keep the configured rule costs visible anyway so an
+ * abstract/manual exchange still reminds the table what must be tracked by hand.
  */
 Hooks.on("renderChatMessageHTML", (message, html) => {
 	const attack = message?.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY);
@@ -58,18 +59,23 @@ async function decorate(message, root) {
 
 	select.dataset.wfrpRuleReminders = "true";
 	select.title = localize(
-		"Outside Combat Tracker these are rule reminders only. The system does not automatically spend Attacks, create parry debt, or remember the once-per-round Dodge Blow use.",
-		"Poza Monitorem Walki są to wyłącznie przypomnienia zasad. System nie zużywa automatycznie Ataków, nie tworzy długu za parowanie ani nie zapamiętuje użycia Uników raz na rundę.",
+		"Outside Combat Tracker these are rule reminders only. The system does not automatically spend Attacks, create parry debt, remember shield commitment, or remember the once-per-round Dodge Blow use.",
+		"Poza Monitorem Walki są to wyłącznie przypomnienia zasad. System nie zużywa automatycznie Ataków, nie tworzy długu za parowanie, nie zapamiętuje zobowiązania tarczą ani użycia Uników raz na rundę.",
 	);
 }
 
 function parryCostReminder(mode) {
 	switch (mode) {
 		case PARRY_ATTACK_COST_MODE.ALL_REMAINING_ATTACKS:
-			return localize(
-				"cost: all following Attacks",
-				"koszt: wszystkie kolejne Ataki",
-			);
+			return WfrpRuleSettings.usesShieldDefensiveCommitment()
+				? localize(
+					"cost: commit all offensive Attacks this round",
+					"koszt: poświęć wszystkie ofensywne Ataki w tej rundzie",
+				)
+				: localize(
+					"cost: all following Attacks",
+					"koszt: wszystkie kolejne Ataki",
+				);
 		case PARRY_ATTACK_COST_MODE.ONE_ATTACK:
 		default:
 			return localize("cost: 1 Attack", "koszt: 1 Atak");
