@@ -6,11 +6,12 @@ const FLAG_SCOPE = "wfrp1ed";
 const ATTACK_FLAG_KEY = "combatAttackResult";
 
 /**
- * Keep configured defence costs visible where the core transaction has no
- * natural numeric cost to show. Outside Combat Tracker all entries are manual
- * reminders. In managed Combat the optional shield-commitment interpretation
- * also gets an explicit label because its cost is a round-state commitment,
- * not a normal immediate/debt number.
+ * Normalize defence-option presentation independently from the underlying
+ * resource implementation.
+ *
+ * Parry choices show one concise cost only. Debt remains an internal detail of
+ * the Core/default economy and is never appended to the selector label. The
+ * optional round contract shows Shield as "All Attacks / Full Defence".
  */
 Hooks.on("renderChatMessageHTML", (message, html) => {
 	const attack = message?.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY);
@@ -31,8 +32,6 @@ async function decorate(message, root) {
 	if (!defender) return;
 
 	const managed = Boolean(combatantForActor(defender));
-	if (managed && !WfrpRuleSettings.usesShieldDefensiveCommitment()) return;
-
 	const select = await defenceSelect(root);
 	if (!(select instanceof HTMLSelectElement)) return;
 	if (select.dataset.wfrpRuleReminders === "true") return;
@@ -44,13 +43,18 @@ async function decorate(message, root) {
 
 	for (const option of select.options) {
 		const response = String(option.dataset.response ?? "");
+		if (response === "none") {
+			option.textContent = responseLabel("none");
+			continue;
+		}
+
 		if (response === "dodge") {
-			if (!managed) {
-				option.textContent = `${option.textContent} — ${localize(
+			option.textContent = managed
+				? responseLabel("dodge")
+				: `${responseLabel("dodge")} — ${localize(
 					"once per round",
 					"raz na rundę",
 				)}`;
-			}
 			continue;
 		}
 
@@ -59,53 +63,50 @@ async function decorate(message, root) {
 		const choice = parryByUuid.get(itemUuid);
 		if (!choice) continue;
 
-		if (!managed) {
-			option.textContent = `${option.textContent} — ${parryCostReminder(
-				choice.attackCostMode,
-			)}`;
-			continue;
-		}
-
-		if (
-			choice.attackCostMode === PARRY_ATTACK_COST_MODE.ALL_REMAINING_ATTACKS &&
-			WfrpRuleSettings.usesShieldDefensiveCommitment()
-		) {
-			option.textContent = `${option.textContent} — ${localize(
-				"commit all offensive Attacks this round",
-				"poświęć wszystkie ofensywne Ataki w tej rundzie",
-			)}`;
-		}
+		const bonus = Number(choice.totalBonus ?? 0);
+		const signed = bonus >= 0 ? `+${bonus}` : String(bonus);
+		option.textContent = [
+			`${responseLabel("parry")} — ${choice.itemName} (${signed})`,
+			parryCostLabel(choice.attackCostMode),
+		].join(" — ");
 	}
 
 	select.dataset.wfrpRuleReminders = "true";
-	if (!managed) {
-		select.title = localize(
-			"Outside Combat Tracker these are rule reminders only. The system does not automatically spend Attacks, create parry debt, remember shield commitment, or remember the once-per-round Dodge Blow use.",
-			"Poza Monitorem Walki są to wyłącznie przypomnienia zasad. System nie zużywa automatycznie Ataków, nie tworzy długu za parowanie, nie zapamiętuje zobowiązania tarczą ani użycia Uników raz na rundę.",
+	select.title = WfrpRuleSettings.usesRoundDefenceContract()
+		? localize(
+			"Round contract: weapon parry costs 1 Attack this round; Shield gives Full Defence and sets this round's Attacks to 0. Parry attempts are tracked separately up to A. No debt carries forward.",
+			"Kontrakt rundy: parowanie bronią kosztuje 1 Atak w tej rundzie; tarcza daje Pełną obronę i ustawia Ataki tej rundy na 0. Próby parowania są liczone osobno do limitu A. Żaden dług nie przechodzi dalej.",
+		)
+		: localize(
+			"Core/default parry costs are shown without the internal debt breakdown.",
+			"Koszt parowania według zasad domyślnych jest pokazany bez wewnętrznego rozbicia na dług.",
 		);
-	} else {
-		select.title = localize(
-			"Optional shield rule: declaring a shield parry commits all offensive Attacks for this round while the normal A parry-attempt limit remains.",
-			"Opcjonalna zasada tarczy: zadeklarowanie parowania tarczą poświęca wszystkie ofensywne Ataki w tej rundzie, zachowując zwykły limit prób parowania równy A.",
-		);
-	}
 }
 
-function parryCostReminder(mode) {
+function parryCostLabel(mode) {
 	switch (mode) {
 		case PARRY_ATTACK_COST_MODE.ALL_REMAINING_ATTACKS:
-			return WfrpRuleSettings.usesShieldDefensiveCommitment()
+			return WfrpRuleSettings.usesRoundDefenceContract()
 				? localize(
-					"cost: commit all offensive Attacks this round",
-					"koszt: poświęć wszystkie ofensywne Ataki w tej rundzie",
+					"All Attacks / Full Defence",
+					"Wszystkie Ataki / Pełna obrona",
 				)
 				: localize(
-					"cost: all following Attacks",
-					"koszt: wszystkie kolejne Ataki",
+					"All following Attacks",
+					"Wszystkie kolejne Ataki",
 				);
 		case PARRY_ATTACK_COST_MODE.ONE_ATTACK:
 		default:
-			return localize("cost: 1 Attack", "koszt: 1 Atak");
+			return localize("Cost 1 A", "Koszt 1 A");
+	}
+}
+
+function responseLabel(response) {
+	switch (response) {
+		case "parry": return localize("Parry", "Parowanie");
+		case "dodge": return localize("Dodge Blow", "Uniki");
+		case "none": return localize("No defence", "Brak obrony");
+		default: return String(response ?? "—");
 	}
 }
 
