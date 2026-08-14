@@ -218,13 +218,31 @@ function activateTrackerDrag(root, combat) {
 
 		row.addEventListener("dragover", (event) => {
 			if (!hasWfrpDrag(event)) return;
+			const sourceId = event.dataTransfer?.getData(DRAG_MIME);
+			if (!sourceId || sourceId === id) return;
+
 			event.preventDefault();
 			if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
 			clearDropTargets(root, row);
+
 			const rect = row.getBoundingClientRect();
-			const after = event.clientY > rect.top + rect.height / 2;
+			const pointerPosition = event.clientY > rect.top + rect.height / 2
+				? "after"
+				: "before";
+			const position = actionableDropPosition(
+				combat,
+				sourceId,
+				id,
+				pointerPosition,
+			);
+			if (!position) {
+				row.classList.remove("wfrp-initiative-drop-target");
+				delete row.dataset.wfrpDropPosition;
+				return;
+			}
+
 			row.classList.add("wfrp-initiative-drop-target");
-			row.dataset.wfrpDropPosition = after ? "after" : "before";
+			row.dataset.wfrpDropPosition = position;
 		});
 
 		row.addEventListener("dragleave", (event) => {
@@ -240,10 +258,9 @@ function activateTrackerDrag(root, combat) {
 			if (!sourceId || sourceId === id) return;
 			event.preventDefault();
 			event.stopPropagation();
-			const position = row.dataset.wfrpDropPosition === "after"
-				? "after"
-				: "before";
+			const position = row.dataset.wfrpDropPosition;
 			clearDropFeedback(root);
+			if (position !== "before" && position !== "after") return;
 			void reorderRelative(combat, sourceId, id, position);
 		});
 
@@ -277,16 +294,38 @@ function activateTrackerDrag(root, combat) {
 	}
 }
 
+/**
+ * Keep the green target indicator honest: whenever the pointer-selected half of
+ * a neighboring row would produce the exact same order, flip to the other half.
+ * This makes first↔second (and any adjacent swap) happen as soon as the target
+ * row is highlighted instead of requiring near-total row overlap.
+ */
+function actionableDropPosition(combat, sourceId, targetId, preferredPosition) {
+	const current = combat.turns.map((entry) => String(entry.id));
+	const preferred = relativeOrder(
+		current,
+		sourceId,
+		targetId,
+		preferredPosition,
+	);
+	if (preferred && !sameOrder(current, preferred)) return preferredPosition;
+
+	const alternatePosition = preferredPosition === "after" ? "before" : "after";
+	const alternate = relativeOrder(
+		current,
+		sourceId,
+		targetId,
+		alternatePosition,
+	);
+	if (alternate && !sameOrder(current, alternate)) return alternatePosition;
+	return null;
+}
+
 async function reorderRelative(combat, sourceId, targetId, position) {
 	try {
-		const ids = combat.turns.map((entry) => String(entry.id));
-		const from = ids.indexOf(String(sourceId));
-		if (from < 0 || !ids.includes(String(targetId))) return;
-
-		ids.splice(from, 1);
-		let insertAt = ids.indexOf(String(targetId));
-		if (position === "after") insertAt += 1;
-		ids.splice(insertAt, 0, String(sourceId));
+		const current = combat.turns.map((entry) => String(entry.id));
+		const ids = relativeOrder(current, sourceId, targetId, position);
+		if (!ids || sameOrder(current, ids)) return;
 
 		await CombatRoundInitiativeOrder.applyOrder(combat, ids, {
 			movedCombatantId: sourceId,
@@ -295,6 +334,25 @@ async function reorderRelative(combat, sourceId, targetId, position) {
 		console.error("WFRP1ED | Unable to reorder initiative.", error);
 		ui.notifications.error(error?.message ?? String(error));
 	}
+}
+
+function relativeOrder(currentIds, sourceId, targetId, position) {
+	const ids = [...currentIds].map(String);
+	const source = String(sourceId);
+	const target = String(targetId);
+	const from = ids.indexOf(source);
+	if (from < 0 || source === target || !ids.includes(target)) return null;
+
+	ids.splice(from, 1);
+	let insertAt = ids.indexOf(target);
+	if (position === "after") insertAt += 1;
+	ids.splice(insertAt, 0, source);
+	return ids;
+}
+
+function sameOrder(left, right) {
+	return left.length === right.length &&
+		left.every((id, index) => String(id) === String(right[index]));
 }
 
 async function reorderToEnd(combat, sourceId) {
