@@ -1,14 +1,20 @@
+import {
+	actorForTestMessage,
+	canSeeFullTestDetails,
+} from "../tests/TestResultAudienceVisibility.mjs";
+
 const FLAG_SCOPE = "wfrp1ed";
 const ATTACK_FLAG_KEY = "combatAttackResult";
 const DEFENCE_FLAG_KEY = "combatDefenceResult";
+const TARGET_CONTEXT_FLAG_KEY = "testTargetContext";
 
 /**
  * Compact identity treatment shared by generic Tests and combat Tests.
  *
  * The generic TestResult card keeps ownership of target breakdown, modifier
- * adjudication, editable d100 and margin. This layer only changes the visual
- * identity header and, for attacks, removes duplicated combat metadata which is
- * already obvious from the selected Weapon and Combatant state.
+ * adjudication, editable d100 and margin. This layer owns the safe public
+ * identity summary: Actor portrait, what Test/action was used, and the target
+ * Actor name when one exists. Mechanical target values never enter this layer.
  */
 Hooks.on("renderChatMessageHTML", (message, html) => {
 	const root = asElement(html);
@@ -28,7 +34,7 @@ function decorateIdentity(message, card) {
 	const originalTitle = header.querySelector("h2");
 	if (!originalTitle) return;
 
-	const actor = actorForMessage(message);
+	const actor = actorForTestMessage(message);
 	const displayName = testDisplayName(message, originalTitle.textContent);
 	const identity = document.createElement("div");
 	identity.classList.add("wfrp1e-test-card__identity");
@@ -41,21 +47,31 @@ function decorateIdentity(message, card) {
 
 	const fields = document.createElement("div");
 	fields.classList.add("wfrp1e-test-card__identity-fields");
+	fields.append(identityRow(localize("Test", "Test"), displayName, {
+		valueData: "wfrpTestDisplayName",
+	}));
 
-	const testRow = document.createElement("div");
-	testRow.classList.add("wfrp1e-test-card__identity-row");
-	const label = document.createElement("span");
-	label.textContent = localize("Test", "Test");
-	const value = document.createElement("strong");
-	value.dataset.wfrpTestDisplayName = "";
-	value.textContent = displayName;
-	testRow.append(label, value);
-	fields.append(testRow);
+	const targetName = targetDisplayName(message);
+	if (targetName) {
+		fields.append(identityRow(localize("Target", "Cel"), targetName));
+	}
 
 	identity.append(portrait, fields);
 	originalTitle.replaceWith(identity);
 	header.classList.add("has-test-identity");
 	header.dataset.wfrpIdentityDecorated = "true";
+}
+
+function identityRow(labelText, valueText, { valueData = "" } = {}) {
+	const row = document.createElement("div");
+	row.classList.add("wfrp1e-test-card__identity-row");
+	const label = document.createElement("span");
+	label.textContent = labelText;
+	const value = document.createElement("strong");
+	if (valueData) value.dataset[valueData] = "";
+	value.textContent = String(valueText ?? "—");
+	row.append(label, value);
+	return row;
 }
 
 function compactAttackContext(message, card) {
@@ -89,6 +105,9 @@ function testDisplayName(message, fallback) {
 		return localize("Dodge Blow", "Uniki");
 	}
 	if (defence?.response === "parry") {
+		if (!canSeeFullTestDetails(message)) {
+			return localize("Parry", "Parowanie");
+		}
 		const itemName = String(defence.itemName ?? "").trim();
 		return itemName
 			? `${localize("Parry", "Parowanie")} — ${itemName}`
@@ -98,22 +117,17 @@ function testDisplayName(message, fallback) {
 	return String(fallback ?? localize("Test", "Test"));
 }
 
-function actorForMessage(message) {
-	const speaker = message?.speaker ?? {};
-	const sceneId = String(speaker.scene ?? "").trim();
-	const tokenId = String(speaker.token ?? "").trim();
-	if (sceneId && tokenId) {
-		const token = game.scenes?.get(sceneId)?.tokens?.get(tokenId);
-		if (token?.actor?.documentName === "Actor") return token.actor;
+function targetDisplayName(message) {
+	const generic = message?.getFlag?.(FLAG_SCOPE, TARGET_CONTEXT_FLAG_KEY);
+	const genericName = String(generic?.name ?? "").trim();
+	if (genericName) return genericName;
+
+	const attack = message?.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY);
+	if (attack?.targetMode === "defender") {
+		return String(attack.target?.name ?? "").trim();
 	}
 
-	const actorId = String(speaker.actor ?? "").trim();
-	if (actorId) {
-		const actor = game.actors?.get(actorId);
-		if (actor?.documentName === "Actor") return actor;
-	}
-
-	return null;
+	return "";
 }
 
 function asElement(html) {
