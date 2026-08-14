@@ -3,6 +3,9 @@ import { TestContext } from "../tests/TestContext.mjs";
 import { TestDialog } from "../tests/TestDialog.mjs";
 import { TestResultChat } from "../tests/TestResultChat.mjs";
 
+const FLAG_SCOPE = "wfrp1ed";
+const TARGET_CONTEXT_FLAG_KEY = "testTargetContext";
+
 export class RollTestAction {
 	/**
 	 * Configure, execute, and publish one test.
@@ -67,6 +70,10 @@ export class RollTestAction {
 	 * This keeps one target/modifier pipeline and makes the existing result
 	 * breakdown automatically audit their source and contribution.
 	 *
+	 * Target identity is persisted separately from mechanical target values. The
+	 * name/UUID are presentation-safe and let restricted viewers see who was
+	 * targeted without exposing that Actor's characteristics or target formula.
+	 *
 	 * @param {TestContext} context
 	 * @returns {Promise<TestResult>}
 	 */
@@ -88,7 +95,17 @@ export class RollTestAction {
 		const result = await context.test.roll(context);
 
 		result.chatMessage = await TestResultChat.publish(result);
+		await persistTargetIdentity(result.chatMessage, context.target);
 
 		return result;
 	}
+}
+
+async function persistTargetIdentity(message, target) {
+	if (!message?.id || target?.documentName !== "Actor") return;
+
+	await message.setFlag(FLAG_SCOPE, TARGET_CONTEXT_FLAG_KEY, {
+		uuid: String(target.uuid ?? ""),
+		name: String(target.name ?? ""),
+	});
 }
