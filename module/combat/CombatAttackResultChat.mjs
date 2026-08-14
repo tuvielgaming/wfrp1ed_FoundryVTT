@@ -1,5 +1,6 @@
 import { CombatAttackRangeRules } from "./CombatAttackRangeRules.mjs";
 import { TestResultChat } from "../tests/TestResultChat.mjs";
+import { canSeeFullTestDetails } from "../tests/TestResultAudienceVisibility.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
 const FLAG_KEY = "combatAttackResult";
@@ -13,6 +14,11 @@ const RANGE_MODIFIER_TYPE = "combat-range";
  * calculation. This controller stores only combat context (weapon, defender,
  * range policy, later defence/damage state) in a separate flag and injects its
  * presentation after the generic card renders.
+ *
+ * Restricted viewers get only an empty attack-context shell. That lets a
+ * defender OWNER receive their own defence controls later without exposing the
+ * attacker's range/modifier diagnostics. Safe target identity is rendered in
+ * the shared Test identity header instead.
  *
  * GM range edits deliberately rewrite the persisted range modifier inside the
  * generic test snapshot, then ask TestResultChat to re-render against the same
@@ -47,7 +53,11 @@ export class CombatAttackResultChat {
 			return;
 		}
 
-		const panel = this.#buildPanel(message, state);
+		const panel = this.#buildPanel(
+			message,
+			state,
+			canSeeFullTestDetails(message),
+		);
 		const header = card.querySelector(".wfrp1e-test-card__header");
 		if (header?.parentElement === card) {
 			header.insertAdjacentElement("afterend", panel);
@@ -56,10 +66,15 @@ export class CombatAttackResultChat {
 		}
 	}
 
-	static #buildPanel(message, state) {
+	static #buildPanel(message, state, fullDetails) {
 		const panel = document.createElement("section");
 		panel.classList.add("wfrp1e-combat-attack-context");
 		panel.dataset.wfrpCombatAttackContext = "";
+
+		if (!fullDetails) {
+			panel.classList.add("is-audience-shell");
+			return panel;
+		}
 
 		const heading = document.createElement("div");
 		heading.classList.add("combat-attack-context__heading");
@@ -71,14 +86,18 @@ export class CombatAttackResultChat {
 		heading.append(kind, weapon);
 		panel.append(heading);
 
-		panel.append(
-			row(
-				localize("Target", "Cel"),
-				state.targetMode === "defender"
-					? String(state.target?.name ?? "—")
-					: localize("No defender / object", "Bez obrońcy / obiekt"),
-			),
-		);
+		/*
+		 * A real defender is already displayed in the shared identity block, so
+		 * only the explicit no-defender/object mode needs a combat-context row.
+		 */
+		if (state.targetMode !== "defender") {
+			panel.append(
+				row(
+					localize("Target", "Cel"),
+					localize("No defender / object", "Bez obrońcy / obiekt"),
+				),
+			);
+		}
 
 		if (state.attackCost > 0) {
 			panel.append(
