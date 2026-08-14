@@ -2,6 +2,8 @@ import "./CombatAttackSheetStatus.mjs";
 import { CombatAttackLauncher } from "./CombatAttackLauncher.mjs";
 import { CombatAttackRangeRules } from "./CombatAttackRangeRules.mjs";
 import { CombatAttackResultChat } from "./CombatAttackResultChat.mjs";
+import { CombatDefenceResultChat } from "./CombatDefenceResultChat.mjs";
+import { CombatDefenceTransaction } from "./CombatDefenceTransaction.mjs";
 import { PendingCombatAttack } from "./PendingCombatAttack.mjs";
 
 Hooks.once("init", () => {
@@ -18,6 +20,7 @@ Hooks.once("init", () => {
 			attack: CombatAttackLauncher,
 			attackRangeRules: CombatAttackRangeRules,
 			attackResultChat: CombatAttackResultChat,
+			defenceTransaction: CombatDefenceTransaction,
 			pendingAttack: PendingCombatAttack,
 		}),
 	});
@@ -26,4 +29,10 @@ Hooks.once("init", () => {
 Hooks.on("renderChatMessageHTML", (message, html) => {
 	PendingCombatAttack.activateListeners(message, html);
 	CombatAttackResultChat.activateListeners(message, html);
+	CombatDefenceTransaction.activateListeners(message, html);
+	CombatDefenceResultChat.activateListeners(message, html);
+});
+
+Hooks.on("updateChatMessage", (message, changes) => {
+	CombatDefenceTransaction.onChatMessageUpdate(message, changes);
 });
