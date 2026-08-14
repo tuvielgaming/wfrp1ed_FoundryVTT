@@ -189,6 +189,13 @@
 		/>
 	</label>
 
+	{{!--
+		Career History and Career Exits are progression-owned summaries.
+		They are intentionally not editable form fields: manual +/- controls
+		would create Actor state that can disagree with Career Items and paid
+		career-transfer transactions. Existing persisted values remain visible
+		until the dedicated Career subsystem becomes their authoritative writer.
+	--}}
 	<section
 		class="header-field header-field--career-history"
 		aria-label="{{localize 'WFRP1ED.Header.CareerHistory'}}"
@@ -201,38 +208,14 @@
 				>
 					<input
 						type="text"
-						name="system.details.careerHistory.{{@index}}.name"
 						value="{{entry.name}}"
-						autocomplete="off"
+						readonly
+						tabindex="-1"
 						aria-label="{{localize 'WFRP1ED.Header.CareerHistoryEntry'}}"
-						{{#unless @root.editable}}disabled{{/unless}}
 					/>
-
-					{{#if @root.editable}}
-						<button
-							type="button"
-							class="header-list-remove"
-							data-action="removeCareerHistoryEntry"
-							data-index="{{@index}}"
-							aria-label="{{localize 'WFRP1ED.Header.RemoveCareerHistoryEntry'}}"
-						>
-							×
-						</button>
-					{{/if}}
 				</div>
 			{{/each}}
 		</div>
-
-		{{#if editable}}
-			<button
-				type="button"
-				class="header-list-add"
-				data-action="addCareerHistoryEntry"
-				aria-label="{{localize 'WFRP1ED.Header.AddCareerHistoryEntry'}}"
-			>
-				+
-			</button>
-		{{/if}}
 	</section>
 
 	<section
@@ -247,37 +230,13 @@
 				>
 					<input
 						type="text"
-						name="system.details.careerExits.{{@index}}"
 						value="{{careerExit}}"
-						autocomplete="off"
+						readonly
+						tabindex="-1"
 						aria-label="{{localize 'WFRP1ED.Header.CareerExitEntry'}}"
-						{{#unless @root.editable}}disabled{{/unless}}
 					/>
-
-					{{#if @root.editable}}
-						<button
-							type="button"
-							class="header-list-remove"
-							data-action="removeCareerExit"
-							data-index="{{@index}}"
-							aria-label="{{localize 'WFRP1ED.Header.RemoveCareerExit'}}"
-						>
-							×
-						</button>
-					{{/if}}
 				</div>
 			{{/each}}
 		</div>
-
-		{{#if editable}}
-			<button
-				type="button"
-				class="header-list-add"
-				data-action="addCareerExit"
-				aria-label="{{localize 'WFRP1ED.Header.AddCareerExit'}}"
-			>
-				+
-			</button>
-		{{/if}}
 	</section>
 </section>
