@@ -52,6 +52,7 @@
 		"css/chat/test-result-effects.css",
 		"css/chat/combat-attack.css",
 		"css/chat/combat-attack-targeting.css",
+		"css/chat/combat-defence.css",
 		"css/chat/damage-result.css",
 		"css/chat/held-items-result.css",
 		"css/effects/rule-effects.css",
