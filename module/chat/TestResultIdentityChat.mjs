@@ -1,6 +1,5 @@
 import {
 	actorForTestMessage,
-	canSeeFullTestDetails,
 } from "../tests/TestResultAudienceVisibility.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
@@ -15,6 +14,11 @@ const TARGET_CONTEXT_FLAG_KEY = "testTargetContext";
  * adjudication, editable d100 and margin. This layer owns the safe public
  * identity summary: Actor portrait, what Test/action was used, and the target
  * Actor name when one exists. Mechanical target values never enter this layer.
+ *
+ * A Parry Item is part of the public action identity rather than a hidden
+ * calculation detail. Everyone may therefore see e.g. `Parry — Shield` while
+ * the parry target, modifier, Attack cost/debt and d100 details remain subject
+ * to the normal GM/Actor-owner visibility rules.
  */
 Hooks.on("renderChatMessageHTML", (message, html) => {
 	const root = asElement(html);
@@ -105,9 +109,6 @@ function testDisplayName(message, fallback) {
 		return localize("Dodge Blow", "Uniki");
 	}
 	if (defence?.response === "parry") {
-		if (!canSeeFullTestDetails(message)) {
-			return localize("Parry", "Parowanie");
-		}
 		const itemName = String(defence.itemName ?? "").trim();
 		return itemName
 			? `${localize("Parry", "Parowanie")} — ${itemName}`
