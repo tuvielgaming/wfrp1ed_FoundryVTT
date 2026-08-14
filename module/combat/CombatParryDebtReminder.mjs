@@ -80,6 +80,19 @@ Hooks.on("renderApplicationV2", (application, element) => {
 	cell.append(marker);
 });
 
+/*
+ * Attack-economy state is updated first when a turn begins. That update causes
+ * the open Actor sheet to render once with paid debt already removed from the
+ * economy but before Wfrp1edCombat has written the presentation-only reminder.
+ * Re-render again when the reminder flag itself changes so the final visible
+ * state is e.g. 0/2 A together with the −2 debt marker, rather than the brief
+ * intermediate 0/2 state becoming the last render the player sees.
+ */
+Hooks.on("updateCombatant", (combatant, changes) => {
+	if (!debtReminderChanged(changes)) return;
+	void refreshActorSheet(combatant?.actor);
+});
+
 /** Summarize debt carried into a new round only for the default interpretation. */
 Hooks.on("updateCombat", (combat, changes) => {
 	if (WfrpRuleSettings.usesRoundDefenceContract()) return;
@@ -125,6 +138,25 @@ function combatantForActor(actor) {
 		(entry) => entry.actor?.id && actor.id && entry.actor.id === actor.id,
 	);
 	return sameId.length === 1 ? sameId[0] : null;
+}
+
+function debtReminderChanged(changes) {
+	if (!changes || typeof changes !== "object") return false;
+	const path = `flags.${FLAG_SCOPE}.${DEBT_REMINDER_FLAG_KEY}`;
+	return Object.hasOwn(changes, path) ||
+		foundry.utils.getProperty(changes, path) !== undefined;
+}
+
+async function refreshActorSheet(actor) {
+	if (!actor?.sheet?.rendered) return;
+	try {
+		await actor.sheet.render();
+	} catch (error) {
+		console.error(
+			"WFRP1ED | Unable to refresh Parry debt reminder on Actor sheet.",
+			error,
+		);
+	}
 }
 
 function nonNegativeInteger(value) {
