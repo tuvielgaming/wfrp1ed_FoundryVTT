@@ -1,0 +1,65 @@
+/* WFRP round-scoped initiative reordering in the native Foundry Combat Tracker. */
+[data-wfrp-initiative-drag-root="true"] [data-wfrp-initiative-drag="true"] {
+	cursor: grab;
+}
+
+[data-wfrp-initiative-drag-root="true"] [data-wfrp-initiative-drag="true"]:active {
+	cursor: grabbing;
+}
+
+[data-wfrp-initiative-drag-root="true"] .wfrp-initiative-drag-source {
+	opacity: 0.62;
+}
+
+[data-wfrp-initiative-drag-root="true"] .wfrp-initiative-drop-target {
+	position: relative;
+	outline: 2px solid var(--color-level-success, #2f9e44);
+	outline-offset: 1px;
+}
+
+[data-wfrp-initiative-drag-root="true"] .wfrp-initiative-drop-target[data-wfrp-drop-position="before"]::before,
+[data-wfrp-initiative-drag-root="true"] .wfrp-initiative-drop-target[data-wfrp-drop-position="after"]::after {
+	content: "";
+	position: absolute;
+	left: 0;
+	right: 0;
+	height: 3px;
+	background: var(--color-level-success, #2f9e44);
+	pointer-events: none;
+	z-index: 10;
+}
+
+[data-wfrp-initiative-drag-root="true"] .wfrp-initiative-drop-target[data-wfrp-drop-position="before"]::before {
+	top: -3px;
+}
+
+[data-wfrp-initiative-drag-root="true"] .wfrp-initiative-drop-target[data-wfrp-drop-position="after"]::after {
+	bottom: -3px;
+}
+
+.wfrp-initiative-drop-end {
+	display: none;
+	box-sizing: border-box;
+	min-height: 24px;
+	margin: 6px 2px 2px;
+	padding: 4px 8px;
+	border: 1px dashed transparent;
+	border-radius: 4px;
+	text-align: center;
+	font-size: var(--font-size-11, 11px);
+	line-height: 1.25;
+	list-style: none;
+	user-select: none;
+}
+
+[data-wfrp-initiative-drag-root="true"].wfrp-initiative-dragging .wfrp-initiative-drop-end {
+	display: block;
+	border-color: var(--color-border-light-2, rgba(255, 255, 255, 0.25));
+	opacity: 0.8;
+}
+
+[data-wfrp-initiative-drag-root="true"] .wfrp-initiative-drop-end--active {
+	border-color: var(--color-level-success, #2f9e44);
+	box-shadow: inset 0 0 0 1px var(--color-level-success, #2f9e44);
+	opacity: 1;
+}
