@@ -1,0 +1,31 @@
+/******************************************************************/
+/* Pending Parry debt marker over the Classic A cell              */
+/******************************************************************/
+
+.wfrp1ed-classic-sheet
+	.characteristic-cell--current[data-characteristic="a"] {
+	position: relative;
+}
+
+.wfrp1ed-classic-sheet .characteristic-current-attacks-debt-marker {
+	position: absolute;
+	top: 0.08em;
+	right: 0.1em;
+	z-index: 2;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 1.15em;
+	height: 1.05em;
+	padding: 0 0.16em;
+	border: 1px solid rgb(132 45 32 / 50%);
+	border-radius: 999px;
+	background: rgb(255 239 224 / 94%);
+	color: #8d2d22;
+	font-size: 0.48em;
+	font-weight: 800;
+	line-height: 1;
+	font-variant-numeric: tabular-nums;
+	cursor: help;
+	box-shadow: 0 1px 2px rgb(0 0 0 / 14%);
+}
