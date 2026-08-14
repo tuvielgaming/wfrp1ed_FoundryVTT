@@ -81,15 +81,18 @@ TestResultChat.applyClientVisibility = applyAudienceVisibility;
 
 /*
  * The persisted value remains `gm-only` for compatibility, but its UI meaning
- * is now GM + Actor OWNER. Rename the existing context-menu entry after the core
- * TestResultChat hook has populated it so the GM is not shown stale wording.
+ * is now GM + Actor OWNER. Rename only the TestResult eye-slash context action
+ * after the core hook has populated the menu; do not touch unrelated Foundry
+ * visibility actions which may use the same icon.
  */
 Hooks.once("init", () => {
 	Hooks.on("getChatMessageContextOptions", (_application, menuItems) => {
 		if (!game.user?.isGM || !Array.isArray(menuItems)) return;
-		const restricted = menuItems.find((entry) =>
-			String(entry?.icon ?? "").includes("fa-eye-slash"),
-		);
+		const restricted = menuItems.find((entry) => {
+			if (!String(entry?.icon ?? "").includes("fa-eye-slash")) return false;
+			const name = String(entry?.name ?? "").toLowerCase();
+			return name.includes("test details") || name.includes("szczegóły testu");
+		});
 		if (!restricted) return;
 		restricted.name = localize(
 			"Test details: restrict to GM & Actor owner",
