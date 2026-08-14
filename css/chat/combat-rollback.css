@@ -1,0 +1,17 @@
+.wfrp-transaction-invalidated {
+	margin: 4px 0 6px;
+	padding: 3px 5px;
+	border: 1px solid currentColor;
+	border-radius: 3px;
+	font-size: 0.82em;
+	font-weight: 700;
+	letter-spacing: 0.02em;
+}
+
+.wfrp1e-test-card.is-wfrp-transaction-invalidated {
+	opacity: 0.82;
+}
+
+[data-wfrp-damage-card].is-wfrp-transaction-reverted {
+	opacity: 0.82;
+}
