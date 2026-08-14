@@ -20,20 +20,14 @@ export const COMBAT_DEFENCE_STATUS = Object.freeze({
 });
 
 /**
- * One response transaction bound to one successful real melee attack card.
+ * One mutually-exclusive response transaction bound to a successful real melee
+ * attack card.
  *
- * The generic attack Test remains authoritative for hit/miss. Until a response
- * is committed this class only derives and renders the currently legal defence
- * choices. A GM modifier/manual-roll edit which changes the attack to a miss
- * therefore removes the pending defence without spending any resource.
- *
- * Once committed, exactly one response is stored on the attack:
- *   Parry OR Dodge Blow OR None.
- *
- * Parry and Dodge resource mutations are GM-authoritative and their d100 tests
- * reuse the existing generic Test pipeline. Parry damage reduction is NOT
- * rolled here; that belongs to the later damage transaction, where the exact
- * incoming damage and mitigation order are known.
+ * Managed mode uses Combatant round resources for Parry and Dodge Blow.
+ * Unmanaged mode is available outside Combat Tracker: the same defence tests
+ * and equipment/Skill requirements apply, but round counters, Attack loss and
+ * parry debt are intentionally not mutated because no authoritative round
+ * lifecycle exists there.
  */
 export class CombatDefenceTransaction {
 	static activateListeners(message, html) {
@@ -41,9 +35,9 @@ export class CombatDefenceTransaction {
 	}
 
 	/**
-	 * Derive the current mechanical outcome without trusting cached success.
-	 * The later damage transaction should use this method so manual edits of the
-	 * attack or defence d100 remain authoritative.
+	 * Derive the current mechanical outcome from the persisted Test snapshots.
+	 * Manual edits of the attack or linked defence d100 therefore remain
+	 * authoritative for later damage resolution.
 	 */
 	static outcomeForAttack(message) {
 		const attackState = message?.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY);
@@ -142,17 +136,13 @@ export class CombatDefenceTransaction {
 			);
 		}
 
-		let selectedParry = null;
-		if (responseId === "parry") {
-			selectedParry = CombatParrySelection.choice(
-				context.combatant,
-				itemUuid,
-			);
-		}
-
+		const selectedParry = responseId === "parry"
+			? selectedParryFor(context, itemUuid)
+			: null;
 		const resolving = {
 			status: COMBAT_DEFENCE_STATUS.RESOLVING,
 			response: responseId,
+			managedByCombat: context.managed,
 			requestedBy: String(requestingUser?.id ?? ""),
 			startedAt: Date.now(),
 		};
@@ -169,21 +159,21 @@ export class CombatDefenceTransaction {
 				resolvedAt: Date.now(),
 			};
 			await writeDefenceState(message, context.attackState, resolved);
-			return Object.freeze({
-				attackMessageId: String(message.id ?? ""),
-				defence: foundry.utils.deepFreeze(foundry.utils.deepClone(resolved)),
-			});
+			return frozenResult(message, resolved);
 		}
 
 		let resourceCommitted = false;
 		try {
 			if (responseId === "parry") {
-				const resource = await CombatParrySelection.commitSelectedParry(
-					context.combatant,
-					selectedParry.itemUuid,
-					requestingUser,
-				);
-				resourceCommitted = true;
+				let resource = unmanagedParryResource(selectedParry);
+				if (context.managed) {
+					resource = await CombatParrySelection.commitSelectedParry(
+						context.combatant,
+						selectedParry.itemUuid,
+						requestingUser,
+					);
+					resourceCommitted = true;
+				}
 
 				const result = await context.defender.rollTest("ws", {
 					modifier: resource.selected.totalBonus,
@@ -193,8 +183,9 @@ export class CombatDefenceTransaction {
 				}
 
 				await CombatDefenceResultChat.attach(result.chatMessage, {
-					version: 1,
+					version: 2,
 					response: "parry",
+					managedByCombat: context.managed,
 					attackMessageId: String(message.id ?? ""),
 					attackerName: context.attackState.attacker?.name ?? "",
 					weaponName: context.attackState.weapon?.name ?? "",
@@ -220,17 +211,18 @@ export class CombatDefenceTransaction {
 					resolvedAt: Date.now(),
 				};
 				await writeDefenceState(message, context.attackState, resolved);
-				return Object.freeze({
-					attackMessageId: String(message.id ?? ""),
-					defence: foundry.utils.deepFreeze(foundry.utils.deepClone(resolved)),
-				});
+				return frozenResult(message, resolved);
 			}
 
-			const dodge = await CombatDodgeEconomy.commitAttempt(
-				context.combatant,
-				requestingUser,
-			);
-			resourceCommitted = true;
+			let dodgeRound = null;
+			if (context.managed) {
+				const dodge = await CombatDodgeEconomy.commitAttempt(
+					context.combatant,
+					requestingUser,
+				);
+				resourceCommitted = true;
+				dodgeRound = dodge.round;
+			}
 
 			const result = await context.defender.rollTest("i", {
 				modifier: 0,
@@ -240,13 +232,14 @@ export class CombatDefenceTransaction {
 			}
 
 			await CombatDefenceResultChat.attach(result.chatMessage, {
-				version: 1,
+				version: 2,
 				response: "dodge",
+				managedByCombat: context.managed,
 				attackMessageId: String(message.id ?? ""),
 				attackerName: context.attackState.attacker?.name ?? "",
 				weaponName: context.attackState.weapon?.name ?? "",
 				defenderUuid: context.defender.uuid,
-				round: dodge.round,
+				round: dodgeRound,
 			});
 
 			const resolved = {
@@ -256,10 +249,7 @@ export class CombatDefenceTransaction {
 				resolvedAt: Date.now(),
 			};
 			await writeDefenceState(message, context.attackState, resolved);
-			return Object.freeze({
-				attackMessageId: String(message.id ?? ""),
-				defence: foundry.utils.deepFreeze(foundry.utils.deepClone(resolved)),
-			});
+			return frozenResult(message, resolved);
 		} catch (error) {
 			if (resourceCommitted) {
 				await writeDefenceState(message, context.attackState, {
@@ -353,12 +343,10 @@ export class CombatDefenceTransaction {
 
 		const attackHit = currentTestOutcome(testState).success;
 		const defence = attackState.defence ?? null;
-
 		if (!attackHit && !defence) return;
 
 		const defender = await actorFromAttackState(attackState);
-		if (!defender) return;
-		if (!attackPanel.isConnected) return;
+		if (!defender || !attackPanel.isConnected) return;
 
 		const panel = document.createElement("section");
 		panel.classList.add("combat-defence-transaction");
@@ -377,7 +365,6 @@ export class CombatDefenceTransaction {
 			panel.append(this.#resolvedSummary(defence));
 			return;
 		}
-
 		if (defence?.status === COMBAT_DEFENCE_STATUS.RESOLVING) {
 			panel.append(statusText(localize(
 				"Resolving defence…",
@@ -385,7 +372,6 @@ export class CombatDefenceTransaction {
 			)));
 			return;
 		}
-
 		if (defence?.status === COMBAT_DEFENCE_STATUS.ERROR) {
 			panel.append(statusText(localize(
 				`Defence encountered an error after spending its resource: ${defence.error ?? "unknown error"}`,
@@ -394,23 +380,18 @@ export class CombatDefenceTransaction {
 			return;
 		}
 
-		const combatant = combatantForActor(defender);
-		if (!combatant) {
-			panel.append(statusText(localize(
-				"Automated Parry/Dodge is available when the defender participates in the active Combat Tracker. Resolve this defence manually for an unmanaged attack.",
-				"Automatyczne Parowanie/Uniki są dostępne, gdy obrońca uczestniczy w aktywnym Monitorze Walki. Przy ataku poza automatyką rozstrzygnij obronę ręcznie.",
-			)));
-			return;
-		}
-
-		const opportunity = CombatDefenceOpportunity.melee(combatant, {
-			seenComing: attackState.seenComing !== false,
-		});
-		panel.append(
-			this.#pendingControls(message, defender, opportunity),
+		const { opportunity } = opportunityFor(
+			defender,
+			attackState.seenComing !== false,
 		);
+		panel.append(this.#pendingControls(message, defender, opportunity));
 	}
 
+	/**
+	 * Compact response selector. Unavailable options are omitted rather than
+	 * rendered as dead controls. Parry Items are individual choices so the
+	 * tactical weapon/shield decision remains explicit in one dropdown.
+	 */
 	static #pendingControls(message, defender, opportunity) {
 		const root = document.createElement("div");
 		root.classList.add("combat-defence-pending");
@@ -426,92 +407,79 @@ export class CombatDefenceTransaction {
 
 		if (!canDefend(defender, game.user)) {
 			root.append(statusText(localize(
-				"Waiting for the defender or GM to choose Parry, Dodge Blow, or no defence.",
-				"Oczekiwanie na obrońcę lub MG: Parowanie, Uniki albo brak obrony.",
+				"Waiting for the defender or GM to choose a defence.",
+				"Oczekiwanie na obrońcę lub MG, który wybierze obronę.",
 			)));
 			return root;
 		}
 
-		let selectedResponse = "";
-		const responseButtons = new Map();
-		const actions = document.createElement("div");
-		actions.classList.add("combat-defence-pending__responses");
+		const chooser = document.createElement("label");
+		chooser.classList.add("combat-defence-pending__chooser");
+		const label = document.createElement("span");
+		label.textContent = localize("Response", "Reakcja");
+		const select = document.createElement("select");
+		select.dataset.defenceChoice = "";
 
-		for (const response of opportunity.responses) {
-			const button = document.createElement("button");
-			button.type = "button";
-			button.dataset.defenceResponse = response.id;
-			button.textContent = responseLabel(response.id);
-			button.disabled = response.available !== true;
-			button.title = response.available
-				? responseLabel(response.id)
-				: unavailableReason(response.reason);
-			button.addEventListener("click", (event) => {
-				event.preventDefault();
-				selectedResponse = response.id;
-				for (const [id, candidate] of responseButtons) {
-					candidate.classList.toggle("is-selected", id === selectedResponse);
-				}
-				parryGroup.hidden = selectedResponse !== "parry";
-				refreshConfirm();
+		appendDefenceOption(select, {
+			value: "none",
+			response: "none",
+			label: responseLabel("none"),
+		});
+
+		const dodge = opportunity.responses.find((entry) => entry.id === "dodge");
+		if (dodge?.available) {
+			appendDefenceOption(select, {
+				value: "dodge",
+				response: "dodge",
+				label: responseLabel("dodge"),
 			});
-			responseButtons.set(response.id, button);
-			actions.append(button);
 		}
-		root.append(actions);
 
-		const parryGroup = document.createElement("label");
-		parryGroup.classList.add("combat-defence-pending__parry-item");
-		parryGroup.hidden = true;
-		const parryLabel = document.createElement("span");
-		parryLabel.textContent = localize("Parry with", "Paruj za pomocą");
-		const parrySelect = document.createElement("select");
-		parrySelect.dataset.defenceParryItem = "";
-		for (const choice of opportunity.parry.choices) {
-			const option = document.createElement("option");
-			option.value = choice.itemUuid;
-			option.textContent = parryChoiceLabel(choice);
-			parrySelect.append(option);
+		const parry = opportunity.responses.find((entry) => entry.id === "parry");
+		if (parry?.available) {
+			opportunity.parry.choices.forEach((choice, index) => {
+				appendDefenceOption(select, {
+					value: `parry-${index}`,
+					response: "parry",
+					itemUuid: choice.itemUuid,
+					label: `${responseLabel("parry")} — ${parryChoiceLabel(
+						choice,
+						opportunity.mode === "managed",
+					)}`,
+				});
+			});
 		}
-		parrySelect.addEventListener("change", () => refreshConfirm());
-		parryGroup.append(parryLabel, parrySelect);
-		root.append(parryGroup);
+
+		chooser.append(label, select);
+		root.append(chooser);
 
 		const confirm = document.createElement("button");
 		confirm.type = "button";
 		confirm.classList.add("combat-defence-pending__confirm");
 		confirm.textContent = localize("Confirm defence", "Zatwierdź obronę");
-		confirm.disabled = true;
 		root.append(confirm);
-
-		function refreshConfirm() {
-			confirm.disabled = !selectedResponse ||
-				(selectedResponse === "parry" && !parrySelect.value);
-		}
 
 		confirm.addEventListener("click", async (event) => {
 			event.preventDefault();
-			if (confirm.disabled) return;
+			const option = select.selectedOptions?.[0];
+			if (!option) return;
 
-			for (const button of responseButtons.values()) button.disabled = true;
-			parrySelect.disabled = true;
+			const response = String(option.dataset.response ?? "none");
+			const itemUuid = String(option.dataset.itemUuid ?? "");
+			select.disabled = true;
 			confirm.disabled = true;
 
 			try {
 				await CombatDefenceTransaction.requestResponse(
 					message,
-					selectedResponse,
-					selectedResponse === "parry" ? parrySelect.value : "",
+					response,
+					itemUuid,
 				);
 			} catch (error) {
 				console.error("WFRP1ED | Unable to commit combat defence.", error);
 				ui.notifications.error(error?.message ?? String(error));
-				for (const response of opportunity.responses) {
-					const button = responseButtons.get(response.id);
-					if (button) button.disabled = response.available !== true;
-				}
-				parrySelect.disabled = false;
-				refreshConfirm();
+				select.disabled = false;
+				confirm.disabled = false;
 			}
 		});
 
@@ -590,24 +558,68 @@ export class CombatDefenceTransaction {
 		if (!defender) {
 			throw new Error("The defending Actor is no longer available.");
 		}
-		const combatant = combatantForActor(defender);
-		if (!combatant) {
-			throw new Error(localize(
-				"Automated Parry/Dodge requires the defender to participate in the active Combat Tracker.",
-				"Automatyczne Parowanie/Uniki wymagają udziału obrońcy w aktywnym Monitorze Walki.",
-			));
-		}
 
+		const resolved = opportunityFor(
+			defender,
+			attackState.seenComing !== false,
+		);
 		return {
 			attackState,
 			testState,
 			defender,
-			combatant,
-			opportunity: CombatDefenceOpportunity.melee(combatant, {
-				seenComing: attackState.seenComing !== false,
-			}),
+			combatant: resolved.combatant,
+			managed: Boolean(resolved.combatant),
+			opportunity: resolved.opportunity,
 		};
 	}
+}
+
+function opportunityFor(defender, seenComing) {
+	const combatant = combatantForActor(defender);
+	const opportunity = combatant
+		? CombatDefenceOpportunity.melee(combatant, { seenComing })
+		: CombatDefenceOpportunity.unmanagedMelee(defender, { seenComing });
+	return { combatant, opportunity };
+}
+
+function selectedParryFor(context, itemUuid) {
+	if (context.managed) {
+		return CombatParrySelection.choice(context.combatant, itemUuid);
+	}
+
+	const requested = String(itemUuid ?? "");
+	const selected = context.opportunity.parry.choices.find(
+		(choice) => choice.itemUuid === requested,
+	);
+	if (!selected) {
+		throw new Error(
+			"The selected Item is not currently available for parrying.",
+		);
+	}
+	return selected;
+}
+
+function unmanagedParryResource(selected) {
+	return {
+		selected,
+		parryAttackCost: 0,
+		parryImmediateAttackCost: 0,
+		parryDebtAdded: 0,
+	};
+}
+
+function appendDefenceOption(select, {
+	value,
+	response,
+	itemUuid = "",
+	label,
+}) {
+	const option = document.createElement("option");
+	option.value = String(value);
+	option.dataset.response = String(response);
+	option.dataset.itemUuid = String(itemUuid);
+	option.textContent = String(label);
+	select.append(option);
 }
 
 function assertPendingAttack(context) {
@@ -674,7 +686,7 @@ function assertCanDefend(actor, user) {
 
 async function writeDefenceState(message, attackState, defence) {
 	const updated = foundry.utils.deepClone(attackState ?? {});
-	updated.version = Math.max(3, Number(updated.version) || 0);
+	updated.version = Math.max(4, Number(updated.version) || 0);
 	updated.defence = foundry.utils.deepClone(defence);
 	updated.updatedBy = game.user?.id ?? "";
 	updated.updatedAt = Date.now();
@@ -689,6 +701,13 @@ async function clearDefenceState(message, attackState) {
 	await message.setFlag(FLAG_SCOPE, ATTACK_FLAG_KEY, updated);
 }
 
+function frozenResult(message, defence) {
+	return Object.freeze({
+		attackMessageId: String(message.id ?? ""),
+		defence: foundry.utils.deepFreeze(foundry.utils.deepClone(defence)),
+	});
+}
+
 function responseLabel(response) {
 	switch (response) {
 		case "parry": return localize("Parry", "Parowanie");
@@ -698,31 +717,16 @@ function responseLabel(response) {
 	}
 }
 
-function unavailableReason(reason) {
-	switch (reason) {
-		case "parry-limit":
-			return localize("Parry attempt limit reached this round.", "Limit prób parowania w tej rundzie został wyczerpany.");
-		case "no-parry-item":
-			return localize("No currently held Item can parry.", "Brak aktualnie trzymanego przedmiotu, którym można parować.");
-		case "not-seen-coming":
-			return localize("The blow was not seen coming.", "Postać nie widziała nadchodzącego ciosu.");
-		case "missing-dodge-blow-skill":
-			return localize("The defender does not have Dodge Blow.", "Obrońca nie posiada umiejętności Uniki.");
-		case "already-used-this-round":
-			return localize("Dodge Blow was already attempted this round.", "Uniki zostały już użyte w tej rundzie.");
-		default:
-			return localize("This defence is not currently available.", "Ta obrona nie jest obecnie dostępna.");
-	}
-}
-
-function parryChoiceLabel(choice) {
+function parryChoiceLabel(choice, managed) {
 	const bonus = Number(choice.totalBonus ?? 0);
 	const signed = bonus >= 0 ? `+${bonus}` : String(bonus);
-	const cost = Number(choice.attackCost ?? 0);
-	const debt = Number(choice.parryDebtAdded ?? 0);
 	const parts = [`${choice.itemName} (${signed})`];
-	if (cost > 0) parts.push(localize(`cost ${cost} A`, `koszt ${cost} A`));
-	if (debt > 0) parts.push(localize(`debt +${debt}`, `dług +${debt}`));
+	if (managed) {
+		const cost = Number(choice.attackCost ?? 0);
+		const debt = Number(choice.parryDebtAdded ?? 0);
+		if (cost > 0) parts.push(localize(`cost ${cost} A`, `koszt ${cost} A`));
+		if (debt > 0) parts.push(localize(`debt +${debt}`, `dług +${debt}`));
+	}
 	return parts.join(" — ");
 }
 
@@ -764,7 +768,9 @@ function registerSocket() {
 				user,
 			);
 		} catch (error) {
-			response.error = error instanceof Error ? error.message : String(error);
+			response.error = error instanceof Error
+				? error.message
+				: String(error);
 		}
 
 		game.socket.emit(SOCKET_CHANNEL, response);
