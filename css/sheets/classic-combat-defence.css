@@ -1,0 +1,40 @@
+/******************************************************************/
+/* Classic sheet shortcuts for a pending melee defence             */
+/******************************************************************/
+
+/*
+ * Defence shortcuts deliberately reuse the Classic sheet's existing rollable
+ * visual language. The Chat card remains the authoritative explicit chooser;
+ * these highlights only appear while exactly one attack is waiting for this
+ * Actor's response.
+ */
+.wfrp1ed-classic-sheet .combat-sheet-defence-rollable,
+.wfrp1ed-classic-sheet .combat-sheet-defence-action {
+	cursor: pointer;
+	transition:
+		background-color 0.15s ease,
+		outline-color 0.15s ease,
+		opacity 0.15s ease;
+}
+
+.wfrp1ed-classic-sheet .combat-sheet-defence-rollable:hover,
+.wfrp1ed-classic-sheet .combat-sheet-defence-action:hover {
+	background-color: var(--rollable-hover-background);
+}
+
+.wfrp1ed-classic-sheet .combat-sheet-defence-rollable:active,
+.wfrp1ed-classic-sheet .combat-sheet-defence-action:active {
+	background-color: var(--rollable-active-background);
+}
+
+.wfrp1ed-classic-sheet .combat-sheet-defence-rollable:focus-visible,
+.wfrp1ed-classic-sheet .combat-sheet-defence-action:focus-visible {
+	outline: 1px solid var(--focus-color);
+	outline-offset: -2px;
+	background-color: var(--rollable-hover-background);
+}
+
+.wfrp1ed-classic-sheet .combat-sheet-defence-action[aria-busy="true"] {
+	cursor: progress;
+	opacity: 0.65;
+}
