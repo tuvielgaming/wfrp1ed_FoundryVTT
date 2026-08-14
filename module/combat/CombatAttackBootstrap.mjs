@@ -29,8 +29,20 @@ Hooks.once("init", () => {
 Hooks.on("renderChatMessageHTML", (message, html) => {
 	PendingCombatAttack.activateListeners(message, html);
 	CombatAttackResultChat.activateListeners(message, html);
-	CombatDefenceTransaction.activateListeners(message, html);
 	CombatDefenceResultChat.activateListeners(message, html);
+
+	/*
+	 * CombatAttackResultChat adds its context synchronously during this render
+	 * hook, but CombatDefenceTransaction resolves the target Actor asynchronously
+	 * and intentionally verifies that the attack panel is mounted before adding
+	 * interactive defence controls. Foundry may still be rendering a detached
+	 * ChatMessage element while this hook itself is running. Waiting until the
+	 * next animation frame lets Foundry mount the exact same element first, then
+	 * decorates it without racing the ChatLog render lifecycle.
+	 */
+	requestAnimationFrame(() => {
+		CombatDefenceTransaction.activateListeners(message, html);
+	});
 });
 
 Hooks.on("updateChatMessage", (message, changes) => {
