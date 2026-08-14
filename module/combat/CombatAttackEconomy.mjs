@@ -20,25 +20,24 @@ Hooks.once("ready", () => {
 /**
  * WFRP 1e Attacks-resource state owned by Combatants.
  *
- * The Actor characteristic `A / Attacks` is the permanent allowance. Runtime
- * spending belongs to the Combatant so multiple tokens of the same Actor can
- * maintain independent combat state.
+ * Actor A is the permanent allowance. Runtime state is stored on Combatant so
+ * multiple Tokens of one Actor remain independent.
  *
- * Core p.118: an ordinary parry loses the character's next attack whether the
- * parry succeeds or fails. A shield parry loses all following attacks. The
- * default implementation pays those losses immediately when possible and uses
- * bounded parry debt when the loss has to reach the next attack opportunity.
+ * Two world-level interpretations are supported:
  *
- * `parriesThisRound` is independent of attack availability. The Core limit is
- * at most A parry attempts in one round, even when all current attacks have
- * already been used.
+ * 1. Core/default following-attacks model:
+ *    - ordinary parry loses the next Attack;
+ *    - a shield parry loses all following Attacks;
+ *    - losses which cannot be paid in the current attack window become bounded
+ *      parry debt for the next attack opportunity.
  *
- * The optional shield defensive-commitment world rule is intentionally separate
- * from the default interpretation. Under that rule a shield may be committed
- * only before the character has made an offensive attack in the round. The
- * commitment forfeits offence for the rest of that round while the ordinary A
- * parry-attempt limit remains in force; repeated shield parries do not create
- * additional future shield debt.
+ * 2. Optional round contract:
+ *    - no parry debt exists;
+ *    - weapon parry reduces this round's remaining offensive Attacks by 1;
+ *    - a shield parry is legal only if no offensive attack has been made this
+ *      round and sets this round's offensive Attacks to 0;
+ *    - parry attempts remain a separate resource capped by permanent A;
+ *    - all round-contract state resets on the next round.
  */
 export class CombatAttackEconomy {
 	static allowance(combatant) {
@@ -63,38 +62,37 @@ export class CombatAttackEconomy {
 
 		const combat = combatant.parent;
 		const allowance = this.allowance(combatant);
-		const state = normalizeState(
-			combatant.getFlag(FLAG_SCOPE, FLAG_KEY),
-			combat?.round ?? 0,
-		);
-		const shieldDefenceCommitted = Boolean(
-			WfrpRuleSettings.usesShieldDefensiveCommitment() &&
-			state.shieldDefenceCommitted,
-		);
+		const roundContract = WfrpRuleSettings.usesRoundDefenceContract();
+		const state = stateForCurrentRound(combatant, combat, allowance);
 		const attackWindowOpen = Boolean(
 			combat?.started &&
 			combat.combatant?.id === combatant.id &&
 			state.turnStarted &&
 			!state.turnCompleted,
 		);
-		const currentAttackRemaining =
-			state.turnStarted && !state.turnCompleted && !shieldDefenceCommitted
-				? Math.max(0, allowance - state.spent)
-				: 0;
-		const projectedNextTurnAttacks = shieldDefenceCommitted && !state.turnStarted
-			? 0
-			: Math.max(
+		const currentAttackRemaining = state.turnStarted && !state.turnCompleted
+			? Math.max(0, allowance - state.spent)
+			: 0;
+
+		let projectedNextTurnAttacks;
+		let remaining;
+		if (roundContract) {
+			projectedNextTurnAttacks = Math.max(0, allowance - state.spent);
+			remaining = state.turnCompleted
+				? 0
+				: projectedNextTurnAttacks;
+		} else {
+			projectedNextTurnAttacks = Math.max(
 				0,
 				allowance - Math.min(allowance, state.parryDebt),
 			);
-
-		let remaining;
-		if (state.turnCompleted) {
-			remaining = 0;
-		} else if (state.turnStarted) {
-			remaining = currentAttackRemaining;
-		} else {
-			remaining = projectedNextTurnAttacks;
+			if (state.turnCompleted) {
+				remaining = 0;
+			} else if (state.turnStarted) {
+				remaining = currentAttackRemaining;
+			} else {
+				remaining = projectedNextTurnAttacks;
+			}
 		}
 
 		const parryAttemptsRemaining = Math.max(
@@ -115,22 +113,31 @@ export class CombatAttackEconomy {
 			remaining,
 			currentAttackRemaining,
 			projectedNextTurnAttacks,
-			parryDebt: Math.min(allowance, state.parryDebt),
+			parryDebt: roundContract
+				? 0
+				: Math.min(allowance, state.parryDebt),
 			parriesThisRound: state.parriesThisRound,
 			parryAttemptsRemaining,
 			attacksMadeThisRound: state.attacksMadeThisRound,
-			shieldDefenceCommitted,
+			shieldDefenceCommitted:
+				roundContract && state.shieldDefenceCommitted,
 			turnStarted: state.turnStarted,
 			turnCompleted: state.turnCompleted,
 			attackWindowOpen,
-			canAttack:
-				attackWindowOpen &&
-				!shieldDefenceCommitted &&
-				currentAttackRemaining > 0,
+			canAttack: attackWindowOpen && currentAttackRemaining > 0,
 			canParry: combatStarted && parryAttemptsRemaining > 0,
+			roundContract,
 		});
 	}
 
+	/**
+	 * Return whether the requested parry cost mode is legal right now.
+	 *
+	 * In the round-contract interpretation Shield is unavailable after any real
+	 * offensive attack this round. Weapon parries do not count as offensive
+	 * attacks, so a character may parry with a weapon and later choose Full
+	 * Defence with a shield before actually attacking.
+	 */
 	static parryCostAvailability(
 		combatant,
 		{
@@ -144,7 +151,7 @@ export class CombatAttackEconomy {
 		const normalizedCostMode = normalizeParryAttackCostMode(costMode);
 
 		if (
-			WfrpRuleSettings.usesShieldDefensiveCommitment() &&
+			WfrpRuleSettings.usesRoundDefenceContract() &&
 			normalizedCostMode === PARRY_ATTACK_COST_MODE.ALL_REMAINING_ATTACKS &&
 			!state.shieldDefenceCommitted &&
 			state.attacksMadeThisRound > 0
@@ -177,48 +184,53 @@ export class CombatAttackEconomy {
 		});
 		if (!availability.available) {
 			throw new Error(
-				"Shield defensive commitment cannot be declared after an offensive attack in the same round.",
+				"Shield Full Defence cannot be declared after an offensive attack in the same round.",
 			);
 		}
 
-		const plan = planParry(state, allowance, normalizedCostMode);
 		const before = this.snapshot(combatant);
+		const plan = planParry(state, allowance, normalizedCostMode);
+		const roundContract = WfrpRuleSettings.usesRoundDefenceContract();
 		const remainingAfter = projectedRemainingForState(
 			plan.nextState,
 			allowance,
 		);
-		const projectedNextTurnAttacksAfter =
-			plan.nextState.shieldDefenceCommitted &&
-			WfrpRuleSettings.usesShieldDefensiveCommitment() &&
-			!plan.nextState.turnStarted
-				? 0
-				: Math.max(
-					0,
-					allowance - Math.min(allowance, plan.nextState.parryDebt),
-				);
+		const projectedNextTurnAttacksAfter = roundContract
+			? Math.max(0, allowance - plan.nextState.spent)
+			: Math.max(
+				0,
+				allowance - Math.min(allowance, plan.nextState.parryDebt),
+			);
 
 		return Object.freeze({
 			parryCostMode: normalizedCostMode,
-			parryAttackCost: plan.immediateAttackCost + plan.parryDebtAdded,
+			parryAttackCost: plan.ruleAttackCost,
 			parryImmediateAttackCost: plan.immediateAttackCost,
-			parryDebtAdded: plan.parryDebtAdded,
-			parryDebtBefore: Math.min(allowance, state.parryDebt),
-			parryDebtAfter: Math.min(allowance, plan.nextState.parryDebt),
+			parryDebtAdded: roundContract ? 0 : plan.parryDebtAdded,
+			parryDebtBefore: roundContract
+				? 0
+				: Math.min(allowance, state.parryDebt),
+			parryDebtAfter: roundContract
+				? 0
+				: Math.min(allowance, plan.nextState.parryDebt),
 			remainingAttacksBefore: before.remaining,
 			remainingAttacksAfter: remainingAfter,
 			projectedNextTurnAttacksBefore: before.projectedNextTurnAttacks,
 			projectedNextTurnAttacksAfter,
 			shieldDefensiveCommitment:
-				WfrpRuleSettings.usesShieldDefensiveCommitment() &&
+				roundContract &&
 				normalizedCostMode === PARRY_ATTACK_COST_MODE.ALL_REMAINING_ATTACKS,
 			shieldDefenceCommittedAfter: plan.nextState.shieldDefenceCommitted,
+			roundContract,
 		});
 	}
 
+	/** Reset round-scoped counters. */
 	static async startRound(combat) {
 		assertCombat(combat);
 
 		const round = nonNegativeInteger(combat.round);
+		const roundContract = WfrpRuleSettings.usesRoundDefenceContract();
 		const updates = [];
 
 		for (const combatant of combat.combatants) {
@@ -227,16 +239,16 @@ export class CombatAttackEconomy {
 				combatant.getFlag(FLAG_SCOPE, FLAG_KEY),
 				round,
 			);
-			const carriedDebt = previous.round > round
+			const carriedDebt = roundContract || previous.round > round
 				? 0
-				: previous.parryDebt;
+				: Math.min(allowance, previous.parryDebt);
 
 			updates.push({
 				_id: combatant.id,
 				[`flags.${FLAG_SCOPE}.${FLAG_KEY}`]: {
 					round,
 					spent: 0,
-					parryDebt: Math.min(allowance, carriedDebt),
+					parryDebt: carriedDebt,
 					parriesThisRound: 0,
 					attacksMadeThisRound: 0,
 					shieldDefenceCommitted: false,
@@ -268,18 +280,28 @@ export class CombatAttackEconomy {
 		});
 	}
 
+	/**
+	 * Opening a turn never resets same-round parry costs.
+	 *
+	 * Round contract simply opens the attack window using whatever Attacks remain
+	 * after earlier parries. Default mode additionally pays carried debt.
+	 */
 	static async startTurn(combatant) {
 		assertCombatant(combatant);
 		const combat = assertStartedCombat(combatant);
 		const allowance = this.allowance(combatant);
 		const state = stateForCurrentRound(combatant, combat, allowance);
-		const debt = Math.min(allowance, state.parryDebt);
-		const paidDebt = Math.min(allowance, debt);
+		const roundContract = WfrpRuleSettings.usesRoundDefenceContract();
+		const debt = roundContract ? 0 : Math.min(allowance, state.parryDebt);
+		const paidDebt = Math.min(
+			debt,
+			Math.max(0, allowance - state.spent),
+		);
 
 		await writeState(combatant, {
 			...state,
 			spent: Math.min(allowance, state.spent + paidDebt),
-			parryDebt: Math.max(0, debt - paidDebt),
+			parryDebt: roundContract ? 0 : Math.max(0, debt - paidDebt),
 			turnStarted: true,
 			turnCompleted: false,
 		});
@@ -295,6 +317,9 @@ export class CombatAttackEconomy {
 
 		await writeState(combatant, {
 			...state,
+			parryDebt: WfrpRuleSettings.usesRoundDefenceContract()
+				? 0
+				: state.parryDebt,
 			turnStarted: true,
 			turnCompleted: true,
 		});
@@ -306,9 +331,7 @@ export class CombatAttackEconomy {
 		return requestAuthorizedAction(
 			"attack",
 			combatant,
-			{
-				count: positiveInteger(count),
-			},
+			{ count: positiveInteger(count) },
 		);
 	}
 
@@ -328,6 +351,7 @@ export class CombatAttackEconomy {
 		);
 	}
 
+	/** GM-authoritative mutation used directly and by socket requests. */
 	static async commit(action, combatant, actionData, requestingUser) {
 		assertCombatant(combatant);
 		assertCanControlCombatant(combatant, requestingUser);
@@ -369,14 +393,6 @@ export class CombatAttackEconomy {
 		if (!state.turnStarted || state.turnCompleted) {
 			throw new Error("The Combatant does not have an active attack window.");
 		}
-		if (
-			WfrpRuleSettings.usesShieldDefensiveCommitment() &&
-			state.shieldDefenceCommitted
-		) {
-			throw new Error(
-				"This Combatant committed all offensive Attacks to shield defence for the current round.",
-			);
-		}
 
 		const remaining = Math.max(0, allowance - state.spent);
 		if (count > remaining) {
@@ -388,6 +404,9 @@ export class CombatAttackEconomy {
 		await writeState(combatant, {
 			...state,
 			spent: state.spent + count,
+			parryDebt: WfrpRuleSettings.usesRoundDefenceContract()
+				? 0
+				: state.parryDebt,
 			attacksMadeThisRound: state.attacksMadeThisRound + count,
 		});
 
@@ -403,60 +422,82 @@ export class CombatAttackEconomy {
 		const availability = this.parryCostAvailability(combatant, { costMode });
 		if (!availability.available) {
 			throw new Error(
-				"Shield defensive commitment cannot be declared after an offensive attack in the same round.",
+				"Shield Full Defence cannot be declared after an offensive attack in the same round.",
 			);
 		}
 
 		const plan = planParry(state, allowance, costMode);
+		const roundContract = WfrpRuleSettings.usesRoundDefenceContract();
 
 		await writeState(combatant, {
 			...plan.nextState,
+			parryDebt: roundContract ? 0 : plan.nextState.parryDebt,
 			parriesThisRound: state.parriesThisRound + 1,
 		});
 
 		return Object.freeze({
 			...this.snapshot(combatant),
 			parryCostMode: costMode,
-			parryAttackCost: plan.immediateAttackCost + plan.parryDebtAdded,
+			parryAttackCost: plan.ruleAttackCost,
 			parryImmediateAttackCost: plan.immediateAttackCost,
-			parryDebtAdded: plan.parryDebtAdded,
+			parryDebtAdded: roundContract ? 0 : plan.parryDebtAdded,
 			shieldDefensiveCommitment:
-				WfrpRuleSettings.usesShieldDefensiveCommitment() &&
+				roundContract &&
 				costMode === PARRY_ATTACK_COST_MODE.ALL_REMAINING_ATTACKS,
+			roundContract,
 		});
 	}
 }
 
+/**
+ * Plan one parry without mutating persistent state.
+ */
 function planParry(state, allowance, costMode) {
 	const normalized = normalizeParryAttackCostMode(costMode);
-	const optionalCommitment = WfrpRuleSettings.usesShieldDefensiveCommitment();
+	const roundContract = WfrpRuleSettings.usesRoundDefenceContract();
+
+	if (roundContract) {
+		const remainingBefore = Math.max(0, allowance - state.spent);
+		let spentAfter = state.spent;
+		let immediateAttackCost = 0;
+		let shieldDefenceCommitted = state.shieldDefenceCommitted;
+		let ruleAttackCost = normalized === PARRY_ATTACK_COST_MODE.ONE_ATTACK
+			? 1
+			: remainingBefore;
+
+		if (
+			normalized === PARRY_ATTACK_COST_MODE.ALL_REMAINING_ATTACKS
+		) {
+			shieldDefenceCommitted = true;
+			immediateAttackCost = remainingBefore;
+			spentAfter = allowance;
+		} else {
+			immediateAttackCost = Math.min(1, remainingBefore);
+			spentAfter = Math.min(allowance, state.spent + 1);
+		}
+
+		return {
+			ruleAttackCost,
+			immediateAttackCost,
+			parryDebtAdded: 0,
+			nextState: {
+				...state,
+				spent: spentAfter,
+				parryDebt: 0,
+				shieldDefenceCommitted,
+			},
+		};
+	}
+
 	const activeAttackWindow = state.turnStarted && !state.turnCompleted;
-	const currentOffenceForfeited = optionalCommitment && state.shieldDefenceCommitted;
-	const remainingNow = activeAttackWindow && !currentOffenceForfeited
+	const remainingNow = activeAttackWindow
 		? Math.max(0, allowance - state.spent)
 		: 0;
 	let spentAfter = state.spent;
 	let parryDebtAfter = Math.min(allowance, state.parryDebt);
 	let immediateAttackCost = 0;
-	let shieldDefenceCommitted = state.shieldDefenceCommitted;
 
-	if (optionalCommitment && state.shieldDefenceCommitted) {
-		/*
-		 * The round's offensive A pool has already been committed to defence.
-		 * `parriesThisRound` remains the authoritative limit, so subsequent parry
-		 * attempts in this round do not create another Attack/debt charge.
-		 */
-	} else if (
-		optionalCommitment &&
-		normalized === PARRY_ATTACK_COST_MODE.ALL_REMAINING_ATTACKS
-	) {
-		shieldDefenceCommitted = true;
-		spentAfter = allowance;
-		if (remainingNow > 0) {
-			immediateAttackCost = remainingNow;
-		}
-		/* No future debt: this optional interpretation forfeits this round's offence. */
-	} else if (normalized === PARRY_ATTACK_COST_MODE.ALL_REMAINING_ATTACKS) {
+	if (normalized === PARRY_ATTACK_COST_MODE.ALL_REMAINING_ATTACKS) {
 		if (remainingNow > 0) {
 			immediateAttackCost = remainingNow;
 			spentAfter = state.spent + immediateAttackCost;
@@ -477,24 +518,21 @@ function planParry(state, allowance, costMode) {
 	);
 
 	return {
+		ruleAttackCost: immediateAttackCost + parryDebtAdded,
 		immediateAttackCost,
 		parryDebtAdded,
 		nextState: {
 			...state,
 			spent: spentAfter,
 			parryDebt: parryDebtAfter,
-			shieldDefenceCommitted,
 		},
 	};
 }
 
 function projectedRemainingForState(state, allowance) {
 	if (state.turnCompleted) return 0;
-	if (
-		WfrpRuleSettings.usesShieldDefensiveCommitment() &&
-		state.shieldDefenceCommitted
-	) {
-		return 0;
+	if (WfrpRuleSettings.usesRoundDefenceContract()) {
+		return Math.max(0, allowance - state.spent);
 	}
 	if (state.turnStarted) {
 		return Math.max(0, allowance - state.spent);
@@ -684,23 +722,29 @@ function stateForCurrentRound(
 	combat,
 	allowance = CombatAttackEconomy.allowance(combatant),
 ) {
-	const round = nonNegativeInteger(combat.round);
+	const round = nonNegativeInteger(combat?.round);
 	const raw = normalizeState(
 		combatant.getFlag(FLAG_SCOPE, FLAG_KEY),
 		round,
 	);
+	const roundContract = WfrpRuleSettings.usesRoundDefenceContract();
 
 	if (raw.round === round) {
 		return {
 			...raw,
-			parryDebt: Math.min(allowance, raw.parryDebt),
+			spent: Math.min(allowance, raw.spent),
+			parryDebt: roundContract
+				? 0
+				: Math.min(allowance, raw.parryDebt),
 		};
 	}
 
 	return {
 		round,
 		spent: 0,
-		parryDebt: raw.round > round ? 0 : Math.min(allowance, raw.parryDebt),
+		parryDebt: roundContract || raw.round > round
+			? 0
+			: Math.min(allowance, raw.parryDebt),
 		parriesThisRound: 0,
 		attacksMadeThisRound: 0,
 		shieldDefenceCommitted: false,
@@ -725,11 +769,16 @@ function normalizeState(raw, fallbackRound) {
 }
 
 async function writeState(combatant, state) {
+	const normalized = normalizeState(
+		state,
+		combatant.parent?.round ?? 0,
+	);
+	if (WfrpRuleSettings.usesRoundDefenceContract()) {
+		normalized.parryDebt = 0;
+	}
+
 	await combatant.update({
-		[`flags.${FLAG_SCOPE}.${FLAG_KEY}`]: normalizeState(
-			state,
-			combatant.parent?.round ?? 0,
-		),
+		[`flags.${FLAG_SCOPE}.${FLAG_KEY}`]: normalized,
 	});
 }
 
