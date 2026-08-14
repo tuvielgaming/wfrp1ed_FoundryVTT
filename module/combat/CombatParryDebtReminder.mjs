@@ -31,10 +31,16 @@ Hooks.on("renderApplicationV2", (application, element) => {
 	if (!combatant) return;
 
 	const snapshot = CombatAttackEconomy.snapshot(combatant);
-	const pendingDebt = nonNegativeInteger(snapshot.parryDebt);
+	const pendingDebt = Math.min(
+		snapshot.allowance,
+		nonNegativeInteger(snapshot.parryDebt),
+	);
 	const paidThisTurn = snapshot.turnStarted && !snapshot.turnCompleted
-		? nonNegativeInteger(
-			combatant.getFlag?.(FLAG_SCOPE, DEBT_REMINDER_FLAG_KEY),
+		? Math.min(
+			snapshot.allowance,
+			nonNegativeInteger(
+				combatant.getFlag?.(FLAG_SCOPE, DEBT_REMINDER_FLAG_KEY),
+			),
 		)
 		: 0;
 	const displayedDebt = paidThisTurn > 0 ? paidThisTurn : pendingDebt;
@@ -58,8 +64,8 @@ Hooks.on("renderApplicationV2", (application, element) => {
 		);
 	} else {
 		marker.title = localize(
-			`Parry debt: ${pendingDebt}. This many Attacks will be lost from the next attack opportunity before any excess debt carries forward.`,
-			`Dług za parowanie: ${pendingDebt}. Tyle Ataków zostanie odjętych od najbliższej możliwości ataku, a ewentualny nadmiar długu przejdzie dalej.`,
+			`Parry debt: ${pendingDebt}. This many Attacks will be lost from the next attack opportunity. Parry debt is capped at the character's A allowance.`,
+			`Dług za parowanie: ${pendingDebt}. Tyle Ataków zostanie odjętych od najbliższej możliwości ataku. Dług za parowanie jest ograniczony do wartości A postaci.`,
 		);
 	}
 
@@ -79,7 +85,11 @@ Hooks.on("updateCombat", (combat, changes) => {
 	const entries = [...(combat?.combatants ?? [])]
 		.map((combatant) => {
 			const raw = combatant.getFlag?.(FLAG_SCOPE, ECONOMY_FLAG_KEY) ?? {};
-			const debt = nonNegativeInteger(raw.parryDebt);
+			const allowance = CombatAttackEconomy.allowance(combatant);
+			const debt = Math.min(
+				allowance,
+				nonNegativeInteger(raw.parryDebt),
+			);
 			if (debt <= 0) return null;
 			return {
 				name: String(combatant.name ?? combatant.actor?.name ?? "—"),
