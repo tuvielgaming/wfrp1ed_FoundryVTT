@@ -8,6 +8,8 @@ import {
 const FLAG_SCOPE = "wfrp1ed";
 const FLAG_KEY = "pendingCombatAttack";
 const TEMPLATE_PATH = "systems/wfrp1ed/templates/chat/pending-combat-attack-v2.hbs";
+const TARGET_SELECTION_PENDING = "__pending__";
+const TARGET_SELECTION_NONE = "__none__";
 
 /** Pending configured melee roll awaiting a confirmed defender context. */
 export class PendingCombatAttack {
@@ -71,11 +73,11 @@ export class PendingCombatAttack {
 			rollButton.disabled = rollButton.dataset.targetResolved !== "true";
 		}
 
-		const sceneSelect = card.querySelector("[data-pending-attack-scene-target]");
-		if (sceneSelect instanceof HTMLSelectElement) {
-			populateSceneTargets(sceneSelect, request);
-			sceneSelect.addEventListener("change", () => {
-				void this.#selectSceneTarget(message, request, sceneSelect);
+		const targetSelect = card.querySelector("[data-pending-attack-scene-target]");
+		if (targetSelect instanceof HTMLSelectElement) {
+			populateTargetChoices(targetSelect, request);
+			targetSelect.addEventListener("change", () => {
+				void this.#selectTarget(message, request, targetSelect);
 			});
 		}
 
@@ -101,10 +103,24 @@ export class PendingCombatAttack {
 		}
 	}
 
-	static async #selectSceneTarget(message, request, select) {
+	static async #selectTarget(message, request, select) {
 		try {
 			assertCanResolve(ActorTargetResolver.actorFromUuidSync(request.actorUuid));
-			const target = ActorTargetResolver.actorFromUuidSync(select.value);
+			const value = String(select.value ?? "");
+			if (value === TARGET_SELECTION_PENDING) {
+				await this.#setSelection(message, request, emptySelection());
+				return;
+			}
+			if (value === TARGET_SELECTION_NONE) {
+				await this.#setSelection(message, request, {
+					targetMode: COMBAT_ATTACK_TARGET_MODE.NONE,
+					targetUuid: "",
+					targetName: localize("No defender / object", "Bez obrońcy / obiekt"),
+				});
+				return;
+			}
+
+			const target = ActorTargetResolver.actorFromUuidSync(value);
 			if (!target) {
 				await this.#setSelection(message, request, emptySelection());
 				return;
@@ -129,14 +145,6 @@ export class PendingCombatAttack {
 			}
 			if (action === "clear-target") {
 				await this.#setSelection(message, request, emptySelection());
-				return;
-			}
-			if (action === "no-defender") {
-				await this.#setSelection(message, request, {
-					targetMode: COMBAT_ATTACK_TARGET_MODE.NONE,
-					targetUuid: "",
-					targetName: localize("No defender / object", "Bez obrońcy / obiekt"),
-				});
 				return;
 			}
 
@@ -284,12 +292,11 @@ export class PendingCombatAttack {
 				? String(selection.targetName || "—")
 				: localize("Not selected", "Nie wybrano"),
 			targetResolved,
-			visibleTokenLabel: localize("Visible token", "Widoczny token"),
+			visibleTokenLabel: localize("Target", "Cel"),
 			dropPrompt: localize("GM: drop Actor from sidebar", "MG: upuść Aktora z panelu bocznego"),
 			useCurrentTargetLabel: localize("Use current target", "Użyj aktualnego celu"),
 			clearTargetLabel: localize("Clear", "Usuń cel"),
 			chooseActorLabel: localize("Choose Actor", "Wybierz Aktora"),
-			noDefenderLabel: localize("No defender / object", "Bez obrońcy / obiekt"),
 			rollLabel: localize("Roll", "Rzuć"),
 			waitingGmLabel: localize(
 				"Waiting for the attacker owner or GM to confirm the target and roll.",
@@ -299,19 +306,47 @@ export class PendingCombatAttack {
 	}
 }
 
-function populateSceneTargets(select, request) {
+function populateTargetChoices(select, request) {
 	select.replaceChildren();
-	const empty = document.createElement("option");
-	empty.value = "";
-	empty.textContent = localize("Choose visible token…", "Wybierz widoczny token…");
-	select.append(empty);
-	for (const entry of ActorTargetResolver.sceneTokenTargets()) {
-		const option = document.createElement("option");
-		option.value = entry.actorUuid;
-		option.textContent = entry.name;
-		if (request?.selection?.targetUuid === entry.actorUuid) option.selected = true;
-		select.append(option);
+	appendOption(
+		select,
+		TARGET_SELECTION_PENDING,
+		localize("Choose target…", "Wybierz cel…"),
+	);
+	appendOption(
+		select,
+		TARGET_SELECTION_NONE,
+		localize("No defender / object", "Bez obrońcy / obiekt"),
+	);
+
+	const visible = ActorTargetResolver.sceneTokenTargets();
+	for (const entry of visible) {
+		appendOption(select, entry.actorUuid, entry.name);
 	}
+
+	const selection = request?.selection ?? {};
+	const mode = String(selection.targetMode ?? "pending");
+	if (mode === COMBAT_ATTACK_TARGET_MODE.NONE) {
+		select.value = TARGET_SELECTION_NONE;
+		return;
+	}
+	if (mode !== COMBAT_ATTACK_TARGET_MODE.DEFENDER) {
+		select.value = TARGET_SELECTION_PENDING;
+		return;
+	}
+
+	const uuid = String(selection.targetUuid ?? "");
+	if (uuid && ![...select.options].some((option) => option.value === uuid)) {
+		appendOption(select, uuid, String(selection.targetName || "—"));
+	}
+	select.value = uuid || TARGET_SELECTION_PENDING;
+}
+
+function appendOption(select, value, label) {
+	const option = document.createElement("option");
+	option.value = String(value);
+	option.textContent = String(label);
+	select.append(option);
 }
 
 function emptySelection() {
