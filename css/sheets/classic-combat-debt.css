@@ -9,8 +9,8 @@
 
 .wfrp1ed-classic-sheet .characteristic-current-attacks-debt-marker {
 	position: absolute;
-	top: 0.08em;
-	right: 0.1em;
+	top: 0.4em;
+	right: 0.4em;
 	z-index: 2;
 	display: inline-flex;
 	align-items: center;
