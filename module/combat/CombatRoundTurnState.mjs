@@ -88,7 +88,12 @@ export class CombatRoundTurnState {
 
 	/**
 	 * Focus one Combatant by its position in the current sorted order.
-	 * Updating Combat.turn lets Foundry run its normal end/start turn lifecycle.
+	 *
+	 * `combat.combatant` is derived from the numeric turn index and can become
+	 * misleading immediately after initiative values are bulk-reordered. Foundry
+	 * also keeps `combat.current.combatantId`, which records the actual lifecycle
+	 * turn owner. Use that history ID to decide whether this is index
+	 * synchronization or a real End Turn -> Start Turn transition.
 	 */
 	static async focus(combat, combatant) {
 		assertCombat(combat);
@@ -99,10 +104,13 @@ export class CombatRoundTurnState {
 		if (index < 0) {
 			throw new Error("The requested Combatant is not present in the current turn order.");
 		}
-		if (String(combat.combatant?.id ?? "") === String(combatant.id)) {
-			/* Initiative edits may have changed the numeric turn index while keeping
-			 * the same intended active Combatant. Correct the index without forcing
-			 * another lifecycle transition if necessary. */
+
+		const lifecycleCombatantId = String(
+			combat.current?.combatantId ?? combat.combatant?.id ?? "",
+		);
+		const requestedId = String(combatant.id);
+
+		if (lifecycleCombatantId === requestedId) {
 			if (Number(combat.turn) !== index) {
 				await combat.update(
 					{ turn: index },
