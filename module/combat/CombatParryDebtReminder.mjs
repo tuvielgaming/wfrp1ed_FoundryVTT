@@ -1,5 +1,6 @@
 import { WfrpRuleSettings } from "../settings/WfrpRuleSettings.mjs";
 import { CombatAttackEconomy } from "./CombatAttackEconomy.mjs";
+import { CombatRoundTurnState } from "./CombatRoundTurnState.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
 const ECONOMY_FLAG_KEY = "attackEconomy";
@@ -11,6 +12,11 @@ const DEBT_REMINDER_FLAG_KEY = "parryDebtReminder";
  * The optional round contract has no debt by definition. When that world rule
  * is active this module is completely silent, including for stale legacy flags
  * which may still exist on Combatants created under the default interpretation.
+ *
+ * A paid debt reminder belongs to the Combatant's real WFRP turn completion,
+ * not merely to the currently focused attack window. It therefore survives the
+ * round boundary and initiative postponement/reordering, and disappears only
+ * after the Combatant completes the affected turn with Next Turn.
  */
 Hooks.on("renderApplicationV2", (application, element) => {
 	if (WfrpRuleSettings.usesRoundDefenceContract()) return;
@@ -36,15 +42,15 @@ Hooks.on("renderApplicationV2", (application, element) => {
 		snapshot.allowance,
 		nonNegativeInteger(snapshot.parryDebt),
 	);
-	const paidThisTurn = snapshot.turnStarted && !snapshot.turnCompleted
-		? Math.min(
+	const paidReminder = CombatRoundTurnState.isCompleted(combatant)
+		? 0
+		: Math.min(
 			snapshot.allowance,
 			nonNegativeInteger(
 				combatant.getFlag?.(FLAG_SCOPE, DEBT_REMINDER_FLAG_KEY),
 			),
-		)
-		: 0;
-	const displayedDebt = paidThisTurn > 0 ? paidThisTurn : pendingDebt;
+		);
+	const displayedDebt = paidReminder > 0 ? paidReminder : pendingDebt;
 	if (displayedDebt <= 0) return;
 
 	const marker = document.createElement("span");
@@ -52,7 +58,7 @@ Hooks.on("renderApplicationV2", (application, element) => {
 	marker.dataset.wfrpParryDebtMarker = "";
 	marker.textContent = `−${displayedDebt}`;
 
-	if (paidThisTurn > 0) {
+	if (paidReminder > 0) {
 		const pendingSuffix = pendingDebt > 0
 			? localize(
 				` Additional pending parry debt: ${pendingDebt}.`,
@@ -60,8 +66,8 @@ Hooks.on("renderApplicationV2", (application, element) => {
 			)
 			: "";
 		marker.title = localize(
-			`Parry debt paid at the start of this turn: ${paidThisTurn} A. This explains the reduced Attacks value for the current turn. The reminder disappears when this Combatant ends the turn.${pendingSuffix}`,
-			`Dług za parowanie spłacony na początku tej tury: ${paidThisTurn} A. To wyjaśnia obniżoną liczbę Ataków w bieżącej turze. Przypomnienie zniknie po zakończeniu tury tego uczestnika.${pendingSuffix}`,
+			`Parry debt paid for this turn: ${paidReminder} A. This explains the reduced Attacks value. The reminder disappears only when this Combatant completes the turn with Next Turn.${pendingSuffix}`,
+			`Dług za parowanie spłacony dla tej tury: ${paidReminder} A. To wyjaśnia obniżoną liczbę Ataków. Przypomnienie zniknie dopiero po zakończeniu tury tego uczestnika przyciskiem Następna tura.${pendingSuffix}`,
 		);
 	} else {
 		marker.title = localize(
