@@ -7,25 +7,9 @@ import { CombatEquipment } from "./CombatEquipment.mjs";
  * The selection is deliberately Item-based. A defender holding both a suitable
  * one-handed weapon and a shield must choose which Item performs the parry;
  * the system must not silently prefer either option. The selected Item carries
- * both its WS modifier and its Core Attacks-resource cost mode.
- *
- * This service does not render UI and does not roll WS. The future pending
- * defence transaction consumes this contract after the defender has chosen the
- * mutually exclusive Parry response instead of Dodge or no defence.
+ * both its WS modifier and its current Attacks-resource cost contract.
  */
 export class CombatParrySelection {
-	/**
-	 * Return presentation-safe parry choices for the Combatant's current state.
-	 *
-	 * Attack-cost previews come from CombatAttackEconomy itself so the Item list
-	 * cannot drift away from the Core "lose next attack" / shield-debt rules.
-	 * The authoritative cost is recalculated when the choice is committed.
-	 *
-	 * @param {Combatant} combatant
-	 * @param {Object} [options]
-	 * @param {boolean} [options.optionalWeaponModifiers=false]
-	 * @returns {Object}
-	 */
 	static choices(
 		combatant,
 		{
@@ -42,29 +26,38 @@ export class CombatParrySelection {
 			})
 			: [];
 
-		const choices = parryOptions.map((option) => {
-			const preview = CombatAttackEconomy.previewParry(
+		const choices = parryOptions
+			.filter((option) => CombatAttackEconomy.parryCostAvailability(
 				combatant,
-				{
-					costMode: option.attackCostMode,
-				},
-			);
+				{ costMode: option.attackCostMode },
+			).available)
+			.map((option) => {
+				const preview = CombatAttackEconomy.previewParry(
+					combatant,
+					{
+						costMode: option.attackCostMode,
+					},
+				);
 
-			return Object.freeze({
-				...option,
-				attackCost: preview.parryAttackCost,
-				immediateAttackCost: preview.parryImmediateAttackCost,
-				parryDebtAdded: preview.parryDebtAdded,
-				parryDebtBefore: preview.parryDebtBefore,
-				parryDebtAfter: preview.parryDebtAfter,
-				remainingAttacksBefore: preview.remainingAttacksBefore,
-				remainingAttacksAfter: preview.remainingAttacksAfter,
-				projectedNextTurnAttacksBefore:
-					preview.projectedNextTurnAttacksBefore,
-				projectedNextTurnAttacksAfter:
-					preview.projectedNextTurnAttacksAfter,
+				return Object.freeze({
+					...option,
+					attackCost: preview.parryAttackCost,
+					immediateAttackCost: preview.parryImmediateAttackCost,
+					parryDebtAdded: preview.parryDebtAdded,
+					parryDebtBefore: preview.parryDebtBefore,
+					parryDebtAfter: preview.parryDebtAfter,
+					remainingAttacksBefore: preview.remainingAttacksBefore,
+					remainingAttacksAfter: preview.remainingAttacksAfter,
+					projectedNextTurnAttacksBefore:
+						preview.projectedNextTurnAttacksBefore,
+					projectedNextTurnAttacksAfter:
+						preview.projectedNextTurnAttacksAfter,
+					shieldDefensiveCommitment:
+						preview.shieldDefensiveCommitment === true,
+					shieldDefenceCommittedAfter:
+						preview.shieldDefenceCommittedAfter === true,
+				});
 			});
-		});
 
 		return foundry.utils.deepFreeze({
 			combatId: economy.combatId,
@@ -81,19 +74,6 @@ export class CombatParrySelection {
 		});
 	}
 
-	/**
-	 * Resolve one currently legal Item choice by UUID.
-	 *
-	 * This always rebuilds the choices from current Actor/Combatant state so a
-	 * stale dialog cannot keep using an Item which has been put away, dropped,
-	 * or otherwise stopped being a valid parry source.
-	 *
-	 * @param {Combatant} combatant
-	 * @param {string} itemUuid
-	 * @param {Object} [options]
-	 * @param {boolean} [options.optionalWeaponModifiers=false]
-	 * @returns {Object}
-	 */
 	static choice(
 		combatant,
 		itemUuid,
@@ -125,25 +105,6 @@ export class CombatParrySelection {
 		return selected;
 	}
 
-	/**
-	 * GM-authoritatively spend the cost of the selected parry Item.
-	 *
-	 * The future defence-response socket/transaction passes the original user
-	 * here. The selected Item is re-resolved on the GM before the attack economy
-	 * is mutated, so a client does not get to submit an arbitrary cheaper cost
-	 * mode for a shield parry.
-	 *
-	 * This method spends/defers the resource cost only. It intentionally does not
-	 * make the WS roll or roll the D6 damage stopped by a successful parry; those
-	 * belong to the pending defence transaction which owns the full blow.
-	 *
-	 * @param {Combatant} combatant
-	 * @param {string} itemUuid
-	 * @param {User} requestingUser
-	 * @param {Object} [options]
-	 * @param {boolean} [options.optionalWeaponModifiers=false]
-	 * @returns {Promise<Object>}
-	 */
 	static async commitSelectedParry(
 		combatant,
 		itemUuid,
@@ -181,6 +142,8 @@ export class CombatParrySelection {
 			parryDebt: economy.parryDebt,
 			remainingAttacks: economy.remaining,
 			projectedNextTurnAttacks: economy.projectedNextTurnAttacks,
+			shieldDefensiveCommitment:
+				economy.shieldDefensiveCommitment === true,
 		});
 	}
 }
