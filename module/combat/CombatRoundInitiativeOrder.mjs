@@ -1,6 +1,5 @@
 const FLAG_SCOPE = "wfrp1ed";
 const BASE_INITIATIVE_FLAG = "roundBaseInitiative";
-const BASE_CAPTURE_OPTION = "wfrpRoundBaseInitiativeCapture";
 const REORDER_OPTION = "wfrpRoundInitiativeReorder";
 const RESET_OPTION = "wfrpRoundInitiativeReset";
 
@@ -26,7 +25,6 @@ export class CombatRoundInitiativeOrder {
 			FLAG_SCOPE,
 			BASE_INITIATIVE_FLAG,
 			current,
-			{ [BASE_CAPTURE_OPTION]: true },
 		);
 		return current;
 	}
@@ -85,12 +83,24 @@ export class CombatRoundInitiativeOrder {
 
 		await this.captureCombatBaselines(combat);
 
-		const finiteValues = [...combat.combatants]
-			.map((entry) => Number(entry.initiative))
-			.filter(Number.isFinite);
-		const top = finiteValues.length
-			? Math.max(...finiteValues)
-			: ids.length;
+		/*
+		 * Anchor synthetic values to the stable baseline rather than to the current
+		 * temporary order. Repeated drags therefore do not make initiative values
+		 * grow without bound during one round.
+		 */
+		const baselineValues = [...combat.combatants]
+			.map((entry) => nullableFinite(
+				entry.getFlag(FLAG_SCOPE, BASE_INITIATIVE_FLAG),
+			))
+			.filter((value) => value !== null);
+		const currentValues = [...combat.combatants]
+			.map((entry) => nullableFinite(entry.initiative))
+			.filter((value) => value !== null);
+		const top = baselineValues.length
+			? Math.max(...baselineValues)
+			: currentValues.length
+				? Math.max(...currentValues)
+				: ids.length;
 		const updates = ids.map((id, index) => ({
 			_id: id,
 			initiative: top + ids.length - index,
@@ -110,7 +120,7 @@ export class CombatRoundInitiativeOrder {
  * started, the first finite value assigned becomes its baseline.
  */
 Hooks.on("updateCombatant", (combatant, changes, options) => {
-	if (options?.[BASE_CAPTURE_OPTION] || options?.[RESET_OPTION]) return;
+	if (options?.[RESET_OPTION]) return;
 	if (!Object.hasOwn(changes ?? {}, "initiative")) return;
 	if (!game.user?.isGM) return;
 
@@ -125,7 +135,6 @@ Hooks.on("updateCombatant", (combatant, changes, options) => {
 		FLAG_SCOPE,
 		BASE_INITIATIVE_FLAG,
 		value,
-		{ [BASE_CAPTURE_OPTION]: true },
 	);
 });
 
