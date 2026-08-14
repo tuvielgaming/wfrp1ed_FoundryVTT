@@ -1,5 +1,6 @@
 const FLAG_SCOPE = "wfrp1ed";
 const ATTACK_FLAG_KEY = "combatAttackResult";
+const DEFENCE_INVALIDATED_STATUS = "invalidated";
 
 /**
  * Preserve intentional deletion of the nested combat-attack defence state.
@@ -35,6 +36,54 @@ Hooks.on("preUpdateChatMessage", (message, changes) => {
 
 	incoming.defence = null;
 });
+
+/**
+ * Repair attacks which were already rolled back by the buggy omission-based
+ * update before this guard existed. The rollback history contains the exact
+ * invalidated defence, so this migration is deterministic rather than a guess.
+ */
+Hooks.once("ready", () => {
+	if (!game.user?.isGM) return;
+	void repairPreviouslyReopenedAttacks();
+});
+
+async function repairPreviouslyReopenedAttacks() {
+	let repaired = 0;
+
+	for (const message of game.messages ?? []) {
+		const state = message.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY);
+		if (!isObject(state) || !isObject(state.defence)) continue;
+
+		const history = Array.isArray(state.defenceHistory)
+			? state.defenceHistory
+			: [];
+		const latestInvalidated = [...history]
+			.reverse()
+			.find((entry) => entry?.status === DEFENCE_INVALIDATED_STATUS);
+		if (!isObject(latestInvalidated)) continue;
+
+		const sameDefence = String(latestInvalidated.testMessageId ?? "") ===
+			String(state.defence.testMessageId ?? "");
+		if (!sameDefence) continue;
+
+		const repairedState = foundry.utils.deepClone(state);
+		repairedState.defence = null;
+		repairedState.updatedBy = game.user?.id ?? "";
+		repairedState.updatedAt = Date.now();
+
+		await message.update({
+			[`flags.${FLAG_SCOPE}.${ATTACK_FLAG_KEY}`]: repairedState,
+		});
+		repaired += 1;
+	}
+
+	if (repaired > 0) {
+		console.info(
+			`WFRP1ED | Reopened ${repaired} previously invalidated defence attack(s).`,
+		);
+		void ui.chat?.render?.({ force: true });
+	}
+}
 
 function directOrNestedFlagUpdate(changes, path) {
 	if (Object.hasOwn(changes, path)) {
