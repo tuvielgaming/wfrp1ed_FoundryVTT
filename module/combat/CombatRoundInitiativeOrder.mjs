@@ -218,8 +218,7 @@ function activateTrackerDrag(root, combat) {
 
 		row.addEventListener("dragover", (event) => {
 			if (!hasWfrpDrag(event)) return;
-			const sourceId = event.dataTransfer?.getData(DRAG_MIME);
-			if (!sourceId || sourceId === id) return;
+			if (row.classList.contains("wfrp-initiative-drag-source")) return;
 
 			event.preventDefault();
 			if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
@@ -229,20 +228,8 @@ function activateTrackerDrag(root, combat) {
 			const pointerPosition = event.clientY > rect.top + rect.height / 2
 				? "after"
 				: "before";
-			const position = actionableDropPosition(
-				combat,
-				sourceId,
-				id,
-				pointerPosition,
-			);
-			if (!position) {
-				row.classList.remove("wfrp-initiative-drop-target");
-				delete row.dataset.wfrpDropPosition;
-				return;
-			}
-
 			row.classList.add("wfrp-initiative-drop-target");
-			row.dataset.wfrpDropPosition = position;
+			row.dataset.wfrpDropPosition = pointerPosition;
 		});
 
 		row.addEventListener("dragleave", (event) => {
@@ -258,9 +245,17 @@ function activateTrackerDrag(root, combat) {
 			if (!sourceId || sourceId === id) return;
 			event.preventDefault();
 			event.stopPropagation();
-			const position = row.dataset.wfrpDropPosition;
+			const preferredPosition = row.dataset.wfrpDropPosition === "after"
+				? "after"
+				: "before";
+			const position = actionableDropPosition(
+				combat,
+				sourceId,
+				id,
+				preferredPosition,
+			);
 			clearDropFeedback(root);
-			if (position !== "before" && position !== "after") return;
+			if (!position) return;
 			void reorderRelative(combat, sourceId, id, position);
 		});
 
