@@ -1,0 +1,137 @@
+const FLAG_SCOPE = "wfrp1ed";
+const FLAG_KEY = "roundTurnState";
+const FOCUS_OPTION = "wfrpRoundTurnFocus";
+
+/**
+ * Round-scoped turn completion independent of Combat.turn and initiative order.
+ *
+ * Foundry's `turn` is an index into the currently sorted initiative list. That
+ * is not enough once the GM is allowed to postpone/reorder Combatants during a
+ * round: an active Combatant may move to the bottom without having completed
+ * their turn. This flag records the actual WFRP round contract separately.
+ */
+export class CombatRoundTurnState {
+	static snapshot(combatant) {
+		assertCombatant(combatant);
+		const round = nonNegativeInteger(combatant.parent?.round);
+		const raw = combatant.getFlag(FLAG_SCOPE, FLAG_KEY) ?? {};
+		const sameRound = nonNegativeInteger(raw.round) === round;
+
+		return Object.freeze({
+			round,
+			completed: sameRound && raw.completed === true,
+		});
+	}
+
+	static isCompleted(combatant) {
+		return this.snapshot(combatant).completed;
+	}
+
+	static async resetRound(combat) {
+		assertCombat(combat);
+		const round = nonNegativeInteger(combat.round);
+		const updates = [...combat.combatants].map((combatant) => ({
+			_id: combatant.id,
+			[`flags.${FLAG_SCOPE}.${FLAG_KEY}`]: {
+				round,
+				completed: false,
+			},
+		}));
+
+		if (updates.length) {
+			await combat.updateEmbeddedDocuments("Combatant", updates);
+		}
+	}
+
+	static async initializeCombatant(combatant) {
+		assertCombatant(combatant);
+		const combat = combatant.parent;
+		if (!combat?.started || nonNegativeInteger(combat.round) <= 0) return;
+		await combatant.setFlag(FLAG_SCOPE, FLAG_KEY, {
+			round: nonNegativeInteger(combat.round),
+			completed: false,
+		});
+	}
+
+	static async markCompleted(combatant) {
+		assertCombatant(combatant);
+		await combatant.setFlag(FLAG_SCOPE, FLAG_KEY, {
+			round: nonNegativeInteger(combatant.parent?.round),
+			completed: true,
+		});
+		return this.snapshot(combatant);
+	}
+
+	/**
+	 * First Combatant from the top of the current tracker who has not finished
+	 * this round. Respect Foundry's native skip-defeated preference.
+	 */
+	static firstUnfinished(combat) {
+		assertCombat(combat);
+		const skipDefeated = combat.settings?.skipDefeated === true;
+		return [...combat.turns].find((combatant) => {
+			if (skipDefeated && combatant.defeated) return false;
+			return !this.isCompleted(combatant);
+		}) ?? null;
+	}
+
+	static unfinished(combat) {
+		assertCombat(combat);
+		const skipDefeated = combat.settings?.skipDefeated === true;
+		return Object.freeze(
+			[...combat.turns].filter((combatant) => {
+				if (skipDefeated && combatant.defeated) return false;
+				return !this.isCompleted(combatant);
+			}),
+		);
+	}
+
+	/**
+	 * Focus one Combatant by its position in the current sorted order.
+	 * Updating Combat.turn lets Foundry run its normal end/start turn lifecycle.
+	 */
+	static async focus(combat, combatant) {
+		assertCombat(combat);
+		assertCombatant(combatant);
+		const index = [...combat.turns].findIndex(
+			(entry) => String(entry.id) === String(combatant.id),
+		);
+		if (index < 0) {
+			throw new Error("The requested Combatant is not present in the current turn order.");
+		}
+		if (String(combat.combatant?.id ?? "") === String(combatant.id)) {
+			/* Initiative edits may have changed the numeric turn index while keeping
+			 * the same intended active Combatant. Correct the index without forcing
+			 * another lifecycle transition if necessary. */
+			if (Number(combat.turn) !== index) {
+				await combat.update(
+					{ turn: index },
+					{ [FOCUS_OPTION]: true, direction: 0 },
+				);
+			}
+			return combat;
+		}
+
+		return combat.update(
+			{ turn: index },
+			{ [FOCUS_OPTION]: true, direction: 1 },
+		);
+	}
+}
+
+function assertCombatant(combatant) {
+	if (!(combatant instanceof foundry.documents.Combatant)) {
+		throw new TypeError("A Foundry Combatant is required.");
+	}
+}
+
+function assertCombat(combat) {
+	if (!(combat instanceof foundry.documents.Combat)) {
+		throw new TypeError("A Foundry Combat is required.");
+	}
+}
+
+function nonNegativeInteger(value) {
+	const numeric = Number(value);
+	return Number.isFinite(numeric) ? Math.max(0, Math.trunc(numeric)) : 0;
+}
