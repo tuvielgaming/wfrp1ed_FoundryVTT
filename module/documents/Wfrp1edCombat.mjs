@@ -16,6 +16,11 @@ const PARRY_DEBT_REMINDER_FLAG_KEY = "parryDebtReminder";
  * Initiative edits made during a started round are temporary. Turn completion
  * is tracked separately from initiative position, so postponing the current
  * Combatant cannot accidentally make Foundry think the whole round is over.
+ *
+ * `parryDebtReminder` is presentation-only. Default-mode debt must survive the
+ * end-of-round transition, remain visible after it is paid at the Combatant's
+ * next turn start, and disappear only when that Combatant actually completes
+ * the turn with Next Turn. Initiative focus changes must not clear it.
  */
 export class Wfrp1edCombat extends foundry.documents.Combat {
 	/**
@@ -67,27 +72,29 @@ export class Wfrp1edCombat extends foundry.documents.Combat {
 		await CombatAttackEconomy.startRound(this);
 		await CombatDodgeEconomy.startRound(this);
 
-		const reminderUpdates = [...this.combatants].map((combatant) => ({
-			_id: combatant.id,
-			[`flags.${FLAG_SCOPE}.${PARRY_DEBT_REMINDER_FLAG_KEY}`]: 0,
-		}));
-		if (reminderUpdates.length) {
-			await this.updateEmbeddedDocuments("Combatant", reminderUpdates);
-		}
+		/*
+		 * Do not clear parryDebtReminder here. Default-mode debt intentionally
+		 * survives the round boundary and the reminder is owned by the affected
+		 * Combatant's real Next Turn completion, not by the global round reset.
+		 */
 	}
 
 	/** @inheritDoc */
 	async _onStartTurn(combatant, context) {
 		await super._onStartTurn(combatant, context);
 
+		const existingReminder = nonNegativeInteger(
+			combatant.getFlag?.(FLAG_SCOPE, PARRY_DEBT_REMINDER_FLAG_KEY),
+		);
 		const before = CombatAttackEconomy.snapshot(combatant);
 		const after = await CombatAttackEconomy.startTurn(combatant);
 		const paidDebt = Math.max(0, after.spent - before.spent);
+		const reminder = paidDebt > 0 ? paidDebt : existingReminder;
 
 		await combatant.setFlag(
 			FLAG_SCOPE,
 			PARRY_DEBT_REMINDER_FLAG_KEY,
-			paidDebt,
+			reminder,
 		);
 	}
 
@@ -102,11 +109,14 @@ export class Wfrp1edCombat extends foundry.documents.Combat {
 	async _onEndTurn(combatant, context) {
 		await super._onEndTurn(combatant, context);
 		await CombatAttackEconomy.endTurn(combatant);
-		await combatant.setFlag(
-			FLAG_SCOPE,
-			PARRY_DEBT_REMINDER_FLAG_KEY,
-			0,
-		);
+
+		if (CombatRoundTurnState.isCompleted(combatant)) {
+			await combatant.setFlag(
+				FLAG_SCOPE,
+				PARRY_DEBT_REMINDER_FLAG_KEY,
+				0,
+			);
+		}
 	}
 
 	/** @inheritDoc */
@@ -122,4 +132,9 @@ export class Wfrp1edCombat extends foundry.documents.Combat {
 			0,
 		);
 	}
+}
+
+function nonNegativeInteger(value) {
+	const numeric = Number(value);
+	return Number.isFinite(numeric) ? Math.max(0, Math.trunc(numeric)) : 0;
 }
