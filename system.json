@@ -21,6 +21,7 @@
 		"module/combat/CombatSheetIntegration.mjs",
 		"module/combat/CombatParryDebtReminder.mjs",
 		"module/combat/CombatDefenceRuleReminderChat.mjs",
+		"module/combat/CombatDefenceAutoResolution.mjs",
 		"module/inventory/ClassicInventoryIntegration.mjs",
 		"module/sheets/ClassicSheetScrollPreservation.mjs",
 		"module/sheets/DocumentImageIntegration.mjs",
