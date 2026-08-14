@@ -63,3 +63,5 @@ export class WfrpRuleSettings {
 function localize(english, polish) {
 	return game.i18n.lang === "pl" ? polish : english;
 }
+
+Hooks.once("init", () => WfrpRuleSettings.register());
