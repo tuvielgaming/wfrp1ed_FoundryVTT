@@ -25,13 +25,25 @@
 	font-size: 12px;
 }
 
-.wfrp1e-combat-attack-context .combat-defence-pending__responses {
+.wfrp1e-combat-attack-context .combat-defence-pending__chooser {
 	display: grid;
-	grid-template-columns: repeat(3, minmax(0, 1fr));
-	gap: 4px;
+	grid-template-columns: auto minmax(0, 1fr);
+	align-items: center;
+	gap: 7px;
+	font-size: 11px;
+	font-weight: 700;
 }
 
-.wfrp1e-combat-attack-context .combat-defence-pending__responses button,
+.wfrp1e-combat-attack-context .combat-defence-pending__chooser select {
+	width: 100%;
+	min-width: 0;
+	height: 29px;
+	margin: 0;
+	padding: 2px 5px;
+	font-family: inherit;
+	font-size: 11px;
+}
+
 .wfrp1e-combat-attack-context .combat-defence-pending__confirm {
 	min-width: 0;
 	min-height: 28px;
@@ -40,35 +52,6 @@
 	font-family: inherit;
 	font-size: 11px;
 	line-height: 1.1;
-}
-
-.wfrp1e-combat-attack-context .combat-defence-pending__responses button.is-selected {
-	outline: 2px solid rgb(89 65 35 / 48%);
-	outline-offset: -2px;
-	background: rgb(89 65 35 / 10%);
-	font-weight: 700;
-}
-
-.wfrp1e-combat-attack-context .combat-defence-pending__parry-item {
-	display: grid;
-	grid-template-columns: auto minmax(0, 1fr);
-	align-items: center;
-	gap: 6px;
-	font-size: 11px;
-	font-weight: 700;
-}
-
-.wfrp1e-combat-attack-context .combat-defence-pending__parry-item[hidden] {
-	display: none !important;
-}
-
-.wfrp1e-combat-attack-context .combat-defence-pending__parry-item select {
-	width: 100%;
-	min-width: 0;
-	height: 28px;
-	margin: 0;
-	padding: 2px 5px;
-	font-size: 11px;
 }
 
 .wfrp1e-combat-attack-context .combat-defence-status {
@@ -117,11 +100,8 @@
 }
 
 @media (max-width: 500px) {
-	.wfrp1e-combat-attack-context .combat-defence-pending__responses {
+	.wfrp1e-combat-attack-context .combat-defence-pending__chooser {
 		grid-template-columns: 1fr;
-	}
-
-	.wfrp1e-combat-attack-context .combat-defence-pending__parry-item {
-		grid-template-columns: 1fr;
+		gap: 4px;
 	}
 }
