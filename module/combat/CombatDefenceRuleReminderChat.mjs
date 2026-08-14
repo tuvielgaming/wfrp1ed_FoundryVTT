@@ -6,9 +6,11 @@ const FLAG_SCOPE = "wfrp1ed";
 const ATTACK_FLAG_KEY = "combatAttackResult";
 
 /**
- * Outside Combat Tracker the defence transaction intentionally does not mutate
- * round resources. Keep the configured rule costs visible anyway so an
- * abstract/manual exchange still reminds the table what must be tracked by hand.
+ * Keep configured defence costs visible where the core transaction has no
+ * natural numeric cost to show. Outside Combat Tracker all entries are manual
+ * reminders. In managed Combat the optional shield-commitment interpretation
+ * also gets an explicit label because its cost is a round-state commitment,
+ * not a normal immediate/debt number.
  */
 Hooks.on("renderChatMessageHTML", (message, html) => {
 	const attack = message?.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY);
@@ -26,7 +28,10 @@ Hooks.on("renderChatMessageHTML", (message, html) => {
 async function decorate(message, root) {
 	const attack = message?.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY);
 	const defender = await actorFromAttackState(attack);
-	if (!defender || combatantForActor(defender)) return;
+	if (!defender) return;
+
+	const managed = Boolean(combatantForActor(defender));
+	if (managed && !WfrpRuleSettings.usesShieldDefensiveCommitment()) return;
 
 	const select = await defenceSelect(root);
 	if (!(select instanceof HTMLSelectElement)) return;
@@ -40,10 +45,12 @@ async function decorate(message, root) {
 	for (const option of select.options) {
 		const response = String(option.dataset.response ?? "");
 		if (response === "dodge") {
-			option.textContent = `${option.textContent} — ${localize(
-				"once per round",
-				"raz na rundę",
-			)}`;
+			if (!managed) {
+				option.textContent = `${option.textContent} — ${localize(
+					"once per round",
+					"raz na rundę",
+				)}`;
+			}
 			continue;
 		}
 
@@ -52,16 +59,36 @@ async function decorate(message, root) {
 		const choice = parryByUuid.get(itemUuid);
 		if (!choice) continue;
 
-		option.textContent = `${option.textContent} — ${parryCostReminder(
-			choice.attackCostMode,
-		)}`;
+		if (!managed) {
+			option.textContent = `${option.textContent} — ${parryCostReminder(
+				choice.attackCostMode,
+			)}`;
+			continue;
+		}
+
+		if (
+			choice.attackCostMode === PARRY_ATTACK_COST_MODE.ALL_REMAINING_ATTACKS &&
+			WfrpRuleSettings.usesShieldDefensiveCommitment()
+		) {
+			option.textContent = `${option.textContent} — ${localize(
+				"commit all offensive Attacks this round",
+				"poświęć wszystkie ofensywne Ataki w tej rundzie",
+			)}`;
+		}
 	}
 
 	select.dataset.wfrpRuleReminders = "true";
-	select.title = localize(
-		"Outside Combat Tracker these are rule reminders only. The system does not automatically spend Attacks, create parry debt, remember shield commitment, or remember the once-per-round Dodge Blow use.",
-		"Poza Monitorem Walki są to wyłącznie przypomnienia zasad. System nie zużywa automatycznie Ataków, nie tworzy długu za parowanie, nie zapamiętuje zobowiązania tarczą ani użycia Uników raz na rundę.",
-	);
+	if (!managed) {
+		select.title = localize(
+			"Outside Combat Tracker these are rule reminders only. The system does not automatically spend Attacks, create parry debt, remember shield commitment, or remember the once-per-round Dodge Blow use.",
+			"Poza Monitorem Walki są to wyłącznie przypomnienia zasad. System nie zużywa automatycznie Ataków, nie tworzy długu za parowanie, nie zapamiętuje zobowiązania tarczą ani użycia Uników raz na rundę.",
+		);
+	} else {
+		select.title = localize(
+			"Optional shield rule: declaring a shield parry commits all offensive Attacks for this round while the normal A parry-attempt limit remains.",
+			"Opcjonalna zasada tarczy: zadeklarowanie parowania tarczą poświęca wszystkie ofensywne Ataki w tej rundzie, zachowując zwykły limit prób parowania równy A.",
+		);
+	}
 }
 
 function parryCostReminder(mode) {
