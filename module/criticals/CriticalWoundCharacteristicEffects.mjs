@@ -14,6 +14,7 @@ import {
 
 const FLAG_SCOPE = "wfrp1ed";
 const CORE_EFFECT_FLAG_KEY = "coreCriticalConsequence";
+const RULE_CHANGES_FLAG_KEY = "ruleChanges";
 const TABLE_RESULT_FLAG_KEY = "detailedCriticalEffect";
 const CRITICAL_WOUND_TYPE = "criticalWound";
 
@@ -68,9 +69,8 @@ Hooks.on("updateItem", (item) => {
 Hooks.once("ready", () => {
 	/*
 	 * The Core RollTables are materialized asynchronously by CriticalBootstrap.
-	 * The previous repair pass could therefore run before those tables existed,
-	 * making legacy wounds appear to have no effect number. Await the same
-	 * idempotent table materialization first, then repair every existing wound.
+	 * Await the same idempotent table materialization first, then repair every
+	 * existing wound before asking the sheet to consume its consequence.
 	 */
 	if (!isPrimaryActiveGm()) return;
 	void repairExistingCoreCharacteristicEffects().catch(reportEffectError);
@@ -128,19 +128,33 @@ function installCharacteristicValueResolver() {
 /**
  * Resolve every active automatic self-effect which targets one current value.
  * The persistent Initial/Purchased/Career profile is never mutated.
+ *
+ * Foundry may report a transfer ActiveEffect embedded in an owned Item as
+ * `active === false` immediately after a world reload even though the effect is
+ * enabled and still belongs to the Actor. RuleEffectResolver correctly honours
+ * Foundry's active state for generic effects, but system-managed Core Critical
+ * Wounds have stronger provenance: the persistent wound plus its enabled managed
+ * ActiveEffect is the authoritative consequence. Add that consequence directly
+ * when the generic resolver did not already discover it. This keeps reloads
+ * deterministic without double-applying a normally active effect.
  */
 function effectiveCharacteristic(actor, id, knownBase = undefined) {
 	const canonicalId = canonicalCharacteristicId(id);
 	const base = knownBase === undefined
 		? baseCharacteristicValue(actor, canonicalId)
 		: finiteNumber(knownBase, `characteristics.${canonicalId}.current`);
-	const candidates = RuleEffectResolver.candidates(
+	const targetId = characteristicTargetId(canonicalId);
+	const generic = RuleEffectResolver.candidates(
 		actor,
-		characteristicTargetId(canonicalId),
+		targetId,
 	).filter((candidate) =>
 		candidate.applicability === RULE_EFFECT_APPLICABILITY.AUTOMATIC &&
 		candidate.side === RULE_EFFECT_SIDES.SELF,
 	);
+	const candidates = [
+		...generic,
+		...managedCoreWoundCandidates(actor, canonicalId, targetId, generic),
+	];
 
 	let value = base;
 	const applied = [];
@@ -175,6 +189,64 @@ function effectiveCharacteristic(actor, id, knownBase = undefined) {
 	});
 }
 
+function managedCoreWoundCandidates(actor, characteristicId, targetId, existing) {
+	if (!(actor instanceof foundry.documents.Actor)) return [];
+	const results = [];
+
+	for (const wound of actor.items ?? []) {
+		if (wound?.type !== CRITICAL_WOUND_TYPE) continue;
+		if (!isCoreDetailedEffectProvider(wound.system?.resolution?.providerId)) continue;
+
+		const definition = coreConsequenceForWound(wound);
+		const entry = definition?.effects?.find(
+			(effect) => effect.characteristicId === characteristicId,
+		);
+		if (!entry) continue;
+
+		const managedEffect = [...(wound.effects ?? [])].find((effect) => {
+			const flag = effect.getFlag?.(FLAG_SCOPE, CORE_EFFECT_FLAG_KEY);
+			return Boolean(flag) &&
+				Number(flag.effectNumber) === definition.effectNumber &&
+				String(flag.location ?? "") === definition.location;
+		}) ?? null;
+
+		/* Explicitly disabling the managed effect is the current treatment switch. */
+		if (!managedEffect || managedEffect.disabled === true) continue;
+
+		/* Do not duplicate a candidate already discovered through persisted rules. */
+		if (existing.some((candidate) =>
+			String(candidate.itemUuid ?? "") === String(wound.uuid ?? "") &&
+			String(candidate.targetId ?? "") === targetId
+		)) {
+			continue;
+		}
+
+		results.push(Object.freeze({
+			id: `core-critical:${wound.uuid}:${managedEffect.id}:${characteristicId}`,
+			targetId,
+			operation: entry.operation,
+			formula: String(entry.value),
+			applicability: RULE_EFFECT_APPLICABILITY.AUTOMATIC,
+			side: RULE_EFFECT_SIDES.SELF,
+			stacking: "per-acquisition",
+			condition: localize(
+				"Until medical attention is received",
+				"Do czasu otrzymania pomocy medycznej",
+			),
+			priority: 50,
+			defaultSelected: true,
+			actorUuid: actor.uuid,
+			effectUuid: managedEffect.uuid,
+			effectName: managedEffect.name,
+			itemUuid: wound.uuid,
+			itemName: wound.name,
+			itemType: wound.type,
+		}));
+	}
+
+	return results;
+}
+
 async function repairExistingCoreCharacteristicEffects() {
 	await ensureCoreDetailedCriticalTables();
 
@@ -183,6 +255,7 @@ async function repairExistingCoreCharacteristicEffects() {
 			if (item.type !== CRITICAL_WOUND_TYPE) continue;
 			await synchronizeCoreCharacteristicEffect(item);
 		}
+		void actor.sheet?.render?.({ force: true });
 	}
 }
 
@@ -246,9 +319,11 @@ async function synchronizeCoreCharacteristicEffect(wound) {
 		),
 		disabled: false,
 		transfer: true,
-		system: { changes },
+		changes: foundry.utils.deepClone(changes),
+		system: { changes: foundry.utils.deepClone(changes) },
 		flags: {
 			[FLAG_SCOPE]: {
+				[RULE_CHANGES_FLAG_KEY]: foundry.utils.deepClone(changes),
 				[CORE_EFFECT_FLAG_KEY]: {
 					version: 1,
 					location: definition.location,
@@ -319,17 +394,11 @@ function decorateAffectedCharacteristics(actor, root) {
 		marker.dataset.wfrpCharacteristicEffectMarker = "";
 		marker.textContent = "!";
 		marker.title = tooltip;
-		marker.dataset.tooltip = tooltip;
 		marker.setAttribute("aria-label", tooltip);
 		cell.append(marker);
 
-		/*
-		 * Foundry's tooltip manager does not consistently activate on a nested
-		 * marker inside a rollable <button>. Put the same concise warning on the
-		 * characteristic control itself so hovering a clickable value still works.
-		 */
+		/* One native delayed tooltip is enough for a clickable characteristic. */
 		cell.title = tooltip;
-		cell.dataset.tooltip = tooltip;
 	}
 }
 
