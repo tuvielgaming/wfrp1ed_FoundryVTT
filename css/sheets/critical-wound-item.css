@@ -114,6 +114,7 @@
 	cursor: pointer;
 	font-size: 14px;
 	font-weight: 700;
+	color: var(--critical-wound-text);
 }
 
 .critical-wound-item-sheet .critical-wound-sheet__provenance dl {
@@ -127,16 +128,20 @@
 	grid-template-columns: 145px minmax(0, 1fr);
 	gap: 8px;
 	font-size: 11px;
+	color: var(--critical-wound-text);
 }
 
 .critical-wound-item-sheet .critical-wound-sheet__provenance-row dt {
 	font-weight: 700;
+	color: var(--critical-wound-text);
 }
 
 .critical-wound-item-sheet .critical-wound-sheet__provenance-row dd {
 	min-width: 0;
 	margin: 0;
 	overflow-wrap: anywhere;
+	color: var(--critical-wound-text);
+	opacity: 0.82;
 }
 
 /******************************************************************/
