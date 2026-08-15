@@ -219,6 +219,7 @@ function buildResolvedDamagePanel(message, damageState, rollState, defender) {
 	const resolution = damageState.resolution ?? {};
 	const toughness = resolution.breakdown?.toughness ?? {};
 	const armour = resolution.breakdown?.armour ?? {};
+	const parry = resolution.breakdown?.parry ?? {};
 	const transaction = DamageApplication.transactionFor(
 		defender,
 		damageState.packet?.id,
@@ -252,17 +253,23 @@ function buildResolvedDamagePanel(message, damageState, rollState, defender) {
 		));
 	}
 
-	if (rollState.parry?.succeeded) {
-		root.append(detailRow(
-			localize("Successful Parry", "Udane Parowanie"),
-			`−${nonNegativeInteger(rollState.parry.reduction)} (${rollState.parry.itemName || "—"})`,
-		));
-	}
-
 	root.append(
 		detailRow(localize("Before Toughness", "Przed Wytrzymałością"), String(damageState.packet?.rawAmount ?? 0)),
 		detailRow(localize("Toughness", "Wytrzymałość"), `−${nonNegativeInteger(toughness.value)}`),
 		detailRow(localize("Armour", "Pancerz"), armourLabel(armour)),
+	);
+
+	if (parry.applied === true) {
+		root.append(detailRow(
+			localize("Successful Parry", "Udane Parowanie"),
+			localize(
+				`−${nonNegativeInteger(parry.rolledReduction)} rolled; ${nonNegativeInteger(parry.absorbed)} stopped (${parry.itemName || "—"})`,
+				`−${nonNegativeInteger(parry.rolledReduction)} na kości; zatrzymano ${nonNegativeInteger(parry.absorbed)} (${parry.itemName || "—"})`,
+			),
+		));
+	}
+
+	root.append(
 		detailRow(localize("Final Wounds", "Końcowe obrażenia"), String(resolution.finalAmount ?? 0)),
 	);
 
@@ -398,12 +405,20 @@ async function resolveDamageAsAuthority(message, requestingUser) {
 
 		const strength = characteristicValue(attacker, "s", "Strength");
 		const generatedDamage = diceTotal + strength;
-		const rawAmount = Math.max(0, generatedDamage - parry.reduction);
 		const toughness = characteristicValue(defender, "t", "Toughness");
 		const armour = CombatEquipment.armourAt(defender, hitLocation);
+		const specialMitigation = parry.succeeded
+			? {
+				parry: {
+					reduction: parry.reduction,
+					itemName: parry.itemName,
+					itemUuid: parry.itemUuid,
+				},
+			}
+			: {};
 
 		const packet = new DamagePacket({
-			rawAmount,
+			rawAmount: generatedDamage,
 			targetActorUuid: defender.uuid,
 			source: {
 				kind: "combat-attack",
@@ -414,6 +429,7 @@ async function resolveDamageAsAuthority(message, requestingUser) {
 			armour: DAMAGE_MITIGATION_POLICY.APPLY,
 			toughness: DAMAGE_MITIGATION_POLICY.APPLY,
 			hitLocation,
+			specialMitigation,
 			criticalMode: DAMAGE_CRITICAL_MODE.DETAILED,
 		});
 		const resolution = DamageResolver.resolve(packet, {
@@ -422,7 +438,7 @@ async function resolveDamageAsAuthority(message, requestingUser) {
 		});
 
 		const rollState = {
-			version: 1,
+			version: 2,
 			status: "resolved",
 			packetId: packet.id,
 			attackMessageId: String(message.id),
@@ -437,7 +453,7 @@ async function resolveDamageAsAuthority(message, requestingUser) {
 			generatedDamage,
 			parry,
 			additionalDamage,
-			rawAmount,
+			rawAmount: generatedDamage,
 			toughness,
 			armour: foundry.utils.deepClone(armour),
 			finalAmount: resolution.finalAmount,
