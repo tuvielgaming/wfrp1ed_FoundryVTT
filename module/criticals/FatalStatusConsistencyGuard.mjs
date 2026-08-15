@@ -7,31 +7,20 @@ const KILLED_OUTCOME = "killed";
 const reconcilingActors = new Set();
 
 /**
- * Safety boundary for Foundry's defeated/dead status.
+ * Migration/safety boundary for Foundry's defeated/dead status.
  *
- * WFRP reaching 0 Wounds and producing Critical overflow does not itself kill a
- * character. Only an explicitly-applied fatal Critical transaction may set the
- * defeated status. Historical/reverted/orphan fatal records are ignored when
- * determining the current state.
- *
- * FatalCriticalIntegration remains the transaction owner. This guard runs after
- * Actor updates and enforces the stricter invariant, including worlds carrying
- * stale fatal flags created by earlier development builds.
+ * FatalCriticalIntegration is the live transaction owner. This guard repairs
+ * stale historical fatal state created by earlier development builds and
+ * verifies explicit fatal/Fate updates. It deliberately does NOT react to
+ * ordinary damage or generic status-effect edits: reaching 0 Wounds is not a
+ * death transaction, and a GM's unrelated manual status choice must not be
+ * overwritten just because the Actor has old WFRP fatal history.
  */
 Hooks.on("updateActor", (actor, changes) => {
 	if (!(actor instanceof foundry.documents.Actor)) return;
-	if (!touchesManagedFatalState(changes)) return;
+	if (!touchesExplicitFatalState(changes)) return;
 	queueReconciliation(actor);
 });
-
-for (const hook of ["createActiveEffect", "updateActiveEffect", "deleteActiveEffect"]) {
-	Hooks.on(hook, (effect) => {
-		const actor = effect?.parent;
-		if (!(actor instanceof foundry.documents.Actor)) return;
-		if (!hasManagedFatalHistory(actor)) return;
-		queueReconciliation(actor);
-	});
-}
 
 Hooks.once("ready", () => {
 	if (!isStatusAuthority()) return;
@@ -72,11 +61,6 @@ async function reconcileStrictFatalStatus(actor) {
 			return;
 		}
 
-		/*
-		 * No currently-applied fatal Critical owns death. Restore the status which
-		 * existed before this subsystem's first fatal application. Never infer death
-		 * from Wounds, Critical value, or historical later `defeatedBefore` values.
-		 */
 		const first = [...history].sort(
 			(left, right) =>
 				(Number(left?.appliedAt) - Number(right?.appliedAt)) ||
@@ -120,10 +104,9 @@ function defeatedStatusId() {
 	return null;
 }
 
-function touchesManagedFatalState(changes) {
+function touchesExplicitFatalState(changes) {
 	if (!changes || typeof changes !== "object") return false;
 	return [
-		DAMAGE_APPLICATIONS_FLAG_KEY,
 		FATAL_APPLICATIONS_FLAG_KEY,
 		FATE_INTERVENTIONS_FLAG_KEY,
 	].some((key) => {
