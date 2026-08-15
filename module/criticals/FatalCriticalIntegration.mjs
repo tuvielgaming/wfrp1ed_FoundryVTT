@@ -5,41 +5,49 @@ const FLAG_SCOPE = "wfrp1ed";
 const DAMAGE_STATE_FLAG_KEY = "damageState";
 const CRITICAL_RESULT_FLAG_KEY = "criticalResult";
 const FATE_INTERVENTIONS_FLAG_KEY = "fateInterventions";
+const FATAL_APPLICATIONS_FLAG_KEY = "fatalCriticalApplications";
 const FATE_INTERVENTION_VERSION = 1;
+const FATAL_APPLICATION_VERSION = 1;
 
 /**
- * Apply the fatal consequence of a Sudden Death result and expose the WFRP 1e
- * Fate Point escape to the GM or owner of the dying Actor.
+ * Apply fatal critical consequences explicitly and expose the WFRP 1e Fate
+ * Point escape to the GM or owner of the dying Actor.
  *
- * The table result remains immutable: a fatal roll is still recorded as
- * "killed". Spending Fate is stored as a separate Actor-side consequence so
- * the history records both the fatal result and the later intervention.
+ * Resolving a table roll and applying its fatal consequence are deliberately
+ * separate. The immutable critical result may say "killed", but the Actor is
+ * not marked defeated until an authorized user presses Apply Fatal Critical.
+ * Spending Fate is then stored as a second Actor-side intervention, preserving
+ * the full result -> application -> Fate history.
  */
 export function registerFatalCriticalIntegration() {
 	Hooks.on("updateActor", (actor, changes, _options, userId) => {
 		refreshActorFatalCriticalCards(actor);
 
-		if (!damageApplicationsChanged(changes)) {
+		if (
+			!damageApplicationsChanged(changes) &&
+			!fatalApplicationsChanged(changes) &&
+			!fateInterventionsChanged(changes)
+		) {
 			return;
 		}
 
 		// Status Śmierci zapisuje tylko jeden klient autorytatywny. Gdy MG jest
 		// aktywny robi to pierwszy aktywny MG; bez MG może to zrobić właściciel
-		// Actor-a, który właśnie zapisał wynik krytyczny.
+		// Actor-a, który właśnie zapisał wynik/aplikację krytyczną.
 		if (!isFatalStatusWriter(actor, userId)) {
 			return;
 		}
 
 		void synchronizeFatalStatus(actor).catch((error) => {
 			console.error(
-				"WFRP1ED | Unable to apply defeated status after fatal critical.",
+				"WFRP1ED | Unable to synchronize defeated status after fatal critical.",
 				error,
 			);
 			ui.notifications.warn(
 				localize(
 					"WFRP1ED.Critical.DeadStatusFailed",
-					"The critical result is fatal, but the defeated status could not be applied.",
-					"Wynik krytyczny oznacza śmierć, ale nie udało się zastosować statusu pokonanego.",
+					"The fatal critical state changed, but the defeated status could not be synchronized.",
+					"Stan śmiertelnego trafienia krytycznego uległ zmianie, ale nie udało się zsynchronizować statusu pokonanego.",
 				),
 			);
 		});
@@ -51,7 +59,81 @@ export function registerFatalCriticalIntegration() {
 }
 
 /**
- * Permanently spend one Fate Point to avert one already-recorded fatal result.
+ * Explicitly apply one already-resolved fatal critical result to its Actor.
+ *
+ * @param {ChatMessage} message Separate critical-result ChatMessage.
+ * @param {User} user
+ * @returns {Promise<Object>}
+ */
+export async function applyFatalCriticalResult(
+	message,
+	user = game.user,
+) {
+	const resultState = criticalResultState(message);
+	const actor = actorForCriticalResult(resultState);
+
+	if (!(actor instanceof foundry.documents.Actor)) {
+		throw new Error("The critical target Actor is not available.");
+	}
+	if (!canManageFatalActor(actor, user)) {
+		throw new Error(
+			"Only a GM or an owner of the dying Actor may apply this fatal critical result.",
+		);
+	}
+
+	const packetId = String(resultState?.packetId ?? "").trim();
+	const transaction = DamageApplication.transactionFor(actor, packetId);
+	if (
+		transaction?.state !== "applied" ||
+		transaction?.criticalResolution?.outcome !== SUDDEN_DEATH_OUTCOME.KILLED
+	) {
+		throw new Error(
+			"A fatal critical can only be applied from an active fatal damage transaction.",
+		);
+	}
+
+	const existing = fatalApplicationFor(actor, packetId);
+	if (existing?.state === "applied") {
+		await synchronizeFatalStatus(actor);
+		return existing;
+	}
+
+	const applications = readFatalApplicationMap(actor);
+	const application = {
+		version: FATAL_APPLICATION_VERSION,
+		packetId,
+		targetActorUuid: actor.uuid,
+		resultMessageId: String(message?.id ?? ""),
+		defeatedBefore: hasDefeatedStatus(actor),
+		userId: String(user?.id ?? ""),
+		appliedAt: Date.now(),
+		state: "applied",
+	};
+	applications[packetId] = foundry.utils.deepClone(application);
+
+	await actor.setFlag(
+		FLAG_SCOPE,
+		FATAL_APPLICATIONS_FLAG_KEY,
+		applications,
+	);
+	await synchronizeFatalStatus(actor);
+	refreshActorFatalCriticalCards(actor);
+
+	ui.notifications.info(
+		localize(
+			"WFRP1ED.Critical.FatalAppliedNotice",
+			`Fatal critical applied to ${actor.name}.`,
+			`Zastosowano śmiertelne trafienie krytyczne: ${actor.name}.`,
+		),
+	);
+
+	return foundry.utils.deepFreeze(
+		foundry.utils.deepClone(application),
+	);
+}
+
+/**
+ * Permanently spend one Fate Point to avert one explicitly-applied fatal result.
  *
  * @param {ChatMessage} message Separate critical-result ChatMessage.
  * @param {User} user
@@ -78,17 +160,23 @@ export async function spendFatePointForFatalCritical(
 	const transaction = DamageApplication.transactionFor(actor, packetId);
 
 	if (
+		transaction?.state !== "applied" ||
 		transaction?.criticalResolution?.outcome !==
 		SUDDEN_DEATH_OUTCOME.KILLED
 	) {
 		throw new Error(
-			"A Fate Point can only be spent here for a fatal critical result.",
+			"A Fate Point can only be spent here for an active fatal critical result.",
+		);
+	}
+	if (fatalApplicationFor(actor, packetId)?.state !== "applied") {
+		throw new Error(
+			"Apply the fatal critical result before spending Fate to avert it.",
 		);
 	}
 
 	const existingIntervention = fateInterventionFor(actor, packetId);
 	if (existingIntervention) {
-		await setDefeatedStatus(actor, false);
+		await synchronizeFatalStatus(actor);
 		return existingIntervention;
 	}
 
@@ -123,7 +211,7 @@ export async function spendFatePointForFatalCritical(
 		[`flags.${FLAG_SCOPE}.${FATE_INTERVENTIONS_FLAG_KEY}`]: interventions,
 	});
 
-	await setDefeatedStatus(actor, false);
+	await synchronizeFatalStatus(actor);
 	refreshActorFatalCriticalCards(actor);
 
 	ui.notifications.info(
@@ -142,17 +230,37 @@ export async function spendFatePointForFatalCritical(
 async function synchronizeFatalStatus(actor) {
 	if (!(actor instanceof foundry.documents.Actor)) return;
 
-	const applications = readDamageApplicationMap(actor);
-	const hasUnavertedFatality = Object.values(applications).some(
-		(transaction) =>
+	const damageApplications = readDamageApplicationMap(actor);
+	const fatalApplications = readFatalApplicationMap(actor);
+	const fatalEntries = Object.values(fatalApplications).filter(
+		(application) => application?.state === "applied",
+	);
+	if (fatalEntries.length === 0) return;
+
+	const hasUnavertedFatality = fatalEntries.some((application) => {
+		const packetId = String(application.packetId ?? "");
+		const transaction = damageApplications[packetId];
+		return Boolean(
 			transaction?.state === "applied" &&
 			transaction?.criticalResolution?.outcome ===
 				SUDDEN_DEATH_OUTCOME.KILLED &&
-			!fateInterventionFor(actor, transaction.packetId),
-	);
+			!fateInterventionFor(actor, packetId)
+		);
+	});
 
-	if (!hasUnavertedFatality) return;
-	await setDefeatedStatus(actor, true);
+	if (hasUnavertedFatality) {
+		await setDefeatedStatus(actor, true);
+		return;
+	}
+
+	/*
+	 * Restore the pre-fatal defeated state rather than blindly clearing a status
+	 * which may have existed before WFRP applied this fatal transaction.
+	 */
+	const defeatedBefore = fatalEntries.some(
+		(application) => application.defeatedBefore === true,
+	);
+	await setDefeatedStatus(actor, defeatedBefore);
 }
 
 async function setDefeatedStatus(actor, active) {
@@ -163,10 +271,16 @@ async function setDefeatedStatus(actor, active) {
 		);
 	}
 
+	if (hasDefeatedStatus(actor) === Boolean(active)) return actor;
 	return actor.toggleStatusEffect(statusId, {
 		active: Boolean(active),
 		overlay: true,
 	});
+}
+
+function hasDefeatedStatus(actor) {
+	const statusId = defeatedStatusId();
+	return Boolean(statusId && actor?.statuses?.has?.(statusId));
 }
 
 function defeatedStatusId() {
@@ -212,6 +326,7 @@ function applyFatalCriticalClientState(message, html) {
 	if (!card) return;
 
 	card.querySelector?.("[data-wfrp-fate-intervention]")?.remove();
+	card.querySelector?.("[data-wfrp-fatal-application]")?.remove();
 	card.classList.remove("is-fate-saved");
 
 	const actor = actorForCriticalResult(resultState);
@@ -220,9 +335,16 @@ function applyFatalCriticalClientState(message, html) {
 	const packetId = String(resultState.packetId ?? "").trim();
 	const transaction = DamageApplication.transactionFor(actor, packetId);
 	if (
+		transaction?.state !== "applied" ||
 		transaction?.criticalResolution?.outcome !==
 		SUDDEN_DEATH_OUTCOME.KILLED
 	) {
+		return;
+	}
+
+	const fatalApplication = fatalApplicationFor(actor, packetId);
+	if (fatalApplication?.state !== "applied") {
+		card.append(buildApplyFatalPanel(message, actor));
 		return;
 	}
 
@@ -233,6 +355,19 @@ function applyFatalCriticalClientState(message, html) {
 		return;
 	}
 
+	const applied = document.createElement("section");
+	applied.className = "wfrp1e-fate-intervention";
+	applied.dataset.wfrpFatalApplication = "";
+	const appliedText = document.createElement("div");
+	appliedText.className = "wfrp1e-fate-intervention__spent";
+	appliedText.textContent = localize(
+		"WFRP1ED.Critical.FatalApplied",
+		"✓ Fatal critical applied — character is defeated",
+		"✓ Zastosowano śmiertelne trafienie krytyczne — postać jest pokonana",
+	);
+	applied.append(appliedText);
+	card.append(applied);
+
 	// Liczby Punktów Przeznaczenia nie pokazujemy osobom, które nie zarządzają
 	// ofiarą. Gracz widzi decyzję na swojej postaci, a MG także na BN-ach.
 	if (!canManageFatalActor(actor, game.user)) return;
@@ -241,6 +376,43 @@ function applyFatalCriticalClientState(message, html) {
 	if (fate.value <= 0) return;
 
 	card.append(buildSpendFatePanel(message, fate.value));
+}
+
+function buildApplyFatalPanel(message, actor) {
+	const panel = document.createElement("section");
+	panel.className = "wfrp1e-fate-intervention";
+	panel.dataset.wfrpFatalApplication = "";
+
+	if (!canManageFatalActor(actor, game.user)) {
+		const pending = document.createElement("div");
+		pending.className = "wfrp1e-critical-result__pending";
+		pending.textContent = localize(
+			"WFRP1ED.Critical.FatalAwaitingApply",
+			"Awaiting the GM or target owner to apply this fatal result.",
+			"Oczekuje na MG lub właściciela celu, który zastosuje ten śmiertelny wynik.",
+		);
+		panel.append(pending);
+		return panel;
+	}
+
+	const action = document.createElement("button");
+	action.type = "button";
+	action.className = "wfrp1e-fate-intervention__action";
+	action.dataset.wfrpApplyFatal = "";
+	action.innerHTML = `<i class="fa-solid fa-skull"></i> ${localize(
+		"WFRP1ED.Critical.ApplyFatal",
+		"Apply Fatal Critical",
+		"Zastosuj śmiertelne trafienie krytyczne",
+	)}`;
+	action.addEventListener("click", () => {
+		action.disabled = true;
+		void applyFatalCriticalResult(message).catch((error) => {
+			action.disabled = false;
+			reportFatalApplyError(error);
+		});
+	});
+	panel.append(action);
+	return panel;
 }
 
 function buildSpendFatePanel(message, fateValue) {
@@ -414,6 +586,28 @@ function fateInterventionFor(actor, packetId) {
 		: null;
 }
 
+function readFatalApplicationMap(actor) {
+	const existing = actor?.getFlag?.(
+		FLAG_SCOPE,
+		FATAL_APPLICATIONS_FLAG_KEY,
+	);
+	return existing && typeof existing === "object" && !Array.isArray(existing)
+		? foundry.utils.deepClone(existing)
+		: {};
+}
+
+function fatalApplicationFor(actor, packetId) {
+	const id = String(packetId ?? "").trim();
+	if (!id) return null;
+	const map = actor?.getFlag?.(FLAG_SCOPE, FATAL_APPLICATIONS_FLAG_KEY);
+	const application = map && typeof map === "object" && !Array.isArray(map)
+		? map[id]
+		: null;
+	return application && typeof application === "object"
+		? foundry.utils.deepClone(application)
+		: null;
+}
+
 function readDamageApplicationMap(actor) {
 	const applications = actor?.getFlag?.(FLAG_SCOPE, "damageApplications");
 	return applications && typeof applications === "object" && !Array.isArray(applications)
@@ -422,12 +616,21 @@ function readDamageApplicationMap(actor) {
 }
 
 function damageApplicationsChanged(changes) {
-	return (
-		foundry.utils.getProperty?.(
-			changes,
-			"flags.wfrp1ed.damageApplications",
-		) !== undefined ||
-		changes?.["flags.wfrp1ed.damageApplications"] !== undefined
+	return changedPath(changes, "flags.wfrp1ed.damageApplications");
+}
+
+function fatalApplicationsChanged(changes) {
+	return changedPath(changes, `flags.${FLAG_SCOPE}.${FATAL_APPLICATIONS_FLAG_KEY}`);
+}
+
+function fateInterventionsChanged(changes) {
+	return changedPath(changes, `flags.${FLAG_SCOPE}.${FATE_INTERVENTIONS_FLAG_KEY}`);
+}
+
+function changedPath(changes, path) {
+	return Boolean(
+		foundry.utils.getProperty?.(changes, path) !== undefined ||
+		changes?.[path] !== undefined
 	);
 }
 
@@ -481,6 +684,20 @@ function asElement(html) {
 	if (html instanceof HTMLElement) return html;
 	if (html?.[0] instanceof HTMLElement) return html[0];
 	return null;
+}
+
+function reportFatalApplyError(error) {
+	console.error(
+		"WFRP1ED | Unable to apply fatal critical result.",
+		error,
+	);
+	ui.notifications.error(
+		error?.message ?? localize(
+			"WFRP1ED.Critical.ApplyFatalFailed",
+			"Unable to apply the fatal critical result.",
+			"Nie można zastosować śmiertelnego trafienia krytycznego.",
+		),
+	);
 }
 
 function reportFateError(error) {
