@@ -1,8 +1,16 @@
+import {
+	detailedCriticalEffectText,
+	isCoreDetailedEffectProvider,
+} from "../criticals/CoreDetailedCriticalTables.mjs";
+
 const {
 	ApplicationV2,
 	DialogV2,
 	HandlebarsApplicationMixin,
 } = foundry.applications.api;
+
+const FLAG_SCOPE = "wfrp1ed";
+const TABLE_RESULT_FLAG_KEY = "detailedCriticalEffect";
 
 /**
  * Dedicated Actor-side browser for persistent Critical Wound Items.
@@ -260,7 +268,8 @@ function criticalWounds(actor) {
 }
 
 function woundPresentation(item) {
-	const description = String(item.system?.description ?? "").trim();
+	const description = coreDescription(item) ||
+		String(item.system?.description ?? "").trim();
 	const hitLocation = String(item.system?.hitLocation ?? "").trim();
 	const criticalValue = Math.max(
 		0,
@@ -282,6 +291,50 @@ function woundPresentation(item) {
 		criticalValue,
 		effectCount: Number.isFinite(effectCount) ? effectCount : 0,
 	};
+}
+
+function coreDescription(item) {
+	const resolution = item?.system?.resolution;
+	if (!isCoreDetailedEffectProvider(resolution?.providerId)) return "";
+
+	const location = effectLocation(item.system?.hitLocation);
+	const effectNumber = coreEffectNumber(resolution);
+	if (!location || !effectNumber) return "";
+
+	return detailedCriticalEffectText(
+		location,
+		effectNumber,
+		game.i18n.lang,
+	);
+}
+
+function coreEffectNumber(resolution) {
+	const tableUuid = String(resolution?.tableUuid ?? "").trim();
+	const resultId = String(resolution?.tableResultId ?? "").trim();
+	if (!tableUuid || !resultId) return 0;
+
+	try {
+		const table = foundry.utils.fromUuidSync(tableUuid);
+		const result = table?.results?.get?.(resultId) ??
+			[...(table?.results ?? [])].find((entry) => String(entry.id) === resultId);
+		const flag = result?.getFlag?.(FLAG_SCOPE, TABLE_RESULT_FLAG_KEY);
+		const number = Number(flag?.effectNumber);
+		return Number.isInteger(number) && number > 0 ? number : 0;
+	} catch (_error) {
+		return 0;
+	}
+}
+
+function effectLocation(hitLocation) {
+	switch (String(hitLocation ?? "")) {
+		case "rightLeg":
+		case "leftLeg": return "leg";
+		case "rightArm":
+		case "leftArm": return "arm";
+		case "head": return "head";
+		case "body": return "body";
+		default: return "";
+	}
 }
 
 function woundFromTarget(actor, target) {
