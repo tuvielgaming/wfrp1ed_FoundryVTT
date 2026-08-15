@@ -23,8 +23,14 @@ export function registerFatalCriticalIntegration() {
 	Hooks.on("updateActor", (actor, changes, _options, userId) => {
 		refreshActorFatalCriticalCards(actor);
 
+		/*
+		 * Ordinary damage, including reaching 0 Wounds and creating Critical
+		 * overflow, never owns Foundry's defeated status. Only the explicit fatal
+		 * application and Fate transaction boundaries may synchronize death.
+		 * Critical rollback calls synchronizeFatalStatus directly after reverting
+		 * the fatal application, so damageApplications need no implicit trigger.
+		 */
 		if (
-			!damageApplicationsChanged(changes) &&
 			!fatalApplicationsChanged(changes) &&
 			!fateInterventionsChanged(changes)
 		) {
@@ -242,29 +248,15 @@ export async function synchronizeFatalStatus(actor) {
 	const allFatalEntries = Object.values(fatalApplications).filter(
 		(application) => application && typeof application === "object",
 	);
-	const fatalEntries = allFatalEntries.filter(
-		(application) => application?.state === "applied",
-	);
+	if (allFatalEntries.length === 0) return;
 
 	/*
-	 * No WFRP fatal history means this subsystem does not own the current defeated
-	 * status. If history exists but every managed fatal application was reverted,
-	 * restore the baseline that existed before the first managed fatality. This is
-	 * important for LIFO rollback: a later fatal may have recorded
-	 * defeatedBefore=true only because an earlier fatal was already active.
+	 * Only an explicitly-applied fatal Critical which still belongs to an active
+	 * applied damage transaction may impose defeated/dead. Reverted, historical,
+	 * orphaned and merely-resolved fatal records never imply death by themselves.
 	 */
-	if (fatalEntries.length === 0) {
-		if (allFatalEntries.length === 0) return;
-		const firstFatal = [...allFatalEntries].sort(
-			(left, right) =>
-				(Number(left?.appliedAt) - Number(right?.appliedAt)) ||
-				String(left?.packetId ?? "").localeCompare(String(right?.packetId ?? "")),
-		)[0];
-		await setDefeatedStatus(actor, firstFatal?.defeatedBefore === true);
-		return;
-	}
-
-	const hasUnavertedFatality = fatalEntries.some((application) => {
+	const hasUnavertedFatality = allFatalEntries.some((application) => {
+		if (application?.state !== "applied") return false;
 		const packetId = String(application.packetId ?? "");
 		const transaction = damageApplications[packetId];
 		return Boolean(
@@ -281,13 +273,17 @@ export async function synchronizeFatalStatus(actor) {
 	}
 
 	/*
-	 * Restore the pre-fatal defeated state rather than blindly clearing a status
-	 * which may have existed before WFRP applied this fatal transaction.
+	 * When no currently-active fatal Critical owns the status, restore the Actor's
+	 * state from before this subsystem's first managed fatal application. A later
+	 * fatal may have recorded defeatedBefore=true only because an earlier fatality
+	 * was active, so never use a later entry as the rollback baseline.
 	 */
-	const defeatedBefore = fatalEntries.some(
-		(application) => application.defeatedBefore === true,
-	);
-	await setDefeatedStatus(actor, defeatedBefore);
+	const firstFatal = [...allFatalEntries].sort(
+		(left, right) =>
+			(Number(left?.appliedAt) - Number(right?.appliedAt)) ||
+			String(left?.packetId ?? "").localeCompare(String(right?.packetId ?? "")),
+	)[0];
+	await setDefeatedStatus(actor, firstFatal?.defeatedBefore === true);
 }
 
 async function setDefeatedStatus(actor, active) {
@@ -343,6 +339,9 @@ function applyFatalCriticalClientState(message, html) {
 	) {
 		return;
 	}
+
+	/* Detailed Critical cards have their own adapter and must have one UI owner. */
+	if (resultState?.kind === "detailed") return;
 
 	const root = asElement(html);
 	if (!root) return;
@@ -640,10 +639,6 @@ function readDamageApplicationMap(actor) {
 	return applications && typeof applications === "object" && !Array.isArray(applications)
 		? applications
 		: {};
-}
-
-function damageApplicationsChanged(changes) {
-	return changedPath(changes, "flags.wfrp1ed.damageApplications");
 }
 
 function fatalApplicationsChanged(changes) {
