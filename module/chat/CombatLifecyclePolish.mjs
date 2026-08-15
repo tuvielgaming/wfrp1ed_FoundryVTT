@@ -16,7 +16,17 @@ Hooks.on("renderChatMessageHTML", (message, html) => {
 
 	presentAdditionalDamageIdentity(message, root);
 	foldDedicatedDamageDetails(message, root);
-	removeDuplicateDetailedFatalControls(message, root);
+
+	/*
+	 * Some critical decorators are registered during init and therefore run after
+	 * this module's top-level render hook. Clean the fatal adapter after the
+	 * current render cycle so the detailed card can never keep both controls.
+	 */
+	requestAnimationFrame(() => {
+		presentAdditionalDamageIdentity(message, root);
+		foldDedicatedDamageDetails(message, root);
+		removeDuplicateDetailedFatalControls(message, root);
+	});
 });
 
 function presentAdditionalDamageIdentity(message, root) {
