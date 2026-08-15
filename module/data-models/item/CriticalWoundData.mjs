@@ -13,12 +13,6 @@ const { TypeDataModel } = foundry.abstract;
  * produced it remains the historical resolution event, while the Item survives
  * on the Actor and owns any embedded ActiveEffects representing ongoing
  * mechanical consequences.
- *
- * This foundation deliberately stores only facts which are independent from a
- * particular critical-effect row. Exact penalties, durations, bleeding,
- * amputations, recovery rules, and other injury-specific mechanics are not
- * guessed here. Those are authored as native ActiveEffects or future audited
- * fields only after the relevant Core Rulebook effect table is verified.
  */
 export class CriticalWoundData extends TypeDataModel {
 	static defineSchema() {
@@ -29,17 +23,14 @@ export class CriticalWoundData extends TypeDataModel {
 			/** Damage overflow value which selected the detailed critical column. */
 			criticalValue: nonNegativeIntegerField(),
 
-			/**
-			 * Stable mechanical hit-location value supplied by the damage/critical
-			 * resolver. It remains text until the detailed location contract has
-			 * been re-audited against the Core tables.
-			 */
+			/** Stable mechanical hit-location value supplied by the resolver. */
 			hitLocation: textField(),
 
 			/**
 			 * Immutable-style provenance of the resolution which created the wound.
-			 * These values are audit links, not presentation strings and not a
-			 * substitute for the Item's embedded ActiveEffects.
+			 * `effectNumber` is persisted directly because managed Core RollTables are
+			 * implementation documents and their UUID/result ids must not be required
+			 * to reconstruct an ongoing injury after a world restart.
 			 */
 			resolution: new SchemaField({
 				damagePacketId: textField(),
@@ -50,6 +41,7 @@ export class CriticalWoundData extends TypeDataModel {
 				providerId: textField(),
 				tableUuid: textField(),
 				tableResultId: textField(),
+				effectNumber: nonNegativeIntegerField(),
 				roll: nonNegativeIntegerField(),
 				resolvedByUserId: textField(),
 				resolvedAt: nonNegativeIntegerField(),
@@ -57,9 +49,7 @@ export class CriticalWoundData extends TypeDataModel {
 		};
 	}
 
-	/**
-	 * Normalize transitional/plain object data without inventing rule content.
-	 */
+	/** Normalize transitional/plain object data without inventing rule content. */
 	static migrateData(source, options = {}) {
 		const migrated = foundry.utils.deepClone(source ?? {});
 		const resolution = migrated.resolution ?? {};
@@ -78,6 +68,9 @@ export class CriticalWoundData extends TypeDataModel {
 			providerId: unwrapText(resolution.providerId),
 			tableUuid: unwrapText(resolution.tableUuid),
 			tableResultId: unwrapText(resolution.tableResultId),
+			effectNumber: toNonNegativeInteger(
+				unwrapValue(resolution.effectNumber),
+			),
 			roll: toNonNegativeInteger(unwrapValue(resolution.roll)),
 			resolvedByUserId: unwrapText(resolution.resolvedByUserId),
 			resolvedAt: toNonNegativeInteger(
