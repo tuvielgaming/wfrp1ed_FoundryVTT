@@ -25,7 +25,8 @@ const reconciliations = new Map();
  * CombatDamageIntegration correctly invalidates the derived DamagePacket when
  * the attack Test changes, because the reversed d100 may select a different hit
  * location. This integration preserves the already-known random damage dice and
- * rebuilds only the dependent hit-location/armour/final-damage stages.
+ * the original Strength/Toughness/parry snapshots, rebuilding only the dependent
+ * hit-location/armour/final-damage stages.
  */
 Hooks.on("preUpdateChatMessage", (message, changes) => {
 	if (!testStateChanged(changes)) return;
@@ -109,9 +110,11 @@ async function reconcileAttackAdjudication(message, snapshot) {
 		restored.armour = foundry.utils.deepClone(
 			CombatEquipment.armourAt(defender, restored.hitLocation),
 		);
-		restored.toughness = nonNegativeInteger(
-			defender.getCharacteristicValue?.("t"),
-		);
+		/*
+		 * Toughness was part of the original damage snapshot. Editing only the
+		 * attack d100 must not silently adopt a later characteristic change.
+		 */
+		restored.toughness = nonNegativeInteger(snapshot.rollState.toughness);
 		restored.packetId = null;
 		restored.finalAmount = null;
 		restored.updatedBy = String(game.user?.id ?? "");
