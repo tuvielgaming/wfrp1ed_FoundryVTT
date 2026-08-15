@@ -350,6 +350,15 @@ function coreConsequenceForWound(wound) {
 }
 
 function coreEffectNumber(wound) {
+	/*
+	 * New wounds persist the resolved effect number directly. This is the stable
+	 * provenance boundary and must work for an owning player who cannot read the
+	 * system-managed world RollTable. Table lookup remains only as a migration
+	 * fallback for wounds created before effectNumber was persisted.
+	 */
+	const direct = positiveInteger(wound.system?.resolution?.effectNumber);
+	if (direct) return direct;
+
 	const tableUuid = String(wound.system?.resolution?.tableUuid ?? "").trim();
 	const resultId = String(wound.system?.resolution?.tableResultId ?? "").trim();
 	if (!tableUuid || !resultId) return 0;
