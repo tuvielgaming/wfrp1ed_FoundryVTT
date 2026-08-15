@@ -14,8 +14,43 @@
 	font-weight: 700;
 }
 
-.combat-damage-context__resolved > .combat-damage-context__heading span {
+.combat-damage-context__resolved {
+	margin: 0;
+}
+
+.combat-damage-context__resolved > summary {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.5rem;
+	cursor: pointer;
+	font-weight: 700;
+	list-style: none;
+}
+
+.combat-damage-context__resolved > summary::-webkit-details-marker {
+	display: none;
+}
+
+.combat-damage-context__resolved > summary::after {
+	content: "⌄";
+	margin-left: 0.2rem;
+	font-size: 0.9em;
+}
+
+.combat-damage-context__resolved[open] > summary::after {
+	content: "⌃";
+}
+
+.combat-damage-context__resolved > summary span {
+	margin-left: auto;
 	font-size: 1.15em;
+}
+
+.combat-damage-context__details-body {
+	margin-top: 0.3rem;
+	padding-top: 0.3rem;
+	border-top: 1px solid rgb(91 75 50 / 25%);
 }
 
 .combat-damage-context__row {
@@ -44,6 +79,10 @@
 	font-style: normal;
 	font-weight: 700;
 	text-decoration: line-through;
+}
+
+.combat-damage-context__pending-parry .combat-damage-context__status {
+	margin-bottom: 0.25rem;
 }
 
 .combat-damage-roll-button {
