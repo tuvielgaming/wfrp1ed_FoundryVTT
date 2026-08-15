@@ -177,6 +177,11 @@ function buildDescriptionPresentation(item) {
 }
 
 function coreEffectNumber(resolution) {
+	/* The persisted number is authoritative and does not require RollTable access. */
+	const direct = Number(resolution?.effectNumber);
+	if (Number.isInteger(direct) && direct > 0) return direct;
+
+	/* Transitional wounds may still need their original table provenance. */
 	const tableUuid = String(resolution?.tableUuid ?? "").trim();
 	const resultId = String(resolution?.tableResultId ?? "").trim();
 	if (!tableUuid || !resultId) return 0;
@@ -244,6 +249,7 @@ function buildProvenancePresentation(resolution) {
 		["providerId", "Provider", "Dostawca"],
 		["tableUuid", "RollTable UUID", "UUID tabeli"],
 		["tableResultId", "Table result", "Wynik tabeli"],
+		["effectNumber", "Critical effect", "Efekt krytyczny"],
 		["roll", "Resolution roll", "Rzut rozstrzygający"],
 		["resolvedByUserId", "Resolved by", "Rozstrzygnął"],
 		["resolvedAt", "Resolved at", "Czas rozstrzygnięcia"],
@@ -269,7 +275,7 @@ function provenanceValue(key, value) {
 		return new Date(timestamp).toLocaleString(game.i18n.lang);
 	}
 
-	if (key === "roll" && Number(value) <= 0) return "";
+	if ((key === "roll" || key === "effectNumber") && Number(value) <= 0) return "";
 	return String(value);
 }
 
