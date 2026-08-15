@@ -136,6 +136,7 @@ function resolveArmour(policy, snapshot, before) {
 			} else {
 				fixedPoints += source.points;
 			}
+		}
 	} else {
 		/* Legacy/custom snapshots without source metadata behave as fixed AP. */
 		fixedPoints = fallbackTotal;
