@@ -2,6 +2,7 @@ import { DAMAGE_MITIGATION_POLICY, DamagePacket } from "./DamagePacket.mjs";
 import { DamageResolution } from "./DamageResolution.mjs";
 
 const LEATHER_ARMOUR_CLASS = "leather";
+const PARRY_SPECIAL_KEY = "parry";
 
 /**
  * Resolve already-generated WFRP damage without mutating an Actor.
@@ -13,7 +14,14 @@ const LEATHER_ARMOUR_CLASS = "leather";
  * state.
  *
  * Core order (Combat, pp. 118, 121-122):
- *   generated damage -> Toughness -> armour at hit location -> Wounds.
+ *   generated damage -> Toughness -> armour at hit location -> successful
+ *   Parry reduction -> Wounds.
+ *
+ * The successful Parry step is represented as a registered special mitigation
+ * because the Core parry rule stops 1d6 of the damage caused by the blow after
+ * the ordinary damage calculation. This distinction matters for Leather's 0/1
+ * protection rule: Leather decides whether it protects against the blow before
+ * the later Parry reduction is applied.
  *
  * Leather is the Core 0/1 exception: it reduces a blow by 1 only when the
  * post-Toughness, pre-armour damage is 1-3. A blow causing 4+ ignores leather.
@@ -31,11 +39,9 @@ export class DamageResolver {
 			? packet
 			: DamagePacket.fromJSON(packet);
 
-		if (Object.keys(normalized.mitigation.special ?? {}).length > 0) {
-			throw new Error(
-				"Unregistered special mitigation flags cannot be resolved.",
-			);
-		}
+		const special = normalizeSpecialMitigation(
+			normalized.mitigation.special,
+		);
 
 		let remaining = normalized.rawAmount;
 		const toughness = resolveToughness(
@@ -52,11 +58,15 @@ export class DamageResolver {
 		);
 		remaining = armour.after;
 
+		const parry = resolveParry(special.parry, remaining);
+		remaining = parry.after;
+
 		return DamageResolution.forPacket(normalized, {
 			finalAmount: remaining,
 			breakdown: {
 				toughness,
 				armour,
+				parry,
 			},
 		});
 	}
@@ -163,6 +173,71 @@ function resolveArmour(policy, snapshot, before) {
 			authoredPoints: leatherPoints,
 			appliedPoints: leatherApplied,
 			ignoredByHighDamage: leatherPoints > 0 && before >= 4,
+		},
+	};
+}
+
+function resolveParry(parry, before) {
+	if (!parry) {
+		return {
+			applied: false,
+			before,
+			rolledReduction: 0,
+			absorbed: 0,
+			after: before,
+			itemUuid: null,
+			itemName: null,
+		};
+	}
+
+	const rolledReduction = nonNegativeInteger(
+		parry.reduction,
+		"Parry damage reduction",
+	);
+	const after = Math.max(0, before - rolledReduction);
+
+	return {
+		applied: true,
+		before,
+		rolledReduction,
+		absorbed: before - after,
+		after,
+		itemUuid: optionalText(parry.itemUuid),
+		itemName: optionalText(parry.itemName),
+	};
+}
+
+function normalizeSpecialMitigation(value) {
+	const source = value ?? {};
+	if (typeof source !== "object" || Array.isArray(source)) {
+		throw new Error("Special mitigation flags must be an object.");
+	}
+
+	const unknown = Object.keys(source).filter(
+		(key) => key !== PARRY_SPECIAL_KEY,
+	);
+	if (unknown.length > 0) {
+		throw new Error(
+			`Unregistered special mitigation flags cannot be resolved: ${unknown.join(", ")}.`,
+		);
+	}
+
+	const rawParry = source[PARRY_SPECIAL_KEY];
+	if (rawParry === undefined || rawParry === null) {
+		return { parry: null };
+	}
+	if (typeof rawParry !== "object" || Array.isArray(rawParry)) {
+		throw new Error("Parry special mitigation must be an object.");
+	}
+
+	return {
+		parry: {
+			reduction: nonNegativeInteger(
+				rawParry.reduction ?? 0,
+				"Parry damage reduction",
+			),
+			itemUuid: optionalText(rawParry.itemUuid),
+			itemName: optionalText(rawParry.itemName),
 		},
 	};
 }
