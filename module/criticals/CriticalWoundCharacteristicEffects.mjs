@@ -7,7 +7,10 @@ import {
 	RuleEffectRegistry,
 } from "../effects/RuleEffectRegistry.mjs";
 import { RuleEffectResolver } from "../effects/RuleEffectResolver.mjs";
-import { isCoreDetailedEffectProvider } from "./CoreDetailedCriticalTables.mjs";
+import {
+	ensureCoreDetailedCriticalTables,
+	isCoreDetailedEffectProvider,
+} from "./CoreDetailedCriticalTables.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
 const CORE_EFFECT_FLAG_KEY = "coreCriticalConsequence";
@@ -25,12 +28,12 @@ const CHARACTERISTIC_ALIASES = Object.freeze({ sp: "m" });
  * the current characteristic-effect contract without inventing treatment,
  * bleeding, prone, limb-use, or duration state machines.
  *
- * Core detailed leg effects #5, #6 and #7 all halve Movement and Initiative
- * until medical attention. Their exact English/Polish source text is already
- * audited in CoreDetailedCriticalTables.mjs (Combat, printed pp. 122-124).
+ * Core detailed leg effects #5, #6 and #7 halve Movement and Initiative until
+ * medical attention. The exact English/Polish rules text remains owned by
+ * CoreDetailedCriticalTables.mjs (Combat/Walka, printed pp. 122-124).
  *
- * Leg #4 also halves M/I but only for D4 rounds. It is intentionally NOT added
- * here until round-duration ActiveEffect expiration is authoritative, because
+ * Leg #4 also halves M/I but only for D4 rounds. It remains deliberately absent
+ * until round-duration ActiveEffect expiration is authoritative; applying it as
  * an indefinite penalty would be mechanically wrong.
  */
 const CORE_CHARACTERISTIC_EFFECTS = Object.freeze({
@@ -54,13 +57,23 @@ Hooks.on("createItem", (item, _options, userId) => {
 		String(userId ?? "") !== String(game.user?.id ?? "")
 	) return;
 
-	void ensureCoreCharacteristicEffect(item).catch(reportEffectError);
+	void synchronizeCoreCharacteristicEffect(item).catch(reportEffectError);
+});
+
+Hooks.on("updateItem", (item) => {
+	if (item?.type !== CRITICAL_WOUND_TYPE) return;
+	void synchronizeCoreCharacteristicEffect(item).catch(reportEffectError);
 });
 
 Hooks.once("ready", () => {
-	/* Repair previously-created Core wounds once, using one authoritative GM. */
+	/*
+	 * The Core RollTables are materialized asynchronously by CriticalBootstrap.
+	 * The previous repair pass could therefore run before those tables existed,
+	 * making legacy wounds appear to have no effect number. Await the same
+	 * idempotent table materialization first, then repair every existing wound.
+	 */
 	if (!isPrimaryActiveGm()) return;
-	void ensureExistingCoreCharacteristicEffects().catch(reportEffectError);
+	void repairExistingCoreCharacteristicEffects().catch(reportEffectError);
 });
 
 for (const hook of ["createActiveEffect", "updateActiveEffect", "deleteActiveEffect"]) {
@@ -162,31 +175,52 @@ function effectiveCharacteristic(actor, id, knownBase = undefined) {
 	});
 }
 
-async function ensureExistingCoreCharacteristicEffects() {
+async function repairExistingCoreCharacteristicEffects() {
+	await ensureCoreDetailedCriticalTables();
+
 	for (const actor of game.actors ?? []) {
 		for (const item of actor.items ?? []) {
 			if (item.type !== CRITICAL_WOUND_TYPE) continue;
-			await ensureCoreCharacteristicEffect(item);
+			await synchronizeCoreCharacteristicEffect(item);
 		}
 	}
 }
 
-async function ensureCoreCharacteristicEffect(wound) {
+/**
+ * Keep only the system-managed consequence which belongs to the wound's current
+ * detailed-critical result. Manual ActiveEffects are never touched.
+ */
+async function synchronizeCoreCharacteristicEffect(wound) {
 	if (
 		wound?.documentName !== "Item" ||
-		wound.type !== CRITICAL_WOUND_TYPE ||
-		!isCoreDetailedEffectProvider(wound.system?.resolution?.providerId)
+		wound.type !== CRITICAL_WOUND_TYPE
 	) return null;
 
-	const definition = coreConsequenceForWound(wound);
-	if (!definition) return null;
+	const managed = [...(wound.effects ?? [])].filter((effect) =>
+		Boolean(effect.getFlag?.(FLAG_SCOPE, CORE_EFFECT_FLAG_KEY)),
+	);
+	const definition = isCoreDetailedEffectProvider(wound.system?.resolution?.providerId)
+		? coreConsequenceForWound(wound)
+		: null;
 
-	const existing = [...(wound.effects ?? [])].find((effect) => {
-		const flag = effect.getFlag?.(FLAG_SCOPE, CORE_EFFECT_FLAG_KEY);
-		return Number(flag?.effectNumber) === definition.effectNumber &&
-			String(flag?.location ?? "") === definition.location;
-	});
-	if (existing) return existing;
+	const matching = definition
+		? managed.find((effect) => {
+			const flag = effect.getFlag?.(FLAG_SCOPE, CORE_EFFECT_FLAG_KEY);
+			return Number(flag?.effectNumber) === definition.effectNumber &&
+				String(flag?.location ?? "") === definition.location;
+		}) ?? null
+		: null;
+
+	const staleIds = managed
+		.filter((effect) => effect !== matching)
+		.map((effect) => effect.id)
+		.filter(Boolean);
+	if (staleIds.length) {
+		await wound.deleteEmbeddedDocuments("ActiveEffect", staleIds);
+	}
+
+	if (!definition) return null;
+	if (matching) return matching;
 
 	const changes = definition.effects.map((entry) =>
 		encodeRuleEffectChange({
@@ -259,6 +293,9 @@ function coreEffectNumber(wound) {
 function decorateAffectedCharacteristics(actor, root) {
 	for (const id of CHARACTERISTIC_IDS) {
 		const effect = effectiveCharacteristic(actor, id);
+		const negative = effect.candidates.filter((candidate) =>
+			isNegativeCandidate(candidate, effect.base),
+		);
 		if (!effect.candidates.length) continue;
 
 		const key = id === "m" && !root.querySelector('[data-characteristic="m"]')
@@ -271,15 +308,28 @@ function decorateAffectedCharacteristics(actor, root) {
 
 		setCharacteristicDisplayValue(cell, id, effect.value);
 		cell.querySelector("[data-wfrp-characteristic-effect-marker]")?.remove();
+		cell.removeAttribute("data-tooltip");
+		cell.removeAttribute("title");
 
+		if (!negative.length) continue;
+
+		const tooltip = negativeTooltip(actor, id, negative);
 		const marker = document.createElement("span");
 		marker.className = "characteristic-current-effect-marker";
 		marker.dataset.wfrpCharacteristicEffectMarker = "";
 		marker.textContent = "!";
-		marker.title = effectTooltip(effect);
-		marker.dataset.tooltip = marker.title;
-		marker.setAttribute("aria-label", marker.title);
+		marker.title = tooltip;
+		marker.dataset.tooltip = tooltip;
+		marker.setAttribute("aria-label", tooltip);
 		cell.append(marker);
+
+		/*
+		 * Foundry's tooltip manager does not consistently activate on a nested
+		 * marker inside a rollable <button>. Put the same concise warning on the
+		 * characteristic control itself so hovering a clickable value still works.
+		 */
+		cell.title = tooltip;
+		cell.dataset.tooltip = tooltip;
 	}
 }
 
@@ -303,31 +353,102 @@ function setCharacteristicDisplayValue(cell, id, value) {
 	cell.prepend(valueNode);
 }
 
-function effectTooltip(effect) {
-	const lines = [localize(
-		`Base value: ${formatCharacteristicValue(effect.base)} · Current effective value: ${formatCharacteristicValue(effect.value)}`,
-		`Wartość bazowa: ${formatCharacteristicValue(effect.base)} · Aktualna wartość efektywna: ${formatCharacteristicValue(effect.value)}`,
-	)];
+function isNegativeCandidate(candidate, base) {
+	const value = Number(candidate?.formula);
+	if (!Number.isFinite(value)) return false;
 
-	for (const candidate of effect.candidates) {
-		const source = [candidate.itemName, candidate.effectName]
-			.map((value) => String(value ?? "").trim())
-			.filter(Boolean)
-			.join(" — ");
-		lines.push(`${source || localize("Active Effect", "Aktywny Efekt")}: ${operationLabel(candidate)}`);
-		if (candidate.condition) lines.push(String(candidate.condition));
+	switch (candidate.operation) {
+		case RULE_EFFECT_OPERATIONS.ADD:
+			return value < 0;
+		case RULE_EFFECT_OPERATIONS.SUBTRACT:
+			return value > 0;
+		case RULE_EFFECT_OPERATIONS.MULTIPLY:
+			return value >= 0 && value < 1;
+		case RULE_EFFECT_OPERATIONS.OVERRIDE:
+			return value < Number(base);
+		default:
+			return false;
 	}
-	return lines.join("\n");
 }
 
-function operationLabel(candidate) {
-	const value = String(candidate.formula ?? "");
-	switch (candidate.operation) {
-		case RULE_EFFECT_OPERATIONS.ADD: return `+${value}`;
-		case RULE_EFFECT_OPERATIONS.SUBTRACT: return `−${value}`;
-		case RULE_EFFECT_OPERATIONS.MULTIPLY: return `×${value}`;
-		case RULE_EFFECT_OPERATIONS.OVERRIDE: return `=${value}`;
-		default: return value;
+function negativeTooltip(actor, characteristicId, candidates) {
+	return candidates.map((candidate) => {
+		const source = briefEffectSource(actor, candidate);
+		return `${source} — ${characteristicLabel(characteristicId)} ${negativeOperationLabel(candidate)}`;
+	}).join("\n");
+}
+
+function briefEffectSource(actor, candidate) {
+	const item = documentFromUuidSync(candidate.itemUuid);
+	if (item?.type === CRITICAL_WOUND_TYPE && item.parent?.uuid === actor.uuid) {
+		return localize(
+			`${hitLocationLabel(item.system?.hitLocation)} Critical Wound`,
+			`Rana krytyczna: ${hitLocationLabel(item.system?.hitLocation)}`,
+		);
+	}
+
+	return String(
+		candidate.itemName ?? candidate.effectName ?? localize("Active Effect", "Aktywny efekt"),
+	).trim();
+}
+
+function negativeOperationLabel(candidate) {
+	const value = Number(candidate?.formula);
+	if (candidate.operation === RULE_EFFECT_OPERATIONS.MULTIPLY && value === 0.5) {
+		return localize("halved", "zmniejszona o połowę");
+	}
+	if (candidate.operation === RULE_EFFECT_OPERATIONS.SUBTRACT) {
+		return localize(`reduced by ${formatCharacteristicValue(value)}`, `zmniejszona o ${formatCharacteristicValue(value)}`);
+	}
+	if (candidate.operation === RULE_EFFECT_OPERATIONS.ADD && value < 0) {
+		return localize(`reduced by ${formatCharacteristicValue(Math.abs(value))}`, `zmniejszona o ${formatCharacteristicValue(Math.abs(value))}`);
+	}
+	if (candidate.operation === RULE_EFFECT_OPERATIONS.MULTIPLY) {
+		return localize(`multiplied by ${formatCharacteristicValue(value)}`, `pomnożona przez ${formatCharacteristicValue(value)}`);
+	}
+	if (candidate.operation === RULE_EFFECT_OPERATIONS.OVERRIDE) {
+		return localize(`set to ${formatCharacteristicValue(value)}`, `ustawiona na ${formatCharacteristicValue(value)}`);
+	}
+	return String(candidate?.formula ?? "");
+}
+
+function characteristicLabel(id) {
+	const labels = {
+		en: {
+			m: "Movement", ws: "Weapon Skill", bs: "Ballistic Skill", s: "Strength",
+			t: "Toughness", w: "Wounds", i: "Initiative", a: "Attacks",
+			dex: "Dexterity", ld: "Leadership", int: "Intelligence", cl: "Cool",
+			wp: "Will Power", fel: "Fellowship",
+		},
+		pl: {
+			m: "Szybkość", ws: "Walka Wręcz", bs: "Umiejętności Strzeleckie", s: "Siła",
+			t: "Wytrzymałość", w: "Żywotność", i: "Inicjatywa", a: "Atak",
+			dex: "Zręczność", ld: "Cechy Przywódcze", int: "Inteligencja", cl: "Opanowanie",
+			wp: "Siła Woli", fel: "Ogłada",
+		},
+	};
+	return labels[game.i18n.lang === "pl" ? "pl" : "en"]?.[id] ?? id;
+}
+
+function hitLocationLabel(hitLocation) {
+	switch (String(hitLocation ?? "")) {
+		case "head": return localize("Head", "Głowa");
+		case "rightArm": return localize("Right arm", "Prawa ręka");
+		case "leftArm": return localize("Left arm", "Lewa ręka");
+		case "body": return localize("Body", "Korpus");
+		case "rightLeg": return localize("Right leg", "Prawa noga");
+		case "leftLeg": return localize("Left leg", "Lewa noga");
+		default: return localize("Critical injury", "Rana krytyczna");
+	}
+}
+
+function documentFromUuidSync(uuid) {
+	const value = String(uuid ?? "").trim();
+	if (!value) return null;
+	try {
+		return foundry.utils.fromUuidSync(value) ?? null;
+	} catch (_error) {
+		return null;
 	}
 }
 
@@ -428,12 +549,12 @@ function isPrimaryActiveGm() {
 
 function reportEffectError(error) {
 	console.error(
-		"WFRP1ED | Unable to materialize a Core Critical Wound Active Effect.",
+		"WFRP1ED | Unable to synchronize a Core Critical Wound Active Effect.",
 		error,
 	);
 	ui.notifications.warn(error?.message ?? localize(
-		"A Critical Wound was applied, but its automatic characteristic effect could not be created.",
-		"Rana krytyczna została zastosowana, ale nie udało się utworzyć jej automatycznego wpływu na cechy.",
+		"A Critical Wound exists, but its automatic characteristic effect could not be synchronized.",
+		"Rana krytyczna istnieje, ale nie udało się zsynchronizować jej automatycznego wpływu na cechy.",
 	));
 }
 
