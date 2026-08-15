@@ -79,6 +79,18 @@ RuleEffectResolver.registerCandidateProvider(PROVIDER_ID, ({ actor, targetId }) 
 	return results;
 });
 
+/* Persist provenance immediately for newly created/repaired managed effects. */
+for (const hook of ["createActiveEffect", "updateActiveEffect"]) {
+	Hooks.on(hook, (effect) => {
+		void persistEffectNumberFromManagedEffect(effect).catch((error) => {
+			console.error(
+				"WFRP1ED | Unable to persist Critical Wound effect-number provenance.",
+				error,
+			);
+		});
+	});
+}
+
 /*
  * Persist the consequence number on the wound itself as the new stable
  * provenance field. Legacy wounds are migrated from their managed ActiveEffect
@@ -110,6 +122,24 @@ function ruleChanges(effect) {
 	if (Array.isArray(source.changes) && source.changes.length) return source.changes;
 	const system = effect?.system?.toObject?.() ?? {};
 	return Array.isArray(system.changes) ? system.changes : [];
+}
+
+async function persistEffectNumberFromManagedEffect(effect) {
+	if (!isPrimaryActiveGm()) return false;
+	const wound = effect?.parent;
+	if (wound?.type !== CRITICAL_WOUND_TYPE) return false;
+	const metadata = effect.getFlag?.(FLAG_SCOPE, CORE_EFFECT_FLAG_KEY);
+	const effectNumber = positiveInteger(metadata?.effectNumber);
+	if (
+		String(metadata?.location ?? "") !== "leg" ||
+		!SUPPORTED_EFFECT_NUMBERS.has(effectNumber) ||
+		positiveInteger(wound.system?.resolution?.effectNumber) === effectNumber
+	) return false;
+
+	await wound.update({
+		"system.resolution.effectNumber": effectNumber,
+	});
+	return true;
 }
 
 async function persistLegacyEffectNumbers() {
