@@ -1,0 +1,52 @@
+.combat-damage-context {
+	margin-top: 0.45rem;
+	padding-top: 0.4rem;
+	border-top: 1px solid rgb(91 75 50 / 35%);
+	font-size: 0.82rem;
+}
+
+.combat-damage-context__heading {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.5rem;
+	margin-bottom: 0.25rem;
+	font-weight: 700;
+}
+
+.combat-damage-context__resolved > .combat-damage-context__heading span {
+	font-size: 1.15em;
+}
+
+.combat-damage-context__row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 0.5rem;
+	align-items: baseline;
+	padding: 0.08rem 0;
+}
+
+.combat-damage-context__row > strong {
+	text-align: right;
+}
+
+.combat-damage-context__status {
+	margin-top: 0.3rem;
+	font-style: italic;
+}
+
+.combat-damage-context__status.is-applied {
+	font-style: normal;
+	font-weight: 700;
+}
+
+.combat-damage-context__status.is-reverted {
+	font-style: normal;
+	font-weight: 700;
+	text-decoration: line-through;
+}
+
+.combat-damage-roll-button {
+	width: 100%;
+	margin-top: 0.25rem;
+}
