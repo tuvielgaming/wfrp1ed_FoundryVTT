@@ -194,6 +194,12 @@
 	"WFRP1ED.Settings.ParryEconomy.Hint": "Wybierz, jak parowanie wpływa na Ataki. Domyślna zasada traci kolejne Ataki i może przenieść koszt jako dług. Kontrakt rundy zamyka wszystkie koszty parowania w bieżącej rundzie: parowanie bronią zmniejsza pozostałe Ataki o 1, parowanie tarczą ustawia pozostałe Ataki na 0, jeżeli w tej rundzie nie wykonano jeszcze ataku ofensywnego, a żaden dług nie przechodzi do następnej rundy.",
 	"WFRP1ED.Settings.ParryEconomy.Core": "Domyślna — kolejne Ataki i dług",
 	"WFRP1ED.Settings.ParryEconomy.RoundContract": "Opcjonalna — kontrakt rundy, bez długu",
+	"WFRP1ED.Settings.WeaponModifiers.Name": "Opcjonalne modyfikatory broni",
+	"WFRP1ED.Settings.WeaponModifiers.Hint": "Używaj opcjonalnej tabeli Modyfikatorów Broni z WFRP 1e dla Trafienia, Obrażeń i Parowania. Modyfikator Inicjatywy pozostaje wyłączony do osobnego audytu jego wpływu na kolejność rundy.",
+	"WFRP1ED.Settings.AutoDamageGM.Name": "Automatyczne rzuty obrażeń dla postaci MG",
+	"WFRP1ED.Settings.AutoDamageGM.Hint": "Automatycznie wykonuj rzut obrażeń ataku oraz rzut redukcji po udanym parowaniu dla postaci, których właścicielem nie jest żaden gracz. Wyłącz, jeśli MG ma zatwierdzać każdy taki rzut przyciskiem.",
+	"WFRP1ED.Settings.AutoDamageOwned.Name": "Automatyczne rzuty obrażeń dla moich postaci",
+	"WFRP1ED.Settings.AutoDamageOwned.Hint": "Ustawienie klienta. Automatycznie wykonuj rzut obrażeń ataku oraz rzut redukcji po udanym parowaniu, gdy jesteś właścicielem postaci wykonującej dany rzut. Wyłącz, aby czekać na przycisk Rzuć obrażenia / Rzuć redukcję parowania.",
 
 	"WFRP1ED.SkillSheet.Name": "Nazwa",
 	"WFRP1ED.SkillSheet.RulesId": "Powiązanie z zasadami",
