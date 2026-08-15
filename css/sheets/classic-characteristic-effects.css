@@ -1,0 +1,32 @@
+/******************************************************************/
+/* Active characteristic effects on the Classic current profile   */
+/******************************************************************/
+
+.wfrp1ed-classic-sheet .characteristic-cell--current {
+	position: relative;
+}
+
+.wfrp1ed-classic-sheet .characteristic-current-effect-marker {
+	position: absolute;
+	top: 0.38em;
+	right: 0.38em;
+	z-index: 3;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.05em;
+	height: 1.05em;
+	border: 1px solid rgb(132 45 32 / 58%);
+	border-radius: 999px;
+	background: rgb(255 239 224 / 96%);
+	color: #a42118;
+	font-size: 0.5em;
+	font-weight: 900;
+	line-height: 1;
+	cursor: help;
+	box-shadow: 0 1px 2px rgb(0 0 0 / 15%);
+}
+
+.wfrp1ed-classic-sheet .characteristic-current-profile--effective {
+	font-variant-numeric: tabular-nums;
+}
