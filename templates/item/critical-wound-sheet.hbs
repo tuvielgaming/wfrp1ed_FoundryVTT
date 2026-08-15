@@ -44,8 +44,13 @@
     <textarea
       name="system.description"
       rows="8"
-      {{#unless editable}}disabled{{/unless}}
-    >{{system.description}}</textarea>
+      {{#if descriptionManagedByCore}}
+        readonly
+        title="WFRP 1e Core Rulebook"
+      {{else}}
+        {{#unless editable}}disabled{{/unless}}
+      {{/if}}
+    >{{description}}</textarea>
   </label>
 
   <details class="critical-wound-sheet__provenance">
