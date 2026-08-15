@@ -3,6 +3,10 @@ import { DamageChat } from "../damage/DamageChat.mjs";
 import {
 	resolveDetailedDamageMessageCritical,
 } from "../criticals/DetailedCriticalIntegration.mjs";
+import {
+	canEditCombatDamageDiceTotal,
+	requestCombatDamageDiceTotalUpdate,
+} from "./CombatDamageIntegration.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
 const ATTACK_FLAG_KEY = "combatAttackResult";
@@ -28,8 +32,11 @@ Hooks.once("init", () => {
 		decorateDetailedCriticalResult(message, html);
 		removeRevertedCriticalSourcePanel(message, html);
 
-		/* CombatDamageIntegration decorates the attack one animation frame later. */
-		requestAnimationFrame(() => hideEmbeddedResolvedDamage(message, html));
+		/*
+		 * The attack keeps a folded damage audit. Only the duplicated detailed
+		 * critical launcher is removed once the dedicated Damage card exists.
+		 */
+		requestAnimationFrame(() => hideEmbeddedCriticalPanel(message, html));
 	});
 
 	Hooks.on("updateChatMessage", (message) => {
@@ -74,6 +81,7 @@ function relabelAdditionalDamageTest(message, html) {
 function decorateInlineDamageApplication(message, html) {
 	const state = message?.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG_KEY);
 	if (!state?.packet?.id) return;
+	if (Number(state.resolution?.finalAmount) <= 0) return;
 
 	/* Combat attack damage is presented by its linked dedicated result card. */
 	if (
@@ -118,8 +126,8 @@ function decorateInlineDamageApplication(message, html) {
 
 /**
  * A combat attack remains the source-of-truth transaction, while its damage is
- * presented in a dedicated ChatMessage. This keeps Attack/Defence readable and
- * avoids duplicating mutable DamageApplication state across two messages.
+ * presented in a dedicated ChatMessage. The view is regenerated when the GM or
+ * attacker owner overrides the summed damage-dice value.
  */
 async function synchronizeDamageResultView(sourceMessage) {
 	if (!sourceMessage?.id || !sourceMessage.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY)) {
@@ -130,7 +138,7 @@ async function synchronizeDamageResultView(sourceMessage) {
 	const damageState = sourceMessage.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG_KEY);
 	const rollState = sourceMessage.getFlag?.(FLAG_SCOPE, COMBAT_DAMAGE_FLAG_KEY);
 
-	if (damageState?.packet?.id && rollState?.packetId) {
+	if (damageState?.packet?.id && rollState?.status === "resolved") {
 		await ensureDamageResultView(sourceMessage, damageState, rollState);
 		return;
 	}
@@ -140,7 +148,7 @@ async function synchronizeDamageResultView(sourceMessage) {
 
 async function ensureDamageResultView(sourceMessage, damageState, rollState) {
 	const packetId = String(damageState?.packet?.id ?? "");
-	if (!packetId || findDamageResultView(sourceMessage.id, packetId)) return;
+	if (!packetId) return;
 
 	const actor = actorFromUuidSync(damageState.packet?.targetActorUuid);
 	const targetName = String(
@@ -154,6 +162,14 @@ async function ensureDamageResultView(sourceMessage, damageState, rollState) {
 		rollState,
 		targetName,
 	);
+	const existing = findDamageResultView(sourceMessage.id, packetId);
+	if (existing) {
+		if (String(existing.content ?? "") !== content && existing.canUserModify?.(game.user, "update")) {
+			await existing.update({ content });
+		}
+		return;
+	}
+
 	const speaker = actor
 		? ChatMessage.getSpeaker({ actor })
 		: {
@@ -171,7 +187,7 @@ async function ensureDamageResultView(sourceMessage, damageState, rollState) {
 		flags: {
 			[FLAG_SCOPE]: {
 				[DAMAGE_RESULT_VIEW_FLAG_KEY]: {
-					version: 1,
+					version: 2,
 					sourceAttackMessageId: String(sourceMessage.id),
 					packetId,
 					targetActorUuid: String(
@@ -214,10 +230,7 @@ function damageResultContent(damageState, rollState, targetName) {
 			localize("Hit location", "Lokacja trafienia"),
 			hitLocationLabel(rollState?.hitLocation),
 		),
-		rowHtml(
-			localize("Damage dice", "Kości obrażeń"),
-			damageDiceLabel(rollState),
-		),
+		rollRowHtml(rollState),
 		rowHtml(
 			localize("Strength", "Siła"),
 			signedInteger(rollState?.strength),
@@ -254,11 +267,8 @@ function damageResultContent(damageState, rollState, targetName) {
 
 	if (parry.applied === true) {
 		rows.push(rowHtml(
-			localize("Successful Parry", "Udane Parowanie"),
-			localize(
-				`−${nonNegativeInteger(parry.rolledReduction)} rolled; ${nonNegativeInteger(parry.absorbed)} stopped (${parry.itemName || "—"})`,
-				`−${nonNegativeInteger(parry.rolledReduction)} na kości; zatrzymano ${nonNegativeInteger(parry.absorbed)} (${parry.itemName || "—"})`,
-			),
+			localize("Parry", "Parowanie"),
+			`${nonNegativeInteger(parry.absorbed)} (${parry.itemName || "—"})`,
 		));
 	}
 
@@ -278,6 +288,48 @@ function damageResultContent(damageState, rollState, targetName) {
 			<div data-wfrp-damage-result-actions></div>
 		</section>
 	`;
+}
+
+function rollRowHtml(rollState) {
+	const dice = Array.isArray(rollState?.damageDice)
+		? rollState.damageDice.map((value) => Math.min(6, Math.max(1, integer(value))))
+		: [];
+	const icons = dice.length
+		? dice.map((value) => d6IconHtml(value)).join("")
+		: `<span class="wfrp1e-damage-roll__empty">—</span>`;
+	const total = nonNegativeInteger(rollState?.diceTotal);
+	const operator = rollState?.diceTotalOverridden ? "→" : "=";
+	const title = localize(
+		"GM or attacker owner may replace the summed dice value before damage is applied.",
+		"MG lub właściciel atakującego może zmienić sumę kości przed zastosowaniem obrażeń.",
+	);
+
+	return `
+		<div class="wfrp1e-damage-card__row wfrp1e-damage-card__roll-row">
+			<span>${escapeHtml(localize("Roll", "Rzut"))}</span>
+			<div class="wfrp1e-damage-roll">
+				<span class="wfrp1e-damage-roll__dice">${icons}</span>
+				<span class="wfrp1e-damage-roll__operator">${operator}</span>
+				<input
+					class="wfrp1e-damage-roll__total"
+					data-wfrp-damage-dice-total
+					type="number"
+					min="0"
+					step="1"
+					value="${total}"
+					title="${escapeHtml(title)}"
+					disabled
+				/>
+			</div>
+		</div>
+	`;
+}
+
+function d6IconHtml(value) {
+	const names = ["one", "two", "three", "four", "five", "six"];
+	const number = Math.min(6, Math.max(1, integer(value)));
+	const name = names[number - 1];
+	return `<i class="fa-solid fa-dice-${name} wfrp1e-damage-die" aria-label="d6: ${number}" title="d6: ${number}"></i>`;
 }
 
 function rowHtml(label, value) {
@@ -301,14 +353,18 @@ function decorateDamageResultView(message, html) {
 		String(view.sourceAttackMessageId ?? ""),
 	);
 	const damageState = sourceMessage?.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG_KEY);
+	const rollState = sourceMessage?.getFlag?.(FLAG_SCOPE, COMBAT_DAMAGE_FLAG_KEY);
 	const actor = actorFromUuidSync(view.targetActorUuid);
 	const transaction = actor
 		? DamageApplication.transactionFor(actor, view.packetId)
 		: null;
+	const finalAmount = Number(damageState?.resolution?.finalAmount ?? 0);
 
 	card.classList.toggle("is-applied", transaction?.state === "applied");
+	card.classList.toggle("is-zero-damage", finalAmount <= 0 && !transaction);
 	card.classList.toggle("is-wfrp-transaction-reverted", transaction?.state === "reverted");
 	actions.replaceChildren();
+	activateDamageTotalInput(card, sourceMessage, rollState);
 
 	if (transaction?.state === "reverted") {
 		status.textContent = localize(
@@ -352,6 +408,15 @@ function decorateDamageResultView(message, html) {
 		return;
 	}
 
+	/* Zero damage has no Actor mutation to confirm, so it is terminal immediately. */
+	if (finalAmount <= 0) {
+		status.textContent = localize(
+			"No damage — resolved.",
+			"Brak obrażeń — rozstrzygnięte.",
+		);
+		return;
+	}
+
 	if (sourceMessage && DamageChat.canApplyMessage(sourceMessage)) {
 		status.textContent = localize(
 			"Damage resolved — ready to apply.",
@@ -365,6 +430,41 @@ function decorateDamageResultView(message, html) {
 		"Damage resolved — awaiting an authorized user to apply it.",
 		"Obrażenia rozstrzygnięte — oczekują na zastosowanie przez uprawnionego użytkownika.",
 	);
+}
+
+function activateDamageTotalInput(card, sourceMessage, rollState) {
+	const input = card.querySelector("[data-wfrp-damage-dice-total]");
+	if (!(input instanceof HTMLInputElement) || !sourceMessage) return;
+	const editable = canEditCombatDamageDiceTotal(sourceMessage, game.user);
+	input.disabled = !editable;
+	input.classList.toggle("is-editable", editable);
+	if (!editable) return;
+
+	input.addEventListener("change", () => {
+		const value = Number(input.value);
+		if (!Number.isInteger(value) || value < 0) {
+			input.value = String(nonNegativeInteger(rollState?.diceTotal));
+			ui.notifications.error(localize(
+				"Enter a non-negative whole damage-dice total.",
+				"Wprowadź nieujemną całkowitą sumę kości obrażeń.",
+			));
+			return;
+		}
+
+		input.disabled = true;
+		void requestCombatDamageDiceTotalUpdate(sourceMessage, value)
+			.catch((error) => {
+				console.error("WFRP1ED | Unable to edit combat damage dice total.", error);
+				input.disabled = false;
+				input.value = String(nonNegativeInteger(rollState?.diceTotal));
+				ui.notifications.error(
+					error?.message ?? localize(
+						"Unable to update the damage roll.",
+						"Nie udało się zaktualizować rzutu obrażeń.",
+					),
+				);
+			});
+	});
 }
 
 function buildApplyDamageButton(sourceMessage) {
@@ -402,11 +502,11 @@ function canResolveSourceCritical(sourceMessage, damageState, user = game.user) 
 	return Boolean(sourceUserId && sourceUserId === String(user.id ?? ""));
 }
 
-function hideEmbeddedResolvedDamage(message, html) {
+function hideEmbeddedCriticalPanel(message, html) {
 	const attack = message?.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY);
 	const damageState = message?.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG_KEY);
 	const rollState = message?.getFlag?.(FLAG_SCOPE, COMBAT_DAMAGE_FLAG_KEY);
-	if (!attack || !damageState?.packet?.id || !rollState) return;
+	if (!attack || !damageState?.packet?.id || rollState?.status !== "resolved") return;
 
 	const view = findDamageResultView(message.id, damageState.packet.id);
 	if (!view) return;
@@ -415,11 +515,10 @@ function hideEmbeddedResolvedDamage(message, html) {
 		? DamageApplication.transactionFor(actor, damageState.packet.id)
 		: null;
 
-	/* Reverted source card keeps its Roll Again control. */
+	/* Reverted source card keeps all history/rollback presentation. */
 	if (transaction?.state === "reverted") return;
 
 	const root = asElement(html);
-	root?.querySelector?.("[data-wfrp-combat-damage]")?.remove();
 	root?.querySelector?.("[data-wfrp-detailed-critical-panel]")?.remove();
 }
 
@@ -662,15 +761,6 @@ function hitLocationLabel(location) {
 		case "leftLeg": return localize("Left Leg", "Lewa noga");
 		default: return String(location ?? "—");
 	}
-}
-
-function damageDiceLabel(state) {
-	const dice = Array.isArray(state?.damageDice)
-		? state.damageDice.map((value) => nonNegativeInteger(value))
-		: [];
-	return dice.length
-		? `${dice.join(" + ")} = ${dice.reduce((sum, value) => sum + value, 0)}`
-		: "—";
 }
 
 function armourLabel(armour) {
