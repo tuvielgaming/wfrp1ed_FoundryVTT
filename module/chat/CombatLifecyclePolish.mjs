@@ -192,8 +192,13 @@ function movePendingParryControl(attackMessage, defenceMessage) {
 	);
 	if (!sourcePanel) return;
 
+	/*
+	 * Put the reduction stage inside the already-styled Parry context, not at the
+	 * bottom of the generic Test card. This makes its label/value rows share the
+	 * same inset, width and visual rhythm as Parry item/modifier/cost rows.
+	 */
 	const defencePanel = defenceEntry.querySelector(
-		"[data-wfrp-combat-defence-context]",
+		"[data-wfrp-combat-defence-result]",
 	) ?? defenceEntry.querySelector(".wfrp1e-test-card");
 	if (!defencePanel) return;
 
