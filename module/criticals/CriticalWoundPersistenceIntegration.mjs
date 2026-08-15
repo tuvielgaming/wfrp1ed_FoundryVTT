@@ -14,16 +14,14 @@ const PROVIDER_ID = "wfrp1ed.core-critical-wound-persistence";
 const repairingEffects = new Set();
 
 /*
- * Foundry v14 may preserve an Item-embedded ActiveEffect document while dropping
- * custom data which existed only in its transient `system` object. The visible
- * wound/effect therefore survived a restart while the declarative WFRP rule
- * changes no longer reached RuleEffectResolver.
+ * Foundry v14 stores ActiveEffect change records in the document's top-level
+ * `changes` field. Earlier Critical Wound code also put the WFRP rule records in
+ * transient system data, so the embedded effect itself survived a restart while
+ * the rule payload could disappear.
  *
- * System-managed Core wound consequences are persisted redundantly in the
- * stable `flags.wfrp1ed.ruleChanges` contract used by RuleEffectResolver. A
- * small candidate-provider fallback also covers Foundry instances which report
- * an Item-embedded transfer effect as inactive after reload even though the
- * effect itself is enabled.
+ * System-managed Core wound consequences are now repaired/persisted in both the
+ * native ActiveEffect `changes` array and the stable `flags.wfrp1ed.ruleChanges`
+ * compatibility contract already understood by RuleEffectResolver.
  */
 RuleEffectResolver.registerCandidateProvider(PROVIDER_ID, ({ actor, targetId }) =>
 	fallbackCandidates(actor, targetId));
@@ -90,13 +88,24 @@ async function persistManagedRuleChanges(effect) {
 	const desired = desiredRuleChanges(effect);
 	if (!desired) return false;
 
-	const current = effect.getFlag?.(FLAG_SCOPE, RULE_CHANGES_FLAG_KEY);
-	if (sameJson(current, desired)) return false;
+	const source = effect.toObject?.() ?? {};
+	const currentNative = Array.isArray(source.changes) ? source.changes : [];
+	const currentFlag = effect.getFlag?.(FLAG_SCOPE, RULE_CHANGES_FLAG_KEY);
+	if (
+		sameJson(currentNative, desired) &&
+		sameJson(currentFlag, desired)
+	) {
+		return false;
+	}
 
 	const key = String(effect.uuid ?? "");
 	repairingEffects.add(key);
 	try {
-		await effect.setFlag(FLAG_SCOPE, RULE_CHANGES_FLAG_KEY, desired);
+		await effect.update({
+			changes: foundry.utils.deepClone(desired),
+			[`flags.${FLAG_SCOPE}.${RULE_CHANGES_FLAG_KEY}`]:
+				foundry.utils.deepClone(desired),
+		});
 	} finally {
 		repairingEffects.delete(key);
 	}
@@ -150,8 +159,8 @@ function fallbackCandidates(actor, targetId) {
 
 			/*
 			 * Normal RuleEffectResolver discovery is preferred whenever Foundry says
-			 * the Item effect is active. This fallback exists only for the reload
-			 * state where an enabled transfer effect is reported inactive.
+			 * the Item effect is active. This fallback exists only for a reload state
+			 * where an enabled transfer effect is temporarily reported inactive.
 			 */
 			if (effect.active !== false) continue;
 
