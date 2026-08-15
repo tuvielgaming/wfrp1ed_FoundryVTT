@@ -15,6 +15,27 @@ const FATE_INTERVENTIONS_FLAG_KEY = "fateInterventions";
 const ROLL_SELECTOR = "[data-wfrp-detailed-critical-roll-input]";
 const activeEdits = new Set();
 
+/*
+ * CriticalBootstrap is loaded before this module and registers the canonical
+ * detailed-result render hook from its init callback. Register our editor from a
+ * later init callback so the canonical renderer writes title/meta/effect first;
+ * this adjudication layer then replaces only the d100 presentation with an input.
+ */
+Hooks.once("init", () => {
+	Hooks.on("renderChatMessageHTML", (message, html) => {
+		const state = detailedResultState(message);
+		if (!state) return;
+
+		const root = asElement(html);
+		const card = root?.matches?.("[data-wfrp-detailed-critical-card]")
+			? root
+			: root?.querySelector?.("[data-wfrp-detailed-critical-card]");
+		if (!card) return;
+
+		installCriticalRollEditor(message, state, card);
+	});
+});
+
 /**
  * Post-resolution GM adjudication for the detailed Critical Hit d100.
  *
@@ -22,19 +43,6 @@ const activeEdits = new Set();
  * only the stored table-resolution snapshot, then synchronizes an already-
  * materialized Critical Wound to the newly selected Core/custom result.
  */
-Hooks.on("renderChatMessageHTML", (message, html) => {
-	const state = detailedResultState(message);
-	if (!state) return;
-
-	const root = asElement(html);
-	const card = root?.matches?.("[data-wfrp-detailed-critical-card]")
-		? root
-		: root?.querySelector?.("[data-wfrp-detailed-critical-card]");
-	if (!card) return;
-
-	installCriticalRollEditor(message, state, card);
-});
-
 function installCriticalRollEditor(message, state, card) {
 	const host = card.querySelector("[data-wfrp-detailed-roll]");
 	if (!(host instanceof HTMLElement)) return;
