@@ -15,10 +15,35 @@
 	padding-top: 0.2rem;
 }
 
-.combat-damage-context__pending-parry.is-relocated-to-defence {
-	margin-top: 0.55rem;
-	padding-top: 0.5rem;
-	border-top: 1px solid rgb(74 52 31 / 24%);
+/*
+ * The Parry-reduction stage is physically moved into the defender's existing
+ * Parry context. Match that context's compact 11px two-column rhythm rather than
+ * retaining the wider Attack-card damage-panel spacing.
+ */
+.wfrp1e-combat-defence-result .combat-damage-context__pending-parry.is-relocated-to-defence {
+	margin: 0.35rem 0 0;
+	padding: 0.4rem 0 0;
+	border-top: 1px solid rgb(89 65 35 / 20%);
+	font-size: 11px;
+}
+
+.wfrp1e-combat-defence-result .combat-damage-context__pending-parry .combat-damage-context__heading {
+	margin-bottom: 0.2rem;
+	font-size: 11px;
+}
+
+.wfrp1e-combat-defence-result .combat-damage-context__pending-parry .combat-damage-context__row {
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 8px;
+	padding: 0.08rem 0;
+	font-size: 11px;
+}
+
+.wfrp1e-combat-defence-result .combat-damage-context__pending-parry .combat-damage-roll-button {
+	min-height: 28px;
+	margin: 0.3rem 0 0;
+	font-family: inherit;
+	font-size: 11px;
 }
 
 .wfrp1e-critical-result__roll-editor {
