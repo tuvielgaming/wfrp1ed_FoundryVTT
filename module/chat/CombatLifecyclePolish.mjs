@@ -12,25 +12,32 @@ const CRITICAL_RESULT_FLAG_KEY = "criticalResult";
  * only removes duplicated/positive status prose, folds diagnostic detail and
  * relocates the already-bound parry-reduction control to the defender's Parry
  * card so Chat reads as Attack -> Defence -> Damage -> Critical.
+ *
+ * Register from init rather than at module-evaluation time. Several canonical
+ * combat/critical render hooks are themselves registered from init callbacks;
+ * this module is loaded last, so doing the same guarantees that this cleanup is
+ * actually the final DOM pass instead of being registered before those renderers.
  */
-Hooks.on("renderChatMessageHTML", (message, html) => {
-	const root = asElement(html);
-	if (!root) return;
+Hooks.once("init", () => {
+	Hooks.on("renderChatMessageHTML", (message, html) => {
+		const root = asElement(html);
+		if (!root) return;
 
-	presentAdditionalDamageIdentity(message, root);
-	foldDedicatedDamageDetails(message, root);
-
-	/*
-	 * Several combat/critical decorators are registered before this final pass.
-	 * Run once after the current render cycle so we work with their finished DOM
-	 * and move existing controls rather than reimplementing their mechanics.
-	 */
-	requestAnimationFrame(() => {
 		presentAdditionalDamageIdentity(message, root);
 		foldDedicatedDamageDetails(message, root);
-		removePositiveResolutionNotices(message, root);
-		removeDuplicateDetailedFatalControls(message, root);
-		relocatePendingParryControl(message);
+
+		/*
+		 * CombatDamageIntegration builds some damage controls in rAF. Run once
+		 * after the current render cycle so those controls exist before we move or
+		 * remove presentation-only DOM.
+		 */
+		requestAnimationFrame(() => {
+			presentAdditionalDamageIdentity(message, root);
+			foldDedicatedDamageDetails(message, root);
+			removePositiveResolutionNotices(message, root);
+			removeDuplicateDetailedFatalControls(message, root);
+			relocatePendingParryControl(message);
+		});
 	});
 });
 
