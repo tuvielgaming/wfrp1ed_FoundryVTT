@@ -33,6 +33,7 @@
 		"module/criticals/CriticalBootstrap.mjs",
 		"module/combat/CombatTransactionRollback.mjs",
 		"module/combat/CombatLifecyclePresentation.mjs",
+		"module/criticals/DetailedFatalCriticalPresentation.mjs",
 		"module/combat/CombatAttackDefenceUpdateGuard.mjs",
 		"module/health/HealthCategoryIntegration.mjs",
 		"module/fate/FateSheetIntegration.mjs",
