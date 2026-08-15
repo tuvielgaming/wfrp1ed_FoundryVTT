@@ -194,6 +194,12 @@
 	"WFRP1ED.Settings.ParryEconomy.Hint": "Choose how parries affect Attacks. Core/default loses following Attacks and can carry the loss forward as debt. Round contract keeps all parry costs inside the current round: weapon parries reduce remaining Attacks by 1, a shield parry sets remaining Attacks to 0 if no offensive attack has been made, and no debt carries into the next round.",
 	"WFRP1ED.Settings.ParryEconomy.Core": "Core/default — following Attacks and debt",
 	"WFRP1ED.Settings.ParryEconomy.RoundContract": "Optional — round contract, no debt",
+	"WFRP1ED.Settings.WeaponModifiers.Name": "Optional Weapon Modifiers",
+	"WFRP1ED.Settings.WeaponModifiers.Hint": "Use the optional WFRP 1e Weapon Modifiers table for To Hit, Damage and Parry. Initiative remains disabled until its round-order interaction is audited separately.",
+	"WFRP1ED.Settings.AutoDamageGM.Name": "Automatic damage rolls for GM-controlled Actors",
+	"WFRP1ED.Settings.AutoDamageGM.Hint": "Automatically roll attack damage and successful-parry damage reduction for Actors that are not owned by a non-GM player. Disable this if you want the GM to click each damage roll manually.",
+	"WFRP1ED.Settings.AutoDamageOwned.Name": "Automatic damage rolls for my Actors",
+	"WFRP1ED.Settings.AutoDamageOwned.Hint": "Client preference. Automatically roll attack damage and successful-parry damage reduction when you own the Actor that must make that roll. Disable this to wait for a Roll Damage / Roll Parry Reduction button.",
 
 	"WFRP1ED.SkillSheet.Name": "Name",
 	"WFRP1ED.SkillSheet.RulesId": "Rules link",
