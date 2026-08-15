@@ -227,15 +227,42 @@ export async function spendFatePointForFatalCritical(
 	);
 }
 
-async function synchronizeFatalStatus(actor) {
+/**
+ * Reconcile Foundry's defeated/dead status from the authoritative fatal
+ * transaction history.
+ *
+ * This is exported because explicit Critical rollback must use the same owner of
+ * the derived defeated state instead of maintaining a second status algorithm.
+ */
+export async function synchronizeFatalStatus(actor) {
 	if (!(actor instanceof foundry.documents.Actor)) return;
 
 	const damageApplications = readDamageApplicationMap(actor);
 	const fatalApplications = readFatalApplicationMap(actor);
-	const fatalEntries = Object.values(fatalApplications).filter(
+	const allFatalEntries = Object.values(fatalApplications).filter(
+		(application) => application && typeof application === "object",
+	);
+	const fatalEntries = allFatalEntries.filter(
 		(application) => application?.state === "applied",
 	);
-	if (fatalEntries.length === 0) return;
+
+	/*
+	 * No WFRP fatal history means this subsystem does not own the current defeated
+	 * status. If history exists but every managed fatal application was reverted,
+	 * restore the baseline that existed before the first managed fatality. This is
+	 * important for LIFO rollback: a later fatal may have recorded
+	 * defeatedBefore=true only because an earlier fatal was already active.
+	 */
+	if (fatalEntries.length === 0) {
+		if (allFatalEntries.length === 0) return;
+		const firstFatal = [...allFatalEntries].sort(
+			(left, right) =>
+				(Number(left?.appliedAt) - Number(right?.appliedAt)) ||
+				String(left?.packetId ?? "").localeCompare(String(right?.packetId ?? "")),
+		)[0];
+		await setDefeatedStatus(actor, firstFatal?.defeatedBefore === true);
+		return;
+	}
 
 	const hasUnavertedFatality = fatalEntries.some((application) => {
 		const packetId = String(application.packetId ?? "");
