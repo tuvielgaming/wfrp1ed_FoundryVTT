@@ -120,15 +120,44 @@ async function reconcileAttackAdjudication(message, snapshot) {
 		restored.updatedBy = String(game.user?.id ?? "");
 		restored.updatedAt = Date.now();
 
-		if (restored.status === "awaiting-parry") {
-			await message.setFlag(
-				FLAG_SCOPE,
-				COMBAT_DAMAGE_FLAG_KEY,
-				restored,
-			);
-			return;
+		/*
+		 * Attack adjudication does not invalidate an already-rolled parry-reduction
+		 * die. The previous code trusted the stored stage string, which could still
+		 * read `awaiting-parry` after an earlier presentation/reconciliation pass and
+		 * exposed a second Roll Parry Reduction button even though a real 1d6 result
+		 * had already been used. Derive the stage from the authoritative defence plus
+		 * the actual reduction value instead.
+		 */
+		if (outcome.parrySucceeded) {
+			const reduction = Number(restored.parry?.reduction);
+			const hasReduction = Number.isInteger(reduction) && reduction >= 1 && reduction <= 6;
+			restored.parry = {
+				...(restored.parry ?? {}),
+				succeeded: true,
+				itemName: String(attack.defence?.itemName ?? restored.parry?.itemName ?? ""),
+				itemUuid: String(attack.defence?.itemUuid ?? restored.parry?.itemUuid ?? ""),
+				reduction: hasReduction ? reduction : null,
+			};
+			if (!hasReduction) {
+				restored.status = "awaiting-parry";
+				await message.setFlag(
+					FLAG_SCOPE,
+					COMBAT_DAMAGE_FLAG_KEY,
+					restored,
+				);
+				return;
+			}
+		} else {
+			restored.parry = {
+				...(restored.parry ?? {}),
+				succeeded: false,
+				reduction: null,
+				itemName: "",
+				itemUuid: "",
+			};
 		}
 
+		restored.status = "resolved";
 		await rebuildDamageFromPreservedRoll(
 			message,
 			attack,
