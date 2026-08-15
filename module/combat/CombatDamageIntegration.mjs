@@ -6,6 +6,7 @@ import {
 	DamagePacket,
 } from "../damage/DamagePacket.mjs";
 import { DamageResolver } from "../damage/DamageResolver.mjs";
+import { WfrpRuleSettings } from "../settings/WfrpRuleSettings.mjs";
 import { TestResultChat } from "../tests/TestResultChat.mjs";
 import { CombatDefenceTransaction } from "./CombatDefenceTransaction.mjs";
 import { CombatEquipment } from "./CombatEquipment.mjs";
@@ -237,8 +238,15 @@ function buildResolvedDamagePanel(message, damageState, rollState, defender) {
 	root.append(
 		detailRow(localize("Hit location", "Lokacja trafienia"), hitLocationLabel(rollState.hitLocation)),
 		detailRow(localize("Damage dice", "Kości obrażeń"), damageDiceLabel(rollState)),
-		detailRow(localize("Strength", "Siła"), `+${nonNegativeInteger(rollState.strength)}`),
+		detailRow(localize("Strength", "Siła"), signedInteger(rollState.strength)),
 	);
+
+	if (Number(rollState.weaponDamageModifier) !== 0) {
+		root.append(detailRow(
+			localize("Weapon modifier", "Modyfikator broni"),
+			signedInteger(rollState.weaponDamageModifier),
+		));
+	}
 
 	if (rollState.additionalDamage?.triggered) {
 		const additional = rollState.additionalDamage;
@@ -371,18 +379,21 @@ async function resolveDamageAsAuthority(message, requestingUser) {
 	if (!attacker || !defender) {
 		throw new Error("The attacker or defender Actor is no longer available.");
 	}
+	const weapon = weaponFromAttack(attacker, attack);
 
 	rollingMessages.add(message.id);
 	try {
 		const attackOutcome = TestResultChat._templateContext(test).result;
 		const hitLocation = hitLocationFromAttackRoll(attackOutcome.roll);
 		const initialRoll = await new Roll("1d6").evaluate({ allowInteractive: false });
+		await showRollAnimation(initialRoll, requestingUser);
 		const initialDie = d6Result(initialRoll, "Initial damage die");
 		const additionalDamage = await resolveAdditionalDamage(
 			attacker,
 			message,
 			test,
 			initialDie,
+			requestingUser,
 		);
 		const damageDice = [initialDie, ...additionalDamage.extraDice];
 		const diceTotal = damageDice.reduce((sum, value) => sum + value, 0);
@@ -395,6 +406,7 @@ async function resolveDamageAsAuthority(message, requestingUser) {
 		};
 		if (outcome.parrySucceeded) {
 			const parryRoll = await new Roll("1d6").evaluate({ allowInteractive: false });
+			await showRollAnimation(parryRoll, requestingUser);
 			parry = {
 				succeeded: true,
 				reduction: d6Result(parryRoll, "Parry reduction die"),
@@ -404,7 +416,15 @@ async function resolveDamageAsAuthority(message, requestingUser) {
 		}
 
 		const strength = characteristicValue(attacker, "s", "Strength");
-		const generatedDamage = diceTotal + strength;
+		const optionalWeaponModifiers =
+			WfrpRuleSettings.usesOptionalWeaponModifiers();
+		const weaponDamageModifier = optionalWeaponModifiers
+			? integer(CombatEquipment.optionalWeaponModifiers(weapon)?.damage)
+			: 0;
+		const generatedDamage = Math.max(
+			0,
+			diceTotal + strength + weaponDamageModifier,
+		);
 		const toughness = characteristicValue(defender, "t", "Toughness");
 		const armour = CombatEquipment.armourAt(defender, hitLocation);
 		const specialMitigation = parry.succeeded
@@ -438,7 +458,7 @@ async function resolveDamageAsAuthority(message, requestingUser) {
 		});
 
 		const rollState = {
-			version: 2,
+			version: 3,
 			status: "resolved",
 			packetId: packet.id,
 			attackMessageId: String(message.id),
@@ -450,6 +470,8 @@ async function resolveDamageAsAuthority(message, requestingUser) {
 			damageDice,
 			diceTotal,
 			strength,
+			weaponDamageModifier,
+			optionalWeaponModifiersApplied: optionalWeaponModifiers,
 			generatedDamage,
 			parry,
 			additionalDamage,
@@ -477,7 +499,13 @@ async function resolveDamageAsAuthority(message, requestingUser) {
 	}
 }
 
-async function resolveAdditionalDamage(attacker, attackMessage, attackTestState, initialDie) {
+async function resolveAdditionalDamage(
+	attacker,
+	attackMessage,
+	attackTestState,
+	initialDie,
+	requestingUser,
+) {
 	const state = {
 		triggered: initialDie === 6,
 		testMessageId: null,
@@ -506,6 +534,7 @@ async function resolveAdditionalDamage(attacker, attackMessage, attackTestState,
 	if (!state.testSucceeded) return state;
 	do {
 		const roll = await new Roll("1d6").evaluate({ allowInteractive: false });
+		await showRollAnimation(roll, requestingUser);
 		const die = d6Result(roll, "Additional damage die");
 		state.extraDice.push(die);
 		if (die !== 6) break;
@@ -762,6 +791,45 @@ function characteristicValue(actor, id, label) {
 	return value;
 }
 
+function weaponFromAttack(attacker, attack) {
+	const uuid = String(attack?.weapon?.uuid ?? "").trim();
+	const weapon = actorDocumentFromUuidSync(uuid);
+	if (
+		weapon?.documentName !== "Item" ||
+		weapon.type !== "weapon" ||
+		weapon.parent?.uuid !== attacker.uuid
+	) {
+		throw new Error(
+			"The melee attack Weapon is no longer available on the attacker.",
+		);
+	}
+	return weapon;
+}
+
+function actorDocumentFromUuidSync(uuid) {
+	try {
+		return foundry.utils.fromUuidSync(String(uuid ?? "").trim()) ?? null;
+	} catch (_error) {
+		return null;
+	}
+}
+
+async function showRollAnimation(roll, requestingUser) {
+	if (!roll || typeof game.dice3d?.showForRoll !== "function") return;
+	try {
+		await game.dice3d.showForRoll(
+			roll,
+			requestingUser ?? game.user,
+			true,
+		);
+	} catch (error) {
+		console.warn(
+			"WFRP1ED | Dice So Nice could not animate a combat damage roll.",
+			error,
+		);
+	}
+}
+
 function d6Result(roll, label) {
 	const value = Number(roll?.total);
 	if (!Number.isInteger(value) || value < 1 || value > 6) {
@@ -830,9 +898,19 @@ function asElement(html) {
 	return null;
 }
 
+function integer(value) {
+	const number = Number(value);
+	return Number.isFinite(number) ? Math.trunc(number) : 0;
+}
+
 function nonNegativeInteger(value) {
 	const number = Number(value);
 	return Number.isFinite(number) ? Math.max(0, Math.trunc(number)) : 0;
+}
+
+function signedInteger(value) {
+	const number = integer(value);
+	return number >= 0 ? `+${number}` : String(number);
 }
 
 function reportDamageError(error) {
