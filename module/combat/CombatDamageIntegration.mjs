@@ -21,24 +21,24 @@ const COMBAT_DAMAGE_HISTORY_FLAG_KEY = "combatDamageHistory";
 const ADDITIONAL_DAMAGE_FLAG_KEY = "combatAdditionalDamageTest";
 
 const SOCKET_CHANNEL = "system.wfrp1ed";
-const SOCKET_REQUEST_TYPE = "combat-damage-roll-request";
-const SOCKET_RESPONSE_TYPE = "combat-damage-roll-response";
+const SOCKET_DAMAGE_REQUEST_TYPE = "combat-damage-roll-request";
+const SOCKET_PARRY_REQUEST_TYPE = "combat-parry-damage-roll-request";
+const SOCKET_OVERRIDE_REQUEST_TYPE = "combat-damage-total-override-request";
+const SOCKET_RESPONSE_TYPE = "combat-damage-action-response";
 const SOCKET_TIMEOUT_MS = 10000;
 
-const rollingMessages = new Set();
+const activeActions = new Set();
 const clearingMessages = new Set();
 const pendingRequests = new Map();
+const queuedAutomaticActions = new Set();
 
 /**
  * Core melee damage bridge.
  *
- * Attack and defence remain authoritative in their existing transactions. Once
- * a successful blow is allowed to continue to damage, this module derives the
- * hit location from the persisted attack d100, rolls Core damage, snapshots the
- * defender's Toughness/armour, and attaches a normal DamagePacket to the same
- * attack ChatMessage. The existing Apply Damage, detailed Critical Hit, and
- * rollback systems therefore continue the lifecycle without a second damage
- * implementation.
+ * Attack/Defence stay authoritative on the attack message. Damage is resolved
+ * in stages so the Actor who owns a roll also owns the click that produces it:
+ * the attacker rolls attack damage, while a defender who successfully parries
+ * rolls the 1d6 reduction. GM-controlled Actors may automate both stages.
  */
 Hooks.on("renderChatMessageHTML", (message, html) => {
 	requestAnimationFrame(() => void decorateCombatDamage(message, html));
@@ -70,16 +70,15 @@ Hooks.on("preUpdateChatMessage", (message, changes) => {
 	if (attackMessage && hasAppliedDamage(attackMessage)) {
 		ui.notifications.warn(localize(
 			"Invalidate the applied damage before changing this defence result.",
-			"Przed zmianą wyniku tej obrony unieważnij zastosowane obrażenia.",
+			"Przed zmianą wyniku tego obrony unieważnij zastosowane obrażenia.",
 		));
 		return false;
 	}
 });
 
 /*
- * If an unapplied damage result becomes stale because the attack/defence was
- * changed or reopened, archive the roll snapshot and remove the actionable
- * DamagePacket. A later valid defence may then roll a fresh damage transaction.
+ * If an unapplied or partly-resolved damage result becomes stale because the
+ * Attack/Defence changed, archive the snapshot and reopen the damage stage.
  */
 Hooks.on("updateChatMessage", (message, changes) => {
 	if (clearingMessages.has(message?.id)) return;
@@ -164,59 +163,133 @@ async function decorateCombatDamage(message, html) {
 	const transaction = damageTransactionFor(message, damageState);
 	const reverted = transaction?.state === "reverted";
 
-	if (!damageState?.packet || !damageState?.resolution || !rollState || reverted) {
-		const heading = document.createElement("div");
-		heading.className = "combat-damage-context__heading";
-		heading.textContent = localize("Damage resolution", "Rozstrzyganie obrażeń");
-		panel.append(heading);
+	if (rollState?.status === "awaiting-parry" && !damageState) {
+		panel.append(buildPendingParryPanel(message, rollState, defender));
+		attackPanel.append(panel);
+		maybeQueueAutomaticParry(message, defender);
+		return;
+	}
 
-		if (reverted && damageState?.resolution && rollState) {
-			panel.append(buildResolvedDamagePanel(
-				message,
-				damageState,
-				rollState,
-				defender,
-			));
-		}
-
-		const button = document.createElement("button");
-		button.type = "button";
-		button.className = "combat-damage-roll-button";
-		button.textContent = reverted
-			? localize("Roll damage again", "Rzuć obrażenia ponownie")
-			: localize("Roll damage", "Rzuć obrażenia");
-		button.disabled = !canRequestDamageRoll(message, game.user);
-		button.title = button.disabled
-			? localize(
-				"Only the GM or an OWNER of the attacker may roll this damage.",
-				"Tylko MG albo Właściciel atakującego może rzucić obrażenia.",
-			)
-			: localize(
-				"Resolve Core melee damage for this blow.",
-				"Rozstrzygnij obrażenia tego ciosu według zasad podstawowych.",
-			);
-		button.addEventListener("click", (event) => {
-			event.preventDefault();
-			event.stopPropagation();
-			button.disabled = true;
-			void requestDamageRoll(message)
-				.catch(reportDamageError)
-				.finally(() => {
-					if (button.isConnected) button.disabled = false;
-				});
-		});
-		panel.append(button);
+	if (damageState?.packet && damageState?.resolution && rollState && !reverted) {
+		panel.append(buildResolvedDamagePanel(
+			message,
+			damageState,
+			rollState,
+			defender,
+		));
 		attackPanel.append(panel);
 		return;
 	}
 
-	panel.append(buildResolvedDamagePanel(message, damageState, rollState, defender));
+	const heading = document.createElement("div");
+	heading.className = "combat-damage-context__heading";
+	heading.textContent = localize("Damage resolution", "Rozstrzyganie obrażeń");
+	panel.append(heading);
+
+	if (reverted && damageState?.resolution && rollState) {
+		panel.append(buildResolvedDamagePanel(
+			message,
+			damageState,
+			rollState,
+			defender,
+		));
+	}
+
+	const button = document.createElement("button");
+	button.type = "button";
+	button.className = "combat-damage-roll-button";
+	button.textContent = reverted
+		? localize("Roll damage again", "Rzuć obrażenia ponownie")
+		: localize("Roll damage", "Rzuć obrażenia");
+	button.disabled = !canRequestDamageRoll(message, game.user);
+	button.title = button.disabled
+		? localize(
+			"Only the GM or an OWNER of the attacker may roll this damage.",
+			"Tylko MG albo Właściciel atakującego może rzucić obrażenia.",
+		)
+		: localize(
+			"Resolve Core melee damage for this blow.",
+			"Rozstrzygnij obrażenia tego ciosu według zasad podstawowych.",
+		);
+	button.addEventListener("click", (event) => {
+		event.preventDefault();
+		event.stopPropagation();
+		button.disabled = true;
+		void requestDamageRoll(message)
+			.catch(reportDamageError)
+			.finally(() => {
+				if (button.isConnected) button.disabled = false;
+			});
+	});
+	panel.append(button);
 	attackPanel.append(panel);
+	maybeQueueAutomaticDamage(message, attacker);
 }
 
-function buildResolvedDamagePanel(message, damageState, rollState, defender) {
+function buildPendingParryPanel(message, rollState, defender) {
 	const root = document.createElement("div");
-	root.className = "combat-damage-context__resolved";
+	root.className = "combat-damage-context__pending-parry";
+
+	const heading = document.createElement("div");
+	heading.className = "combat-damage-context__heading";
+	heading.textContent = localize(
+		"Parry damage reduction",
+		"Redukcja obrażeń przez parowanie",
+	);
+	root.append(heading);
+
+	root.append(
+		detailRow(
+			localize("Damage before parry", "Obrażenia przed parowaniem"),
+			String(nonNegativeInteger(rollState.generatedDamage)),
+		),
+		detailRow(
+			localize("Parry", "Parowanie"),
+			String(rollState.parry?.itemName || "—"),
+		),
+	);
+
+	const status = statusText(localize(
+		`${defender.name} rolls 1d6 to determine how much damage the successful parry stops.`,
+		`${defender.name} rzuca 1k6, aby ustalić, ile obrażeń zatrzymuje udane parowanie.`,
+	));
+	root.append(status);
+
+	const button = document.createElement("button");
+	button.type = "button";
+	button.className = "combat-damage-roll-button";
+	button.textContent = localize(
+		"Roll parry reduction",
+		"Rzuć redukcję parowania",
+	);
+	button.disabled = !canRequestParryRoll(message, game.user);
+	button.title = button.disabled
+		? localize(
+			"Only the GM or an OWNER of the defender may roll this parry reduction.",
+			"Tylko MG albo Właściciel broniącego się może rzucić redukcję parowania.",
+		)
+		: "";
+	button.addEventListener("click", (event) => {
+		event.preventDefault();
+		event.stopPropagation();
+		button.disabled = true;
+		void requestParryReductionRoll(message)
+			.catch(reportDamageError)
+			.finally(() => {
+				if (button.isConnected) button.disabled = false;
+			});
+	});
+	root.append(button);
+	return root;
+}
+
+/**
+ * The detailed damage data may remain on the Attack card for auditability, but
+ * it is folded by default because the dedicated Damage card is the primary UI.
+ */
+function buildResolvedDamagePanel(message, damageState, rollState, defender) {
+	const details = document.createElement("details");
+	details.className = "combat-damage-context__resolved";
 	const resolution = damageState.resolution ?? {};
 	const toughness = resolution.breakdown?.toughness ?? {};
 	const armour = resolution.breakdown?.armour ?? {};
@@ -226,23 +299,24 @@ function buildResolvedDamagePanel(message, damageState, rollState, defender) {
 		damageState.packet?.id,
 	);
 
-	const heading = document.createElement("div");
-	heading.className = "combat-damage-context__heading";
+	const summary = document.createElement("summary");
 	const title = document.createElement("strong");
 	title.textContent = localize("Damage", "Obrażenia");
 	const amount = document.createElement("span");
 	amount.textContent = String(resolution.finalAmount ?? 0);
-	heading.append(title, amount);
-	root.append(heading);
+	summary.append(title, amount);
+	details.append(summary);
 
-	root.append(
+	const body = document.createElement("div");
+	body.className = "combat-damage-context__details-body";
+	body.append(
 		detailRow(localize("Hit location", "Lokacja trafienia"), hitLocationLabel(rollState.hitLocation)),
-		detailRow(localize("Damage dice", "Kości obrażeń"), damageDiceLabel(rollState)),
+		detailRow(localize("Roll", "Rzut"), damageDiceLabel(rollState)),
 		detailRow(localize("Strength", "Siła"), signedInteger(rollState.strength)),
 	);
 
 	if (Number(rollState.weaponDamageModifier) !== 0) {
-		root.append(detailRow(
+		body.append(detailRow(
 			localize("Weapon modifier", "Modyfikator broni"),
 			signedInteger(rollState.weaponDamageModifier),
 		));
@@ -250,7 +324,7 @@ function buildResolvedDamagePanel(message, damageState, rollState, defender) {
 
 	if (rollState.additionalDamage?.triggered) {
 		const additional = rollState.additionalDamage;
-		root.append(detailRow(
+		body.append(detailRow(
 			localize("Additional Damage", "Dodatkowe obrażenia"),
 			additional.testSucceeded
 				? localize(
@@ -261,25 +335,23 @@ function buildResolvedDamagePanel(message, damageState, rollState, defender) {
 		));
 	}
 
-	root.append(
+	body.append(
 		detailRow(localize("Before Toughness", "Przed Wytrzymałością"), String(damageState.packet?.rawAmount ?? 0)),
 		detailRow(localize("Toughness", "Wytrzymałość"), `−${nonNegativeInteger(toughness.value)}`),
 		detailRow(localize("Armour", "Pancerz"), armourLabel(armour)),
 	);
 
 	if (parry.applied === true) {
-		root.append(detailRow(
-			localize("Successful Parry", "Udane Parowanie"),
-			localize(
-				`−${nonNegativeInteger(parry.rolledReduction)} rolled; ${nonNegativeInteger(parry.absorbed)} stopped (${parry.itemName || "—"})`,
-				`−${nonNegativeInteger(parry.rolledReduction)} na kości; zatrzymano ${nonNegativeInteger(parry.absorbed)} (${parry.itemName || "—"})`,
-			),
+		body.append(detailRow(
+			localize("Parry", "Parowanie"),
+			`${nonNegativeInteger(parry.absorbed)} (${parry.itemName || "—"})`,
 		));
 	}
 
-	root.append(
-		detailRow(localize("Final Wounds", "Końcowe obrażenia"), String(resolution.finalAmount ?? 0)),
-	);
+	body.append(detailRow(
+		localize("Final damage", "Końcowe obrażenia"),
+		String(resolution.finalAmount ?? 0),
+	));
 
 	const status = document.createElement("div");
 	status.className = "combat-damage-context__status";
@@ -297,19 +369,21 @@ function buildResolvedDamagePanel(message, damageState, rollState, defender) {
 			`REVERTED · Wounds restored ${transaction.woundsAfter} → ${transaction.woundsBefore}`,
 			`COFNIĘTO · przywrócono Żywotność ${transaction.woundsAfter} → ${transaction.woundsBefore}`,
 		);
+	} else if (Number(resolution.finalAmount) <= 0) {
+		status.classList.add("is-applied");
+		status.textContent = localize(
+			"No damage — resolved.",
+			"Brak obrażeń — rozstrzygnięte.",
+		);
 	} else {
-		status.textContent = DamageChat.canApplyMessage(message)
-			? localize(
-				"Ready — right-click this attack card and choose Apply Damage.",
-				"Gotowe — kliknij kartę ataku prawym przyciskiem i wybierz Zastosuj obrażenia.",
-			)
-			: localize(
-				"Damage resolved — awaiting an authorized user to apply it.",
-				"Obrażenia rozstrzygnięte — oczekują na zastosowanie przez uprawnionego użytkownika.",
-			);
+		status.textContent = localize(
+			"Damage is shown on the separate Damage card.",
+			"Obrażenia są pokazane na osobnej karcie Obrażeń.",
+		);
 	}
-	root.append(status);
-	return root;
+	body.append(status);
+	details.append(body);
+	return details;
 }
 
 async function requestDamageRoll(message) {
@@ -320,7 +394,65 @@ async function requestDamageRoll(message) {
 		));
 	}
 	if (game.user?.isGM) return resolveDamageAsAuthority(message, game.user);
+	return requestGmAction(SOCKET_DAMAGE_REQUEST_TYPE, message);
+}
 
+async function requestParryReductionRoll(message) {
+	if (!canRequestParryRoll(message, game.user)) {
+		throw new Error(localize(
+			"You are not allowed to roll this parry reduction.",
+			"Nie masz uprawnień do rzutu redukcji tego parowania.",
+		));
+	}
+	if (game.user?.isGM) return resolveParryAsAuthority(message, game.user);
+	return requestGmAction(SOCKET_PARRY_REQUEST_TYPE, message);
+}
+
+/**
+ * Request a manual replacement for the summed damage dice. Individual rolled
+ * dice remain visible as audit data; only their total is overridden.
+ */
+export async function requestCombatDamageDiceTotalUpdate(message, total) {
+	const normalized = nonNegativeIntegerStrict(total, "Damage dice total");
+	if (!canEditCombatDamageDiceTotal(message, game.user)) {
+		throw new Error(localize(
+			"You are not allowed to edit this damage roll.",
+			"Nie masz uprawnień do edycji tego rzutu obrażeń.",
+		));
+	}
+	if (game.user?.isGM) {
+		return applyDamageDiceTotalOverrideAsAuthority(
+			message,
+			normalized,
+			game.user,
+		);
+	}
+	return requestGmAction(
+		SOCKET_OVERRIDE_REQUEST_TYPE,
+		message,
+		{ total: normalized },
+	);
+}
+
+export function canEditCombatDamageDiceTotal(message, user = game.user) {
+	if (!message?.id || !user) return false;
+	const rollState = message.getFlag?.(FLAG_SCOPE, COMBAT_DAMAGE_FLAG_KEY);
+	const damageState = message.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG_KEY);
+	if (rollState?.status !== "resolved" || !damageState?.packet?.id) return false;
+	if (damageTransactionFor(message, damageState)) return false;
+	if (user.isGM) return true;
+	const attack = message.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY);
+	const attacker = actorFromUuidSync(attack?.attacker?.uuid);
+	return hasOwnerPermission(attacker, user);
+}
+
+async function requestGmAction(type, message, extra = {}) {
+	if (!game.socket) {
+		throw new Error(localize(
+			"The system socket is unavailable.",
+			"Gniazdo systemu jest niedostępne.",
+		));
+	}
 	const gm = primaryActiveGM();
 	if (!gm) {
 		throw new Error(localize(
@@ -334,22 +466,24 @@ async function requestDamageRoll(message) {
 		const timeout = setTimeout(() => {
 			pendingRequests.delete(requestId);
 			reject(new Error(localize(
-				"The GM did not resolve combat damage in time.",
-				"MG nie rozstrzygnął obrażeń w wymaganym czasie.",
+				"The GM did not resolve the damage action in time.",
+				"MG nie rozstrzygnął akcji obrażeń w wymaganym czasie.",
 			)));
 		}, SOCKET_TIMEOUT_MS);
 		pendingRequests.set(requestId, { resolve, reject, timeout });
 		game.socket.emit(SOCKET_CHANNEL, {
-			type: SOCKET_REQUEST_TYPE,
+			type,
 			requestId,
 			requestUserId: String(game.user?.id ?? ""),
 			messageId: String(message.id ?? ""),
+			...extra,
 		});
 	});
 }
 
 async function resolveDamageAsAuthority(message, requestingUser) {
-	if (!message?.id || rollingMessages.has(message.id)) {
+	const actionKey = actionId(message, "damage");
+	if (!message?.id || activeActions.has(actionKey)) {
 		throw new Error("This attack damage is already being resolved.");
 	}
 	if (!canRequestDamageRoll(message, requestingUser)) {
@@ -367,6 +501,10 @@ async function resolveDamageAsAuthority(message, requestingUser) {
 	}
 
 	const existingDamage = message.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG_KEY);
+	const existingRoll = message.getFlag?.(FLAG_SCOPE, COMBAT_DAMAGE_FLAG_KEY);
+	if (existingRoll?.status === "awaiting-parry") {
+		throw new Error("Attack damage has already been rolled; parry reduction is pending.");
+	}
 	if (existingDamage) {
 		if (damageTransactionFor(message, existingDamage)?.state !== "reverted") {
 			throw new Error("Damage has already been resolved for this attack.");
@@ -381,7 +519,7 @@ async function resolveDamageAsAuthority(message, requestingUser) {
 	}
 	const weapon = weaponFromAttack(attacker, attack);
 
-	rollingMessages.add(message.id);
+	activeActions.add(actionKey);
 	try {
 		const attackOutcome = TestResultChat._templateContext(test).result;
 		const hitLocation = hitLocationFromAttackRoll(attackOutcome.roll);
@@ -397,27 +535,8 @@ async function resolveDamageAsAuthority(message, requestingUser) {
 		);
 		const damageDice = [initialDie, ...additionalDamage.extraDice];
 		const diceTotal = damageDice.reduce((sum, value) => sum + value, 0);
-
-		let parry = {
-			succeeded: false,
-			reduction: 0,
-			itemName: "",
-			itemUuid: "",
-		};
-		if (outcome.parrySucceeded) {
-			const parryRoll = await new Roll("1d6").evaluate({ allowInteractive: false });
-			await showRollAnimation(parryRoll, requestingUser);
-			parry = {
-				succeeded: true,
-				reduction: d6Result(parryRoll, "Parry reduction die"),
-				itemName: String(attack.defence?.itemName ?? ""),
-				itemUuid: String(attack.defence?.itemUuid ?? ""),
-			};
-		}
-
 		const strength = characteristicValue(attacker, "s", "Strength");
-		const optionalWeaponModifiers =
-			WfrpRuleSettings.usesOptionalWeaponModifiers();
+		const optionalWeaponModifiers = WfrpRuleSettings.usesOptionalWeaponModifiers();
 		const weaponDamageModifier = optionalWeaponModifiers
 			? integer(CombatEquipment.optionalWeaponModifiers(weapon)?.damage)
 			: 0;
@@ -427,40 +546,20 @@ async function resolveDamageAsAuthority(message, requestingUser) {
 		);
 		const toughness = characteristicValue(defender, "t", "Toughness");
 		const armour = CombatEquipment.armourAt(defender, hitLocation);
-		const specialMitigation = parry.succeeded
-			? {
-				parry: {
-					reduction: parry.reduction,
-					itemName: parry.itemName,
-					itemUuid: parry.itemUuid,
-				},
-			}
-			: {};
-
-		const packet = new DamagePacket({
-			rawAmount: generatedDamage,
-			targetActorUuid: defender.uuid,
-			source: {
-				kind: "combat-attack",
-				id: String(message.id),
-				uuid: String(message.uuid ?? `ChatMessage.${message.id}`),
-				label: String(attack.weapon?.name ?? "Melee attack"),
-			},
-			armour: DAMAGE_MITIGATION_POLICY.APPLY,
-			toughness: DAMAGE_MITIGATION_POLICY.APPLY,
-			hitLocation,
-			specialMitigation,
-			criticalMode: DAMAGE_CRITICAL_MODE.DETAILED,
-		});
-		const resolution = DamageResolver.resolve(packet, {
-			toughness: { value: toughness },
-			armour,
-		});
-
-		const rollState = {
-			version: 3,
-			status: "resolved",
-			packetId: packet.id,
+		const parry = {
+			succeeded: outcome.parrySucceeded === true,
+			reduction: null,
+			itemName: outcome.parrySucceeded
+				? String(attack.defence?.itemName ?? "")
+				: "",
+			itemUuid: outcome.parrySucceeded
+				? String(attack.defence?.itemUuid ?? "")
+				: "",
+		};
+		const baseState = {
+			version: 4,
+			status: parry.succeeded ? "awaiting-parry" : "resolved",
+			packetId: null,
 			attackMessageId: String(message.id),
 			attackerUuid: String(attacker.uuid ?? ""),
 			defenderUuid: String(defender.uuid ?? ""),
@@ -469,6 +568,8 @@ async function resolveDamageAsAuthority(message, requestingUser) {
 			initialDie,
 			damageDice,
 			diceTotal,
+			diceTotalOriginal: diceTotal,
+			diceTotalOverridden: false,
 			strength,
 			weaponDamageModifier,
 			optionalWeaponModifiersApplied: optionalWeaponModifiers,
@@ -478,24 +579,192 @@ async function resolveDamageAsAuthority(message, requestingUser) {
 			rawAmount: generatedDamage,
 			toughness,
 			armour: foundry.utils.deepClone(armour),
-			finalAmount: resolution.finalAmount,
+			finalAmount: null,
 			rolledBy: String(requestingUser?.id ?? game.user?.id ?? ""),
 			resolvedBy: String(game.user?.id ?? ""),
 			rolledAt: Date.now(),
 		};
 
-		await DamageChat.attach(message, { packet, resolution });
-		try {
-			await message.setFlag(FLAG_SCOPE, COMBAT_DAMAGE_FLAG_KEY, rollState);
-		} catch (error) {
-			await message.unsetFlag(FLAG_SCOPE, DAMAGE_FLAG_KEY).catch(() => {});
-			throw error;
+		if (parry.succeeded) {
+			await message.setFlag(FLAG_SCOPE, COMBAT_DAMAGE_FLAG_KEY, baseState);
+			void ui.chat?.render?.({ force: true });
+
+			/* GM-controlled defenders may keep the whole damage sequence automatic. */
+			if (
+				!actorOwnedByPlayer(defender) &&
+				WfrpRuleSettings.autoRollDamageForGmActors()
+			) {
+				return resolveParryAsAuthority(message, game.user);
+			}
+			return foundry.utils.deepFreeze(foundry.utils.deepClone(baseState));
 		}
 
+		return finalizeDamageResolution(message, baseState, attack, defender);
+	} finally {
+		activeActions.delete(actionKey);
+	}
+}
+
+async function resolveParryAsAuthority(message, requestingUser) {
+	const actionKey = actionId(message, "parry");
+	if (!message?.id || activeActions.has(actionKey)) {
+		throw new Error("This parry damage reduction is already being resolved.");
+	}
+	if (!canRequestParryRoll(message, requestingUser)) {
+		throw new Error("The requesting user may not roll this parry reduction.");
+	}
+
+	const attack = message.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY);
+	const rollState = message.getFlag?.(FLAG_SCOPE, COMBAT_DAMAGE_FLAG_KEY);
+	const defender = await actorFromUuid(attack?.target?.uuid);
+	if (!attack || !defender || rollState?.status !== "awaiting-parry") {
+		throw new Error("This attack is not waiting for a parry reduction roll.");
+	}
+
+	activeActions.add(actionKey);
+	try {
+		const parryRoll = await new Roll("1d6").evaluate({ allowInteractive: false });
+		await showRollAnimation(parryRoll, requestingUser);
+		const updated = foundry.utils.deepClone(rollState);
+		updated.parry = {
+			...(updated.parry ?? {}),
+			succeeded: true,
+			reduction: d6Result(parryRoll, "Parry reduction die"),
+			rolledBy: String(requestingUser?.id ?? ""),
+			rolledAt: Date.now(),
+		};
+		updated.status = "resolved";
+		return finalizeDamageResolution(message, updated, attack, defender);
+	} finally {
+		activeActions.delete(actionKey);
+	}
+}
+
+async function finalizeDamageResolution(message, rollState, attack, defender) {
+	const packet = damagePacketForState(message, rollState, attack, defender);
+	const resolution = DamageResolver.resolve(packet, {
+		toughness: { value: nonNegativeInteger(rollState.toughness) },
+		armour: foundry.utils.deepClone(rollState.armour ?? {}),
+	});
+	const finalized = {
+		...foundry.utils.deepClone(rollState),
+		version: 4,
+		status: "resolved",
+		packetId: packet.id,
+		rawAmount: packet.rawAmount,
+		finalAmount: resolution.finalAmount,
+		resolvedBy: String(game.user?.id ?? ""),
+		resolvedAt: Date.now(),
+	};
+
+	await DamageChat.attach(message, { packet, resolution });
+	try {
+		await message.setFlag(FLAG_SCOPE, COMBAT_DAMAGE_FLAG_KEY, finalized);
+	} catch (error) {
+		await message.unsetFlag(FLAG_SCOPE, DAMAGE_FLAG_KEY).catch(() => {});
+		throw error;
+	}
+
+	void ui.chat?.render?.({ force: true });
+	return foundry.utils.deepFreeze(foundry.utils.deepClone(finalized));
+}
+
+function damagePacketForState(message, rollState, attack, defender, existingPacket = null) {
+	const parry = rollState.parry ?? {};
+	const specialMitigation = parry.succeeded === true && Number.isInteger(Number(parry.reduction))
+		? {
+			parry: {
+				reduction: nonNegativeInteger(parry.reduction),
+				itemName: String(parry.itemName ?? ""),
+				itemUuid: String(parry.itemUuid ?? ""),
+			},
+		}
+		: {};
+
+	return new DamagePacket({
+		id: existingPacket?.id ?? null,
+		rawAmount: nonNegativeInteger(rollState.generatedDamage),
+		targetActorUuid: defender.uuid,
+		source: existingPacket?.source ?? {
+			kind: "combat-attack",
+			id: String(message.id),
+			uuid: String(message.uuid ?? `ChatMessage.${message.id}`),
+			label: String(attack.weapon?.name ?? "Melee attack"),
+		},
+		armour: existingPacket?.mitigation?.armour ?? DAMAGE_MITIGATION_POLICY.APPLY,
+		toughness: existingPacket?.mitigation?.toughness ?? DAMAGE_MITIGATION_POLICY.APPLY,
+		hitLocation: rollState.hitLocation,
+		specialMitigation,
+		criticalMode: existingPacket?.critical?.mode ?? DAMAGE_CRITICAL_MODE.DETAILED,
+		createdAt: existingPacket?.createdAt ?? Date.now(),
+	});
+}
+
+async function applyDamageDiceTotalOverrideAsAuthority(
+	message,
+	total,
+	requestingUser,
+) {
+	const actionKey = actionId(message, "override");
+	if (activeActions.has(actionKey)) {
+		throw new Error("This damage roll is already being edited.");
+	}
+	if (!canEditCombatDamageDiceTotal(message, requestingUser)) {
+		throw new Error("The requesting user may not edit this damage roll.");
+	}
+
+	const normalized = nonNegativeIntegerStrict(total, "Damage dice total");
+	const attack = message.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY);
+	const rollState = foundry.utils.deepClone(
+		message.getFlag?.(FLAG_SCOPE, COMBAT_DAMAGE_FLAG_KEY) ?? {},
+	);
+	const damageState = message.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG_KEY);
+	const defender = await actorFromUuid(attack?.target?.uuid);
+	if (!attack || !defender || !damageState?.packet) {
+		throw new Error("This damage result is no longer available.");
+	}
+
+	activeActions.add(actionKey);
+	try {
+		rollState.diceTotal = normalized;
+		rollState.diceTotalOverridden = normalized !== Number(rollState.diceTotalOriginal);
+		rollState.diceTotalOverriddenBy = rollState.diceTotalOverridden
+			? String(requestingUser?.id ?? "")
+			: null;
+		rollState.diceTotalOverriddenAt = rollState.diceTotalOverridden
+			? Date.now()
+			: null;
+		rollState.generatedDamage = Math.max(
+			0,
+			normalized +
+				integer(rollState.strength) +
+				integer(rollState.weaponDamageModifier),
+		);
+		rollState.rawAmount = rollState.generatedDamage;
+
+		const existingPacket = DamagePacket.fromJSON(damageState.packet);
+		const packet = damagePacketForState(
+			message,
+			rollState,
+			attack,
+			defender,
+			existingPacket,
+		);
+		const resolution = DamageResolver.resolve(packet, {
+			toughness: { value: nonNegativeInteger(rollState.toughness) },
+			armour: foundry.utils.deepClone(rollState.armour ?? {}),
+		});
+		rollState.packetId = packet.id;
+		rollState.finalAmount = resolution.finalAmount;
+		rollState.updatedBy = String(requestingUser?.id ?? "");
+		rollState.updatedAt = Date.now();
+
+		await DamageChat.attach(message, { packet, resolution });
+		await message.setFlag(FLAG_SCOPE, COMBAT_DAMAGE_FLAG_KEY, rollState);
 		void ui.chat?.render?.({ force: true });
 		return foundry.utils.deepFreeze(foundry.utils.deepClone(rollState));
 	} finally {
-		rollingMessages.delete(message.id);
+		activeActions.delete(actionKey);
 	}
 }
 
@@ -547,7 +816,7 @@ async function markAdditionalDamageTest(testMessage, attackMessage) {
 		testMessage?.getFlag?.(FLAG_SCOPE, TEST_FLAG_KEY) ?? {},
 	);
 	if (!state || typeof state !== "object") return;
-	state.testName = localize("Additional Damage", "Dodatkowe obrażenia");
+	state.testName = localize("Additional Damage", "Obrażenia dodatkowe");
 	state.updatedBy = game.user?.id ?? "";
 	state.updatedAt = Date.now();
 	const content = await TestResultChat._render(state);
@@ -564,11 +833,16 @@ async function markAdditionalDamageTest(testMessage, attackMessage) {
 }
 
 function canRequestDamageRoll(message, user = game.user) {
-	if (!message?.id || !user || rollingMessages.has(message.id)) return false;
+	if (!message?.id || !user || activeActions.has(actionId(message, "damage"))) {
+		return false;
+	}
 	const existingDamage = message.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG_KEY);
+	const existingRoll = message.getFlag?.(FLAG_SCOPE, COMBAT_DAMAGE_FLAG_KEY);
+	if (existingRoll?.status === "awaiting-parry") return false;
 	if (existingDamage && damageTransactionFor(message, existingDamage)?.state !== "reverted") {
 		return false;
 	}
+	if (existingRoll && !existingDamage) return false;
 
 	const attack = message.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY);
 	const test = message.getFlag?.(FLAG_SCOPE, TEST_FLAG_KEY);
@@ -581,24 +855,83 @@ function canRequestDamageRoll(message, user = game.user) {
 	}
 	if (user.isGM) return true;
 	const attacker = actorFromUuidSync(attack.attacker?.uuid);
-	return attacker?.testUserPermission?.(
-		user,
-		CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER,
-	) === true;
+	return hasOwnerPermission(attacker, user);
+}
+
+function canRequestParryRoll(message, user = game.user) {
+	if (!message?.id || !user || activeActions.has(actionId(message, "parry"))) {
+		return false;
+	}
+	if (message.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG_KEY)) return false;
+	const rollState = message.getFlag?.(FLAG_SCOPE, COMBAT_DAMAGE_FLAG_KEY);
+	if (rollState?.status !== "awaiting-parry" || rollState.parry?.succeeded !== true) {
+		return false;
+	}
+	const outcome = CombatDefenceTransaction.outcomeForAttack(message);
+	if (!outcome?.parrySucceeded || !outcome.continueToDamage) return false;
+	if (user.isGM) return true;
+	const attack = message.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY);
+	const defender = actorFromUuidSync(attack?.target?.uuid);
+	return hasOwnerPermission(defender, user);
+}
+
+function maybeQueueAutomaticDamage(message, attacker) {
+	if (!canRequestDamageRoll(message, game.user)) return;
+	if (!shouldAutomaticallyRollForActor(attacker, game.user)) return;
+	queueAutomaticAction(
+		actionId(message, "auto-damage"),
+		() => requestDamageRoll(message),
+	);
+}
+
+function maybeQueueAutomaticParry(message, defender) {
+	if (!canRequestParryRoll(message, game.user)) return;
+	if (!shouldAutomaticallyRollForActor(defender, game.user)) return;
+	queueAutomaticAction(
+		actionId(message, "auto-parry"),
+		() => requestParryReductionRoll(message),
+	);
+}
+
+function shouldAutomaticallyRollForActor(actor, user) {
+	if (!(actor instanceof foundry.documents.Actor) || !user) return false;
+	if (actorOwnedByPlayer(actor)) {
+		return !user.isGM &&
+			hasOwnerPermission(actor, user) &&
+			WfrpRuleSettings.autoRollDamageForOwnedActors();
+	}
+	return user.isGM &&
+		isPrimaryActiveGM() &&
+		WfrpRuleSettings.autoRollDamageForGmActors();
+}
+
+function queueAutomaticAction(key, action) {
+	if (queuedAutomaticActions.has(key)) return;
+	queuedAutomaticActions.add(key);
+	queueMicrotask(() => {
+		void action()
+			.catch(reportDamageError)
+			.finally(() => {
+				setTimeout(() => queuedAutomaticActions.delete(key), 250);
+			});
+	});
 }
 
 async function reconcileAttackDamageAfterChange(message, reason) {
 	const damageState = message?.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG_KEY);
 	const rollState = message?.getFlag?.(FLAG_SCOPE, COMBAT_DAMAGE_FLAG_KEY);
-	if (!damageState || !rollState) return;
-	if (damageTransactionFor(message, damageState)?.state === "applied") return;
+	if (!damageState && !rollState) return;
+	if (damageState && damageTransactionFor(message, damageState)?.state === "applied") {
+		return;
+	}
 
 	const outcome = CombatDefenceTransaction.outcomeForAttack(message);
 	if (
 		reason === "attack-adjudication-changed" ||
 		!outcome?.attackHit ||
 		outcome.defenceStatus !== "resolved" ||
-		!outcome.continueToDamage
+		!outcome.continueToDamage ||
+		(rollState?.status === "awaiting-parry" && !outcome.parrySucceeded)
 	) {
 		await archiveAndClearCombatDamage(message, reason);
 	}
@@ -607,8 +940,10 @@ async function reconcileAttackDamageAfterChange(message, reason) {
 async function clearCurrentDamageIfReversible(message, reason) {
 	const damageState = message?.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG_KEY);
 	const rollState = message?.getFlag?.(FLAG_SCOPE, COMBAT_DAMAGE_FLAG_KEY);
-	if (!damageState || !rollState) return;
-	if (damageTransactionFor(message, damageState)?.state === "applied") return;
+	if (!damageState && !rollState) return;
+	if (damageState && damageTransactionFor(message, damageState)?.state === "applied") {
+		return;
+	}
 	await archiveAndClearCombatDamage(message, reason);
 }
 
@@ -659,10 +994,16 @@ function damageTransactionFor(message, damageState = null) {
 function refreshDamageCardsForActor(actor) {
 	if (!(actor instanceof foundry.documents.Actor)) return;
 	for (const message of game.messages ?? []) {
+		const attack = message.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY);
 		const state = message.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG_KEY);
-		if (String(state?.packet?.targetActorUuid ?? "") !== String(actor.uuid ?? "")) {
-			continue;
-		}
+		const roll = message.getFlag?.(FLAG_SCOPE, COMBAT_DAMAGE_FLAG_KEY);
+		const relevant =
+			String(state?.packet?.targetActorUuid ?? "") === String(actor.uuid ?? "") ||
+			String(roll?.attackerUuid ?? "") === String(actor.uuid ?? "") ||
+			String(roll?.defenderUuid ?? "") === String(actor.uuid ?? "") ||
+			String(attack?.attacker?.uuid ?? "") === String(actor.uuid ?? "") ||
+			String(attack?.target?.uuid ?? "") === String(actor.uuid ?? "");
+		if (!relevant) continue;
 		const entry = document.querySelector(`[data-message-id="${message.id}"]`);
 		if (entry) requestAnimationFrame(() => void decorateCombatDamage(message, entry));
 	}
@@ -679,7 +1020,12 @@ async function handleSocketPayload(payload) {
 		handleSocketResponse(payload);
 		return;
 	}
-	if (payload.type !== SOCKET_REQUEST_TYPE || !isPrimaryActiveGM()) return;
+	const requestTypes = new Set([
+		SOCKET_DAMAGE_REQUEST_TYPE,
+		SOCKET_PARRY_REQUEST_TYPE,
+		SOCKET_OVERRIDE_REQUEST_TYPE,
+	]);
+	if (!requestTypes.has(payload.type) || !isPrimaryActiveGM()) return;
 
 	const response = {
 		type: SOCKET_RESPONSE_TYPE,
@@ -694,7 +1040,24 @@ async function handleSocketPayload(payload) {
 		const message = game.messages?.get(String(payload.messageId ?? ""));
 		if (!requester?.active) throw new Error("The requesting user is not active.");
 		if (!message) throw new Error("The requested attack message is unavailable.");
-		response.result = await resolveDamageAsAuthority(message, requester);
+
+		switch (payload.type) {
+			case SOCKET_DAMAGE_REQUEST_TYPE:
+				response.result = await resolveDamageAsAuthority(message, requester);
+				break;
+			case SOCKET_PARRY_REQUEST_TYPE:
+				response.result = await resolveParryAsAuthority(message, requester);
+				break;
+			case SOCKET_OVERRIDE_REQUEST_TYPE:
+				response.result = await applyDamageDiceTotalOverrideAsAuthority(
+					message,
+					payload.total,
+					requester,
+				);
+				break;
+			default:
+				throw new Error("Unsupported combat damage action.");
+		}
 		response.ok = true;
 	} catch (error) {
 		console.error("WFRP1ED | GM rejected combat damage request.", error);
@@ -746,12 +1109,15 @@ function hitLocationLabel(location) {
 }
 
 function damageDiceLabel(state) {
-	const dice = Array.isArray(state.damageDice)
+	const dice = Array.isArray(state?.damageDice)
 		? state.damageDice.map((value) => nonNegativeInteger(value))
 		: [];
-	return dice.length
-		? `${dice.join(" + ")} = ${dice.reduce((sum, value) => sum + value, 0)}`
-		: "—";
+	if (!dice.length) return "—";
+	const rolled = dice.join(" + ");
+	const total = nonNegativeInteger(state?.diceTotal);
+	return state?.diceTotalOverridden
+		? `${rolled} → ${total}`
+		: `${rolled} = ${total}`;
 }
 
 function armourLabel(armour) {
@@ -862,12 +1228,26 @@ function actorFromUuidSync(uuid) {
 	return null;
 }
 
+function hasOwnerPermission(actor, user) {
+	if (!(actor instanceof foundry.documents.Actor) || !user) return false;
+	if (user.isGM) return true;
+	return actor.testUserPermission?.(
+		user,
+		CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER,
+	) === true;
+}
+
+function actorOwnedByPlayer(actor) {
+	if (!(actor instanceof foundry.documents.Actor)) return false;
+	return [...(game.users ?? [])].some((user) =>
+		!user?.isGM && hasOwnerPermission(actor, user),
+	);
+}
+
 function canSeeDamage(attacker, defender, user) {
 	if (!user) return false;
 	if (user.isGM) return true;
-	const owner = CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER;
-	return attacker.testUserPermission?.(user, owner) === true ||
-		defender.testUserPermission?.(user, owner) === true;
+	return hasOwnerPermission(attacker, user) || hasOwnerPermission(defender, user);
 }
 
 function attackStateChanged(changes) {
@@ -898,6 +1278,10 @@ function asElement(html) {
 	return null;
 }
 
+function actionId(message, phase) {
+	return `${String(message?.id ?? "")}:${phase}`;
+}
+
 function integer(value) {
 	const number = Number(value);
 	return Number.isFinite(number) ? Math.trunc(number) : 0;
@@ -906,6 +1290,14 @@ function integer(value) {
 function nonNegativeInteger(value) {
 	const number = Number(value);
 	return Number.isFinite(number) ? Math.max(0, Math.trunc(number)) : 0;
+}
+
+function nonNegativeIntegerStrict(value, label) {
+	const number = Number(value);
+	if (!Number.isFinite(number) || !Number.isInteger(number) || number < 0) {
+		throw new Error(`${label} must be a non-negative integer.`);
+	}
+	return number;
 }
 
 function signedInteger(value) {
