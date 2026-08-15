@@ -48,6 +48,21 @@ Hooks.on("renderChatMessageHTML", (message, html) => {
 	requestAnimationFrame(() => keepSingleFatalConfirmation(card));
 });
 
+/*
+ * FatalCriticalIntegration and DetailedFatalCriticalPresentation also refresh
+ * visible cards directly from updateActor, without emitting another render hook.
+ * Re-run the final de-duplication after those direct decorators have completed.
+ */
+Hooks.on("updateActor", () => {
+	requestAnimationFrame(() => {
+		for (const card of document.querySelectorAll(
+			"[data-wfrp-detailed-critical-card].is-killed",
+		)) {
+			keepSingleFatalConfirmation(card);
+		}
+	});
+});
+
 async function removeSiblingCriticalMessages(currentMessage, packetId) {
 	if (!canAuthoritativelyDeleteChat()) return;
 	const currentId = String(currentMessage?.id ?? "");
