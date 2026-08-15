@@ -1,12 +1,15 @@
 import { CombatDefenceTransaction } from "./CombatDefenceTransaction.mjs";
 import { DamageApplication } from "../damage/DamageApplication.mjs";
 import { DamageChat } from "../damage/DamageChat.mjs";
+import { synchronizeFatalStatus } from "../criticals/FatalCriticalIntegration.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
 const ATTACK_FLAG_KEY = "combatAttackResult";
 const DEFENCE_RESULT_FLAG_KEY = "combatDefenceResult";
 const DAMAGE_FLAG_KEY = "damageState";
 const DAMAGE_APPLICATIONS_FLAG_KEY = "damageApplications";
+const FATAL_APPLICATIONS_FLAG_KEY = "fatalCriticalApplications";
+const FATE_INTERVENTIONS_FLAG_KEY = "fateInterventions";
 const PARRY_ECONOMY_FLAG_KEY = "attackEconomy";
 const DODGE_ECONOMY_FLAG_KEY = "dodgeEconomy";
 const AUTHORIZED_DAMAGE_APPLICATION_OPTION =
@@ -520,6 +523,7 @@ function preflightDamageCascade(actor, linkedDamage) {
 				"A newer damage transaction exists for this Actor. Invalidate newer damage first.",
 			);
 		}
+		preflightFatalRollback(actor, linkedDamage[index].transaction);
 	}
 
 	let expectedWounds = readRemainingWounds(actor);
@@ -545,6 +549,21 @@ function preflightSingleDamage(actor, transaction) {
 			"Current Wounds differ from the recorded post-damage value. Revert newer/manual Wounds changes first.",
 		);
 	}
+	preflightFatalRollback(actor, transaction);
+}
+
+function preflightFatalRollback(actor, transaction) {
+	const packetId = String(transaction?.packetId ?? "");
+	if (!packetId) return;
+	const fatal = objectFlag(actor, FATAL_APPLICATIONS_FLAG_KEY)?.[packetId];
+	if (fatal?.state !== "applied") return;
+	const fate = objectFlag(actor, FATE_INTERVENTIONS_FLAG_KEY)?.[packetId];
+	if (isObject(fate)) {
+		throw new Error(localize(
+			"This fatal Critical has already consumed a Fate Point. Revert the Fate intervention before invalidating its damage.",
+			"To śmiertelne trafienie krytyczne zużyło już Punkt Przeznaczenia. Przed unieważnieniem jego obrażeń cofnij interwencję Punktu Przeznaczenia.",
+		));
+	}
 }
 
 async function revertDamageMessage(message, {
@@ -567,6 +586,7 @@ async function revertDamageMessage(message, {
 	else if (readRemainingWounds(actor) !== Number(transaction.woundsAfter)) {
 		throw new Error("Linked damage is no longer at the top of the Wounds history.");
 	}
+	if (skipLatestCheck) preflightFatalRollback(actor, transaction);
 
 	const criticalWounds = linkedCriticalWounds(actor, state.packet.id);
 	if (criticalWounds.length > 0) {
@@ -579,22 +599,46 @@ async function revertDamageMessage(message, {
 	const applications = mutableObject(
 		actor.getFlag?.(FLAG_SCOPE, DAMAGE_APPLICATIONS_FLAG_KEY),
 	) ?? {};
+	const revertedAt = Date.now();
 	const reverted = {
 		...foundry.utils.deepClone(transaction),
 		state: DAMAGE_REVERTED_STATE,
-		revertedAt: Date.now(),
+		revertedAt,
 		revertedBy: String(game.user?.id ?? ""),
 		revertReason: String(reason ?? "gm-invalidated"),
 	};
 	applications[String(state.packet.id)] = foundry.utils.deepClone(reverted);
 
+	const fatalApplications = mutableObject(
+		actor.getFlag?.(FLAG_SCOPE, FATAL_APPLICATIONS_FLAG_KEY),
+	) ?? {};
+	const fatalApplication = fatalApplications[String(state.packet.id)];
+	if (fatalApplication?.state === "applied") {
+		fatalApplications[String(state.packet.id)] = {
+			...foundry.utils.deepClone(fatalApplication),
+			state: "reverted",
+			revertedAt,
+			revertedBy: String(game.user?.id ?? ""),
+			revertReason: String(reason ?? "damage-invalidated"),
+		};
+	}
+
+	const actorChanges = {
+		"system.status.wounds.value": Number(transaction.woundsBefore),
+		[`flags.${FLAG_SCOPE}.${DAMAGE_APPLICATIONS_FLAG_KEY}`]: applications,
+	};
+	if (fatalApplication?.state === "applied") {
+		actorChanges[`flags.${FLAG_SCOPE}.${FATAL_APPLICATIONS_FLAG_KEY}`] =
+			fatalApplications;
+	}
+
 	await actor.update(
-		{
-			"system.status.wounds.value": Number(transaction.woundsBefore),
-			[`flags.${FLAG_SCOPE}.${DAMAGE_APPLICATIONS_FLAG_KEY}`]: applications,
-		},
+		actorChanges,
 		{ [AUTHORIZED_DAMAGE_APPLICATION_OPTION]: true },
 	);
+	if (fatalApplication?.state === "applied") {
+		await synchronizeFatalStatus(actor);
+	}
 
 	state.application = foundry.utils.deepClone(reverted);
 	state.updatedBy = game.user?.id ?? "";
@@ -607,6 +651,7 @@ async function revertDamageMessage(message, {
 	return {
 		transaction: reverted,
 		removedCriticalWounds: criticalWounds.length,
+		fatalCriticalReverted: fatalApplication?.state === "applied",
 	};
 }
 
@@ -841,6 +886,11 @@ function readRemainingWounds(actor) {
 		throw new Error("The Actor has no valid remaining Wounds value.");
 	}
 	return Math.max(0, value);
+}
+
+function objectFlag(actor, key) {
+	const value = actor?.getFlag?.(FLAG_SCOPE, key);
+	return isObject(value) ? value : {};
 }
 
 function mutableObject(value) {
