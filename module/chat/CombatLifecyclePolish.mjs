@@ -4,8 +4,10 @@ const DEFENCE_RESULT_FLAG_KEY = "combatDefenceResult";
 const ADDITIONAL_DAMAGE_FLAG_KEY = "combatAdditionalDamageTest";
 const DAMAGE_RESULT_VIEW_FLAG_KEY = "combatDamageResultView";
 const DAMAGE_STATE_FLAG_KEY = "damageState";
+const COMBAT_DAMAGE_FLAG_KEY = "combatDamageRoll";
 const CRITICAL_RESULT_FLAG_KEY = "criticalResult";
 const FATAL_APPLICATIONS_FLAG_KEY = "fatalCriticalApplications";
+const focusedParryStages = new Set();
 
 /**
  * Final presentation pass for the compact combat lifecycle.
@@ -159,6 +161,16 @@ function isInvalidationNotice(element) {
 		text.includes("UNIEWAŻNION");
 }
 
+/**
+ * CombatDamageIntegration owns and binds the actual reduction button on the
+ * source Attack card. Move that existing DOM node to the resolved Parry card;
+ * this changes presentation only and preserves permissions/socket mechanics.
+ *
+ * Invalidated damage deliberately leaves its historical Chat cards in place.
+ * Therefore the relocated control must also be removed explicitly when the
+ * authoritative attack is no longer in the awaiting-parry stage; otherwise an
+ * old live-looking button survives on a historical Parry card.
+ */
 function relocatePendingParryControl(message) {
 	const attackState = message?.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY);
 	if (attackState?.defence?.testMessageId) {
@@ -187,23 +199,118 @@ function movePendingParryControl(attackMessage, defenceMessage) {
 	);
 	if (!attackEntry || !defenceEntry) return;
 
+	const rollState = attackMessage.getFlag?.(FLAG_SCOPE, COMBAT_DAMAGE_FLAG_KEY);
+	const damageState = attackMessage.getFlag?.(FLAG_SCOPE, DAMAGE_STATE_FLAG_KEY);
+	const pending = Boolean(
+		!damageState &&
+		rollState?.status === "awaiting-parry" &&
+		rollState?.parry?.succeeded === true,
+	);
+	const previous = defenceEntry.querySelector(
+		"[data-wfrp-relocated-parry-reduction]",
+	);
+
+	/* A historical/invalidation render must never leave an actionable stale roll. */
+	if (!pending) {
+		previous?.remove();
+		return;
+	}
+
 	const sourcePanel = attackEntry.querySelector(
 		"[data-wfrp-combat-damage] .combat-damage-context__pending-parry",
 	);
-	if (!sourcePanel) return;
+	if (!sourcePanel) {
+		/* It may already have been moved during an earlier render of the same stage. */
+		if (previous) maybeFocusPendingParry(attackMessage, defenceEntry, rollState);
+		return;
+	}
 
 	const defencePanel = defenceEntry.querySelector(
 		"[data-wfrp-combat-defence-result]",
 	) ?? defenceEntry.querySelector(".wfrp1e-test-card");
 	if (!defencePanel) return;
 
-	defencePanel.querySelector("[data-wfrp-relocated-parry-reduction]")?.remove();
+	previous?.remove();
 	sourcePanel.dataset.wfrpRelocatedParryReduction = "";
 	sourcePanel.classList.add("is-relocated-to-defence");
 	defencePanel.append(sourcePanel);
 
 	const wrapper = attackEntry.querySelector("[data-wfrp-combat-damage]");
 	if (wrapper && !wrapper.children.length) wrapper.remove();
+
+	maybeFocusPendingParry(attackMessage, defenceEntry, rollState);
+}
+
+/**
+ * Keep the audit history instead of deleting invalidated ChatMessages, but take
+ * the user to the older Parry card when it becomes the current interactive step.
+ * A player is focused only for an Actor they own. The GM is focused only for a
+ * GM-controlled defender, avoiding a competing scroll on player-owned Actors.
+ */
+function maybeFocusPendingParry(attackMessage, defenceEntry, rollState) {
+	if (!(defenceEntry instanceof HTMLElement) || !game.user) return;
+
+	const attack = attackMessage.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY);
+	const defender = actorFromUuidSync(attack?.target?.uuid);
+	if (!(defender instanceof foundry.documents.Actor)) return;
+
+	if (game.user.isGM) {
+		if (actorOwnedByPlayer(defender)) return;
+	} else if (!hasOwnerPermission(defender, game.user)) {
+		return;
+	}
+
+	const stageKey = [
+		String(attackMessage.id ?? ""),
+		String(rollState?.rolledAt ?? rollState?.updatedAt ?? ""),
+		String(rollState?.initialDie ?? ""),
+	].join(":");
+	if (focusedParryStages.has(stageKey)) return;
+	focusedParryStages.add(stageKey);
+	pruneFocusHistory();
+
+	requestAnimationFrame(() => {
+		defenceEntry.scrollIntoView?.({
+			behavior: "smooth",
+			block: "center",
+			inline: "nearest",
+		});
+	});
+}
+
+function pruneFocusHistory() {
+	while (focusedParryStages.size > 100) {
+		const oldest = focusedParryStages.values().next().value;
+		if (oldest === undefined) return;
+		focusedParryStages.delete(oldest);
+	}
+}
+
+function actorOwnedByPlayer(actor) {
+	if (!(actor instanceof foundry.documents.Actor)) return false;
+	return [...(game.users ?? [])].some((user) =>
+		!user?.isGM && hasOwnerPermission(actor, user),
+	);
+}
+
+function hasOwnerPermission(actor, user) {
+	if (!(actor instanceof foundry.documents.Actor) || !user) return false;
+	if (user.isGM) return true;
+	return actor.testUserPermission?.(
+		user,
+		CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER,
+	) === true;
+}
+
+function actorFromUuidSync(uuid) {
+	try {
+		const document = foundry.utils.fromUuidSync(String(uuid ?? "").trim());
+		if (document instanceof foundry.documents.Actor) return document;
+		if (document?.actor instanceof foundry.documents.Actor) return document.actor;
+	} catch (_error) {
+		return null;
+	}
+	return null;
 }
 
 function removeDuplicateDetailedFatalControls(message, root) {
