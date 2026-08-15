@@ -387,6 +387,8 @@ function buildResolvedDamagePanel(message, damageState, rollState, defender) {
 }
 
 async function requestDamageRoll(message) {
+	/* A manual click and an already-queued automatic action may meet in one tick. */
+	if (activeActions.has(actionId(message, "damage"))) return null;
 	if (!canRequestDamageRoll(message, game.user)) {
 		throw new Error(localize(
 			"You are not allowed to roll damage for this attack.",
@@ -398,6 +400,20 @@ async function requestDamageRoll(message) {
 }
 
 async function requestParryReductionRoll(message) {
+	if (activeActions.has(actionId(message, "parry"))) return null;
+
+	const rollState = message?.getFlag?.(FLAG_SCOPE, COMBAT_DAMAGE_FLAG_KEY);
+	if (
+		rollState?.status !== "awaiting-parry" ||
+		rollState?.parry?.succeeded !== true ||
+		message?.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG_KEY)
+	) {
+		throw new Error(localize(
+			"Parry reduction is not ready. Resolve the attack damage first.",
+			"Redukcja obrażeń przez parowanie nie jest jeszcze gotowa. Najpierw rozstrzygnij obrażenia ataku.",
+		));
+	}
+
 	if (!canRequestParryRoll(message, game.user)) {
 		throw new Error(localize(
 			"You are not allowed to roll this parry reduction.",
@@ -490,37 +506,43 @@ async function resolveDamageAsAuthority(message, requestingUser) {
 		throw new Error("The requesting user may not roll damage for this attack.");
 	}
 
-	const attack = message.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY);
-	const test = message.getFlag?.(FLAG_SCOPE, TEST_FLAG_KEY);
-	const outcome = CombatDefenceTransaction.outcomeForAttack(message);
-	if (!attack || !test || !outcome) {
-		throw new Error("This ChatMessage has no complete melee attack transaction.");
-	}
-	if (!outcome.attackHit || outcome.defenceStatus !== "resolved" || !outcome.continueToDamage) {
-		throw new Error("This attack is not currently eligible for damage resolution.");
-	}
-
-	const existingDamage = message.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG_KEY);
-	const existingRoll = message.getFlag?.(FLAG_SCOPE, COMBAT_DAMAGE_FLAG_KEY);
-	if (existingRoll?.status === "awaiting-parry") {
-		throw new Error("Attack damage has already been rolled; parry reduction is pending.");
-	}
-	if (existingDamage) {
-		if (damageTransactionFor(message, existingDamage)?.state !== "reverted") {
-			throw new Error("Damage has already been resolved for this attack.");
-		}
-		await archiveAndClearCombatDamage(message, "damage-rerolled");
-	}
-
-	const attacker = await actorFromUuid(attack.attacker?.uuid);
-	const defender = await actorFromUuid(attack.target?.uuid);
-	if (!attacker || !defender) {
-		throw new Error("The attacker or defender Actor is no longer available.");
-	}
-	const weapon = weaponFromAttack(attacker, attack);
-
+	/*
+	 * Acquire the transaction lock before the first await. Previously Actor UUID
+	 * resolution and rollback cleanup happened first, allowing a manual click and
+	 * queued automation to both pass validation and each animate/commit a fresh
+	 * initial d6 after damage invalidation.
+	 */
 	activeActions.add(actionKey);
 	try {
+		const attack = message.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY);
+		const test = message.getFlag?.(FLAG_SCOPE, TEST_FLAG_KEY);
+		const outcome = CombatDefenceTransaction.outcomeForAttack(message);
+		if (!attack || !test || !outcome) {
+			throw new Error("This ChatMessage has no complete melee attack transaction.");
+		}
+		if (!outcome.attackHit || outcome.defenceStatus !== "resolved" || !outcome.continueToDamage) {
+			throw new Error("This attack is not currently eligible for damage resolution.");
+		}
+
+		const existingDamage = message.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG_KEY);
+		const existingRoll = message.getFlag?.(FLAG_SCOPE, COMBAT_DAMAGE_FLAG_KEY);
+		if (existingRoll?.status === "awaiting-parry") {
+			throw new Error("Attack damage has already been rolled; parry reduction is pending.");
+		}
+		if (existingDamage) {
+			if (damageTransactionFor(message, existingDamage)?.state !== "reverted") {
+				throw new Error("Damage has already been resolved for this attack.");
+			}
+			await archiveAndClearCombatDamage(message, "damage-rerolled");
+		}
+
+		const attacker = await actorFromUuid(attack.attacker?.uuid);
+		const defender = await actorFromUuid(attack.target?.uuid);
+		if (!attacker || !defender) {
+			throw new Error("The attacker or defender Actor is no longer available.");
+		}
+		const weapon = weaponFromAttack(attacker, attack);
+
 		const attackOutcome = TestResultChat._templateContext(test).result;
 		const hitLocation = hitLocationFromAttackRoll(attackOutcome.roll);
 		const initialRoll = await new Roll("1d6").evaluate({ allowInteractive: false });
@@ -614,15 +636,16 @@ async function resolveParryAsAuthority(message, requestingUser) {
 		throw new Error("The requesting user may not roll this parry reduction.");
 	}
 
-	const attack = message.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY);
-	const rollState = message.getFlag?.(FLAG_SCOPE, COMBAT_DAMAGE_FLAG_KEY);
-	const defender = await actorFromUuid(attack?.target?.uuid);
-	if (!attack || !defender || rollState?.status !== "awaiting-parry") {
-		throw new Error("This attack is not waiting for a parry reduction roll.");
-	}
-
+	/* Serialize before resolving the defender UUID for the same race-safe reason. */
 	activeActions.add(actionKey);
 	try {
+		const attack = message.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY);
+		const rollState = message.getFlag?.(FLAG_SCOPE, COMBAT_DAMAGE_FLAG_KEY);
+		const defender = await actorFromUuid(attack?.target?.uuid);
+		if (!attack || !defender || rollState?.status !== "awaiting-parry") {
+			throw new Error("This attack is not waiting for a parry reduction roll.");
+		}
+
 		const parryRoll = await new Roll("1d6").evaluate({ allowInteractive: false });
 		await showRollAnimation(parryRoll, requestingUser);
 		const updated = foundry.utils.deepClone(rollState);
