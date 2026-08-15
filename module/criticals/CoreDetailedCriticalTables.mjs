@@ -275,7 +275,7 @@ const EFFECTS = deepFreeze({
 	body: [
 		effect(
 			"Your blow crashes into the chest. Winded, your opponent may do nothing except parry in the next round.",
-			"Twój cios trafia w klatkę piersiową. Przeciwnik na zaczerpnięcie oddechu i w ciągu następnej rundy nie może robić nic, poza parowaniem.",
+			"Twój cios trafia w klatkę piersiową. Przeciwnik nie może zaczerpnąć oddechu i w ciągu następnej rundy nie może robić nic, poza parowaniem.",
 		),
 		effect(
 			"Your blow strikes the groin. Doubled up in agony, your opponent may do nothing at all for the next round.",
