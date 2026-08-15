@@ -145,6 +145,7 @@ export async function applyDetailedCriticalWound(message) {
 			providerId: String(resolution.effect?.providerId ?? ""),
 			tableUuid: String(resolution.effect?.tableUuid ?? ""),
 			tableResultId: String(resolution.effect?.resultId ?? ""),
+			effectNumber: Number(resolution.effectNumber ?? 0),
 			roll: Number(resolution.roll?.total ?? 0),
 			resolvedByUserId: String(resolution.resolvedBy ?? ""),
 			resolvedAt: Number(resolution.resolvedAt ?? 0),
