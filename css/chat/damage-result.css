@@ -32,6 +32,47 @@
 	margin-top: 0.2rem;
 }
 
+.wfrp1e-damage-card__roll-row {
+	align-items: center;
+}
+
+.wfrp1e-damage-roll {
+	display: inline-flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 0.25rem;
+	min-width: 0;
+}
+
+.wfrp1e-damage-roll__dice {
+	display: inline-flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 0.18rem;
+	flex-wrap: wrap;
+}
+
+.wfrp1e-damage-die {
+	font-size: 1.3rem;
+	line-height: 1;
+}
+
+.wfrp1e-damage-roll__operator {
+	font-weight: 700;
+}
+
+.wfrp1e-damage-roll__total {
+	width: 3.2rem;
+	height: 1.7rem;
+	padding: 0.1rem 0.25rem;
+	text-align: center;
+	font-weight: 700;
+}
+
+.wfrp1e-damage-roll__total.is-editable:not(:disabled) {
+	cursor: text;
+}
+
 .wfrp1e-damage-card__mitigation {
 	margin-top: 0.35rem;
 	padding-top: 0.35rem;
@@ -48,7 +89,8 @@
 	text-align: center;
 }
 
-.wfrp1e-damage-card.is-applied .wfrp1e-damage-card__status {
+.wfrp1e-damage-card.is-applied .wfrp1e-damage-card__status,
+.wfrp1e-damage-card.is-zero-damage .wfrp1e-damage-card__status {
 	font-weight: 700;
 }
 
