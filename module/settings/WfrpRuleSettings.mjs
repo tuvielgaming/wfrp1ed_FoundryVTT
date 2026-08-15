@@ -15,8 +15,15 @@ const OWNED_DAMAGE_AUTOMATION_SETTING_KEY = "autoRollDamageForOwnedActors";
  * Rules which change the shared world contract use world scope. Automatic rolls
  * for player-owned Actors are a client preference so every player may decide
  * whether their own damage/parry dice wait for a click or roll immediately.
+ *
+ * Damage automation may be suspended transiently while an already-resolved Test
+ * is being adjudicated. This is runtime-only state: it prevents an automatic
+ * reroll from racing the reconciliation of the original, already-rolled damage
+ * dice and is never persisted as a world/user preference.
  */
 export class WfrpRuleSettings {
+	static #damageAutomationSuspensions = new Set();
+
 	static register() {
 		game.settings.register(game.system.id, SHIELD_PARRY_SETTING_KEY, {
 			name: game.i18n.localize("WFRP1ED.Settings.ParryEconomy.Name"),
@@ -95,11 +102,39 @@ export class WfrpRuleSettings {
 	}
 
 	static autoRollDamageForGmActors() {
-		return this.#booleanSetting(GM_DAMAGE_AUTOMATION_SETTING_KEY, true);
+		return !this.damageAutomationSuspended() &&
+			this.#booleanSetting(GM_DAMAGE_AUTOMATION_SETTING_KEY, true);
 	}
 
 	static autoRollDamageForOwnedActors() {
-		return this.#booleanSetting(OWNED_DAMAGE_AUTOMATION_SETTING_KEY, false);
+		return !this.damageAutomationSuspended() &&
+			this.#booleanSetting(OWNED_DAMAGE_AUTOMATION_SETTING_KEY, false);
+	}
+
+	/**
+	 * Temporarily suppress automatic damage/parry dice while a resolved combat
+	 * transaction is being reconciled after GM adjudication.
+	 *
+	 * @param {string} key Stable runtime reconciliation id.
+	 * @returns {string}
+	 */
+	static suspendDamageAutomation(key) {
+		const id = String(key ?? "").trim();
+		if (!id) {
+			throw new Error("Damage automation suspension requires a non-empty key.");
+		}
+		this.#damageAutomationSuspensions.add(id);
+		return id;
+	}
+
+	/** @param {string} key */
+	static resumeDamageAutomation(key) {
+		this.#damageAutomationSuspensions.delete(String(key ?? "").trim());
+	}
+
+	/** @returns {boolean} */
+	static damageAutomationSuspended() {
+		return this.#damageAutomationSuspensions.size > 0;
 	}
 
 	/** Optional interpretation: all parry costs are confined to this round. */
