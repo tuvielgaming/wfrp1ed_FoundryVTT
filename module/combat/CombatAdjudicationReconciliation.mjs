@@ -163,9 +163,22 @@ async function reconcileDefenceAdjudication(defenceMessage, snapshot) {
 		restored.updatedAt = Date.now();
 
 		if (outcome.parrySucceeded) {
-			const existingReduction = Number(restored.parry?.reduction);
+			const reductionValue = restored.parry?.reduction;
+			const existingReduction = Number(reductionValue);
+			/*
+			 * A Core parry reduction is a real 1d6 result, therefore only 1..6 is
+			 * reusable. Number(null) is 0, which previously made a failed->successful
+			 * adjudication look as though a reduction had already been rolled and
+			 * incorrectly rebuilt damage with "Parry 0" instead of asking the defender
+			 * for the reduction die.
+			 */
 			const hasExistingReduction =
-				Number.isInteger(existingReduction) && existingReduction >= 0;
+				reductionValue !== null &&
+				reductionValue !== undefined &&
+				reductionValue !== "" &&
+				Number.isInteger(existingReduction) &&
+				existingReduction >= 1 &&
+				existingReduction <= 6;
 			restored.parry = {
 				...(restored.parry ?? {}),
 				succeeded: true,
