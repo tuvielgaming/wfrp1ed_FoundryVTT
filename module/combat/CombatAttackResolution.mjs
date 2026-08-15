@@ -1,4 +1,8 @@
-import { WEAPON_KIND } from "../data-models/item/WeaponData.mjs";
+import {
+	WEAPON_KIND,
+	weaponOptionalModifierSnapshot,
+} from "../data-models/item/WeaponData.mjs";
+import { WfrpRuleSettings } from "../settings/WfrpRuleSettings.mjs";
 import { CombatAttackEconomy } from "./CombatAttackEconomy.mjs";
 import { CombatEquipmentState } from "./CombatEquipmentState.mjs";
 import { CombatAttackResultChat } from "./CombatAttackResultChat.mjs";
@@ -64,8 +68,29 @@ export class CombatAttackResolution {
 			attackCost = 1;
 		}
 
+		const optionalWeaponModifiers =
+			WfrpRuleSettings.usesOptionalWeaponModifiers();
+		const weaponModifiers = optionalWeaponModifiers
+			? weaponOptionalModifierSnapshot(weapon)
+			: null;
+		const toHitModifier = integer(weaponModifiers?.toHit);
+		const testModifiers = [];
+		if (toHitModifier !== 0) {
+			testModifiers.push({
+				id: "weapon-optional-to-hit",
+				value: toHitModifier,
+				source: localize(
+					`Weapon modifier — ${weapon.name}`,
+					`Modyfikator broni — ${weapon.name}`,
+				),
+				type: "weapon",
+				enabled: true,
+			});
+		}
+
 		const options = {
 			modifier: finiteNumber(configuration?.modifier ?? 0, "Attack modifier"),
+			modifiers: testModifiers,
 			resultVisibility: configuration?.resultVisibility,
 			ruleEffects: mutableRuleEffects(configuration?.ruleEffects),
 		};
@@ -82,7 +107,7 @@ export class CombatAttackResolution {
 		}
 
 		const attackState = {
-			version: 2,
+			version: 3,
 			family: WEAPON_KIND.MELEE,
 			status: "rolled",
 			managedByCombat: Boolean(combatant),
@@ -95,6 +120,10 @@ export class CombatAttackResolution {
 				uuid: weapon.uuid,
 				name: String(weapon.name ?? ""),
 				kind: WEAPON_KIND.MELEE,
+				optionalModifiersApplied: optionalWeaponModifiers,
+				optionalModifiers: weaponModifiers
+					? foundry.utils.deepClone(weaponModifiers)
+					: null,
 			},
 			targetMode,
 			target: targetMode === COMBAT_ATTACK_TARGET_MODE.DEFENDER
@@ -177,6 +206,11 @@ function mutableRuleEffects(value) {
 		...entry,
 		source: { ...(entry?.source ?? {}) },
 	}));
+}
+
+function integer(value) {
+	const number = Number(value);
+	return Number.isFinite(number) ? Math.trunc(number) : 0;
 }
 
 function finiteNumber(value, label) {
