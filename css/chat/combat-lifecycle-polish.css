@@ -14,3 +14,51 @@
 .wfrp1e-damage-card__details-body {
 	padding-top: 0.2rem;
 }
+
+.combat-damage-context__pending-parry.is-relocated-to-defence {
+	margin-top: 0.55rem;
+	padding-top: 0.5rem;
+	border-top: 1px solid rgb(74 52 31 / 24%);
+}
+
+.wfrp1e-critical-result__roll-editor {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.6rem;
+}
+
+.wfrp1e-critical-result__roll-label {
+	font-weight: 700;
+}
+
+.wfrp1e-critical-result__roll-input {
+	width: 4.5rem;
+	height: 1.65rem;
+	padding: 0.1rem 0.35rem;
+	border: 1px solid transparent;
+	border-radius: 3px;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	font-weight: 700;
+	text-align: right;
+}
+
+.wfrp1e-critical-result__roll-input.is-editable {
+	border-color: rgb(74 52 31 / 36%);
+	background: rgb(255 255 255 / 42%);
+	box-shadow: inset 0 1px 2px rgb(0 0 0 / 8%);
+	cursor: text;
+}
+
+.wfrp1e-critical-result__roll-input.is-editable:hover,
+.wfrp1e-critical-result__roll-input.is-editable:focus {
+	border-color: rgb(74 52 31 / 60%);
+	outline: none;
+	background: rgb(255 255 255 / 66%);
+}
+
+.wfrp1e-critical-result__roll-input.is-readonly {
+	pointer-events: none;
+}
