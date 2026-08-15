@@ -34,6 +34,12 @@ Hooks.on("deleteChatMessage", (message) => {
 	queueMicrotask(() => void removeAllCriticalMessagesForPacket(state.packetId));
 });
 
+/* Repair historical duplicate result cards left by older development builds. */
+Hooks.once("ready", () => {
+	if (!canAuthoritativelyDeleteChat()) return;
+	void repairExistingCriticalResultMessages();
+});
+
 /* Final presentation guard: one applied-fatal confirmation, never duplicates. */
 Hooks.on("renderChatMessageHTML", (message, html) => {
 	const state = detailedCriticalState(message);
@@ -62,6 +68,27 @@ Hooks.on("updateActor", () => {
 		}
 	});
 });
+
+async function repairExistingCriticalResultMessages() {
+	const packetIds = new Set(
+		[...(game.messages ?? [])]
+			.map((message) => String(detailedCriticalState(message)?.packetId ?? ""))
+			.filter(Boolean),
+	);
+
+	for (const packetId of packetIds) {
+		const messages = criticalMessagesForPacket(packetId)
+			.sort(compareNewestFirst);
+		if (messages.length === 0) continue;
+
+		const context = damageContext(detailedCriticalState(messages[0]));
+		const keep = context?.transaction?.criticalResolution ? messages[0] : null;
+		await deleteMessages(
+			messages.filter((message) => !keep || message.id !== keep.id),
+			packetId,
+		);
+	}
+}
 
 async function removeSiblingCriticalMessages(currentMessage, packetId) {
 	if (!canAuthoritativelyDeleteChat()) return;
@@ -138,6 +165,12 @@ function isAppliedFatalConfirmation(element) {
 	const text = String(element?.textContent ?? "").toLowerCase();
 	return text.includes("fatal critical applied") ||
 		text.includes("zastosowano śmiertelne trafienie krytyczne");
+}
+
+function compareNewestFirst(left, right) {
+	const leftTime = Number(left?._stats?.createdTime ?? left?.timestamp ?? 0);
+	const rightTime = Number(right?._stats?.createdTime ?? right?.timestamp ?? 0);
+	return (rightTime - leftTime) || String(right?.id ?? "").localeCompare(String(left?.id ?? ""));
 }
 
 function canAuthoritativelyDeleteChat() {
