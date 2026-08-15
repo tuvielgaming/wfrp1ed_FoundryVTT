@@ -21,37 +21,20 @@ const ADDITIONAL_DAMAGE_FLAG_KEY = "combatAdditionalDamageTest";
 const defenceReconciliations = new Map();
 const additionalDamageReconciliations = new Set();
 
-/**
- * Preserve already-rolled random dice when a GM adjudicates a later combat Test.
- *
- * The base combat integration deliberately invalidates an unapplied DamagePacket
- * when its defence Test changes. That is correct for the derived resolution, but
- * a failed->successful Parry must not become a way to reroll the attacker's
- * already-known damage die. This layer snapshots that roll before invalidation,
- * temporarily pauses automatic damage rolling, and rebuilds only the dependent
- * stages from the original random result.
- *
- * The same principle applies to the Core Additional Damage confirmation Test:
- * editing its result changes whether the extra exploding d6 sequence exists,
- * while the original attack damage d6 is immutable. If the confirmation becomes
- * successful for the first time, only the newly-required extra d6 sequence is
- * rolled.
- */
 Hooks.on("preUpdateChatMessage", (message, changes) => {
 	if (!testStateChanged(changes)) return;
 
 	const defence = message?.getFlag?.(FLAG_SCOPE, DEFENCE_RESULT_FLAG_KEY);
 	if (defence?.attackMessageId) {
-		prepareDefenceReconciliation(message, defence);
+		const attackMessage = game.messages?.get(String(defence.attackMessageId));
+		if (attackMessage && canMutateAttackMessage(attackMessage)) {
+			prepareDefenceReconciliation(message, defence);
+		}
 		return;
 	}
 
-	const additional = message?.getFlag?.(
-		FLAG_SCOPE,
-		ADDITIONAL_DAMAGE_FLAG_KEY,
-	);
+	const additional = message?.getFlag?.(FLAG_SCOPE, ADDITIONAL_DAMAGE_FLAG_KEY);
 	if (!additional?.attackMessageId) return;
-
 	const attackMessage = game.messages?.get(String(additional.attackMessageId));
 	if (!attackMessage) return;
 	if (hasAppliedDamage(attackMessage)) {
@@ -68,43 +51,43 @@ Hooks.on("updateChatMessage", (message, changes) => {
 
 	const defence = message?.getFlag?.(FLAG_SCOPE, DEFENCE_RESULT_FLAG_KEY);
 	if (defence?.attackMessageId) {
-		const snapshot = defenceReconciliations.get(String(message.id));
-		if (snapshot) {
-			void reconcileDefenceAdjudication(message, snapshot);
+		const messageId = String(message.id ?? "");
+		const attackMessage = game.messages?.get(String(defence.attackMessageId));
+		if (!attackMessage || !canMutateAttackMessage(attackMessage)) {
+			const localSnapshot = defenceReconciliations.get(messageId);
+			if (localSnapshot) finishDefenceReconciliation(messageId, localSnapshot);
+			return;
 		}
+
+		let snapshot = defenceReconciliations.get(messageId);
+		if (!snapshot) {
+			prepareDefenceReconciliation(message, defence);
+			snapshot = defenceReconciliations.get(messageId);
+		}
+		if (snapshot) void reconcileDefenceAdjudication(message, snapshot);
 		return;
 	}
 
-	const additional = message?.getFlag?.(
-		FLAG_SCOPE,
-		ADDITIONAL_DAMAGE_FLAG_KEY,
-	);
+	const additional = message?.getFlag?.(FLAG_SCOPE, ADDITIONAL_DAMAGE_FLAG_KEY);
 	if (additional?.attackMessageId) {
+		const attackMessage = game.messages?.get(String(additional.attackMessageId));
+		if (!attackMessage || !canMutateAttackMessage(attackMessage)) return;
 		void reconcileAdditionalDamageAdjudication(message, additional);
 	}
 });
 
 function prepareDefenceReconciliation(defenceMessage, defence) {
 	const attackMessage = game.messages?.get(String(defence.attackMessageId ?? ""));
-	if (!attackMessage || hasAppliedDamage(attackMessage)) return;
+	if (!attackMessage || !canMutateAttackMessage(attackMessage) || hasAppliedDamage(attackMessage)) return;
 
-	const rollState = attackMessage.getFlag?.(
-		FLAG_SCOPE,
-		COMBAT_DAMAGE_FLAG_KEY,
-	);
+	const rollState = attackMessage.getFlag?.(FLAG_SCOPE, COMBAT_DAMAGE_FLAG_KEY);
 	if (!rollState) return;
-
-	const damageState = attackMessage.getFlag?.(
-		FLAG_SCOPE,
-		DAMAGE_FLAG_KEY,
-	);
+	const damageState = attackMessage.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG_KEY);
 	const suspensionKey = `defence-adjudication:${String(attackMessage.id)}`;
 	WfrpRuleSettings.suspendDamageAutomation(suspensionKey);
 
 	const previous = defenceReconciliations.get(String(defenceMessage.id));
-	if (previous?.suspensionKey) {
-		WfrpRuleSettings.resumeDamageAutomation(previous.suspensionKey);
-	}
+	if (previous?.suspensionKey) WfrpRuleSettings.resumeDamageAutomation(previous.suspensionKey);
 
 	const snapshot = {
 		attackMessageId: String(attackMessage.id),
@@ -115,7 +98,6 @@ function prepareDefenceReconciliation(defenceMessage, defence) {
 	};
 	defenceReconciliations.set(String(defenceMessage.id), snapshot);
 
-	/* Safety valve in case another module cancels the update after this hook. */
 	setTimeout(() => {
 		const current = defenceReconciliations.get(String(defenceMessage.id));
 		if (current !== snapshot) return;
@@ -127,32 +109,17 @@ function prepareDefenceReconciliation(defenceMessage, defence) {
 async function reconcileDefenceAdjudication(defenceMessage, snapshot) {
 	const messageId = String(defenceMessage?.id ?? "");
 	if (!messageId || defenceReconciliations.get(messageId) !== snapshot) return;
-
 	const attackMessage = game.messages?.get(String(snapshot.attackMessageId ?? ""));
-	if (!attackMessage) {
+	if (!attackMessage || !canMutateAttackMessage(attackMessage)) {
 		finishDefenceReconciliation(messageId, snapshot);
 		return;
 	}
 
 	try {
-		/*
-		 * CombatDamageIntegration archives/unsets the stale result asynchronously.
-		 * Wait for that authoritative invalidation before rebuilding from our saved
-		 * random roll. Automation is suspended during this window, so an NPC cannot
-		 * race us by producing a replacement damage die.
-		 */
 		const cleared = await waitForDamageRollClear(attackMessage, snapshot.rollState);
 		if (!cleared) return;
-
 		const outcome = CombatDefenceTransaction.outcomeForAttack(attackMessage);
-		if (
-			!outcome?.attackHit ||
-			outcome.defenceStatus !== "resolved" ||
-			!outcome.continueToDamage
-		) {
-			return;
-		}
-
+		if (!outcome?.attackHit || outcome.defenceStatus !== "resolved" || !outcome.continueToDamage) return;
 		const attackState = attackMessage.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY);
 		if (!attackState) return;
 
@@ -165,20 +132,9 @@ async function reconcileDefenceAdjudication(defenceMessage, snapshot) {
 		if (outcome.parrySucceeded) {
 			const reductionValue = restored.parry?.reduction;
 			const existingReduction = Number(reductionValue);
-			/*
-			 * A Core parry reduction is a real 1d6 result, therefore only 1..6 is
-			 * reusable. Number(null) is 0, which previously made a failed->successful
-			 * adjudication look as though a reduction had already been rolled and
-			 * incorrectly rebuilt damage with "Parry 0" instead of asking the defender
-			 * for the reduction die.
-			 */
 			const hasExistingReduction =
-				reductionValue !== null &&
-				reductionValue !== undefined &&
-				reductionValue !== "" &&
-				Number.isInteger(existingReduction) &&
-				existingReduction >= 1 &&
-				existingReduction <= 6;
+				reductionValue !== null && reductionValue !== undefined && reductionValue !== "" &&
+				Number.isInteger(existingReduction) && existingReduction >= 1 && existingReduction <= 6;
 			restored.parry = {
 				...(restored.parry ?? {}),
 				succeeded: true,
@@ -186,14 +142,9 @@ async function reconcileDefenceAdjudication(defenceMessage, snapshot) {
 				itemUuid: String(attackState.defence?.itemUuid ?? ""),
 				reduction: hasExistingReduction ? existingReduction : null,
 			};
-
 			if (!hasExistingReduction) {
 				restored.status = "awaiting-parry";
-				await attackMessage.setFlag(
-					FLAG_SCOPE,
-					COMBAT_DAMAGE_FLAG_KEY,
-					restored,
-				);
+				await attackMessage.setFlag(FLAG_SCOPE, COMBAT_DAMAGE_FLAG_KEY, restored);
 				return;
 			}
 		} else {
@@ -207,17 +158,9 @@ async function reconcileDefenceAdjudication(defenceMessage, snapshot) {
 		}
 
 		restored.status = "resolved";
-		await rebuildDamageFromPreservedRoll(
-			attackMessage,
-			attackState,
-			restored,
-			snapshot.damageState,
-		);
+		await rebuildDamageFromPreservedRoll(attackMessage, attackState, restored, snapshot.damageState);
 	} catch (error) {
-		console.error(
-			"WFRP1ED | Unable to reconcile damage after defence adjudication.",
-			error,
-		);
+		console.error("WFRP1ED | Unable to reconcile damage after defence adjudication.", error);
 		ui.notifications.error(error?.message ?? localize(
 			"Unable to reconcile the original damage roll after defence adjudication.",
 			"Nie udało się odtworzyć pierwotnego rzutu obrażeń po zmianie wyniku obrony.",
@@ -229,20 +172,14 @@ async function reconcileDefenceAdjudication(defenceMessage, snapshot) {
 }
 
 function finishDefenceReconciliation(messageId, snapshot) {
-	if (defenceReconciliations.get(messageId) === snapshot) {
-		defenceReconciliations.delete(messageId);
-	}
-	if (snapshot?.suspensionKey) {
-		WfrpRuleSettings.resumeDamageAutomation(snapshot.suspensionKey);
-	}
+	if (defenceReconciliations.get(messageId) === snapshot) defenceReconciliations.delete(messageId);
+	if (snapshot?.suspensionKey) WfrpRuleSettings.resumeDamageAutomation(snapshot.suspensionKey);
 }
 
 async function waitForDamageRollClear(message, originalRoll) {
 	for (let attempt = 0; attempt < 60; attempt += 1) {
 		const current = message.getFlag?.(FLAG_SCOPE, COMBAT_DAMAGE_FLAG_KEY);
 		if (!current) return true;
-
-		/* If another integration already reconciled to a different roll, do not clobber it. */
 		if (!sameRollIdentity(current, originalRoll)) return false;
 		await delay(10);
 	}
@@ -251,19 +188,17 @@ async function waitForDamageRollClear(message, originalRoll) {
 
 function sameRollIdentity(left, right) {
 	return Boolean(
-		left &&
-		right &&
+		left && right &&
 		Number(left.rolledAt) === Number(right.rolledAt) &&
-		Number(left.initialDie) === Number(right.initialDie),
+		Number(left.initialDie) === Number(right.initialDie)
 	);
 }
 
 async function reconcileAdditionalDamageAdjudication(testMessage, marker) {
 	const testMessageId = String(testMessage?.id ?? "");
 	if (!testMessageId || additionalDamageReconciliations.has(testMessageId)) return;
-
 	const attackMessage = game.messages?.get(String(marker.attackMessageId ?? ""));
-	if (!attackMessage || hasAppliedDamage(attackMessage)) return;
+	if (!attackMessage || !canMutateAttackMessage(attackMessage) || hasAppliedDamage(attackMessage)) return;
 	const rollState = attackMessage.getFlag?.(FLAG_SCOPE, COMBAT_DAMAGE_FLAG_KEY);
 	if (!rollState || Number(rollState.initialDie) !== 6) return;
 
@@ -283,9 +218,7 @@ async function reconcileAdditionalDamageAdjudication(testMessage, marker) {
 			testRoll: Number(result.roll),
 			testTarget: Number(result.target),
 			testSucceeded: isSuccessful,
-			extraDice: Array.isArray(previous.extraDice)
-				? [...previous.extraDice]
-				: [],
+			extraDice: Array.isArray(previous.extraDice) ? [...previous.extraDice] : [],
 		};
 
 		if (isSuccessful && !wasSuccessful) {
@@ -293,12 +226,6 @@ async function reconcileAdditionalDamageAdjudication(testMessage, marker) {
 		} else if (!isSuccessful) {
 			updated.additionalDamage.extraDice = [];
 		}
-
-		/*
-		 * An adjudication which crosses success/failure changes the actual dice
-		 * participating in damage, so a previous manual sum override is no longer
-		 * meaningful. Success->success preserves both extra dice and any manual sum.
-		 */
 		if (isSuccessful !== wasSuccessful) {
 			updated.diceTotalOverridden = false;
 			updated.diceTotalOverriddenBy = null;
@@ -314,9 +241,7 @@ async function reconcileAdditionalDamageAdjudication(testMessage, marker) {
 		if (!updated.diceTotalOverridden) updated.diceTotal = rolledTotal;
 		updated.generatedDamage = Math.max(
 			0,
-			nonNegativeInteger(updated.diceTotal) +
-				integer(updated.strength) +
-				integer(updated.weaponDamageModifier),
+			nonNegativeInteger(updated.diceTotal) + integer(updated.strength) + integer(updated.weaponDamageModifier),
 		);
 		updated.rawAmount = updated.generatedDamage;
 		updated.updatedBy = String(game.user?.id ?? "");
@@ -324,30 +249,16 @@ async function reconcileAdditionalDamageAdjudication(testMessage, marker) {
 
 		const attackState = attackMessage.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY);
 		if (!attackState) return;
-
 		if (updated.status === "awaiting-parry") {
-			await attackMessage.setFlag(
-				FLAG_SCOPE,
-				COMBAT_DAMAGE_FLAG_KEY,
-				updated,
-			);
+			await attackMessage.setFlag(FLAG_SCOPE, COMBAT_DAMAGE_FLAG_KEY, updated);
 			void ui.chat?.render?.({ force: true });
 			return;
 		}
-
 		const currentDamage = attackMessage.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG_KEY);
-		await rebuildDamageFromPreservedRoll(
-			attackMessage,
-			attackState,
-			updated,
-			currentDamage,
-		);
+		await rebuildDamageFromPreservedRoll(attackMessage, attackState, updated, currentDamage);
 		void ui.chat?.render?.({ force: true });
 	} catch (error) {
-		console.error(
-			"WFRP1ED | Unable to reconcile Additional Damage adjudication.",
-			error,
-		);
+		console.error("WFRP1ED | Unable to reconcile Additional Damage adjudication.", error);
 		ui.notifications.error(error?.message ?? localize(
 			"Unable to update damage after changing the Additional Damage confirmation Test.",
 			"Nie udało się zaktualizować obrażeń po zmianie testu potwierdzającego Obrażenia dodatkowe.",
@@ -372,34 +283,21 @@ async function rollExplodingAdditionalDamage() {
 	return dice;
 }
 
-async function rebuildDamageFromPreservedRoll(
-	message,
-	attackState,
-	rollState,
-	existingDamageState,
-) {
-	const defender = actorFromUuidSync(
-		attackState?.target?.uuid ?? rollState?.defenderUuid,
-	);
+async function rebuildDamageFromPreservedRoll(message, attackState, rollState, existingDamageState) {
+	const defender = actorFromUuidSync(attackState?.target?.uuid ?? rollState?.defenderUuid);
 	if (!(defender instanceof foundry.documents.Actor)) {
 		throw new Error("The defender is no longer available for damage reconciliation.");
 	}
 
-	const existingPacket = existingDamageState?.packet
-		? DamagePacket.fromJSON(existingDamageState.packet)
-		: null;
+	const existingPacket = existingDamageState?.packet ? DamagePacket.fromJSON(existingDamageState.packet) : null;
 	const parry = rollState.parry ?? {};
-	const specialMitigation =
-		parry.succeeded === true &&
-		Number.isInteger(Number(parry.reduction))
-			? {
-				parry: {
-					reduction: nonNegativeInteger(parry.reduction),
-					itemName: String(parry.itemName ?? ""),
-					itemUuid: String(parry.itemUuid ?? ""),
-				},
-			}
-			: {};
+	const specialMitigation = parry.succeeded === true && Number.isInteger(Number(parry.reduction))
+		? { parry: {
+			reduction: nonNegativeInteger(parry.reduction),
+			itemName: String(parry.itemName ?? ""),
+			itemUuid: String(parry.itemUuid ?? ""),
+		} }
+		: {};
 
 	const packet = new DamagePacket({
 		id: existingPacket?.id ?? null,
@@ -446,6 +344,21 @@ function hasAppliedDamage(message) {
 		DamageApplication.transactionFor(actor, state.packet.id)?.state === "applied";
 }
 
+function canMutateAttackMessage(message) {
+	if (!message?.id || !game.user) return false;
+	const primary = primaryActiveGm();
+	if (primary) {
+		return Boolean(game.user.isGM && String(game.user.id) === String(primary.id));
+	}
+	return message.canUserModify?.(game.user, "update") === true;
+}
+
+function primaryActiveGm() {
+	return [...(game.users ?? [])]
+		.filter((user) => user?.active && user?.isGM)
+		.sort((left, right) => String(left.id).localeCompare(String(right.id)))[0] ?? null;
+}
+
 function actorFromUuidSync(uuid) {
 	try {
 		const document = foundry.utils.fromUuidSync(String(uuid ?? "").trim());
@@ -462,18 +375,14 @@ async function showRollAnimation(roll) {
 	try {
 		await game.dice3d.showForRoll(roll, game.user, true);
 	} catch (error) {
-		console.warn(
-			"WFRP1ED | Dice So Nice could not animate reconciled Additional Damage.",
-			error,
-		);
+		console.warn("WFRP1ED | Dice So Nice could not animate reconciled Additional Damage.", error);
 	}
 }
 
 function testStateChanged(changes) {
 	if (!changes || typeof changes !== "object") return false;
 	const path = `flags.${FLAG_SCOPE}.${TEST_FLAG_KEY}`;
-	return Object.hasOwn(changes, path) ||
-		foundry.utils.getProperty?.(changes, path) !== undefined;
+	return Object.hasOwn(changes, path) || foundry.utils.getProperty?.(changes, path) !== undefined;
 }
 
 function delay(milliseconds) {
