@@ -1,3 +1,5 @@
+import { DamageApplication } from "../damage/DamageApplication.mjs";
+
 const FLAG_SCOPE = "wfrp1ed";
 const ATTACK_FLAG_KEY = "combatAttackResult";
 const DEFENCE_RESULT_FLAG_KEY = "combatDefenceResult";
@@ -7,7 +9,7 @@ const DAMAGE_STATE_FLAG_KEY = "damageState";
 const COMBAT_DAMAGE_FLAG_KEY = "combatDamageRoll";
 const CRITICAL_RESULT_FLAG_KEY = "criticalResult";
 const FATAL_APPLICATIONS_FLAG_KEY = "fatalCriticalApplications";
-const focusedParryStages = new Set();
+const focusedLifecycleStages = new Set();
 
 /**
  * Final presentation pass for the compact combat lifecycle.
@@ -55,6 +57,7 @@ function runFinalPass(message, root) {
 	removeDuplicateDetailedFatalControls(message, root);
 	lockAppliedFatalCriticalRoll(message, root);
 	relocatePendingParryControl(message);
+	maybeFocusRevertedDamage(message);
 }
 
 function scheduleVisibleCriticalCleanup() {
@@ -253,24 +256,71 @@ function maybeFocusPendingParry(attackMessage, defenceEntry, rollState) {
 	const attack = attackMessage.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY);
 	const defender = actorFromUuidSync(attack?.target?.uuid);
 	if (!(defender instanceof foundry.documents.Actor)) return;
+	if (!isRelevantController(defender)) return;
 
-	if (game.user.isGM) {
-		if (actorOwnedByPlayer(defender)) return;
-	} else if (!hasOwnerPermission(defender, game.user)) {
-		return;
-	}
+	focusChatEntryOnce(
+		defenceEntry,
+		[
+			"parry",
+			String(attackMessage.id ?? ""),
+			String(rollState?.rolledAt ?? rollState?.updatedAt ?? ""),
+			String(rollState?.initialDie ?? ""),
+		].join(":"),
+	);
+}
 
-	const stageKey = [
-		String(attackMessage.id ?? ""),
-		String(rollState?.rolledAt ?? rollState?.updatedAt ?? ""),
-		String(rollState?.initialDie ?? ""),
-	].join(":");
-	if (focusedParryStages.has(stageKey)) return;
-	focusedParryStages.add(stageKey);
+/**
+ * Damage invalidation keeps the old result as an audit record. When that exposes
+ * "Roll damage again" on the older source Attack message, center that message for
+ * the Actor who is actually responsible for the next roll instead of forcing the
+ * user to search backwards through Chat.
+ */
+function maybeFocusRevertedDamage(message) {
+	const attack = message?.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY);
+	const damageState = message?.getFlag?.(FLAG_SCOPE, DAMAGE_STATE_FLAG_KEY);
+	if (!attack || !damageState?.packet?.id) return;
+
+	const defender = actorFromUuidSync(damageState.packet.targetActorUuid);
+	if (!(defender instanceof foundry.documents.Actor)) return;
+	const transaction = DamageApplication.transactionFor(
+		defender,
+		damageState.packet.id,
+	);
+	if (transaction?.state !== "reverted") return;
+
+	const attacker = actorFromUuidSync(attack.attacker?.uuid);
+	if (!(attacker instanceof foundry.documents.Actor)) return;
+	if (!isRelevantController(attacker)) return;
+
+	const entry = document.querySelector(
+		`[data-message-id="${cssEscape(message.id)}"]`,
+	);
+	if (!(entry instanceof HTMLElement)) return;
+
+	focusChatEntryOnce(
+		entry,
+		[
+			"damage-reroll",
+			String(message.id ?? ""),
+			String(transaction.revertedAt ?? damageState.updatedAt ?? ""),
+		].join(":"),
+	);
+}
+
+function isRelevantController(actor) {
+	if (!(actor instanceof foundry.documents.Actor) || !game.user) return false;
+	if (game.user.isGM) return !actorOwnedByPlayer(actor);
+	return hasOwnerPermission(actor, game.user);
+}
+
+function focusChatEntryOnce(entry, stageKey) {
+	if (!(entry instanceof HTMLElement) || !stageKey) return;
+	if (focusedLifecycleStages.has(stageKey)) return;
+	focusedLifecycleStages.add(stageKey);
 	pruneFocusHistory();
 
 	requestAnimationFrame(() => {
-		defenceEntry.scrollIntoView?.({
+		entry.scrollIntoView?.({
 			behavior: "smooth",
 			block: "center",
 			inline: "nearest",
@@ -279,10 +329,10 @@ function maybeFocusPendingParry(attackMessage, defenceEntry, rollState) {
 }
 
 function pruneFocusHistory() {
-	while (focusedParryStages.size > 100) {
-		const oldest = focusedParryStages.values().next().value;
+	while (focusedLifecycleStages.size > 100) {
+		const oldest = focusedLifecycleStages.values().next().value;
 		if (oldest === undefined) return;
-		focusedParryStages.delete(oldest);
+		focusedLifecycleStages.delete(oldest);
 	}
 }
 
