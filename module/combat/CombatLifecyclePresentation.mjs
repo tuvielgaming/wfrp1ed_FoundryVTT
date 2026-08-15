@@ -1,15 +1,21 @@
 import { DamageApplication } from "../damage/DamageApplication.mjs";
 import { DamageChat } from "../damage/DamageChat.mjs";
+import {
+	resolveDetailedDamageMessageCritical,
+} from "../criticals/DetailedCriticalIntegration.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
+const ATTACK_FLAG_KEY = "combatAttackResult";
 const DAMAGE_FLAG_KEY = "damageState";
+const COMBAT_DAMAGE_FLAG_KEY = "combatDamageRoll";
+const DAMAGE_RESULT_VIEW_FLAG_KEY = "combatDamageResultView";
 const CRITICAL_RESULT_FLAG_KEY = "criticalResult";
 const ADDITIONAL_DAMAGE_FLAG_KEY = "combatAdditionalDamageTest";
 const DAMAGE_APPLICATIONS_FLAG_KEY = "damageApplications";
 
 Hooks.once("init", () => {
 	/*
-	 * Damage application is now a visible action on the result itself. Keep one
+	 * Damage application is a visible action on the result itself. Keep one
 	 * interaction contract and do not also hide the same action in the generic
 	 * ChatMessage context menu.
 	 */
@@ -18,8 +24,16 @@ Hooks.once("init", () => {
 	Hooks.on("renderChatMessageHTML", (message, html) => {
 		relabelAdditionalDamageTest(message, html);
 		decorateInlineDamageApplication(message, html);
+		decorateDamageResultView(message, html);
 		decorateDetailedCriticalResult(message, html);
 		removeRevertedCriticalSourcePanel(message, html);
+
+		/* CombatDamageIntegration decorates the attack one animation frame later. */
+		requestAnimationFrame(() => hideEmbeddedResolvedDamage(message, html));
+	});
+
+	Hooks.on("updateChatMessage", (message) => {
+		void synchronizeDamageResultView(message);
 	});
 
 	Hooks.on("createChatMessage", (message) => {
@@ -27,6 +41,7 @@ Hooks.once("init", () => {
 	});
 
 	Hooks.on("updateActor", (actor, changes) => {
+		refreshDamageResultViewsForActor(actor);
 		void removeRevertedCriticalResultMessages(actor, changes);
 	});
 });
@@ -55,10 +70,18 @@ function relabelAdditionalDamageTest(message, html) {
 	}
 }
 
-/** Put Apply Damage directly on every actionable WFRP damage-bearing card. */
+/** Put Apply Damage directly on standalone/legacy damage-bearing cards. */
 function decorateInlineDamageApplication(message, html) {
 	const state = message?.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG_KEY);
 	if (!state?.packet?.id) return;
+
+	/* Combat attack damage is presented by its linked dedicated result card. */
+	if (
+		message.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY) &&
+		findDamageResultView(message.id, state.packet.id)
+	) {
+		return;
+	}
 
 	const root = asElement(html);
 	if (!root || root.querySelector("[data-wfrp-inline-apply-damage]")) {
@@ -90,6 +113,261 @@ function decorateInlineDamageApplication(message, html) {
 		);
 	}
 
+	host.append(buildApplyDamageButton(message));
+}
+
+/**
+ * A combat attack remains the source-of-truth transaction, while its damage is
+ * presented in a dedicated ChatMessage. This keeps Attack/Defence readable and
+ * avoids duplicating mutable DamageApplication state across two messages.
+ */
+async function synchronizeDamageResultView(sourceMessage) {
+	if (!sourceMessage?.id || !sourceMessage.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY)) {
+		return;
+	}
+	if (!isPrimaryActiveGM()) return;
+
+	const damageState = sourceMessage.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG_KEY);
+	const rollState = sourceMessage.getFlag?.(FLAG_SCOPE, COMBAT_DAMAGE_FLAG_KEY);
+
+	if (damageState?.packet?.id && rollState?.packetId) {
+		await ensureDamageResultView(sourceMessage, damageState, rollState);
+		return;
+	}
+
+	await removeOrphanedDamageResultViews(sourceMessage);
+}
+
+async function ensureDamageResultView(sourceMessage, damageState, rollState) {
+	const packetId = String(damageState?.packet?.id ?? "");
+	if (!packetId || findDamageResultView(sourceMessage.id, packetId)) return;
+
+	const actor = actorFromUuidSync(damageState.packet?.targetActorUuid);
+	const targetName = String(
+		actor?.name ??
+		damageState.targetName ??
+		damageState.packet?.targetActorUuid ??
+		"",
+	);
+	const content = damageResultContent(
+		damageState,
+		rollState,
+		targetName,
+	);
+	const speaker = actor
+		? ChatMessage.getSpeaker({ actor })
+		: {
+			scene: null,
+			actor: null,
+			token: null,
+			alias: targetName,
+		};
+
+	await ChatMessage.create({
+		speaker,
+		content,
+		whisper: foundry.utils.deepClone(sourceMessage.whisper ?? []),
+		blind: sourceMessage.blind === true,
+		flags: {
+			[FLAG_SCOPE]: {
+				[DAMAGE_RESULT_VIEW_FLAG_KEY]: {
+					version: 1,
+					sourceAttackMessageId: String(sourceMessage.id),
+					packetId,
+					targetActorUuid: String(
+						damageState.packet?.targetActorUuid ?? "",
+					),
+					createdAt: Date.now(),
+				},
+			},
+		},
+	});
+
+	void ui.chat?.render?.({ force: true });
+}
+
+async function removeOrphanedDamageResultViews(sourceMessage) {
+	const views = damageResultViewsForSource(sourceMessage.id);
+	for (const view of views) {
+		const state = view.getFlag?.(FLAG_SCOPE, DAMAGE_RESULT_VIEW_FLAG_KEY);
+		const actor = actorFromUuidSync(state?.targetActorUuid);
+		const transaction = actor
+			? DamageApplication.transactionFor(actor, state?.packetId)
+			: null;
+
+		/* A reverted result remains useful history and may precede a reroll. */
+		if (transaction?.state === "reverted") continue;
+		if (view.canUserModify?.(game.user, "delete")) {
+			await view.delete();
+		}
+	}
+}
+
+function damageResultContent(damageState, rollState, targetName) {
+	const resolution = damageState?.resolution ?? {};
+	const toughness = resolution.breakdown?.toughness ?? {};
+	const armour = resolution.breakdown?.armour ?? {};
+	const parry = resolution.breakdown?.parry ?? {};
+	const rows = [
+		rowHtml(localize("Target", "Cel"), targetName || "—"),
+		rowHtml(
+			localize("Hit location", "Lokacja trafienia"),
+			hitLocationLabel(rollState?.hitLocation),
+		),
+		rowHtml(
+			localize("Damage dice", "Kości obrażeń"),
+			damageDiceLabel(rollState),
+		),
+		rowHtml(
+			localize("Strength", "Siła"),
+			signedInteger(rollState?.strength),
+		),
+	];
+
+	if (Number(rollState?.weaponDamageModifier) !== 0) {
+		rows.push(rowHtml(
+			localize("Weapon modifier", "Modyfikator broni"),
+			signedInteger(rollState.weaponDamageModifier),
+		));
+	}
+	if (rollState?.additionalDamage?.triggered) {
+		rows.push(rowHtml(
+			localize("Additional Damage", "Obrażenia dodatkowe"),
+			additionalDamageLabel(rollState.additionalDamage),
+		));
+	}
+
+	rows.push(
+		rowHtml(
+			localize("Before Toughness", "Przed Wytrzymałością"),
+			String(damageState?.packet?.rawAmount ?? 0),
+		),
+		rowHtml(
+			localize("Toughness", "Wytrzymałość"),
+			`−${nonNegativeInteger(toughness.value)}`,
+		),
+		rowHtml(
+			localize("Armour", "Pancerz"),
+			armourLabel(armour),
+		),
+	);
+
+	if (parry.applied === true) {
+		rows.push(rowHtml(
+			localize("Successful Parry", "Udane Parowanie"),
+			localize(
+				`−${nonNegativeInteger(parry.rolledReduction)} rolled; ${nonNegativeInteger(parry.absorbed)} stopped (${parry.itemName || "—"})`,
+				`−${nonNegativeInteger(parry.rolledReduction)} na kości; zatrzymano ${nonNegativeInteger(parry.absorbed)} (${parry.itemName || "—"})`,
+			),
+		));
+	}
+
+	rows.push(rowHtml(
+		localize("Final damage", "Końcowe obrażenia"),
+		String(resolution.finalAmount ?? 0),
+	));
+
+	return `
+		<section class="wfrp1e-damage-card combat-damage-result-card" data-wfrp-combat-damage-result-card>
+			<div class="wfrp1e-damage-card__header">
+				<strong>${escapeHtml(localize("Damage", "Obrażenia"))}</strong>
+				<span class="wfrp1e-damage-card__amount">${escapeHtml(String(resolution.finalAmount ?? 0))}</span>
+			</div>
+			${rows.join("")}
+			<div class="wfrp1e-damage-card__status" data-wfrp-damage-result-status></div>
+			<div data-wfrp-damage-result-actions></div>
+		</section>
+	`;
+}
+
+function rowHtml(label, value) {
+	return `<div class="wfrp1e-damage-card__row"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`;
+}
+
+function decorateDamageResultView(message, html) {
+	const view = message?.getFlag?.(FLAG_SCOPE, DAMAGE_RESULT_VIEW_FLAG_KEY);
+	if (!view) return;
+
+	const root = asElement(html);
+	const card = root?.matches?.("[data-wfrp-combat-damage-result-card]")
+		? root
+		: root?.querySelector?.("[data-wfrp-combat-damage-result-card]");
+	if (!card) return;
+
+	const status = card.querySelector("[data-wfrp-damage-result-status]");
+	const actions = card.querySelector("[data-wfrp-damage-result-actions]");
+	if (!status || !actions) return;
+	const sourceMessage = game.messages?.get(
+		String(view.sourceAttackMessageId ?? ""),
+	);
+	const damageState = sourceMessage?.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG_KEY);
+	const actor = actorFromUuidSync(view.targetActorUuid);
+	const transaction = actor
+		? DamageApplication.transactionFor(actor, view.packetId)
+		: null;
+
+	card.classList.toggle("is-applied", transaction?.state === "applied");
+	card.classList.toggle("is-wfrp-transaction-reverted", transaction?.state === "reverted");
+	actions.replaceChildren();
+
+	if (transaction?.state === "reverted") {
+		status.textContent = localize(
+			`REVERTED · Wounds restored ${transaction.woundsAfter} → ${transaction.woundsBefore}`,
+			`COFNIĘTO · przywrócono Żywotność ${transaction.woundsAfter} → ${transaction.woundsBefore}`,
+		);
+		return;
+	}
+
+	if (transaction?.state === "applied") {
+		status.textContent = localize(
+			`Applied · Wounds ${transaction.woundsBefore} → ${transaction.woundsAfter}` +
+				(Number(transaction.criticalValue) > 0 ? ` · Critical +${transaction.criticalValue}` : ""),
+			`Zastosowano · Żywotność ${transaction.woundsBefore} → ${transaction.woundsAfter}` +
+				(Number(transaction.criticalValue) > 0 ? ` · Krytyk +${transaction.criticalValue}` : ""),
+		);
+
+		if (
+			Number(transaction.criticalValue) > 0 &&
+			!transaction.criticalResolution &&
+			sourceMessage &&
+			canResolveSourceCritical(sourceMessage, damageState)
+		) {
+			const button = document.createElement("button");
+			button.type = "button";
+			button.className = "wfrp1e-critical-result__action";
+			button.innerHTML = `<i class="fa-solid fa-burst"></i> ${localize(
+				"Resolve Detailed Critical",
+				"Rozstrzygnij szczegółowe trafienie krytyczne",
+			)}`;
+			button.addEventListener("click", () => {
+				button.disabled = true;
+				void resolveDetailedDamageMessageCritical(sourceMessage)
+					.catch(reportCriticalError)
+					.finally(() => {
+						if (button.isConnected) button.disabled = false;
+					});
+			});
+			actions.append(button);
+		}
+		return;
+	}
+
+	if (sourceMessage && DamageChat.canApplyMessage(sourceMessage)) {
+		status.textContent = localize(
+			"Damage resolved — ready to apply.",
+			"Obrażenia rozstrzygnięte — gotowe do zastosowania.",
+		);
+		actions.append(buildApplyDamageButton(sourceMessage));
+		return;
+	}
+
+	status.textContent = localize(
+		"Damage resolved — awaiting an authorized user to apply it.",
+		"Obrażenia rozstrzygnięte — oczekują na zastosowanie przez uprawnionego użytkownika.",
+	);
+}
+
+function buildApplyDamageButton(sourceMessage) {
 	const action = document.createElement("button");
 	action.type = "button";
 	action.classList.add(
@@ -105,13 +383,70 @@ function decorateInlineDamageApplication(message, html) {
 		event.preventDefault();
 		event.stopPropagation();
 		action.disabled = true;
-		void DamageChat.applyMessage(message).finally(() => {
-			if (action.isConnected) {
-				action.disabled = false;
-			}
+		void DamageChat.applyMessage(sourceMessage).finally(() => {
+			if (action.isConnected) action.disabled = false;
 		});
 	});
-	host.append(action);
+	return action;
+}
+
+function canResolveSourceCritical(sourceMessage, damageState, user = game.user) {
+	if (!sourceMessage || !damageState || !user) return false;
+	if (user.isGM) return true;
+	const sourceUserId = String(
+		damageState.createdBy ??
+		sourceMessage.user?.id ??
+		sourceMessage.author?.id ??
+		"",
+	).trim();
+	return Boolean(sourceUserId && sourceUserId === String(user.id ?? ""));
+}
+
+function hideEmbeddedResolvedDamage(message, html) {
+	const attack = message?.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY);
+	const damageState = message?.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG_KEY);
+	const rollState = message?.getFlag?.(FLAG_SCOPE, COMBAT_DAMAGE_FLAG_KEY);
+	if (!attack || !damageState?.packet?.id || !rollState) return;
+
+	const view = findDamageResultView(message.id, damageState.packet.id);
+	if (!view) return;
+	const actor = actorFromUuidSync(damageState.packet.targetActorUuid);
+	const transaction = actor
+		? DamageApplication.transactionFor(actor, damageState.packet.id)
+		: null;
+
+	/* Reverted source card keeps its Roll Again control. */
+	if (transaction?.state === "reverted") return;
+
+	const root = asElement(html);
+	root?.querySelector?.("[data-wfrp-combat-damage]")?.remove();
+	root?.querySelector?.("[data-wfrp-detailed-critical-panel]")?.remove();
+}
+
+function findDamageResultView(sourceMessageId, packetId) {
+	return damageResultViewsForSource(sourceMessageId).find((message) => {
+		const view = message.getFlag?.(FLAG_SCOPE, DAMAGE_RESULT_VIEW_FLAG_KEY);
+		return String(view?.packetId ?? "") === String(packetId ?? "");
+	}) ?? null;
+}
+
+function damageResultViewsForSource(sourceMessageId) {
+	const id = String(sourceMessageId ?? "");
+	if (!id) return [];
+	return [...(game.messages ?? [])].filter((message) => {
+		const view = message.getFlag?.(FLAG_SCOPE, DAMAGE_RESULT_VIEW_FLAG_KEY);
+		return String(view?.sourceAttackMessageId ?? "") === id;
+	});
+}
+
+function refreshDamageResultViewsForActor(actor) {
+	if (!(actor instanceof foundry.documents.Actor)) return;
+	for (const message of game.messages ?? []) {
+		const view = message.getFlag?.(FLAG_SCOPE, DAMAGE_RESULT_VIEW_FLAG_KEY);
+		if (String(view?.targetActorUuid ?? "") !== String(actor.uuid ?? "")) continue;
+		const entry = document.querySelector(`[data-message-id="${message.id}"]`);
+		if (entry) decorateDamageResultView(message, entry);
+	}
 }
 
 /**
@@ -304,6 +639,51 @@ function damageApplicationsChanged(changes) {
 		foundry.utils.getProperty?.(changes, path) !== undefined;
 }
 
+function additionalDamageLabel(additional) {
+	if (additional?.testSucceeded) {
+		const extra = Array.isArray(additional.extraDice) && additional.extraDice.length
+			? `; +${additional.extraDice.join(" + ")}`
+			: "";
+		return localize(
+			`WS test succeeded${extra}`,
+			`Test WW udany${extra}`,
+		);
+	}
+	return localize("WS test failed", "Test WW nieudany");
+}
+
+function hitLocationLabel(location) {
+	switch (String(location ?? "")) {
+		case "head": return localize("Head", "Głowa");
+		case "rightArm": return localize("Right Arm", "Prawa ręka");
+		case "leftArm": return localize("Left Arm", "Lewa ręka");
+		case "body": return localize("Body", "Korpus");
+		case "rightLeg": return localize("Right Leg", "Prawa noga");
+		case "leftLeg": return localize("Left Leg", "Lewa noga");
+		default: return String(location ?? "—");
+	}
+}
+
+function damageDiceLabel(state) {
+	const dice = Array.isArray(state?.damageDice)
+		? state.damageDice.map((value) => nonNegativeInteger(value))
+		: [];
+	return dice.length
+		? `${dice.join(" + ")} = ${dice.reduce((sum, value) => sum + value, 0)}`
+		: "—";
+}
+
+function armourLabel(armour) {
+	const value = nonNegativeInteger(armour?.value);
+	if (armour?.leather?.ignoredByHighDamage === true) {
+		return localize(
+			`−${value} (leather ignored: blow was 4+)`,
+			`−${value} (skóra pominięta: cios zadał 4+)`,
+		);
+	}
+	return `−${value}`;
+}
+
 function actorFromUuidSync(uuid) {
 	const value = String(uuid ?? "").trim();
 	if (!value) return null;
@@ -336,6 +716,39 @@ function asElement(html) {
 	if (html instanceof HTMLElement) return html;
 	if (html?.[0] instanceof HTMLElement) return html[0];
 	return null;
+}
+
+function integer(value) {
+	const number = Number(value);
+	return Number.isFinite(number) ? Math.trunc(number) : 0;
+}
+
+function nonNegativeInteger(value) {
+	return Math.max(0, integer(value));
+}
+
+function signedInteger(value) {
+	const number = integer(value);
+	return number >= 0 ? `+${number}` : String(number);
+}
+
+function escapeHtml(value) {
+	return String(value ?? "")
+		.replaceAll("&", "&amp;")
+		.replaceAll("<", "&lt;")
+		.replaceAll(">", "&gt;")
+		.replaceAll('"', "&quot;")
+		.replaceAll("'", "&#039;");
+}
+
+function reportCriticalError(error) {
+	console.error("WFRP1ED | Unable to resolve detailed critical.", error);
+	ui.notifications.error(
+		error?.message ?? localize(
+			"Unable to resolve the detailed critical.",
+			"Nie udało się rozstrzygnąć szczegółowego trafienia krytycznego.",
+		),
+	);
 }
 
 function localize(english, polish) {
