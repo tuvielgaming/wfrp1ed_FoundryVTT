@@ -1,6 +1,14 @@
+import {
+	detailedCriticalEffectText,
+	isCoreDetailedEffectProvider,
+} from "../criticals/CoreDetailedCriticalTables.mjs";
+
 const { ItemSheetV2 } = foundry.applications.sheets;
 const { DialogV2, HandlebarsApplicationMixin } =
 	foundry.applications.api;
+
+const FLAG_SCOPE = "wfrp1ed";
+const TABLE_RESULT_FLAG_KEY = "detailedCriticalEffect";
 
 /**
  * Native Foundry v14 sheet for persistent Critical Wound Items.
@@ -10,9 +18,11 @@ const { DialogV2, HandlebarsApplicationMixin } =
  * - read-only resolution provenance used for audit/debugging;
  * - native embedded ActiveEffects which own ongoing mechanical consequences.
  *
- * Exact WFRP injury mechanics are not authored by this sheet. A future audited
- * detailed-critical resolver will create the Item and its effects from verified
- * Core table data.
+ * Core Rulebook wound descriptions are a special case: their text is system-
+ * managed source material, not user-authored Item data. The sheet resolves that
+ * description from the wound's table provenance in the current client language,
+ * so Polish and English clients see the literal text from their corresponding
+ * Core Rulebook even if the Item was originally created under another locale.
  */
 export class CriticalWoundItemSheet extends HandlebarsApplicationMixin(
 	ItemSheetV2,
@@ -51,10 +61,13 @@ export class CriticalWoundItemSheet extends HandlebarsApplicationMixin(
 
 	async _prepareContext(options) {
 		const context = await super._prepareContext(options);
+		const description = buildDescriptionPresentation(this.document);
 
 		context.item = this.document;
 		context.system = this.document.system;
 		context.editable = this.isEditable;
+		context.description = description.text;
+		context.descriptionManagedByCore = description.managedByCore;
 		context.effects = buildEffectPresentation(this.document);
 		context.provenanceRows = buildProvenancePresentation(
 			this.document.system?.resolution,
@@ -130,6 +143,67 @@ export class CriticalWoundItemSheet extends HandlebarsApplicationMixin(
 		if (confirmed) {
 			await effect.delete();
 		}
+	}
+}
+
+function buildDescriptionPresentation(item) {
+	const fallback = String(item?.system?.description ?? "");
+	const resolution = item?.system?.resolution;
+	if (!isCoreDetailedEffectProvider(resolution?.providerId)) {
+		return {
+			text: fallback,
+			managedByCore: false,
+		};
+	}
+
+	const location = effectLocation(item?.system?.hitLocation);
+	const effectNumber = coreEffectNumber(resolution);
+	if (!location || !effectNumber) {
+		return {
+			text: fallback,
+			managedByCore: false,
+		};
+	}
+
+	const text = detailedCriticalEffectText(
+		location,
+		effectNumber,
+		game.i18n.lang,
+	);
+	return {
+		text: text || fallback,
+		managedByCore: Boolean(text),
+	};
+}
+
+function coreEffectNumber(resolution) {
+	const tableUuid = String(resolution?.tableUuid ?? "").trim();
+	const resultId = String(resolution?.tableResultId ?? "").trim();
+	if (!tableUuid || !resultId) return 0;
+
+	try {
+		const table = foundry.utils.fromUuidSync(tableUuid);
+		const result = table?.results?.get?.(resultId) ??
+			[...(table?.results ?? [])].find((entry) => String(entry.id) === resultId);
+		const flag = result?.getFlag?.(FLAG_SCOPE, TABLE_RESULT_FLAG_KEY);
+		const number = Number(flag?.effectNumber);
+		return Number.isInteger(number) && number > 0 ? number : 0;
+	} catch (_error) {
+		return 0;
+	}
+}
+
+function effectLocation(hitLocation) {
+	switch (String(hitLocation ?? "")) {
+		case "rightLeg":
+		case "leftLeg":
+			return "leg";
+		case "rightArm":
+		case "leftArm":
+			return "arm";
+		case "head": return "head";
+		case "body": return "body";
+		default: return "";
 	}
 }
 
