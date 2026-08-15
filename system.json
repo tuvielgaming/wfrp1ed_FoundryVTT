@@ -35,6 +35,7 @@
 		"module/criticals/CriticalBootstrap.mjs",
 		"module/criticals/CriticalWoundCharacteristicEffects.mjs",
 		"module/criticals/CriticalWoundPersistenceIntegration.mjs",
+		"module/criticals/CriticalWoundManagedEffectFallback.mjs",
 		"module/combat/CombatTransactionRollback.mjs",
 		"module/combat/CombatRollbackAutomationGuard.mjs",
 		"module/combat/DedicatedDamageRollbackBridge.mjs",
