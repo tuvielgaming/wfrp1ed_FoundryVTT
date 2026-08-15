@@ -25,6 +25,7 @@
 		"module/combat/CombatDefenceRuleReminderChat.mjs",
 		"module/combat/CombatDefenceAutoResolution.mjs",
 		"module/combat/CombatDamageIntegration.mjs",
+		"module/combat/CombatDamageSocketTransportGuard.mjs",
 		"module/combat/CombatAdjudicationReconciliation.mjs",
 		"module/combat/CombatAttackAdjudicationReconciliation.mjs",
 		"module/inventory/ClassicInventoryIntegration.mjs",
@@ -36,6 +37,7 @@
 		"module/criticals/CriticalWoundCharacteristicEffects.mjs",
 		"module/criticals/CriticalWoundPersistenceIntegration.mjs",
 		"module/criticals/CriticalWoundManagedEffectFallback.mjs",
+		"module/rules/FractionalCharacteristicPolicy.mjs",
 		"module/combat/CombatTransactionRollback.mjs",
 		"module/combat/CombatRollbackAutomationGuard.mjs",
 		"module/combat/DedicatedDamageRollbackBridge.mjs",
@@ -43,6 +45,7 @@
 		"module/combat/CombatLifecyclePresentation.mjs",
 		"module/criticals/DetailedFatalCriticalPresentation.mjs",
 		"module/criticals/CriticalTransactionRollback.mjs",
+		"module/criticals/FatalStatusConsistencyGuard.mjs",
 		"module/combat/CombatAttackDefenceUpdateGuard.mjs",
 		"module/health/HealthCategoryIntegration.mjs",
 		"module/fate/FateSheetIntegration.mjs",
@@ -52,7 +55,8 @@
 		"module/chat/TestResultIdentityChat.mjs",
 		"module/tests/TestResultModifierToggle.mjs",
 		"module/criticals/DetailedCriticalAdjudication.mjs",
-		"module/chat/CombatLifecyclePolish.mjs"
+		"module/chat/CombatLifecyclePolish.mjs",
+		"module/criticals/CriticalResultLifecycleGuard.mjs"
 	],
 	"styles": [
 		"css/myOwn.css",
