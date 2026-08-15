@@ -3,20 +3,20 @@ const ATTACK_FLAG_KEY = "combatAttackResult";
 const DEFENCE_RESULT_FLAG_KEY = "combatDefenceResult";
 const ADDITIONAL_DAMAGE_FLAG_KEY = "combatAdditionalDamageTest";
 const DAMAGE_RESULT_VIEW_FLAG_KEY = "combatDamageResultView";
+const DAMAGE_STATE_FLAG_KEY = "damageState";
 const CRITICAL_RESULT_FLAG_KEY = "criticalResult";
+const FATAL_APPLICATIONS_FLAG_KEY = "fatalCriticalApplications";
 
 /**
- * Final presentation pass for the compact Polish-first combat lifecycle.
+ * Final presentation pass for the compact combat lifecycle.
  *
  * Mechanics remain owned by their combat/damage/critical modules. This layer
- * only removes duplicated/positive status prose, folds diagnostic detail and
- * relocates the already-bound parry-reduction control to the defender's Parry
- * card so Chat reads as Attack -> Defence -> Damage -> Critical.
+ * removes duplicated/positive state prose, folds diagnostic detail and moves the
+ * already-bound Parry-reduction control into the defender's Parry context.
  *
- * Register from init rather than at module-evaluation time. Several canonical
- * combat/critical render hooks are themselves registered from init callbacks;
- * this module is loaded last, so doing the same guarantees that this cleanup is
- * actually the final DOM pass instead of being registered before those renderers.
+ * Critical application also updates Actor/Item state after the original Chat
+ * render has completed. Therefore this pass is repeated after those state hooks,
+ * not only during the initial renderChatMessageHTML callback.
  */
 Hooks.once("init", () => {
 	Hooks.on("renderChatMessageHTML", (message, html) => {
@@ -25,34 +25,63 @@ Hooks.once("init", () => {
 
 		presentAdditionalDamageIdentity(message, root);
 		foldDedicatedDamageDetails(message, root);
+		scheduleFinalPass(message, root);
+	});
 
-		/*
-		 * CombatDamageIntegration builds some damage controls in rAF. Run once
-		 * after the current render cycle so those controls exist before we move or
-		 * remove presentation-only DOM.
-		 */
-		requestAnimationFrame(() => {
-			presentAdditionalDamageIdentity(message, root);
-			foldDedicatedDamageDetails(message, root);
-			removePositiveResolutionNotices(message, root);
-			removeDuplicateDetailedFatalControls(message, root);
-			relocatePendingParryControl(message);
-		});
+	Hooks.on("updateActor", () => scheduleVisibleCriticalCleanup());
+	Hooks.on("createItem", (item) => {
+		if (item?.type === "criticalWound") scheduleVisibleCriticalCleanup();
+	});
+	Hooks.on("deleteItem", (item) => {
+		if (item?.type === "criticalWound") scheduleVisibleCriticalCleanup();
 	});
 });
 
+function scheduleFinalPass(message, root) {
+	requestAnimationFrame(() => {
+		runFinalPass(message, root);
+		/* Direct Actor/Item decorators may run from the same animation frame. */
+		setTimeout(() => runFinalPass(message, root), 0);
+	});
+}
+
+function runFinalPass(message, root) {
+	if (!root?.isConnected && !root?.matches?.("[data-message-id]")) return;
+	presentAdditionalDamageIdentity(message, root);
+	foldDedicatedDamageDetails(message, root);
+	removePositiveResolutionNotices(message, root);
+	removeDuplicateDetailedFatalControls(message, root);
+	lockAppliedFatalCriticalRoll(message, root);
+	relocatePendingParryControl(message);
+}
+
+function scheduleVisibleCriticalCleanup() {
+	requestAnimationFrame(() => {
+		cleanupVisibleCriticalCards();
+		setTimeout(cleanupVisibleCriticalCards, 0);
+	});
+}
+
+function cleanupVisibleCriticalCards() {
+	for (const message of game.messages ?? []) {
+		if (!message.getFlag?.(FLAG_SCOPE, CRITICAL_RESULT_FLAG_KEY)) continue;
+		const entry = document.querySelector(
+			`[data-message-id="${cssEscape(message.id)}"]`,
+		);
+		if (!entry) continue;
+		removePositiveResolutionNotices(message, entry);
+		removeDuplicateDetailedFatalControls(message, entry);
+		lockAppliedFatalCriticalRoll(message, entry);
+	}
+}
+
 function presentAdditionalDamageIdentity(message, root) {
-	const marker = message?.getFlag?.(
-		FLAG_SCOPE,
-		ADDITIONAL_DAMAGE_FLAG_KEY,
-	);
+	const marker = message?.getFlag?.(FLAG_SCOPE, ADDITIONAL_DAMAGE_FLAG_KEY);
 	if (!marker) return;
 
 	const label = localize("Additional Damage", "Obrażenia dodatkowe");
 	const identityValue = root.querySelector?.("[data-wfrp-test-display-name]");
 	if (identityValue) identityValue.textContent = label;
-
-	/* Compatibility with an undecorated/older TestResult card. */
 	const heading = root.querySelector?.(".wfrp1e-test-card__header h2");
 	if (heading) heading.textContent = label;
 }
@@ -69,33 +98,22 @@ function foldDedicatedDamageDetails(message, root) {
 	const rows = [...card.querySelectorAll(":scope > .wfrp1e-damage-card__row")];
 	if (rows.length <= 3) return;
 
-	/*
-	 * Target, hit location and the editable damage roll stay visible. Strength,
-	 * armour, Toughness, Additional Damage and other audit rows are folded.
-	 */
-	const detailsRows = rows.slice(3);
+	/* Target, hit location and editable Roll stay visible. */
 	const details = document.createElement("details");
 	details.className = "wfrp1e-damage-card__details";
 	details.dataset.wfrpDamageFoldedDetails = "";
-
 	const summary = document.createElement("summary");
 	summary.textContent = localize("Damage details", "Szczegóły obrażeń");
 	details.append(summary);
-
 	const body = document.createElement("div");
 	body.className = "wfrp1e-damage-card__details-body";
-	for (const row of detailsRows) body.append(row);
+	for (const row of rows.slice(3)) body.append(row);
 	details.append(body);
-
 	const status = card.querySelector("[data-wfrp-damage-result-status]");
 	card.insertBefore(details, status ?? null);
 }
 
-/**
- * Apply button present = pending action. No button = already resolved.
- * Keep explicit invalidation/revert warnings, but remove redundant prose such as
- * "damage resolved — ready to apply" or "critical result applied — resolved".
- */
+/** Button present = pending action; no button = resolved. */
 function removePositiveResolutionNotices(message, root) {
 	const view = message?.getFlag?.(FLAG_SCOPE, DAMAGE_RESULT_VIEW_FLAG_KEY);
 	if (view) {
@@ -106,36 +124,25 @@ function removePositiveResolutionNotices(message, root) {
 		if (status && !isInvalidationNotice(status)) status.remove();
 	}
 
-	/* Source Attack damage audit/status prose is redundant with the Damage card. */
-	for (const status of root.querySelectorAll?.(
-		".combat-damage-context__status",
-	) ?? []) {
+	for (const status of root.querySelectorAll?.(".combat-damage-context__status") ?? []) {
 		if (!isInvalidationNotice(status)) status.remove();
 	}
-
-	/*
-	 * A resolved detailed-critical marker on the source Damage/Attack card adds no
-	 * information once the resolve control has disappeared. The separate critical
-	 * result card is the authoritative presentation.
-	 */
-	for (const resolved of root.querySelectorAll?.(
-		".wfrp1e-critical-result__resolved",
-	) ?? []) {
+	for (const resolved of root.querySelectorAll?.(".wfrp1e-critical-result__resolved") ?? []) {
 		if (!isInvalidationNotice(resolved)) resolved.remove();
 	}
 
 	/*
-	 * Once a non-fatal Critical Wound is materialized, remove its positive status
-	 * and "Open wound" convenience panel from the result card. The wound remains
-	 * available from the Actor; the absence of Apply Critical Wound now means the
-	 * result is resolved, matching the same visual language as Damage.
+	 * Do not rely on the renderer's status text to decide whether a wound has been
+	 * applied. Resolve the linked persistent Item directly; when it exists, the
+	 * whole Apply/Open panel is redundant and must disappear.
 	 */
-	for (const panel of root.querySelectorAll?.(
-		"[data-wfrp-critical-wound-application]",
-	) ?? []) {
-		if (panel.querySelector(".wfrp1e-fate-intervention__spent")) {
-			panel.remove();
-		}
+	const state = message?.getFlag?.(FLAG_SCOPE, CRITICAL_RESULT_FLAG_KEY);
+	const woundApplied = Boolean(linkedCriticalWound(message, state));
+	for (const panel of root.querySelectorAll?.("[data-wfrp-critical-wound-application]") ?? []) {
+		if (
+			woundApplied ||
+			panel.querySelector(".wfrp1e-fate-intervention__spent")
+		) panel.remove();
 	}
 }
 
@@ -145,7 +152,6 @@ function isInvalidationNotice(element) {
 		element.classList.contains("is-reverted") ||
 		element.classList.contains("is-invalidated")
 	) return true;
-
 	const text = String(element.textContent ?? "").toUpperCase();
 	return text.includes("REVERTED") ||
 		text.includes("COFNIĘTO") ||
@@ -153,11 +159,6 @@ function isInvalidationNotice(element) {
 		text.includes("UNIEWAŻNION");
 }
 
-/**
- * CombatDamageIntegration owns and binds the actual reduction button on the
- * source Attack card. Move that existing DOM node to the resolved Parry card;
- * this changes presentation only and preserves permissions/socket mechanics.
- */
 function relocatePendingParryControl(message) {
 	const attackState = message?.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY);
 	if (attackState?.defence?.testMessageId) {
@@ -178,7 +179,6 @@ function relocatePendingParryControl(message) {
 
 function movePendingParryControl(attackMessage, defenceMessage) {
 	if (!attackMessage?.id || !defenceMessage?.id) return;
-
 	const attackEntry = document.querySelector(
 		`[data-message-id="${cssEscape(attackMessage.id)}"]`,
 	);
@@ -192,20 +192,12 @@ function movePendingParryControl(attackMessage, defenceMessage) {
 	);
 	if (!sourcePanel) return;
 
-	/*
-	 * Put the reduction stage inside the already-styled Parry context, not at the
-	 * bottom of the generic Test card. This makes its label/value rows share the
-	 * same inset, width and visual rhythm as Parry item/modifier/cost rows.
-	 */
 	const defencePanel = defenceEntry.querySelector(
 		"[data-wfrp-combat-defence-result]",
 	) ?? defenceEntry.querySelector(".wfrp1e-test-card");
 	if (!defencePanel) return;
 
-	defencePanel.querySelector(
-		"[data-wfrp-relocated-parry-reduction]",
-	)?.remove();
-
+	defencePanel.querySelector("[data-wfrp-relocated-parry-reduction]")?.remove();
 	sourcePanel.dataset.wfrpRelocatedParryReduction = "";
 	sourcePanel.classList.add("is-relocated-to-defence");
 	defencePanel.append(sourcePanel);
@@ -216,27 +208,65 @@ function movePendingParryControl(attackMessage, defenceMessage) {
 
 function removeDuplicateDetailedFatalControls(message, root) {
 	const state = message?.getFlag?.(FLAG_SCOPE, CRITICAL_RESULT_FLAG_KEY);
-	if (
-		state?.kind !== "detailed" ||
-		state?.resolution?.outcome !== "killed"
-	) return;
-
+	if (state?.kind !== "detailed" || state?.resolution?.outcome !== "killed") return;
 	const card = root.matches?.("[data-wfrp-detailed-critical-card]")
 		? root
 		: root.querySelector?.("[data-wfrp-detailed-critical-card]");
 	if (!card) return;
 
-	/*
-	 * FatalCriticalIntegration owns the mechanics for every fatal result, while
-	 * DetailedFatalCriticalPresentation adapts those mechanics to this template.
-	 * Remove only duplicate generic panels and leave the detailed lifecycle panel.
-	 */
 	for (const panel of card.querySelectorAll(
 		"[data-wfrp-fatal-application], [data-wfrp-fate-intervention]",
 	)) {
 		if (panel.matches("[data-wfrp-detailed-fatal-lifecycle]")) continue;
 		if (panel.closest("[data-wfrp-detailed-fatal-lifecycle]")) continue;
 		panel.remove();
+	}
+}
+
+/** Once a fatal consequence is applied its d100 is immutable until rollback. */
+function lockAppliedFatalCriticalRoll(message, root) {
+	const state = message?.getFlag?.(FLAG_SCOPE, CRITICAL_RESULT_FLAG_KEY);
+	if (state?.kind !== "detailed" || state?.resolution?.outcome !== "killed") return;
+	const actor = actorForCriticalResult(state);
+	const packetId = String(state.packetId ?? "");
+	const fatal = actor?.getFlag?.(FLAG_SCOPE, FATAL_APPLICATIONS_FLAG_KEY)?.[packetId];
+	if (fatal?.state !== "applied") return;
+
+	const card = root.matches?.("[data-wfrp-detailed-critical-card]")
+		? root
+		: root.querySelector?.("[data-wfrp-detailed-critical-card]");
+	const host = card?.querySelector?.("[data-wfrp-detailed-roll]");
+	if (!host) return;
+	host.classList.remove("wfrp1e-critical-result__roll-editor");
+	host.textContent = `${game.i18n.lang === "pl" ? "K100" : "d100"}: ${
+		state.resolution?.roll?.total ?? "—"
+	}`;
+}
+
+function linkedCriticalWound(message, state) {
+	if (!state || state.kind !== "detailed") return null;
+	const actor = actorForCriticalResult(state);
+	if (!(actor instanceof foundry.documents.Actor)) return null;
+	return [...(actor.items ?? [])].find((item) =>
+		item?.type === "criticalWound" &&
+		String(item.system?.resolution?.resultMessageId ?? "") === String(message.id ?? ""),
+	) ?? null;
+}
+
+function actorForCriticalResult(state) {
+	const source = game.messages?.get(String(state?.sourceMessageId ?? ""));
+	const damage = source?.getFlag?.(FLAG_SCOPE, DAMAGE_STATE_FLAG_KEY);
+	try {
+		const document = foundry.utils.fromUuidSync(
+			String(damage?.packet?.targetActorUuid ?? ""),
+		);
+		return document instanceof foundry.documents.Actor
+			? document
+			: document?.actor instanceof foundry.documents.Actor
+				? document.actor
+				: null;
+	} catch (_error) {
+		return null;
 	}
 }
 
