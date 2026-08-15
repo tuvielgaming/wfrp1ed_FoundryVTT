@@ -5,14 +5,16 @@ export const SHIELD_PARRY_RULE = Object.freeze({
 
 const SHIELD_PARRY_SETTING_KEY = "shieldParryRule";
 const WEAPON_MODIFIERS_SETTING_KEY = "optionalWeaponModifiers";
+const GM_DAMAGE_AUTOMATION_SETTING_KEY = "autoRollDamageForGmActors";
+const OWNED_DAMAGE_AUTOMATION_SETTING_KEY = "autoRollDamageForOwnedActors";
 
 /**
- * Native Foundry world settings for explicit WFRP 1e rule interpretations.
+ * Native Foundry settings for explicit WFRP 1e rule interpretations and local
+ * combat-roll preferences.
  *
- * The persisted shield-parry key/value names are retained for compatibility
- * with worlds which already selected that optional interpretation. The Core
- * Weapon Modifiers table is a separate optional rule and therefore defaults to
- * disabled; authoring values on Weapon Items never enables it implicitly.
+ * Rules which change the shared world contract use world scope. Automatic rolls
+ * for player-owned Actors are a client preference so every player may decide
+ * whether their own damage/parry dice wait for a click or roll immediately.
  */
 export class WfrpRuleSettings {
 	static register() {
@@ -34,15 +36,40 @@ export class WfrpRuleSettings {
 		});
 
 		game.settings.register(game.system.id, WEAPON_MODIFIERS_SETTING_KEY, {
-			name: localize(
-				"Optional Weapon Modifiers",
-				"Opcjonalne modyfikatory broni",
+			name: game.i18n.localize(
+				"WFRP1ED.Settings.WeaponModifiers.Name",
 			),
-			hint: localize(
-				"Use the optional WFRP 1e Weapon Modifiers table for To Hit, Damage and Parry. Initiative remains disabled until its round-order interaction is audited separately.",
-				"Używaj opcjonalnej tabeli Modyfikatorów Broni z WFRP 1e dla Trafienia, Obrażeń i Parowania. Modyfikator Inicjatywy pozostaje wyłączony do osobnego audytu jego wpływu na kolejność rundy.",
+			hint: game.i18n.localize(
+				"WFRP1ED.Settings.WeaponModifiers.Hint",
 			),
 			scope: "world",
+			config: true,
+			type: Boolean,
+			/* Most WFRP 1e tables use this optional Core table in practice. */
+			default: true,
+		});
+
+		game.settings.register(game.system.id, GM_DAMAGE_AUTOMATION_SETTING_KEY, {
+			name: game.i18n.localize(
+				"WFRP1ED.Settings.AutoDamageGM.Name",
+			),
+			hint: game.i18n.localize(
+				"WFRP1ED.Settings.AutoDamageGM.Hint",
+			),
+			scope: "world",
+			config: true,
+			type: Boolean,
+			default: true,
+		});
+
+		game.settings.register(game.system.id, OWNED_DAMAGE_AUTOMATION_SETTING_KEY, {
+			name: game.i18n.localize(
+				"WFRP1ED.Settings.AutoDamageOwned.Name",
+			),
+			hint: game.i18n.localize(
+				"WFRP1ED.Settings.AutoDamageOwned.Hint",
+			),
+			scope: "client",
 			config: true,
 			type: Boolean,
 			default: false,
@@ -64,14 +91,15 @@ export class WfrpRuleSettings {
 	}
 
 	static usesOptionalWeaponModifiers() {
-		try {
-			return game.settings.get(
-				game.system.id,
-				WEAPON_MODIFIERS_SETTING_KEY,
-			) === true;
-		} catch (_error) {
-			return false;
-		}
+		return this.#booleanSetting(WEAPON_MODIFIERS_SETTING_KEY, true);
+	}
+
+	static autoRollDamageForGmActors() {
+		return this.#booleanSetting(GM_DAMAGE_AUTOMATION_SETTING_KEY, true);
+	}
+
+	static autoRollDamageForOwnedActors() {
+		return this.#booleanSetting(OWNED_DAMAGE_AUTOMATION_SETTING_KEY, false);
 	}
 
 	/** Optional interpretation: all parry costs are confined to this round. */
@@ -83,10 +111,14 @@ export class WfrpRuleSettings {
 	static usesShieldDefensiveCommitment() {
 		return this.usesRoundDefenceContract();
 	}
+
+	static #booleanSetting(key, fallback) {
+		try {
+			return game.settings.get(game.system.id, key) === true;
+		} catch (_error) {
+			return Boolean(fallback);
+		}
+	}
 }
 
 Hooks.once("init", () => WfrpRuleSettings.register());
-
-function localize(english, polish) {
-	return game.i18n.lang === "pl" ? polish : english;
-}
