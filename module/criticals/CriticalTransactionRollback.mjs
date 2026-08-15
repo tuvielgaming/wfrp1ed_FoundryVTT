@@ -1,4 +1,5 @@
 import { DamageApplication } from "../damage/DamageApplication.mjs";
+import { synchronizeFatalStatus } from "./FatalCriticalIntegration.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
 const DAMAGE_STATE_FLAG_KEY = "damageState";
@@ -135,31 +136,30 @@ async function invalidateCritical(message) {
 			[`flags.${FLAG_SCOPE}.${DAMAGE_APPLICATIONS_FLAG_KEY}`]: applications,
 		};
 
-		let updatedFatalApplications = null;
 		if (context.isFatal) {
-			updatedFatalApplications = applicationMap(
+			const fatalApplications = applicationMap(
 				context.actor,
 				FATAL_APPLICATIONS_FLAG_KEY,
 			);
-			updatedFatalApplications[context.packetId] = {
+			fatalApplications[context.packetId] = {
 				...foundry.utils.deepClone(context.fatalApplication),
 				state: "reverted",
 				revertedAt: Date.now(),
 				revertedBy: String(game.user?.id ?? ""),
 			};
 			update[`flags.${FLAG_SCOPE}.${FATAL_APPLICATIONS_FLAG_KEY}`] =
-				updatedFatalApplications;
+				fatalApplications;
 		}
 
 		await context.actor.update(update);
 
+		/*
+		 * FatalCriticalIntegration is the single owner of the derived Foundry
+		 * defeated/dead status. Reconcile only after both the damage resolution and
+		 * fatal application transaction have been atomically rewritten above.
+		 */
 		if (context.isFatal) {
-			await restoreDefeatedAfterFatalRollback(
-				context.actor,
-				context.fatalApplication,
-				applications,
-				updatedFatalApplications,
-			);
+			await synchronizeFatalStatus(context.actor);
 		}
 
 		if (message.canUserModify?.(game.user, "delete")) {
@@ -222,60 +222,6 @@ function latestAppliedDamage(actor) {
 			(Number(right.appliedAt) - Number(left.appliedAt)) ||
 			String(right.id ?? "").localeCompare(String(left.id ?? "")),
 		)[0] ?? null;
-}
-
-async function restoreDefeatedAfterFatalRollback(
-	actor,
-	revertedFatal,
-	damageApplications,
-	fatalApplications,
-) {
-	const fateInterventions = applicationMap(actor, FATE_INTERVENTIONS_FLAG_KEY);
-	const hasOtherFatality = Object.entries(fatalApplications ?? {}).some(
-		([packetId, application]) => {
-			if (application?.state !== "applied") return false;
-			const damage = damageApplications?.[packetId];
-			return Boolean(
-				damage?.state === "applied" &&
-				damage?.criticalResolution?.outcome === KILLED_OUTCOME &&
-				!fateInterventions[packetId]
-			);
-		},
-	);
-
-	await setDefeatedStatus(
-		actor,
-		hasOtherFatality ? true : revertedFatal?.defeatedBefore === true,
-	);
-}
-
-async function setDefeatedStatus(actor, active) {
-	const statusId = defeatedStatusId();
-	if (!statusId) return;
-	if (Boolean(actor.statuses?.has?.(statusId)) === Boolean(active)) return;
-	await actor.toggleStatusEffect(statusId, {
-		active: Boolean(active),
-		overlay: true,
-	});
-}
-
-function defeatedStatusId() {
-	const configured = CONFIG.statusEffects ?? {};
-	const special = CONFIG.specialStatusEffects ?? {};
-	const direct = special.DEFEATED ?? special.defeated;
-	if (typeof direct === "string" && configured[direct]) return direct;
-
-	for (const [key, id] of Object.entries(special)) {
-		if (
-			String(key).toLowerCase().includes("defeat") &&
-			typeof id === "string" &&
-			configured[id]
-		) return id;
-	}
-	for (const fallback of ["dead", "defeated"]) {
-		if (configured[fallback]) return fallback;
-	}
-	return null;
 }
 
 function applicationMap(actor, key) {
