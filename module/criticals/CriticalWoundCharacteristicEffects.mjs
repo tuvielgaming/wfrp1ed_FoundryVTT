@@ -63,6 +63,10 @@ Hooks.once("ready", () => {
 	void ensureExistingCoreCharacteristicEffects().catch(reportEffectError);
 });
 
+for (const hook of ["createActiveEffect", "updateActiveEffect", "deleteActiveEffect"]) {
+	Hooks.on(hook, (effect) => refreshCriticalEffectActor(effect));
+}
+
 Hooks.on("renderApplicationV2", (application, element) => {
 	const actor = application?.document;
 	if (
@@ -184,27 +188,31 @@ async function ensureCoreCharacteristicEffect(wound) {
 	});
 	if (existing) return existing;
 
+	const changes = definition.effects.map((entry) =>
+		encodeRuleEffectChange({
+			targetId: characteristicTargetId(entry.characteristicId),
+			operation: entry.operation,
+			formula: String(entry.value),
+			applicability: RULE_EFFECT_APPLICABILITY.AUTOMATIC,
+			side: RULE_EFFECT_SIDES.SELF,
+			stacking: "per-acquisition",
+			condition: localize(
+				"Until medical attention is received",
+				"Do czasu otrzymania pomocy medycznej",
+			),
+		}),
+	);
 	const source = {
 		name: localize(
 			"Critical Wound — Movement and Initiative halved",
 			"Rana krytyczna — Szybkość i Inicjatywa o połowę",
 		),
-		img: String(wound.img ?? "icons/svg/blood.svg"),
-		disabled: false,
-		changes: definition.effects.map((entry) =>
-			encodeRuleEffectChange({
-				targetId: characteristicTargetId(entry.characteristicId),
-				operation: entry.operation,
-				formula: String(entry.value),
-				applicability: RULE_EFFECT_APPLICABILITY.AUTOMATIC,
-				side: RULE_EFFECT_SIDES.SELF,
-				stacking: "per-acquisition",
-				condition: localize(
-					"Until medical attention is received",
-					"Do czasu otrzymania pomocy medycznej",
-				),
-			}),
+		img: String(
+			wound.img || foundry.documents.ActiveEffect.DEFAULT_ICON,
 		),
+		disabled: false,
+		transfer: true,
+		system: { changes },
 		flags: {
 			[FLAG_SCOPE]: {
 				[CORE_EFFECT_FLAG_KEY]: {
@@ -321,6 +329,19 @@ function operationLabel(candidate) {
 		case RULE_EFFECT_OPERATIONS.OVERRIDE: return `=${value}`;
 		default: return value;
 	}
+}
+
+function refreshCriticalEffectActor(effect) {
+	const item = effect?.parent;
+	const actor = item?.parent;
+	if (
+		item?.type !== CRITICAL_WOUND_TYPE ||
+		!(actor instanceof foundry.documents.Actor)
+	) return;
+
+	requestAnimationFrame(() => {
+		void actor.sheet?.render?.({ force: true });
+	});
 }
 
 function halfMovementAndInitiativeUntilMedicalAttention() {
