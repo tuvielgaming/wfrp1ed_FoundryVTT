@@ -79,6 +79,11 @@ Hooks.on("preUpdateChatMessage", (message, changes) => {
 /*
  * If an unapplied or partly-resolved damage result becomes stale because the
  * Attack/Defence changed, archive the snapshot and reopen the damage stage.
+ *
+ * updateChatMessage runs on every connected client. Only the primary active GM
+ * (or, without a GM, a user who can update the source message) may mutate the
+ * authoritative attack message. This prevents an owning defender from receiving
+ * harmless-but-confusing permission errors when adjudicating their Parry Test.
  */
 Hooks.on("updateChatMessage", (message, changes) => {
 	if (clearingMessages.has(message?.id)) return;
@@ -88,6 +93,7 @@ Hooks.on("updateChatMessage", (message, changes) => {
 		const attackChanged = attackStateChanged(changes);
 		const testChanged = testStateChanged(changes);
 		if (attackChanged || testChanged) {
+			if (!canMutateCombatDamageMessage(message)) return;
 			void reconcileAttackDamageAfterChange(
 				message,
 				testChanged
@@ -103,7 +109,7 @@ Hooks.on("updateChatMessage", (message, changes) => {
 	const attackMessage = defence?.attackMessageId
 		? game.messages?.get(String(defence.attackMessageId))
 		: null;
-	if (attackMessage) {
+	if (attackMessage && canMutateCombatDamageMessage(attackMessage)) {
 		void clearCurrentDamageIfReversible(
 			attackMessage,
 			"defence-adjudication-changed",
@@ -1271,6 +1277,18 @@ function canSeeDamage(attacker, defender, user) {
 	if (!user) return false;
 	if (user.isGM) return true;
 	return hasOwnerPermission(attacker, user) || hasOwnerPermission(defender, user);
+}
+
+function canMutateCombatDamageMessage(message) {
+	if (!message?.id || !game.user) return false;
+	const primary = primaryActiveGM();
+	if (primary) {
+		return Boolean(
+			game.user.isGM &&
+			String(game.user.id) === String(primary.id),
+		);
+	}
+	return message.canUserModify?.(game.user, "update") === true;
 }
 
 function attackStateChanged(changes) {
