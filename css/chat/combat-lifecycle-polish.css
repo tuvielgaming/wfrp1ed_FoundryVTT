@@ -1,0 +1,16 @@
+.wfrp1e-damage-card__details {
+	margin-top: 0.4rem;
+	border-top: 1px solid rgb(63 42 28 / 22%);
+}
+
+.wfrp1e-damage-card__details > summary {
+	padding: 0.35rem 0.1rem 0.15rem;
+	font-weight: 700;
+	font-size: 0.82rem;
+	cursor: pointer;
+	user-select: none;
+}
+
+.wfrp1e-damage-card__details-body {
+	padding-top: 0.2rem;
+}
