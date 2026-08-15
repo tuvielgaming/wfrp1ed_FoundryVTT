@@ -202,6 +202,21 @@ export class DamageChat {
 				);
 			}
 
+			/*
+			 * The Actor transaction is authoritative. A chat button can survive one
+			 * render frame after another client applies the packet; treating that
+			 * harmless stale click as an error confuses players and creates a noisy
+			 * console. Reconcile presentation and return the existing transaction.
+			 */
+			const existing = DamageApplication.transactionFor(targetActor, packet.id);
+			if (existing?.state === "applied") {
+				this.refreshActorCards(targetActor);
+				requestChatRefresh();
+				return foundry.utils.deepFreeze(
+					foundry.utils.deepClone(existing),
+				);
+			}
+
 			const transaction = await DamageApplication.apply({
 				packet,
 				resolution,
@@ -214,7 +229,9 @@ export class DamageChat {
 				targetActor,
 				transaction,
 			);
+			this.refreshActorCards(targetActor);
 			this.refreshVisibleMessage(message);
+			requestChatRefresh();
 
 			ui.notifications.info(
 				localize(
@@ -492,6 +509,12 @@ export class DamageChat {
 			? game.messages?.get(messageId) ?? null
 			: null;
 	}
+}
+
+function requestChatRefresh() {
+	requestAnimationFrame(() => {
+		void ui.chat?.render?.({ force: true });
+	});
 }
 
 function normalizePacket(packet) {
