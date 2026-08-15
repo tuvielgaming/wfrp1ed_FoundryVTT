@@ -1,3 +1,4 @@
+import { WfrpRuleSettings } from "../settings/WfrpRuleSettings.mjs";
 import { TestResultChat } from "../tests/TestResultChat.mjs";
 import { CombatDefenceOpportunity } from "./CombatDefenceOpportunity.mjs";
 import { CombatDodgeEconomy } from "./CombatDodgeEconomy.mjs";
@@ -171,19 +172,50 @@ export class CombatDefenceTransaction {
 						context.combatant,
 						selectedParry.itemUuid,
 						requestingUser,
+						{
+							optionalWeaponModifiers:
+								WfrpRuleSettings.usesOptionalWeaponModifiers(),
+						},
 					);
 					resourceCommitted = true;
 				}
 
+				const parryModifiers = [];
+				if (Number(resource.selected.baseBonus) !== 0) {
+					parryModifiers.push({
+						id: "parry-item-base",
+						value: Number(resource.selected.baseBonus),
+						source: localize(
+							`Parry — ${resource.selected.itemName}`,
+							`Parowanie — ${resource.selected.itemName}`,
+						),
+						type: "weapon",
+						enabled: true,
+					});
+				}
+				if (Number(resource.selected.optionalBonus) !== 0) {
+					parryModifiers.push({
+						id: "weapon-optional-parry",
+						value: Number(resource.selected.optionalBonus),
+						source: localize(
+							`Weapon modifier — ${resource.selected.itemName}`,
+							`Modyfikator broni — ${resource.selected.itemName}`,
+						),
+						type: "weapon",
+						enabled: true,
+					});
+				}
+
 				const result = await context.defender.rollTest("ws", {
-					modifier: resource.selected.totalBonus,
+					modifier: 0,
+					modifiers: parryModifiers,
 				});
 				if (!result?.chatMessage) {
 					throw new Error("Parry Test did not produce a ChatMessage.");
 				}
 
 				await CombatDefenceResultChat.attach(result.chatMessage, {
-					version: 2,
+					version: 3,
 					response: "parry",
 					managedByCombat: context.managed,
 					attackMessageId: String(message.id ?? ""),
@@ -193,6 +225,8 @@ export class CombatDefenceTransaction {
 					itemUuid: resource.selected.itemUuid,
 					itemName: resource.selected.itemName,
 					parryBonus: resource.selected.totalBonus,
+					baseParryBonus: resource.selected.baseBonus,
+					optionalParryBonus: resource.selected.optionalBonus,
 					attackCost: resource.parryAttackCost,
 					immediateAttackCost: resource.parryImmediateAttackCost,
 					parryDebtAdded: resource.parryDebtAdded,
@@ -204,6 +238,8 @@ export class CombatDefenceTransaction {
 					itemUuid: resource.selected.itemUuid,
 					itemName: resource.selected.itemName,
 					parryBonus: resource.selected.totalBonus,
+					baseParryBonus: resource.selected.baseBonus,
+					optionalParryBonus: resource.selected.optionalBonus,
 					attackCost: resource.parryAttackCost,
 					immediateAttackCost: resource.parryImmediateAttackCost,
 					parryDebtAdded: resource.parryDebtAdded,
@@ -575,16 +611,30 @@ export class CombatDefenceTransaction {
 }
 
 function opportunityFor(defender, seenComing) {
+	const optionalWeaponModifiers = WfrpRuleSettings.usesOptionalWeaponModifiers();
 	const combatant = combatantForActor(defender);
 	const opportunity = combatant
-		? CombatDefenceOpportunity.melee(combatant, { seenComing })
-		: CombatDefenceOpportunity.unmanagedMelee(defender, { seenComing });
+		? CombatDefenceOpportunity.melee(combatant, {
+			seenComing,
+			optionalWeaponModifiers,
+		})
+		: CombatDefenceOpportunity.unmanagedMelee(defender, {
+			seenComing,
+			optionalWeaponModifiers,
+		});
 	return { combatant, opportunity };
 }
 
 function selectedParryFor(context, itemUuid) {
 	if (context.managed) {
-		return CombatParrySelection.choice(context.combatant, itemUuid);
+		return CombatParrySelection.choice(
+			context.combatant,
+			itemUuid,
+			{
+				optionalWeaponModifiers:
+					WfrpRuleSettings.usesOptionalWeaponModifiers(),
+			},
+		);
 	}
 
 	const requested = String(itemUuid ?? "");
