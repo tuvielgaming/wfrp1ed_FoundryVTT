@@ -38,8 +38,10 @@
 		"module/combat/CombatTransactionRollback.mjs",
 		"module/combat/CombatRollbackAutomationGuard.mjs",
 		"module/combat/DedicatedDamageRollbackBridge.mjs",
+		"module/combat/UnappliedDamageInvalidation.mjs",
 		"module/combat/CombatLifecyclePresentation.mjs",
 		"module/criticals/DetailedFatalCriticalPresentation.mjs",
+		"module/criticals/CriticalTransactionRollback.mjs",
 		"module/combat/CombatAttackDefenceUpdateGuard.mjs",
 		"module/health/HealthCategoryIntegration.mjs",
 		"module/fate/FateSheetIntegration.mjs",
@@ -48,8 +50,8 @@
 		"module/chat/ChatClientLocalization.mjs",
 		"module/chat/TestResultIdentityChat.mjs",
 		"module/tests/TestResultModifierToggle.mjs",
-		"module/chat/CombatLifecyclePolish.mjs",
-		"module/criticals/DetailedCriticalAdjudication.mjs"
+		"module/criticals/DetailedCriticalAdjudication.mjs",
+		"module/chat/CombatLifecyclePolish.mjs"
 	],
 	"styles": [
 		"css/myOwn.css",
