@@ -106,11 +106,29 @@ function removePositiveResolutionNotices(message, root) {
 		if (!isInvalidationNotice(status)) status.remove();
 	}
 
-	/* Once a non-fatal Critical Wound is materialized, its Apply button is gone. */
+	/*
+	 * A resolved detailed-critical marker on the source Damage/Attack card adds no
+	 * information once the resolve control has disappeared. The separate critical
+	 * result card is the authoritative presentation.
+	 */
+	for (const resolved of root.querySelectorAll?.(
+		".wfrp1e-critical-result__resolved",
+	) ?? []) {
+		if (!isInvalidationNotice(resolved)) resolved.remove();
+	}
+
+	/*
+	 * Once a non-fatal Critical Wound is materialized, remove its positive status
+	 * and "Open wound" convenience panel from the result card. The wound remains
+	 * available from the Actor; the absence of Apply Critical Wound now means the
+	 * result is resolved, matching the same visual language as Damage.
+	 */
 	for (const panel of root.querySelectorAll?.(
 		"[data-wfrp-critical-wound-application]",
 	) ?? []) {
-		if (!panel.querySelector("button")) panel.remove();
+		if (panel.querySelector(".wfrp1e-fate-intervention__spent")) {
+			panel.remove();
+		}
 	}
 }
 
