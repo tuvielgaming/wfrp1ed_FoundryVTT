@@ -97,36 +97,35 @@ export class CriticalWoundData extends TypeDataModel {
 		};
 	}
 
-	/** Normalize transitional/plain object data without inventing rule content. */
+	/**
+	 * Normalize transitional/plain object data without inventing rule content.
+	 *
+	 * Foundry also calls DataModel migration for partial document updates. A
+	 * migration must therefore never manufacture default values for sibling keys
+	 * which were absent from the update payload. Doing so used to make an edit to
+	 * `description`, `hitLocation`, or `criticalValue` replace the complete
+	 * consequence/resolution structures with empty defaults.
+	 */
 	static migrateData(source, options = {}) {
 		const migrated = foundry.utils.deepClone(source ?? {});
-		const resolution = migrated.resolution ?? {};
-		const consequence = migrated.consequence ?? {};
 
-		migrated.description = unwrapText(migrated.description);
-		migrated.hitLocation = unwrapText(migrated.hitLocation);
-		migrated.criticalValue = toNonNegativeInteger(
-			unwrapValue(migrated.criticalValue),
-		);
-		migrated.consequence = normalizeConsequence(consequence);
-		migrated.resolution = {
-			damagePacketId: unwrapText(resolution.damagePacketId),
-			sourceMessageId: unwrapText(resolution.sourceMessageId),
-			resultMessageId: unwrapText(resolution.resultMessageId),
-			tableRole: unwrapText(resolution.tableRole),
-			tableVariant: unwrapText(resolution.tableVariant),
-			providerId: unwrapText(resolution.providerId),
-			tableUuid: unwrapText(resolution.tableUuid),
-			tableResultId: unwrapText(resolution.tableResultId),
-			effectNumber: toNonNegativeInteger(
-				unwrapValue(resolution.effectNumber),
-			),
-			roll: toNonNegativeInteger(unwrapValue(resolution.roll)),
-			resolvedByUserId: unwrapText(resolution.resolvedByUserId),
-			resolvedAt: toNonNegativeInteger(
-				unwrapValue(resolution.resolvedAt),
-			),
-		};
+		if (Object.hasOwn(migrated, "description")) {
+			migrated.description = unwrapText(migrated.description);
+		}
+		if (Object.hasOwn(migrated, "hitLocation")) {
+			migrated.hitLocation = unwrapText(migrated.hitLocation);
+		}
+		if (Object.hasOwn(migrated, "criticalValue")) {
+			migrated.criticalValue = toNonNegativeInteger(
+				unwrapValue(migrated.criticalValue),
+			);
+		}
+		if (Object.hasOwn(migrated, "consequence")) {
+			migrated.consequence = normalizeConsequence(migrated.consequence ?? {});
+		}
+		if (Object.hasOwn(migrated, "resolution")) {
+			migrated.resolution = normalizeResolution(migrated.resolution ?? {});
+		}
 
 		return super.migrateData(migrated, options);
 	}
@@ -158,6 +157,27 @@ function normalizeConsequence(source) {
 			until: unwrapText(periodicWounds.until),
 		},
 		dropHeld: unwrapText(source?.dropHeld),
+	};
+}
+
+function normalizeResolution(source) {
+	return {
+		damagePacketId: unwrapText(source.damagePacketId),
+		sourceMessageId: unwrapText(source.sourceMessageId),
+		resultMessageId: unwrapText(source.resultMessageId),
+		tableRole: unwrapText(source.tableRole),
+		tableVariant: unwrapText(source.tableVariant),
+		providerId: unwrapText(source.providerId),
+		tableUuid: unwrapText(source.tableUuid),
+		tableResultId: unwrapText(source.tableResultId),
+		effectNumber: toNonNegativeInteger(
+			unwrapValue(source.effectNumber),
+		),
+		roll: toNonNegativeInteger(unwrapValue(source.roll)),
+		resolvedByUserId: unwrapText(source.resolvedByUserId),
+		resolvedAt: toNonNegativeInteger(
+			unwrapValue(source.resolvedAt),
+		),
 	};
 }
 
