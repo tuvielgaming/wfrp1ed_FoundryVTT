@@ -1,5 +1,6 @@
 import { TestResultModifierToggle } from "../tests/TestResultModifierToggle.mjs";
 import {
+	combatAttackSourceForTest,
 	combatTestLockReason,
 	isCombatTestAdjudicationLocked,
 } from "./CombatTransactionState.mjs";
@@ -13,18 +14,26 @@ let chatRefreshQueued = false;
 /**
  * Closed combat transactions are immutable until Damage is explicitly reverted.
  *
- * The normal UX is visual rather than notification-driven: when Apply Damage
- * closes the transaction, Attack/Defence/Additional-Damage cards rerender with
- * their adjudication inputs read-only. Authority guards remain as a defensive
- * fallback for stale DOM/socket requests, but a stale edit is treated as a
- * harmless no-op and the Chat is refreshed instead of showing an error toast.
+ * Apply Damage is the closing boundary for positive damage. Once the target
+ * Actor records that application, Attack/Defence/Additional-Damage Test inputs
+ * become visibly read-only on every client. Damage invalidation reopens the
+ * transaction and a normal Chat rerender restores the editable controls.
+ *
+ * The authority guard remains as a fallback for a stale DOM/socket request, but
+ * normal users should never be able to type into a closed Test input at all.
  */
 Hooks.once("init", () => {
 	installRollCommitGuard();
 
 	Hooks.on("renderChatMessageHTML", (message, html) => {
-		if (!isCombatTestAdjudicationLocked(message)) return;
-		lockRenderedCombatTest(html);
+		applyRenderedLockState(message, html);
+
+		/*
+		 * Several Test presentation hooks decorate the same card. Re-check once
+		 * after the current render stack has finished so no later decorator can
+		 * accidentally turn a closed roll input editable again.
+		 */
+		queueMicrotask(() => applyRenderedLockState(message, html));
 	});
 
 	Hooks.on("preUpdateChatMessage", (message, changes) => {
@@ -34,14 +43,17 @@ Hooks.once("init", () => {
 	});
 
 	/*
-	 * Damage state lives on the source Attack message while the Parry and
-	 * Additional Damage Tests are separate older ChatMessages. Re-render Chat on
-	 * every client when that boundary changes so all related cards lock/unlock in
-	 * the same frame rather than leaving a stale editable Parry card behind.
+	 * The authoritative damage application is mirrored into the source Attack
+	 * ChatMessage. Lock already-rendered linked Test cards immediately instead of
+	 * relying only on ChatLog deciding to reconstruct older history entries.
 	 */
 	Hooks.on("updateChatMessage", (message, changes) => {
 		if (!message?.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY)) return;
 		if (!flagChanged(changes, DAMAGE_FLAG_KEY)) return;
+
+		if (isCombatTestAdjudicationLocked(message)) {
+			lockVisibleCombatFamily(message);
+		}
 		requestChatRefresh();
 	});
 });
@@ -59,11 +71,10 @@ function installRollCommitGuard() {
 	) {
 		if (isCombatTestAdjudicationLocked(message)) {
 			/*
-			 * A correctly rerendered card is already read-only, so this branch is
-			 * only for a stale DOM/socket race. Do not turn that implementation race
-			 * into a user-facing warning: restore the authoritative presentation and
-			 * return the unchanged snapshot.
+			 * This should only be reachable from a stale DOM/socket request. Preserve
+			 * the authoritative roll, repaint the cards, and do not surface an error.
 			 */
+			lockVisibleCombatFamily(combatAttackSourceForTest(message));
 			requestChatRefresh();
 			return closedRollSnapshot(message);
 		}
@@ -88,6 +99,25 @@ function closedRollSnapshot(message) {
 		rollEdited: state.rollEdited === true,
 		locked: true,
 	});
+}
+
+function applyRenderedLockState(message, html) {
+	if (!isCombatTestAdjudicationLocked(message)) return;
+	lockRenderedCombatTest(html);
+}
+
+function lockVisibleCombatFamily(sourceMessage) {
+	if (!sourceMessage?.id) return;
+	const sourceId = String(sourceMessage.id);
+
+	for (const message of game.messages ?? []) {
+		if (!message?.getFlag?.(FLAG_SCOPE, TEST_FLAG_KEY)) continue;
+		if (combatAttackSourceForTest(message)?.id !== sourceId) continue;
+		if (!isCombatTestAdjudicationLocked(message)) continue;
+
+		const entry = visibleMessageElement(message.id);
+		if (entry) lockRenderedCombatTest(entry);
+	}
 }
 
 function lockRenderedCombatTest(html) {
@@ -132,6 +162,15 @@ function lockRenderedCombatTest(html) {
 			input.title = reason;
 		}
 	}
+}
+
+function visibleMessageElement(messageId) {
+	const id = String(messageId ?? "");
+	if (!id) return null;
+	const escaped = globalThis.CSS?.escape
+		? CSS.escape(id)
+		: id.replaceAll('"', '\\"');
+	return document.querySelector(`[data-message-id="${escaped}"]`);
 }
 
 function testStateChanged(changes) {
