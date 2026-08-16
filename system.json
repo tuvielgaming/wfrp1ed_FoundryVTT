@@ -38,6 +38,7 @@
 		"module/criticals/CriticalConsequenceEngine.mjs",
 		"module/criticals/CriticalConsequencePersistence.mjs",
 		"module/rules/FractionalCharacteristicPolicy.mjs",
+		"module/combat/EffectiveAttacksIntegration.mjs",
 		"module/combat/CombatTransactionRollback.mjs",
 		"module/combat/CombatRollbackAutomationGuard.mjs",
 		"module/combat/DedicatedDamageRollbackBridge.mjs",
