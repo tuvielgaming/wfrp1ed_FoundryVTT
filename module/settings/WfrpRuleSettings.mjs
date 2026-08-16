@@ -7,6 +7,7 @@ const SHIELD_PARRY_SETTING_KEY = "shieldParryRule";
 const WEAPON_MODIFIERS_SETTING_KEY = "optionalWeaponModifiers";
 const GM_DAMAGE_AUTOMATION_SETTING_KEY = "autoRollDamageForGmActors";
 const OWNED_DAMAGE_AUTOMATION_SETTING_KEY = "autoRollDamageForOwnedActors";
+const PENDING_TEST_CLEANUP_SETTING_KEY = "autoClearPendingTests";
 
 /**
  * Native Foundry settings for explicit WFRP 1e rule interpretations and local
@@ -81,6 +82,19 @@ export class WfrpRuleSettings {
 			type: Boolean,
 			default: false,
 		});
+
+		game.settings.register(game.system.id, PENDING_TEST_CLEANUP_SETTING_KEY, {
+			name: game.i18n.localize(
+				"WFRP1ED.Settings.PendingCleanup.Name",
+			),
+			hint: game.i18n.localize(
+				"WFRP1ED.Settings.PendingCleanup.Hint",
+			),
+			scope: "world",
+			config: true,
+			type: Boolean,
+			default: true,
+		});
 	}
 
 	static shieldParryRule() {
@@ -109,6 +123,10 @@ export class WfrpRuleSettings {
 	static autoRollDamageForOwnedActors() {
 		return !this.damageAutomationSuspended() &&
 			this.#booleanSetting(OWNED_DAMAGE_AUTOMATION_SETTING_KEY, false);
+	}
+
+	static autoClearPendingTests() {
+		return this.#booleanSetting(PENDING_TEST_CLEANUP_SETTING_KEY, true);
 	}
 
 	/**
