@@ -8,6 +8,7 @@ import { RuleEffectResolver } from "../effects/RuleEffectResolver.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
 const CORE_EFFECT_FLAG_KEY = "coreCriticalConsequence";
+const GENERIC_EFFECT_FLAG_KEY = "criticalConsequenceEffect";
 const RULE_CHANGES_FLAG_KEY = "ruleChanges";
 const PROVIDER_ID = "wfrp1ed.core-critical-managed-fallback";
 const CRITICAL_WOUND_TYPE = "criticalWound";
@@ -18,31 +19,42 @@ const SUPPORTED_TARGETS = new Set([
 ]);
 
 /**
- * Last-resort reconstruction for system-managed Core Critical Wound effects.
+ * Last-resort reconstruction for managed Core Critical Wound effects.
  *
- * A persistent wound is the durable game fact. Managed RollTables are lookup
- * infrastructure and their UUID/result ids are not suitable as the only way to
- * reconstruct an ongoing injury after a reload. The embedded ActiveEffect already
- * persists the exact Core consequence number in `coreCriticalConsequence`; use
- * that provenance directly whenever Foundry's ordinary Item-effect discovery
- * cannot see an enabled transfer effect.
- *
- * This provider deliberately stays silent when the same managed effect already
- * exposes a decodable rule change for the requested target and is active, so it
- * cannot double-apply a healthy native ActiveEffect.
+ * Some Foundry reload paths can report enabled transfer effects embedded in an
+ * owned Item as inactive. The persistent wound/effect remains the durable game
+ * fact, so reconstruct its declarative WFRP candidate only when native effect
+ * discovery cannot see it. Timed generic Critical effects are never restored
+ * after their Foundry duration has expired.
  */
 RuleEffectResolver.registerCandidateProvider(PROVIDER_ID, ({ actor, targetId }) => {
 	if (!(actor instanceof foundry.documents.Actor)) return [];
 	if (!SUPPORTED_TARGETS.has(String(targetId ?? ""))) return [];
 
-	const characteristicId = String(targetId).split(".")[1];
 	const results = [];
-
 	for (const wound of actor.items ?? []) {
 		if (wound?.type !== CRITICAL_WOUND_TYPE) continue;
 
 		for (const effect of wound.effects ?? []) {
-			if (effect?.disabled === true) continue;
+			if (effect?.disabled === true || effect.duration?.expired === true) continue;
+			if (isNativelyDiscoverable(effect, targetId)) continue;
+
+			const generic = effect.getFlag?.(FLAG_SCOPE, GENERIC_EFFECT_FLAG_KEY);
+			if (generic?.kind === "characteristics") {
+				for (let index = 0; index < ruleChanges(effect).length; index += 1) {
+					const decoded = decodeRuleEffectChange(ruleChanges(effect)[index]);
+					if (decoded?.targetId !== targetId) continue;
+					results.push(candidateFromDecoded({
+						actor,
+						wound,
+						effect,
+						decoded,
+						id: `${PROVIDER_ID}:generic:${effect.uuid}:${index}`,
+					}));
+				}
+				continue;
+			}
+
 			const metadata = effect.getFlag?.(FLAG_SCOPE, CORE_EFFECT_FLAG_KEY);
 			const effectNumber = positiveInteger(metadata?.effectNumber);
 			if (
@@ -50,8 +62,7 @@ RuleEffectResolver.registerCandidateProvider(PROVIDER_ID, ({ actor, targetId }) 
 				!SUPPORTED_EFFECT_NUMBERS.has(effectNumber)
 			) continue;
 
-			if (isNativelyDiscoverable(effect, targetId)) continue;
-
+			const characteristicId = String(targetId).split(".")[1];
 			results.push({
 				id: `${PROVIDER_ID}:${effect.uuid}:${characteristicId}`,
 				targetId,
@@ -79,7 +90,7 @@ RuleEffectResolver.registerCandidateProvider(PROVIDER_ID, ({ actor, targetId }) 
 	return results;
 });
 
-/* Persist provenance immediately for newly created/repaired managed effects. */
+/* Persist provenance immediately for newly created/repaired legacy effects. */
 for (const hook of ["createActiveEffect", "updateActiveEffect"]) {
 	Hooks.on(hook, (effect) => {
 		void persistEffectNumberFromManagedEffect(effect).catch((error) => {
@@ -91,11 +102,6 @@ for (const hook of ["createActiveEffect", "updateActiveEffect"]) {
 	});
 }
 
-/*
- * Persist the consequence number on the wound itself as the new stable
- * provenance field. Legacy wounds are migrated from their managed ActiveEffect
- * flag without consulting a regenerated RollTable.
- */
 Hooks.once("ready", () => {
 	if (!isPrimaryActiveGm()) return;
 	void persistLegacyEffectNumbers().catch((error) => {
@@ -106,13 +112,31 @@ Hooks.once("ready", () => {
 	});
 });
 
+function candidateFromDecoded({ actor, wound, effect, decoded, id }) {
+	return {
+		id,
+		targetId: decoded.targetId,
+		operation: decoded.operation,
+		formula: decoded.formula,
+		applicability: decoded.applicability,
+		side: decoded.side,
+		stacking: decoded.stacking,
+		condition: decoded.condition,
+		priority: decoded.priority,
+		defaultSelected: decoded.applicability === RULE_EFFECT_APPLICABILITY.AUTOMATIC,
+		actorUuid: actor.uuid,
+		effectUuid: effect.uuid,
+		effectName: effect.name,
+		itemUuid: wound.uuid,
+		itemName: wound.name,
+		itemType: wound.type,
+	};
+}
+
 function isNativelyDiscoverable(effect, targetId) {
 	if (effect?.active === false) return false;
-	const changes = ruleChanges(effect);
-	return changes.some((change) => {
-		const decoded = decodeRuleEffectChange(change);
-		return decoded?.targetId === targetId;
-	});
+	return ruleChanges(effect).some((change) =>
+		decodeRuleEffectChange(change)?.targetId === targetId);
 }
 
 function ruleChanges(effect) {
@@ -136,9 +160,7 @@ async function persistEffectNumberFromManagedEffect(effect) {
 		positiveInteger(wound.system?.resolution?.effectNumber) === effectNumber
 	) return false;
 
-	await wound.update({
-		"system.resolution.effectNumber": effectNumber,
-	});
+	await wound.update({ "system.resolution.effectNumber": effectNumber });
 	return true;
 }
 
@@ -159,9 +181,7 @@ async function persistLegacyEffectNumbers() {
 			);
 			if (!effectNumber) continue;
 
-			await wound.update({
-				"system.resolution.effectNumber": effectNumber,
-			});
+			await wound.update({ "system.resolution.effectNumber": effectNumber });
 			touched = true;
 		}
 		if (touched) void actor.sheet?.render?.({ force: true });
