@@ -17,8 +17,7 @@ import {
 	RULE_EFFECT_SIDES,
 } from "../effects/RuleEffectRegistry.mjs";
 import { LootPileService } from "../loot/LootPileService.mjs";
-import { coreCriticalConsequence } from "./CoreCriticalConsequences.mjs";
-import { isCoreDetailedEffectProvider } from "./CoreDetailedCriticalTables.mjs";
+import { criticalConsequenceForWound } from "./CriticalConsequenceDefinition.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
 const RUNTIME_FLAG_KEY = "criticalConsequenceRuntime";
@@ -28,28 +27,27 @@ const TIMED_FLAG_KEY = "criticalTimed";
 const RULE_CHANGES_FLAG_KEY = "ruleChanges";
 const DAMAGE_STATE_FLAG_KEY = "damageState";
 const CRITICAL_RESULT_FLAG_KEY = "criticalResult";
-const VERSION = 3;
+const VERSION = 4;
 const processingRounds = new Set();
 
 /**
- * Resolve declarative Critical consequences exactly once when a persistent Core
+ * Resolve declarative Critical consequences exactly once when a persistent
  * Critical Wound is materialized.
  *
- * Random duration formulas are rolled once and persisted on the wound. Timed
- * effects use an explicit WFRP round anchor because Foundry does not reliably
- * register Item-embedded transfer effects for expiry. One-shot Item movement is
- * a Loot transaction rather than a repeatable ActiveEffect change.
+ * The engine is intentionally ignorant of named Core results. A Core wound and
+ * a user-authored wound expose the same `system.consequence` contract. Random
+ * duration formulas are rolled once and the normalized definition is snapshotted
+ * into runtime state, so later Item editing or a world reload cannot silently
+ * change an already-applied injury.
  */
 export class CriticalConsequenceEngine {
 	static async apply(wound) {
-		if (!isEligibleCoreWound(wound)) return null;
+		if (!isEligibleWound(wound)) return null;
 		const existing = runtimeState(wound);
 		if (existing?.state === "applied") return existing;
 
-		const location = genericLocation(wound.system?.hitLocation);
-		const effectNumber = positiveInteger(wound.system?.resolution?.effectNumber);
-		const definition = coreCriticalConsequence(location, effectNumber);
-		if (!definition) return null;
+		const definition = criticalConsequenceForWound(wound);
+		if (!definition?.enabled) return null;
 
 		if (definition.dropHeld === "injured-hand") {
 			const selected = await ensurePhysicalArmSide(wound);
@@ -60,8 +58,9 @@ export class CriticalConsequenceEngine {
 		const state = {
 			version: VERSION,
 			state: "applying",
-			location,
-			effectNumber,
+			location: genericLocation(wound.system?.hitLocation),
+			effectNumber: positiveInteger(wound.system?.resolution?.effectNumber),
+			definition: foundry.utils.deepClone(definition),
 			resolved,
 			lootPileUuid: "",
 			createdAt: Date.now(),
@@ -92,7 +91,8 @@ export class CriticalConsequenceEngine {
 }
 
 Hooks.on("createItem", (item) => {
-	if (!isEligibleCoreWound(item) || !isConsequenceAuthority(item.parent)) return;
+	if (!isEligibleWound(item) || !isConsequenceAuthority(item.parent)) return;
+	if (!criticalConsequenceForWound(item)?.enabled) return;
 	void CriticalConsequenceEngine.apply(item).catch(reportConsequenceError);
 });
 
@@ -142,7 +142,7 @@ async function resolveRandomState(definition) {
 		resolved.duration = {
 			formula: String(definition.duration.formula),
 			value: positiveInteger(roll.total),
-			units: String(definition.duration.units ?? "rounds"),
+			units: String(definition.duration.units || "rounds"),
 			roll: roll.toJSON(),
 		};
 		await showDice(roll);
@@ -152,11 +152,11 @@ async function resolveRandomState(definition) {
 
 async function createManagedEffects(wound, definition, resolved) {
 	const sources = [];
-	const legacyCharacteristicOwner =
-		genericLocation(wound.system?.hitLocation) === "leg" &&
-		[5, 6, 7].includes(positiveInteger(wound.system?.resolution?.effectNumber));
 
-	if (Array.isArray(definition.characteristics) && !legacyCharacteristicOwner) {
+	if (Array.isArray(definition.characteristics) && definition.characteristics.length) {
+		const condition = definition.duration?.until === "medical-attention"
+			? localize("Until medical attention is received", "Do czasu otrzymania pomocy medycznej")
+			: "";
 		const changes = definition.characteristics.map((entry) =>
 			encodeRuleEffectChange({
 				targetId: `characteristic.${String(entry.characteristicId)}.current`,
@@ -165,14 +165,10 @@ async function createManagedEffects(wound, definition, resolved) {
 				applicability: RULE_EFFECT_APPLICABILITY.AUTOMATIC,
 				side: RULE_EFFECT_SIDES.SELF,
 				stacking: "per-acquisition",
-				condition: definition.until === "medical-attention"
-					? localize("Until medical attention is received", "Do czasu otrzymania pomocy medycznej")
-					: "",
+				condition,
 			}),
 		);
 		const flags = consequenceEffectFlags(wound, "characteristics", resolved);
-		/* Persist the same canonical change payload consumed by RuleEffectResolver
-		 * immediately, rather than waiting for an asynchronous repair hook. */
 		flags[FLAG_SCOPE][RULE_CHANGES_FLAG_KEY] = foundry.utils.deepClone(changes);
 		if (resolved.duration?.units === "rounds") {
 			flags[FLAG_SCOPE][TIMED_FLAG_KEY] = timedStateFor(
@@ -259,7 +255,7 @@ async function ensurePhysicalArmSide(wound) {
 
 	/* A Critical Wound materialized from attack damage already has authoritative
 	 * left/right hit-location provenance. Recover it defensively before offering
-	 * the manual Compendium-template dialog. */
+	 * the manual template dialog. */
 	const inherited = physicalArmFromResolutionProvenance(wound);
 	if (inherited) {
 		await wound.update({ "system.hitLocation": inherited });
@@ -272,8 +268,8 @@ async function ensurePhysicalArmSide(wound) {
 			title: localize("Choose injured arm", "Wybierz zranione ramię"),
 		},
 		content: `<p>${escapeHtml(localize(
-			`The Core template '${wound.name}' does not know which arm was hit. Choose the physical arm before the automatic held-item consequence is applied.`,
-			`Szablon Core '${wound.name}' nie określa, które ramię zostało trafione. Wybierz stronę przed automatycznym upuszczeniem trzymanych przedmiotów.`,
+			`The template '${wound.name}' does not know which arm was hit. Choose the physical arm before the automatic held-item consequence is applied.`,
+			`Szablon '${wound.name}' nie określa, które ramię zostało trafione. Wybierz stronę przed automatycznym upuszczeniem trzymanych przedmiotów.`,
 		))}</p>`,
 		modal: true,
 		rejectClose: false,
@@ -547,13 +543,11 @@ function runtimeState(wound) {
 		: null;
 }
 
-function isEligibleCoreWound(wound) {
+function isEligibleWound(wound) {
 	return Boolean(
 		wound instanceof foundry.documents.Item &&
 		wound.type === "criticalWound" &&
-		wound.parent instanceof foundry.documents.Actor &&
-		isCoreDetailedEffectProvider(wound.system?.resolution?.providerId) &&
-		positiveInteger(wound.system?.resolution?.effectNumber)
+		wound.parent instanceof foundry.documents.Actor
 	);
 }
 
