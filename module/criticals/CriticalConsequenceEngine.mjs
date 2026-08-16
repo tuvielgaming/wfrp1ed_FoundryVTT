@@ -27,7 +27,7 @@ const TIMED_FLAG_KEY = "criticalTimed";
 const RULE_CHANGES_FLAG_KEY = "ruleChanges";
 const DAMAGE_STATE_FLAG_KEY = "damageState";
 const CRITICAL_RESULT_FLAG_KEY = "criticalResult";
-const VERSION = 10;
+const VERSION = 11;
 const processingTurns = new Set();
 let processingWorldTime = false;
 
@@ -101,8 +101,10 @@ Hooks.on("createItem", (item) => {
  * Round-based characteristic effects and periodic damage are both anchored to
  * the initiative position at which the wound was applied. The partial remainder
  * of that turn/round never consumes a declared round and never causes an early
- * periodic tick. A complete cycle is reached when initiative re-enters the
- * anchor combatant's turn on a later round.
+ * periodic tick. A complete cycle is reached when initiative crosses that saved
+ * turn-start boundary on a later round. If the original combatant is defeated,
+ * skipped, or removed, the saved turn slot remains as a virtual boundary rather
+ * than restarting the timer from another combatant.
  */
 Hooks.on("combatTurnChange", (combat, prior, current) => {
 	if (!isPrimaryActiveGm() || !isForwardCombatProgression(prior, current)) return;
@@ -449,17 +451,7 @@ async function processTimedCriticalTurnChange(combat, prior, current, transition
 					continue;
 				}
 
-				const anchorCombatantId = String(timed.anchorCombatantId ?? "");
-				if (!anchorCombatantId || !combatHasCombatant(combat, anchorCombatantId)) {
-					const reanchored = reanchorTimedState(timed, combat, current);
-					await effect.setFlag(FLAG_SCOPE, TIMED_FLAG_KEY, {
-						...reanchored,
-						lastTransitionKey: transitionKey,
-					});
-					continue;
-				}
-
-				if (!transitionEntersInitiativeAnchor(timed, combat, current)) continue;
+				if (!transitionCrossesInitiativeAnchor(timed, combat, prior, current)) continue;
 				if (currentRound <= nonNegativeInteger(timed.startRound)) {
 					await effect.setFlag(FLAG_SCOPE, TIMED_FLAG_KEY, {
 						...foundry.utils.deepClone(timed),
@@ -524,17 +516,6 @@ function timedStateWithAnchor(effect, timed, combat, current) {
 	};
 }
 
-function reanchorTimedState(timed, combat, current) {
-	return {
-		...foundry.utils.deepClone(timed),
-		version: VERSION,
-		combatId: String(combat?.id ?? ""),
-		startRound: nonNegativeInteger(current?.round ?? combat?.round),
-		anchorCombatantId: String(current?.combatantId ?? combat?.combatant?.id ?? ""),
-		anchorTurn: combatTurnIndex(current?.turn ?? combat?.turn),
-	};
-}
-
 async function processPeriodicCriticalTurnChange(combat, prior, current, transitionKey) {
 	const currentRound = nonNegativeInteger(current?.round ?? combat.round);
 
@@ -557,17 +538,7 @@ async function processPeriodicCriticalTurnChange(combat, prior, current, transit
 					continue;
 				}
 
-				const anchorCombatantId = String(periodic.anchorCombatantId ?? "");
-				if (!anchorCombatantId || !combatHasCombatant(combat, anchorCombatantId)) {
-					const reanchored = reanchorPeriodicState(periodic, combat, current);
-					await effect.setFlag(FLAG_SCOPE, PERIODIC_FLAG_KEY, {
-						...reanchored,
-						lastTransitionKey: transitionKey,
-					});
-					continue;
-				}
-
-				if (!transitionEntersInitiativeAnchor(periodic, combat, current)) continue;
+				if (!transitionCrossesInitiativeAnchor(periodic, combat, prior, current)) continue;
 				if (currentRound <= nonNegativeInteger(periodic.startRound)) {
 					await effect.setFlag(FLAG_SCOPE, PERIODIC_FLAG_KEY, {
 						...foundry.utils.deepClone(periodic),
@@ -601,17 +572,6 @@ function periodicStateWithAnchor(periodic, combat, current) {
 		anchorCombatantId: String(current?.combatantId ?? combat?.combatant?.id ?? ""),
 		anchorTurn: combatTurnIndex(current?.turn ?? combat?.turn),
 		lastTransitionKey: String(periodic.lastTransitionKey ?? ""),
-	};
-}
-
-function reanchorPeriodicState(periodic, combat, current) {
-	return {
-		...foundry.utils.deepClone(periodic),
-		version: VERSION,
-		combatId: String(combat?.id ?? ""),
-		startRound: nonNegativeInteger(current?.round ?? combat?.round),
-		anchorCombatantId: String(current?.combatantId ?? combat?.combatant?.id ?? ""),
-		anchorTurn: combatTurnIndex(current?.turn ?? combat?.turn),
 	};
 }
 
@@ -770,31 +730,48 @@ function activeCombatForActor(actor) {
 	return null;
 }
 
-function combatHasCombatant(combat, combatantId) {
-	const id = String(combatantId ?? "");
-	if (!id) return false;
-	return [...(combat?.combatants ?? [])].some((combatant) => String(combatant.id ?? "") === id);
-}
-
 function initiativeStateHasAnchor(state, combat) {
 	return Boolean(
 		String(state?.combatId ?? "") === String(combat?.id ?? "") &&
 		nonNegativeInteger(state?.startRound) > 0 &&
-		String(state?.anchorCombatantId ?? "")
+		(
+			String(state?.anchorCombatantId ?? "") ||
+			combatTurnIndex(state?.anchorTurn) >= 0
+		)
 	);
 }
 
-function transitionEntersInitiativeAnchor(state, combat, current) {
-	const anchorCombatantId = String(state?.anchorCombatantId ?? "");
-	const currentCombatantId = String(current?.combatantId ?? "");
-	if (anchorCombatantId && currentCombatantId === anchorCombatantId) return true;
-
-	const anchorTurn = combatTurnIndex(state?.anchorTurn);
+function transitionCrossesInitiativeAnchor(state, combat, prior, current) {
+	const priorRound = nonNegativeInteger(prior?.round);
+	const currentRound = nonNegativeInteger(current?.round);
+	const priorTurn = combatTurnIndex(prior?.turn);
 	const currentTurn = combatTurnIndex(current?.turn);
-	if (anchorTurn < 0 || currentTurn !== anchorTurn) return false;
+	if (currentRound <= 0 || priorTurn < 0 || currentTurn < 0) return false;
+	if (currentRound < priorRound) return false;
 
-	const anchoredCombatant = combat?.turns?.[anchorTurn];
-	return !anchorCombatantId || String(anchoredCombatant?.id ?? "") === anchorCombatantId;
+	const anchorCombatantId = String(state?.anchorCombatantId ?? "");
+	let anchorTurn = -1;
+	if (anchorCombatantId) {
+		anchorTurn = [...(combat?.turns ?? [])]
+			.findIndex((combatant) => String(combatant?.id ?? "") === anchorCombatantId);
+	}
+	if (anchorTurn < 0) anchorTurn = virtualAnchorTurn(state, combat);
+	if (anchorTurn < 0) return false;
+
+	if (currentRound === priorRound) {
+		return currentTurn > priorTurn && anchorTurn > priorTurn && anchorTurn <= currentTurn;
+	}
+	if (currentRound - priorRound > 1) return true;
+	return anchorTurn > priorTurn || anchorTurn <= currentTurn;
+}
+
+function virtualAnchorTurn(state, combat) {
+	const savedTurn = combatTurnIndex(state?.anchorTurn);
+	const turnCount = Number(combat?.turns?.length ?? 0);
+	if (savedTurn < 0 || !Number.isInteger(turnCount) || turnCount <= 0) return -1;
+	/* A saved index equal to the new turn count represents the old last slot.
+	 * Its virtual boundary is therefore crossed when Combat wraps to turn 0. */
+	return Math.min(savedTurn, turnCount);
 }
 
 function isForwardCombatProgression(prior, current) {
