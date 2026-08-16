@@ -1,0 +1,14 @@
+{
+  "name": "wfrp1ed-foundryvtt",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:packs": "node scripts/build-packs.mjs"
+  },
+  "devDependencies": {
+    "@foundryvtt/foundryvtt-cli": "0.0.6"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
