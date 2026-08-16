@@ -1,11 +1,12 @@
 const FLAG_SCOPE = "wfrp1ed";
 const GENERIC_EFFECT_FLAG_KEY = "criticalConsequenceEffect";
 const RULE_CHANGES_FLAG_KEY = "ruleChanges";
+const TIMED_FLAG_KEY = "criticalTimed";
 const repairing = new Set();
 
 for (const hookName of ["createActiveEffect", "updateActiveEffect"]) {
 	Hooks.on(hookName, (effect) => {
-		void persistGenericCriticalChanges(effect).catch(reportError);
+		void synchronizeGenericCriticalEffect(effect).catch(reportError);
 	});
 }
 
@@ -19,36 +20,64 @@ async function repairExisting() {
 		for (const wound of actor.items ?? []) {
 			if (wound?.type !== "criticalWound") continue;
 			for (const effect of wound.effects ?? []) {
-				await persistGenericCriticalChanges(effect);
+				await synchronizeGenericCriticalEffect(effect);
 			}
 		}
 	}
 }
 
-async function persistGenericCriticalChanges(effect) {
+/**
+ * Preserve the declarative rule payload and the terminal state of managed
+ * Critical effects.
+ *
+ * "Automation enabled" means execute the wound's declared consequence once
+ * when the wound is applied. It is not a repeating toggle. Once the WFRP round
+ * timer has stamped expiredAtRound, the generated transfer ActiveEffect must
+ * remain disabled; otherwise Foundry can prepare/transfer the Item child again
+ * and make a completed temporary consequence appear to re-apply.
+ */
+async function synchronizeGenericCriticalEffect(effect) {
 	const wound = effect?.parent;
 	if (wound?.type !== "criticalWound") return false;
 	const metadata = effect.getFlag?.(FLAG_SCOPE, GENERIC_EFFECT_FLAG_KEY);
-	if (metadata?.kind !== "characteristics") return false;
+	if (!metadata?.kind) return false;
 
 	const uuid = String(effect.uuid ?? "");
 	if (repairing.has(uuid)) return false;
-	const source = effect.toObject?.() ?? {};
-	const changes = Array.isArray(source.changes) ? source.changes : [];
-	if (!changes.length) return false;
-	const flagged = effect.getFlag?.(FLAG_SCOPE, RULE_CHANGES_FLAG_KEY);
-	if (sameJson(flagged, changes)) return false;
+
+	const update = {};
+	const timed = effect.getFlag?.(FLAG_SCOPE, TIMED_FLAG_KEY);
+	if (positiveInteger(timed?.expiredAtRound) > 0 && effect.disabled !== true) {
+		update.disabled = true;
+		update["duration.expired"] = true;
+	}
+
+	if (metadata.kind === "characteristics") {
+		const source = effect.toObject?.() ?? {};
+		const changes = Array.isArray(source.changes) ? source.changes : [];
+		if (changes.length) {
+			const flagged = effect.getFlag?.(FLAG_SCOPE, RULE_CHANGES_FLAG_KEY);
+			if (!sameJson(flagged, changes)) {
+				update[`flags.${FLAG_SCOPE}.${RULE_CHANGES_FLAG_KEY}`] =
+					foundry.utils.deepClone(changes);
+			}
+		}
+	}
+
+	if (!Object.keys(update).length) return false;
 
 	repairing.add(uuid);
 	try {
-		await effect.update({
-			[`flags.${FLAG_SCOPE}.${RULE_CHANGES_FLAG_KEY}`]:
-				foundry.utils.deepClone(changes),
-		});
+		await effect.update(update);
 	} finally {
 		repairing.delete(uuid);
 	}
 	return true;
+}
+
+function positiveInteger(value) {
+	const number = Number(value);
+	return Number.isInteger(number) && number > 0 ? number : 0;
 }
 
 function sameJson(a, b) {
