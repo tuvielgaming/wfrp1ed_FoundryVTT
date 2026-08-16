@@ -1,13 +1,20 @@
 import { CombatAttackEconomy } from "../combat/CombatAttackEconomy.mjs";
 import { CombatDodgeEconomy } from "../combat/CombatDodgeEconomy.mjs";
+import { CombatInitiativeClock } from "../combat/CombatInitiativeClock.mjs";
 import { CombatRoundInitiativeOrder } from "../combat/CombatRoundInitiativeOrder.mjs";
 import { CombatRoundTurnState } from "../combat/CombatRoundTurnState.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
 const PARRY_DEBT_REMINDER_FLAG_KEY = "parryDebtReminder";
+const CORE_INITIATIVE_OPTION = "wfrpCoreInitiative";
 
 /**
  * WFRP 1e Combat document.
+ *
+ * Core initiative is deterministic: Combatants act in descending current
+ * Initiative characteristic rather than rolling a die. Equal Initiative values
+ * deliberately remain equal; Foundry may serialize their UI turns, but the WFRP
+ * rules layer treats the shared Initiative score as one simultaneous band.
  *
  * Round start is the authoritative reset point for current-round Attack/parry
  * resources. Starting a Combatant turn only opens that Combatant's attack
@@ -24,6 +31,45 @@ const PARRY_DEBT_REMINDER_FLAG_KEY = "parryDebtReminder";
  */
 export class Wfrp1edCombat extends foundry.documents.Combat {
 	/**
+	 * Foundry's Roll Initiative action becomes the Core WFRP procedure: assign
+	 * each requested Combatant their Actor's current Initiative characteristic.
+	 * No initiative die exists in the WFRP 1e Core procedure.
+	 *
+	 * Optional weapon Initiative modifiers are intentionally not guessed here.
+	 * The existing optional Weapon Modifiers world setting remains authoritative,
+	 * but combat first needs an explicit canonical "weapon currently used for
+	 * initiative" contract before a two-weapon Actor can be resolved safely.
+	 *
+	 * @inheritDoc
+	 */
+	async rollInitiative(ids, options = {}) {
+		const requested = normalizeCombatantIds(ids, this);
+		const updates = [];
+
+		for (const id of requested) {
+			const combatant = this.combatants.get(id);
+			const initiative = coreInitiativeFor(combatant);
+			if (initiative === null) continue;
+			updates.push({ _id: id, initiative });
+		}
+
+		if (updates.length) {
+			await this.updateEmbeddedDocuments(
+				"Combatant",
+				updates,
+				{ ...options, [CORE_INITIATIVE_OPTION]: true },
+			);
+		}
+
+		if (!this.started) {
+			await CombatRoundInitiativeOrder.captureCombatBaselines(this, {
+				force: true,
+			});
+		}
+		return this;
+	}
+
+	/**
 	 * WFRP turn advancement follows unfinished round-turn state rather than the
 	 * current numeric turn index. This is necessary because the GM may reorder
 	 * initiative during the round.
@@ -32,6 +78,9 @@ export class Wfrp1edCombat extends foundry.documents.Combat {
 	 * the GM/player actually presses Next Turn. A drag-based postponement changes
 	 * focus without marking that Combatant complete.
 	 *
+	 * The immutable initiative clock is emitted only from this real progression
+	 * path. Merely dragging/re-focusing the tracker therefore cannot age a wound.
+	 *
 	 * @inheritDoc
 	 */
 	async nextTurn() {
@@ -39,29 +88,41 @@ export class Wfrp1edCombat extends foundry.documents.Combat {
 			return super.nextTurn();
 		}
 
-		await CombatRoundTurnState.markCompleted(this.combatant);
+		const prior = this.combatant;
+		await CombatRoundTurnState.markCompleted(prior);
 		const next = CombatRoundTurnState.firstUnfinished(this);
 		if (!next) return this.nextRound();
 
-		return CombatRoundTurnState.focus(this, next);
+		const result = await CombatRoundTurnState.focus(this, next);
+		await CombatInitiativeClock.emitTurnStart(this, prior, next);
+		return result;
 	}
 
 	/**
-	 * Restore temporary initiative order before Foundry calculates the next
-	 * round's first Combatant.
+	 * End-of-round is the immutable clock safety boundary. It is emitted before
+	 * temporary initiative is restored, so a clock point made unreachable by a
+	 * death, Skip Defeated, or a temporary reorder still completes exactly one
+	 * full cycle before the round is allowed to advance.
 	 *
 	 * @inheritDoc
 	 */
 	async nextRound() {
+		if (this.started && Number(this.round) > 0) {
+			await CombatInitiativeClock.emitRoundEnd(this);
+		}
 		await CombatRoundInitiativeOrder.resetBeforeNextRound(this);
-		return super.nextRound();
+		const result = await super.nextRound();
+		if (this.started && Number(this.round) > 0 && this.combatant) {
+			await CombatInitiativeClock.emitRoundStart(this, this.combatant);
+		}
+		return result;
 	}
 
 	/** @inheritDoc */
 	async _onStartRound(context) {
 		await super._onStartRound(context);
 
-		/* Round 1 establishes the baseline after any pre-combat initiative rolls. */
+		/* Round 1 establishes the baseline after any pre-combat initiative action. */
 		if (Number(this.round) === 1) {
 			await CombatRoundInitiativeOrder.captureCombatBaselines(this, {
 				force: true,
@@ -131,6 +192,25 @@ export class Wfrp1edCombat extends foundry.documents.Combat {
 			PARRY_DEBT_REMINDER_FLAG_KEY,
 			0,
 		);
+	}
+}
+
+function normalizeCombatantIds(ids, combat) {
+	if (Array.isArray(ids)) return ids.map(String);
+	if (ids instanceof Set) return [...ids].map(String);
+	const id = String(ids ?? "").trim();
+	if (id) return [id];
+	return [...(combat?.combatants ?? [])].map((entry) => String(entry.id));
+}
+
+function coreInitiativeFor(combatant) {
+	const actor = combatant?.actor;
+	if (!(actor instanceof foundry.documents.Actor)) return null;
+	try {
+		const value = Number(actor.getCharacteristicValue?.("i"));
+		return Number.isFinite(value) ? value : null;
+	} catch (_error) {
+		return null;
 	}
 }
 
