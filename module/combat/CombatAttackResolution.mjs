@@ -51,6 +51,7 @@ export class CombatAttackResolution {
 		this.#validate(actor, weapon, targetMode, target);
 
 		const combatant = this.combatantFor(actor);
+		const lifecycleCombat = game.combat?.started ? game.combat : null;
 		let economy = null;
 		let attackCost = 0;
 
@@ -107,10 +108,16 @@ export class CombatAttackResolution {
 		}
 
 		const attackState = {
-			version: 3,
+			version: 4,
 			family: WEAPON_KIND.MELEE,
 			status: "rolled",
 			managedByCombat: Boolean(combatant),
+			lifecycle: lifecycleCombat
+				? {
+					combatId: String(lifecycleCombat.id ?? ""),
+					round: positiveRound(lifecycleCombat.round),
+				}
+				: null,
 			attacker: {
 				uuid: actor.uuid,
 				name: String(actor.name ?? ""),
@@ -206,6 +213,11 @@ function mutableRuleEffects(value) {
 		...entry,
 		source: { ...(entry?.source ?? {}) },
 	}));
+}
+
+function positiveRound(value) {
+	const number = Number(value);
+	return Number.isInteger(number) && number > 0 ? number : null;
 }
 
 function integer(value) {
