@@ -1,14 +1,13 @@
 import { createHash } from "node:crypto";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { ClassicLevel } from "classic-level";
 import { coreCriticalTableSources } from "../module/core/CoreCriticalTableCatalog.mjs";
 import { coreCriticalWoundItemSources } from "../module/core/CoreCriticalWoundCatalog.mjs";
 import { coreSkillItemSources } from "../module/core/CoreSkillCatalog.mjs";
 
-const compilePack = await loadCompilePack();
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const SOURCE_ROOT = join(ROOT, ".pack-build");
 const PACK_ROOT = join(ROOT, "packs");
 
 const PACKS = Object.freeze([
@@ -20,78 +19,144 @@ const PACKS = Object.freeze([
 	pack("core-critical-tables-pl", "RollTable", 16, () => coreCriticalTableSources("pl")),
 ]);
 
-await rm(SOURCE_ROOT, { recursive: true, force: true });
-await mkdir(SOURCE_ROOT, { recursive: true });
 await mkdir(PACK_ROOT, { recursive: true });
 
 for (const definition of PACKS) {
-	const sourceDirectory = join(SOURCE_ROOT, definition.name);
 	const destination = join(PACK_ROOT, definition.name);
-	await mkdir(sourceDirectory, { recursive: true });
 	await rm(destination, { recursive: true, force: true });
 
 	const documents = definition.documents().map((source, index) =>
 		prepareDocument(definition, source, index));
 	validatePack(definition, documents);
 
-	for (const document of documents) {
-		const fileName = `${safeFileName(document.name)}_${document._id}.json`;
-		await writeFile(
-			join(sourceDirectory, fileName),
-			`${JSON.stringify(document, null, 2)}\n`,
-			"utf8",
-		);
-	}
-
-	await compilePack(sourceDirectory, destination, { log: true });
+	await compileFoundryLevelPack(definition, documents, destination);
 	console.log(
 		`WFRP1ED | Built ${definition.name}: ${documents.length} ${definition.documentType} documents.`,
 	);
 }
 
-await rm(SOURCE_ROOT, { recursive: true, force: true });
 console.log("WFRP1ED | Core compendium build complete.");
-
-async function loadCompilePack() {
-	/*
-	 * The published 0.0.6 package has existed in more than one packaging shape:
-	 * the current source entry point re-exports compilePack, while some npm
-	 * installs expose the implementation only from lib/package.mjs. Prefer the
-	 * public API, but support that published-package layout as a compatibility
-	 * fallback so the repository build is deterministic across both variants.
-	 */
-	try {
-		const api = await import("@foundryvtt/foundryvtt-cli");
-		if (typeof api.compilePack === "function") return api.compilePack;
-	} catch (error) {
-		if (error?.code !== "ERR_PACKAGE_PATH_NOT_EXPORTED") {
-			console.warn(
-				"WFRP1ED | Foundry CLI root API did not expose compilePack; trying its package implementation.",
-			);
-		}
-	}
-
-	try {
-		const implementation = await import(
-			"@foundryvtt/foundryvtt-cli/lib/package.mjs"
-		);
-		if (typeof implementation.compilePack === "function") {
-			return implementation.compilePack;
-		}
-	} catch (error) {
-		throw new Error(
-			"Unable to load compilePack from @foundryvtt/foundryvtt-cli. Run 'npm install' and verify that the installed CLI package contains lib/package.mjs.",
-			{ cause: error },
-		);
-	}
-
-	throw new Error(
-		"@foundryvtt/foundryvtt-cli is installed, but neither its public API nor lib/package.mjs exposes compilePack.",
-	);
-}
 
 function pack(name, documentType, expectedCount, documents) {
 	return Object.freeze({ name, documentType, expectedCount, documents });
+}
+
+/**
+ * Write the small hierarchy used by this repository directly in Foundry's
+ * LevelDB pack format.
+ *
+ * The published @foundryvtt/foundryvtt-cli 0.0.6 npm package is missing the
+ * lib/package.mjs implementation referenced by its documented compilePack API
+ * in some installations. Depending on that private packaging detail makes the
+ * system build fail before it reaches our content. ClassicLevel is the actual
+ * database layer used by Foundry's official compiler, so keep our build local
+ * and deterministic for the two document hierarchies we own here:
+ *
+ *   Item -> ActiveEffect
+ *   RollTable -> TableResult
+ *
+ * Foundry stores embedded collections as arrays of ids on the parent and stores
+ * each embedded document under a hierarchical LevelDB key.
+ */
+async function compileFoundryLevelPack(definition, documents, destination) {
+	const collection = collectionFor(definition.documentType);
+	await mkdir(destination, { recursive: true });
+
+	const db = new ClassicLevel(destination, {
+		keyEncoding: "utf8",
+		valueEncoding: "json",
+	});
+
+	await db.open();
+	try {
+		const batch = db.batch();
+		const seenKeys = new Set();
+
+		for (const source of documents) {
+			const document = structuredCloneSafe(source);
+			const parentId = document._id;
+
+			if (collection === "items") {
+				const effects = Array.isArray(document.effects)
+					? document.effects
+					: [];
+				document.effects = effects.map((effect) => effect._id);
+
+				for (const effect of effects) {
+					putUnique(
+						batch,
+						seenKeys,
+						`!items.effects!${parentId}.${effect._id}`,
+						effect,
+					);
+				}
+			}
+
+			if (collection === "tables") {
+				const results = Array.isArray(document.results)
+					? document.results
+					: [];
+				document.results = results.map((result) => result._id);
+
+				for (const result of results) {
+					putUnique(
+						batch,
+						seenKeys,
+						`!tables.results!${parentId}.${result._id}`,
+						result,
+					);
+				}
+			}
+
+			putUnique(
+				batch,
+				seenKeys,
+				`!${collection}!${parentId}`,
+				document,
+			);
+		}
+
+		await batch.write();
+		await compactDatabase(db);
+	} finally {
+		await db.close();
+	}
+}
+
+function putUnique(batch, seenKeys, key, source) {
+	if (seenKeys.has(key)) {
+		throw new Error(`Duplicate Foundry pack key '${key}'.`);
+	}
+	seenKeys.add(key);
+
+	const value = structuredCloneSafe(source);
+	delete value._key;
+	batch.put(key, value);
+}
+
+async function compactDatabase(db) {
+	const forward = db.keys({ limit: 1, fillCache: false });
+	const firstKey = await forward.next();
+	await forward.close();
+
+	const backward = db.keys({ limit: 1, reverse: true, fillCache: false });
+	const lastKey = await backward.next();
+	await backward.close();
+
+	if (firstKey && lastKey) {
+		await db.compactRange(firstKey, lastKey, { keyEncoding: "utf8" });
+	}
+}
+
+function collectionFor(documentType) {
+	switch (documentType) {
+		case "Item": return "items";
+		case "RollTable": return "tables";
+		default:
+			throw new Error(
+				`Unsupported compendium document type '${documentType}'.`,
+			);
+	}
 }
 
 function validatePack(definition, documents) {
@@ -109,6 +174,29 @@ function validatePack(definition, documents) {
 		}
 		if (ids.has(id)) {
 			throw new Error(`${definition.name} contains duplicate document id '${id}'.`);
+		}
+		ids.add(id);
+
+		validateEmbeddedIds(definition, document, "effects");
+		validateEmbeddedIds(definition, document, "results");
+	}
+}
+
+function validateEmbeddedIds(definition, document, field) {
+	if (!Array.isArray(document[field])) return;
+	const ids = new Set();
+
+	for (const embedded of document[field]) {
+		const id = String(embedded?._id ?? "");
+		if (!/^[A-Za-z0-9]{16}$/.test(id)) {
+			throw new Error(
+				`${definition.name} document '${document._id}' contains invalid ${field} id '${id}'.`,
+			);
+		}
+		if (ids.has(id)) {
+			throw new Error(
+				`${definition.name} document '${document._id}' contains duplicate ${field} id '${id}'.`,
+			);
 		}
 		ids.add(id);
 	}
@@ -153,16 +241,6 @@ function stableId(seed) {
 		.update(String(seed), "utf8")
 		.digest("hex")
 		.slice(0, 16);
-}
-
-function safeFileName(value) {
-	const normalized = String(value ?? "document")
-		.normalize("NFKD")
-		.replace(/[\u0300-\u036f]/g, "")
-		.replace(/[^A-Za-z0-9._-]+/g, "_")
-		.replace(/^_+|_+$/g, "")
-		.slice(0, 80);
-	return normalized || "document";
 }
 
 function structuredCloneSafe(value) {
