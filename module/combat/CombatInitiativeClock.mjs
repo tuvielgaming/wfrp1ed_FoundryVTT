@@ -27,6 +27,16 @@ export const COMBAT_INITIATIVE_CLOCK_EVENT = Object.freeze({
  * only from its real Next Turn / Next Round lifecycle.
  */
 export class CombatInitiativeClock {
+	static #consumers = new Set();
+
+	static registerConsumer(consumer) {
+		if (typeof consumer !== "function") {
+			throw new TypeError("Initiative clock consumer must be a function.");
+		}
+		this.#consumers.add(consumer);
+		return () => this.#consumers.delete(consumer);
+	}
+
 	static capture(combat) {
 		if (!(combat instanceof foundry.documents.Combat) || !combat.started) {
 			return emptyClockState();
@@ -148,6 +158,10 @@ export class CombatInitiativeClock {
 				String(source.currentCombatantId ?? ""),
 			].join("|"),
 		});
+
+		for (const consumer of [...this.#consumers]) {
+			await consumer(combat, event);
+		}
 		Hooks.callAll(COMBAT_INITIATIVE_CLOCK_HOOK, combat, event);
 		return event;
 	}
