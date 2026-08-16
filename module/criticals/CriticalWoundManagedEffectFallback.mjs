@@ -9,6 +9,7 @@ import { RuleEffectResolver } from "../effects/RuleEffectResolver.mjs";
 const FLAG_SCOPE = "wfrp1ed";
 const CORE_EFFECT_FLAG_KEY = "coreCriticalConsequence";
 const GENERIC_EFFECT_FLAG_KEY = "criticalConsequenceEffect";
+const TIMED_FLAG_KEY = "criticalTimed";
 const RULE_CHANGES_FLAG_KEY = "ruleChanges";
 const PROVIDER_ID = "wfrp1ed.core-critical-managed-fallback";
 const CRITICAL_WOUND_TYPE = "criticalWound";
@@ -21,10 +22,11 @@ const SUPPORTED_TARGETS = new Set([
 /**
  * Last-resort reconstruction for managed Core Critical Wound effects.
  *
- * Generic Item transfer effects are now consumed directly by RuleEffectResolver
- * even when Foundry reports the grandchild ActiveEffect as inactive. This
- * provider remains as a compatibility path for legacy managed wounds whose
- * declarative changes need to be reconstructed from provenance.
+ * Foundry can prepare an Item-embedded timed ActiveEffect as expired even while
+ * our WFRP round anchor still says the consequence is active. For system-managed
+ * timed Criticals, `flags.wfrp1ed.criticalTimed.expiredAtRound` is therefore the
+ * authoritative expiry boundary. The native duration remains presentation and
+ * compatibility data, not the only source of truth.
  */
 RuleEffectResolver.registerCandidateProvider(PROVIDER_ID, ({ actor, targetId }) => {
 	if (!(actor instanceof foundry.documents.Actor)) return [];
@@ -35,10 +37,10 @@ RuleEffectResolver.registerCandidateProvider(PROVIDER_ID, ({ actor, targetId }) 
 		if (wound?.type !== CRITICAL_WOUND_TYPE) continue;
 
 		for (const effect of wound.effects ?? []) {
-			if (effect?.disabled === true || effect.duration?.expired === true) continue;
+			const generic = effect.getFlag?.(FLAG_SCOPE, GENERIC_EFFECT_FLAG_KEY);
+			if (effect?.disabled === true || isExpiredForWfrp(effect, generic)) continue;
 			if (isNativelyDiscoverable(effect, targetId)) continue;
 
-			const generic = effect.getFlag?.(FLAG_SCOPE, GENERIC_EFFECT_FLAG_KEY);
 			if (generic?.kind === "characteristics") {
 				const changes = ruleChanges(effect);
 				for (let index = 0; index < changes.length; index += 1) {
@@ -132,6 +134,11 @@ function candidateFromDecoded({ actor, wound, effect, decoded, id }) {
 	};
 }
 
+/**
+ * Match the generic resolver's native discovery contract. If Foundry considers
+ * the effect expired, native discovery will not see it; the fallback may still
+ * restore it when the WFRP timed flag says the duration has not actually ended.
+ */
 function isNativelyDiscoverable(effect, targetId) {
 	if (effect?.disabled === true || effect?.duration?.expired === true) return false;
 	const item = effect?.parent;
@@ -145,6 +152,20 @@ function isNativelyDiscoverable(effect, targetId) {
 	}
 	return ruleChanges(effect).some((change) =>
 		decodeRuleEffectChange(change)?.targetId === targetId);
+}
+
+function isExpiredForWfrp(effect, generic) {
+	if (generic?.kind === "characteristics") {
+		const timed = effect.getFlag?.(FLAG_SCOPE, TIMED_FLAG_KEY);
+		if (
+			timed &&
+			typeof timed === "object" &&
+			String(timed.units ?? "") === "rounds"
+		) {
+			return positiveInteger(timed.expiredAtRound) > 0;
+		}
+	}
+	return effect?.duration?.expired === true;
 }
 
 function ruleChanges(effect) {
