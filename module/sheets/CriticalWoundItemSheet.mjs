@@ -477,7 +477,9 @@ function sheetLabels() {
 		durationUnits: localize("Duration units", "Jednostka czasu"),
 		until: localize("Until", "Do kiedy"),
 		periodicWounds: localize("Wounds each round", "Żywotność na rundę"),
-		periodicUntil: localize("Periodic effect until", "Efekt okresowy do"),
+		periodicDurationFormula: localize("Periodic duration", "Czas efektu okresowego"),
+		periodicDurationUnits: localize("Periodic duration unit", "Jednostka czasu efektu"),
+		periodicUntil: localize("Or until", "Lub do"),
 		dropHeld: localize("Drop held items", "Upuszczanie trzymanych przedmiotów"),
 		characteristics: localize("Characteristic changes", "Zmiany cech"),
 		addCharacteristic: localize("Add change", "Dodaj zmianę"),
@@ -485,6 +487,13 @@ function sheetLabels() {
 		durationUnitOptions: {
 			"": localize("None", "Brak"),
 			rounds: localize("Rounds", "Rundy"),
+		},
+		periodicDurationUnitOptions: {
+			"": localize("None", "Brak"),
+			rounds: localize("Rounds", "Rundy"),
+			minutes: localize("Minutes", "Minuty"),
+			hours: localize("Hours", "Godziny"),
+			days: localize("Days", "Dni"),
 		},
 		untilOptions: {
 			"": localize("None", "Brak"),
