@@ -27,8 +27,9 @@ const TIMED_FLAG_KEY = "criticalTimed";
 const RULE_CHANGES_FLAG_KEY = "ruleChanges";
 const DAMAGE_STATE_FLAG_KEY = "damageState";
 const CRITICAL_RESULT_FLAG_KEY = "criticalResult";
-const VERSION = 4;
+const VERSION = 5;
 const processingRounds = new Set();
+let processingWorldTime = false;
 
 /**
  * Resolve declarative Critical consequences exactly once when a persistent
@@ -116,6 +117,16 @@ Hooks.on("updateCombat", (combat, changes) => {
 	queueRoundConsequences(combat, currentRound);
 });
 
+/* Foundry v14 world time is canonical seconds. Minute/hour/day periodic
+ * lifetimes therefore remain deterministic even outside Combat. */
+Hooks.on("updateWorldTime", (worldTime) => {
+	if (!isPrimaryActiveGm() || processingWorldTime) return;
+	processingWorldTime = true;
+	void processPeriodicWorldTimeExpiries(Number(worldTime))
+		.catch(reportConsequenceError)
+		.finally(() => { processingWorldTime = false; });
+});
+
 Hooks.once("ready", () => {
 	if (!isPrimaryActiveGm()) return;
 	void repairExistingRuntimeEffects().catch(reportConsequenceError);
@@ -143,6 +154,22 @@ async function resolveRandomState(definition) {
 			formula: String(definition.duration.formula),
 			value: positiveInteger(roll.total),
 			units: String(definition.duration.units || "rounds"),
+			roll: roll.toJSON(),
+		};
+		await showDice(roll);
+	}
+
+	const periodicDuration = definition.periodicWounds?.duration;
+	if (
+		definition.periodicWounds?.formula &&
+		periodicDuration?.formula &&
+		periodicDuration?.units
+	) {
+		const roll = await evaluateFormula(periodicDuration.formula);
+		resolved.periodicDuration = {
+			formula: String(periodicDuration.formula),
+			value: positiveInteger(roll.total),
+			units: String(periodicDuration.units),
 			roll: roll.toJSON(),
 		};
 		await showDice(roll);
@@ -197,14 +224,10 @@ async function createManagedEffects(wound, definition, resolved) {
 
 	if (definition.periodicWounds?.formula) {
 		const flags = consequenceEffectFlags(wound, "periodic-wounds", resolved);
-		flags[FLAG_SCOPE][PERIODIC_FLAG_KEY] = {
-			version: VERSION,
-			kind: "wounds-per-round",
-			formula: String(definition.periodicWounds.formula),
-			until: String(definition.periodicWounds.until ?? ""),
-			lastCombatId: "",
-			lastRound: 0,
-		};
+		flags[FLAG_SCOPE][PERIODIC_FLAG_KEY] = periodicStateFor(
+			definition.periodicWounds,
+			resolved.periodicDuration,
+		);
 		sources.push({
 			name: localize("Critical bleeding", "Krwawienie z rany krytycznej"),
 			img: "icons/svg/blood.svg",
@@ -245,6 +268,30 @@ function timedStateFor(actor, duration) {
 		combatId: String(combat?.id ?? ""),
 		startRound: combat ? nonNegativeInteger(combat.round) : 0,
 		expiredAtRound: 0,
+	};
+}
+
+function periodicStateFor(definition, resolvedDuration) {
+	const duration = resolvedDuration
+		? foundry.utils.deepClone(resolvedDuration)
+		: null;
+	const worldTime = currentWorldTime();
+	const worldSeconds = duration && duration.units !== "rounds"
+		? durationSeconds(duration.value, duration.units)
+		: 0;
+	return {
+		version: VERSION,
+		kind: "wounds-per-round",
+		formula: String(definition.formula),
+		until: String(definition.until ?? ""),
+		duration,
+		lastCombatId: "",
+		lastRound: 0,
+		ticksApplied: 0,
+		startWorldTime: worldSeconds > 0 ? worldTime : 0,
+		endWorldTime: worldSeconds > 0 ? worldTime + worldSeconds : 0,
+		expiredAtRound: 0,
+		expiredAtWorldTime: 0,
 	};
 }
 
@@ -389,6 +436,7 @@ async function processTimedCriticals(combat, round) {
 
 				if (round - nonNegativeInteger(timed.startRound) < durationRounds) continue;
 				await effect.update({
+					disabled: true,
 					"duration.expired": true,
 					[`flags.${FLAG_SCOPE}.${TIMED_FLAG_KEY}`]: {
 						...foundry.utils.deepClone(timed),
@@ -408,6 +456,7 @@ async function processPeriodicCriticals(combat, round) {
 			for (const effect of wound.effects ?? []) {
 				const periodic = effectFlag(effect, PERIODIC_FLAG_KEY);
 				if (!periodic || effect.disabled === true || effect.duration?.expired === true) continue;
+				if (await expirePeriodicIfWorldTimeElapsed(effect, periodic, currentWorldTime())) continue;
 				if (
 					String(periodic.lastCombatId ?? "") === String(combat.id ?? "") &&
 					Number(periodic.lastRound ?? 0) === round
@@ -459,11 +508,73 @@ async function applyPeriodicWounds(actor, wound, effect, periodic, combat, round
 }
 
 async function stampPeriodic(effect, periodic, combat, round) {
-	await effect.setFlag(FLAG_SCOPE, PERIODIC_FLAG_KEY, {
+	const ticksApplied = nonNegativeInteger(periodic.ticksApplied) + 1;
+	const duration = periodic.duration && typeof periodic.duration === "object"
+		? foundry.utils.deepClone(periodic.duration)
+		: null;
+	const expiresByRounds = Boolean(
+		duration?.units === "rounds" &&
+		positiveInteger(duration.value) > 0 &&
+		ticksApplied >= positiveInteger(duration.value)
+	);
+	const next = {
 		...foundry.utils.deepClone(periodic),
 		lastCombatId: String(combat.id ?? ""),
 		lastRound: round,
+		ticksApplied,
+		expiredAtRound: expiresByRounds ? round : nonNegativeInteger(periodic.expiredAtRound),
+	};
+	const update = {
+		[`flags.${FLAG_SCOPE}.${PERIODIC_FLAG_KEY}`]: next,
+	};
+	if (expiresByRounds) {
+		update.disabled = true;
+		update["duration.expired"] = true;
+	}
+	await effect.update(update);
+	if (expiresByRounds) refreshActorSheetIfOpen(effect.parent?.parent);
+}
+
+async function processPeriodicWorldTimeExpiries(worldTime) {
+	if (!Number.isFinite(worldTime)) return;
+	for (const actor of game.actors ?? []) {
+		for (const wound of actor.items ?? []) {
+			if (wound?.type !== "criticalWound") continue;
+			for (const effect of wound.effects ?? []) {
+				const periodic = effectFlag(effect, PERIODIC_FLAG_KEY);
+				if (!periodic || effect.disabled === true) continue;
+				await expirePeriodicIfWorldTimeElapsed(effect, periodic, worldTime);
+			}
+		}
+	}
+}
+
+async function expirePeriodicIfWorldTimeElapsed(effect, periodic, worldTime) {
+	const duration = periodic?.duration;
+	if (!duration || duration.units === "rounds" || !positiveInteger(duration.value)) return false;
+	let endWorldTime = Number(periodic.endWorldTime ?? 0);
+	if (!Number.isFinite(endWorldTime) || endWorldTime <= 0) {
+		const seconds = durationSeconds(duration.value, duration.units);
+		if (seconds <= 0) return false;
+		const anchored = {
+			...foundry.utils.deepClone(periodic),
+			startWorldTime: worldTime,
+			endWorldTime: worldTime + seconds,
+		};
+		await effect.setFlag(FLAG_SCOPE, PERIODIC_FLAG_KEY, anchored);
+		return false;
+	}
+	if (worldTime < endWorldTime) return false;
+	await effect.update({
+		disabled: true,
+		"duration.expired": true,
+		[`flags.${FLAG_SCOPE}.${PERIODIC_FLAG_KEY}`]: {
+			...foundry.utils.deepClone(periodic),
+			expiredAtWorldTime: worldTime,
+		},
 	});
+	refreshActorSheetIfOpen(effect.parent?.parent);
+	return true;
 }
 
 async function repairExistingRuntimeEffects() {
@@ -565,6 +676,22 @@ function primaryActiveGm() {
 
 function isPrimaryActiveGm() {
 	return Boolean(game.user?.isGM && primaryActiveGm()?.id === game.user.id);
+}
+
+function currentWorldTime() {
+	const value = Number(game.time?.worldTime ?? 0);
+	return Number.isFinite(value) ? value : 0;
+}
+
+function durationSeconds(value, units) {
+	const amount = positiveInteger(value);
+	if (!amount) return 0;
+	switch (String(units ?? "")) {
+		case "minutes": return amount * 60;
+		case "hours": return amount * 60 * 60;
+		case "days": return amount * 24 * 60 * 60;
+		default: return 0;
+	}
 }
 
 function genericLocation(hitLocation) {
