@@ -39,7 +39,6 @@
 		"module/criticals/CriticalConsequencePersistence.mjs",
 		"module/criticals/CriticalWoundPersistenceIntegration.mjs",
 		"module/criticals/CriticalWoundManagedEffectFallback.mjs",
-		"module/criticals/CriticalRuntimeCharacteristicEffects.mjs",
 		"module/rules/FractionalCharacteristicPolicy.mjs",
 		"module/combat/CombatTransactionRollback.mjs",
 		"module/combat/CombatRollbackAutomationGuard.mjs",
