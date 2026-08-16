@@ -10,6 +10,7 @@ const { DialogV2, HandlebarsApplicationMixin } =
 
 const FLAG_SCOPE = "wfrp1ed";
 const TABLE_RESULT_FLAG_KEY = "detailedCriticalEffect";
+const CONSEQUENCE_PREFIX = "system.consequence.";
 
 /**
  * Native Foundry v14 sheet for persistent Critical Wound Items.
@@ -36,7 +37,13 @@ export class CriticalWoundItemSheet extends HandlebarsApplicationMixin(
 		tag: "form",
 		form: {
 			handler: this.#handleFormSubmit,
-			submitOnChange: true,
+			/*
+			 * Do not let ApplicationV2 expand and submit this entire form on every
+			 * field change. `system.consequence` contains an array plus nested schema
+			 * fields; partial expanded submissions can replace sibling data. We bind
+			 * explicit per-control persistence in _onRender instead.
+			 */
+			submitOnChange: false,
 			closeOnSubmit: false,
 		},
 		actions: {
@@ -78,56 +85,50 @@ export class CriticalWoundItemSheet extends HandlebarsApplicationMixin(
 	_onRender(context, options) {
 		super._onRender(context, options);
 		if (!this.isEditable) return;
+
 		for (const input of this.element?.querySelectorAll?.("[data-consequence-characteristic-field]") ?? []) {
 			input.addEventListener("change", (event) => {
-				void updateConsequenceCharacteristic(this.document, event.currentTarget);
+				void updateConsequenceCharacteristic(this.document, event.currentTarget)
+					.catch(reportAuthoringError);
+			});
+		}
+
+		for (const input of this.element?.querySelectorAll?.("[name]") ?? []) {
+			if (input.dataset?.consequenceCharacteristicField) continue;
+			input.addEventListener("change", (event) => {
+				void updateNamedControl(this.document, event.currentTarget)
+					.catch(reportAuthoringError);
 			});
 		}
 	}
 
 	/**
-	 * Persist only the form control which actually changed.
+	 * Safe fallback for an explicit/programmatic form submit.
 	 *
-	 * Foundry ApplicationV2 expands the entire submitted form into an update
-	 * object. The characteristic editor deliberately uses an array which is
-	 * updated transactionally by its own handlers; submitting the rest of the
-	 * form at the same time can therefore replace `system.consequence` with a
-	 * partial object and erase sibling fields. A per-control update avoids that
-	 * destructive race and also keeps Add/Remove Change actions independent.
+	 * Normal editing never reaches this handler because submitOnChange is false.
+	 * If the form is explicitly submitted, persist a complete consequence object
+	 * plus the ordinary Item fields rather than trusting FormDataExtended's partial
+	 * nested-object expansion.
 	 *
 	 * @this {CriticalWoundItemSheet}
 	 */
-	static async #handleFormSubmit(event, _form, _formData) {
+	static async #handleFormSubmit(event, form, _formData) {
 		if (!this.isEditable) return;
-		const control = event?.target;
-		if (!isFormControl(control)) return;
-
-		/* Characteristic rows have an explicit array-aware update handler. Ignore
-		 * the same bubbling change event here so the two update paths cannot race. */
-		if (control.dataset?.consequenceCharacteristicField) return;
-
-		const name = String(control.name ?? "").trim();
-		if (!name) return;
-		await this.document.update({
-			[name]: formControlValue(control),
-		});
+		event?.preventDefault?.();
+		await persistFormSnapshot(this.document, form);
 	}
 
 	/** @this {CriticalWoundItemSheet} */
 	static async #addConsequenceCharacteristic() {
 		if (!this.isEditable) return;
 		const consequence = consequenceSystemSource(this.document.system?.consequence);
-		await this.document.update({
-			"system.consequence.enabled": true,
-			"system.consequence.characteristics": [
-				...consequence.characteristics,
-				{
-					characteristicId: "i",
-					operation: "multiply",
-					value: 0.5,
-				},
-			],
+		consequence.enabled = true;
+		consequence.characteristics.push({
+			characteristicId: "i",
+			operation: "multiply",
+			value: 0.5,
 		});
+		await this.document.update({ "system.consequence": consequence });
 	}
 
 	/** @this {CriticalWoundItemSheet} */
@@ -137,9 +138,7 @@ export class CriticalWoundItemSheet extends HandlebarsApplicationMixin(
 		if (!Number.isInteger(index) || index < 0) return;
 		const consequence = consequenceSystemSource(this.document.system?.consequence);
 		consequence.characteristics.splice(index, 1);
-		await this.document.update({
-			"system.consequence.characteristics": consequence.characteristics,
-		});
+		await this.document.update({ "system.consequence": consequence });
 	}
 
 	/** @this {CriticalWoundItemSheet} */
@@ -220,11 +219,87 @@ async function updateConsequenceCharacteristic(item, input) {
 	const consequence = consequenceSystemSource(item.system?.consequence);
 	const entry = consequence.characteristics[index];
 	if (!entry) return;
-	entry[field] = field === "value" ? Number(input.value) : String(input.value);
-	await item.update({
-		"system.consequence.enabled": true,
-		"system.consequence.characteristics": consequence.characteristics,
-	});
+	entry[field] = field === "value" ? parseNumberControl(input) : String(input.value);
+	consequence.enabled = true;
+	await item.update({ "system.consequence": consequence });
+}
+
+async function updateNamedControl(item, control) {
+	if (!isFormControl(control)) return;
+	const name = String(control.name ?? "").trim();
+	if (!name) return;
+
+	if (name.startsWith(CONSEQUENCE_PREFIX)) {
+		const consequence = consequenceSystemSource(item.system?.consequence);
+		const relativePath = name.slice(CONSEQUENCE_PREFIX.length);
+		setObjectPath(consequence, relativePath, formControlValue(control));
+		await item.update({ "system.consequence": consequence });
+		return;
+	}
+
+	await item.update({ [name]: formControlValue(control) });
+}
+
+async function persistFormSnapshot(item, form) {
+	if (!form?.querySelectorAll) return;
+	const update = {};
+	const consequence = consequenceSystemSource(item.system?.consequence);
+	let consequenceTouched = false;
+
+	for (const control of form.querySelectorAll("[name]")) {
+		if (!isFormControl(control) || control.disabled) continue;
+		if (control.dataset?.consequenceCharacteristicField) continue;
+		const name = String(control.name ?? "").trim();
+		if (!name) continue;
+
+		if (name.startsWith(CONSEQUENCE_PREFIX)) {
+			setObjectPath(
+				consequence,
+				name.slice(CONSEQUENCE_PREFIX.length),
+				formControlValue(control),
+			);
+			consequenceTouched = true;
+		} else {
+			update[name] = formControlValue(control);
+		}
+	}
+
+	/* Characteristic rows are intentionally reconstructed as a complete array so
+	 * an explicit submit cannot drop edits that have not blurred yet. */
+	const rows = [...form.querySelectorAll("[data-consequence-characteristic-index]")];
+	if (rows.length) {
+		consequence.characteristics = rows.map(characteristicFromRow).filter(Boolean);
+		consequenceTouched = true;
+	}
+
+	if (consequenceTouched) update["system.consequence"] = consequence;
+	if (Object.keys(update).length) await item.update(update);
+}
+
+function characteristicFromRow(row) {
+	const characteristicId = row.querySelector('[data-consequence-characteristic-field="characteristicId"]')?.value;
+	const operation = row.querySelector('[data-consequence-characteristic-field="operation"]')?.value;
+	const valueControl = row.querySelector('[data-consequence-characteristic-field="value"]');
+	if (!characteristicId || !operation || !valueControl) return null;
+	return {
+		characteristicId: String(characteristicId),
+		operation: String(operation),
+		value: parseNumberControl(valueControl),
+	};
+}
+
+function setObjectPath(target, path, value) {
+	const parts = String(path ?? "").split(".").filter(Boolean);
+	if (!parts.length) return;
+	let cursor = target;
+	for (let index = 0; index < parts.length - 1; index += 1) {
+		const key = parts[index];
+		if (!cursor[key] || typeof cursor[key] !== "object" || Array.isArray(cursor[key])) {
+			cursor[key] = {};
+		}
+		cursor = cursor[key];
+	}
+	cursor[parts.at(-1)] = value;
 }
 
 function isFormControl(value) {
@@ -240,10 +315,15 @@ function formControlValue(control) {
 		return control.checked === true;
 	}
 	if (String(control.type ?? "").toLowerCase() === "number") {
-		const number = Number(control.value);
-		return Number.isFinite(number) ? number : 0;
+		return parseNumberControl(control);
 	}
 	return String(control.value ?? "");
+}
+
+function parseNumberControl(control) {
+	const raw = String(control?.value ?? "").trim().replace(",", ".");
+	const number = Number(raw);
+	return Number.isFinite(number) ? number : 0;
 }
 
 function buildDescriptionPresentation(item) {
@@ -446,6 +526,14 @@ function effectFromTarget(application, target) {
 	return id
 		? application.document.effects.get(id) ?? null
 		: null;
+}
+
+function reportAuthoringError(error) {
+	console.error("WFRP1ED | Unable to update Critical Wound authoring data.", error);
+	ui.notifications.error(error?.message ?? localize(
+		"Unable to save the Critical Wound change.",
+		"Nie udało się zapisać zmiany rany krytycznej.",
+	));
 }
 
 function localize(english, polish) {
