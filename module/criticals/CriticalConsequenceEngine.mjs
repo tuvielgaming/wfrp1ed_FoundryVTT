@@ -24,16 +24,18 @@ const FLAG_SCOPE = "wfrp1ed";
 const RUNTIME_FLAG_KEY = "criticalConsequenceRuntime";
 const EFFECT_FLAG_KEY = "criticalConsequenceEffect";
 const PERIODIC_FLAG_KEY = "criticalPeriodic";
-const VERSION = 1;
+const TIMED_FLAG_KEY = "criticalTimed";
+const VERSION = 2;
+const processingRounds = new Set();
 
 /**
  * Resolve declarative Critical consequences exactly once when a persistent Core
  * Critical Wound is materialized.
  *
- * Random duration formulas are rolled once and persisted on the wound before an
- * ActiveEffect is created. Reloading, disabling, or re-enabling the Effect can
- * therefore never reroll the injury. Destructive Item movement is a separate
- * one-shot Loot transaction rather than a repeatable ActiveEffect change.
+ * Random duration formulas are rolled once and persisted on the wound. Timed
+ * effects use an explicit WFRP round anchor because Foundry does not reliably
+ * register Item-embedded transfer effects for expiry. One-shot Item movement is
+ * a Loot transaction rather than a repeatable ActiveEffect change.
  */
 export class CriticalConsequenceEngine {
 	static async apply(wound) {
@@ -45,6 +47,11 @@ export class CriticalConsequenceEngine {
 		const effectNumber = positiveInteger(wound.system?.resolution?.effectNumber);
 		const definition = coreCriticalConsequence(location, effectNumber);
 		if (!definition) return null;
+
+		if (definition.dropHeld === "injured-hand") {
+			const selected = await ensurePhysicalArmSide(wound);
+			if (!selected) return null;
+		}
 
 		const resolved = await resolveRandomState(definition);
 		const state = {
@@ -70,6 +77,7 @@ export class CriticalConsequenceEngine {
 			state.state = "applied";
 			state.completedAt = Date.now();
 			await wound.setFlag(FLAG_SCOPE, RUNTIME_FLAG_KEY, state);
+			refreshActorSheetIfOpen(wound.parent);
 			return foundry.utils.deepFreeze(foundry.utils.deepClone(state));
 		} catch (error) {
 			state.state = "error";
@@ -85,14 +93,44 @@ Hooks.on("createItem", (item) => {
 	void CriticalConsequenceEngine.apply(item).catch(reportConsequenceError);
 });
 
-/* Per-round automatic consequences are authoritative GM work. */
+/*
+ * combatTurnChange is the semantic round boundary. updateCombat is a defensive
+ * second entry point for custom Combat progression; per-effect round stamps and
+ * an in-memory lock make the combined path idempotent.
+ */
 Hooks.on("combatTurnChange", (combat, prior, current) => {
 	if (!isPrimaryActiveGm()) return;
-	const priorRound = Number(prior?.round ?? combat.round ?? 0);
-	const currentRound = Number(current?.round ?? combat.round ?? 0);
-	if (!Number.isFinite(currentRound) || currentRound <= priorRound) return;
-	void processPeriodicCriticals(combat, currentRound).catch(reportConsequenceError);
+	const priorRound = nonNegativeInteger(prior?.round);
+	const currentRound = nonNegativeInteger(current?.round ?? combat.round);
+	if (currentRound <= priorRound) return;
+	queueRoundConsequences(combat, currentRound);
 });
+
+Hooks.on("updateCombat", (combat, changes) => {
+	if (!isPrimaryActiveGm() || !Object.hasOwn(changes ?? {}, "round")) return;
+	const currentRound = nonNegativeInteger(combat.round);
+	if (currentRound <= 0) return;
+	queueRoundConsequences(combat, currentRound);
+});
+
+Hooks.once("ready", () => {
+	if (!isPrimaryActiveGm()) return;
+	void repairExistingRuntimeEffects().catch(reportConsequenceError);
+});
+
+function queueRoundConsequences(combat, round) {
+	const key = `${String(combat?.id ?? "")}:${round}`;
+	if (!combat?.id || processingRounds.has(key)) return;
+	processingRounds.add(key);
+	void processRoundConsequences(combat, round)
+		.catch(reportConsequenceError)
+		.finally(() => processingRounds.delete(key));
+}
+
+async function processRoundConsequences(combat, round) {
+	await processTimedCriticals(combat, round);
+	await processPeriodicCriticals(combat, round);
+}
 
 async function resolveRandomState(definition) {
 	const resolved = {};
@@ -111,10 +149,6 @@ async function resolveRandomState(definition) {
 
 async function createManagedEffects(wound, definition, resolved) {
 	const sources = [];
-
-	/* Leg #5-#7 are still owned by the pre-existing audited characteristic
-	 * consequence synchronizer. Do not duplicate them while the generic engine
-	 * is introduced; Leg #4 proves the randomized-duration path. */
 	const legacyCharacteristicOwner =
 		genericLocation(wound.system?.hitLocation) === "leg" &&
 		[5, 6, 7].includes(positiveInteger(wound.system?.resolution?.effectNumber));
@@ -133,6 +167,13 @@ async function createManagedEffects(wound, definition, resolved) {
 					: "",
 			}),
 		);
+		const flags = consequenceEffectFlags(wound, "characteristics", resolved);
+		if (resolved.duration?.units === "rounds") {
+			flags[FLAG_SCOPE][TIMED_FLAG_KEY] = timedStateFor(
+				wound.parent,
+				resolved.duration,
+			);
+		}
 		sources.push({
 			name: localize("Critical Wound consequence", "Skutek rany krytycznej"),
 			img: String(wound.img || "icons/svg/blood.svg"),
@@ -145,35 +186,32 @@ async function createManagedEffects(wound, definition, resolved) {
 					value: resolved.duration.value,
 					units: resolved.duration.units,
 					expired: false,
-					expiry: null,
+					expiry: resolved.duration.units === "rounds" ? "roundStart" : null,
 				},
 			} : {}),
-			flags: consequenceEffectFlags(wound, "characteristics", resolved),
+			flags,
 		});
 	}
 
 	if (definition.periodicWounds?.formula) {
+		const flags = consequenceEffectFlags(wound, "periodic-wounds", resolved);
+		flags[FLAG_SCOPE][PERIODIC_FLAG_KEY] = {
+			version: VERSION,
+			kind: "wounds-per-round",
+			formula: String(definition.periodicWounds.formula),
+			until: String(definition.periodicWounds.until ?? ""),
+			lastCombatId: "",
+			lastRound: 0,
+		};
 		sources.push({
 			name: localize("Critical bleeding", "Krwawienie z rany krytycznej"),
 			img: "icons/svg/blood.svg",
 			disabled: false,
 			transfer: true,
+			/* Bleeding is event-driven state, not a characteristic mutation. */
 			changes: [],
 			system: { changes: [] },
-			flags: {
-				...consequenceEffectFlags(wound, "periodic-wounds", resolved),
-				[FLAG_SCOPE]: {
-					...consequenceEffectFlags(wound, "periodic-wounds", resolved)[FLAG_SCOPE],
-					[PERIODIC_FLAG_KEY]: {
-						version: VERSION,
-						kind: "wounds-per-round",
-						formula: String(definition.periodicWounds.formula),
-						until: String(definition.periodicWounds.until ?? ""),
-						lastCombatId: "",
-						lastRound: 0,
-					},
-				},
-			},
+			flags,
 		});
 	}
 
@@ -194,6 +232,59 @@ function consequenceEffectFlags(wound, kind, resolved) {
 			},
 		},
 	};
+}
+
+function timedStateFor(actor, duration) {
+	const combat = activeCombatForActor(actor);
+	return {
+		version: VERSION,
+		units: "rounds",
+		durationRounds: positiveInteger(duration?.value),
+		combatId: String(combat?.id ?? ""),
+		startRound: combat ? nonNegativeInteger(combat.round) : 0,
+		expiredAtRound: 0,
+	};
+}
+
+async function ensurePhysicalArmSide(wound) {
+	const current = String(wound.system?.hitLocation ?? "");
+	if (current === "leftArm" || current === "rightArm") return current;
+	if (current !== "arm") return current;
+
+	const { DialogV2 } = foundry.applications.api;
+	const choice = await DialogV2.wait({
+		window: {
+			title: localize("Choose injured arm", "Wybierz zranione ramię"),
+		},
+		content: `<p>${escapeHtml(localize(
+			`The Core template '${wound.name}' does not know which arm was hit. Choose the physical arm before the automatic held-item consequence is applied.`,
+			`Szablon Core '${wound.name}' nie określa, które ramię zostało trafione. Wybierz stronę przed automatycznym upuszczeniem trzymanych przedmiotów.`,
+		))}</p>`,
+		modal: true,
+		rejectClose: false,
+		buttons: [
+			{
+				action: "left",
+				label: localize("Left arm", "Lewa ręka"),
+				callback: () => "leftArm",
+			},
+			{
+				action: "right",
+				label: localize("Right arm", "Prawa ręka"),
+				default: true,
+				callback: () => "rightArm",
+			},
+		],
+	});
+	if (choice !== "leftArm" && choice !== "rightArm") {
+		ui.notifications.info(localize(
+			"The Critical Wound was added, but its side-dependent automatic consequence was not applied.",
+			"Rana krytyczna została dodana, ale automatyczny skutek zależny od strony nie został zastosowany.",
+		));
+		return "";
+	}
+	await wound.update({ "system.hitLocation": choice });
+	return choice;
 }
 
 async function executeDropHeld(wound, mode) {
@@ -233,9 +324,6 @@ function heldItemsForMode(actor, mode, hitLocation) {
 function relativeHandForPhysicalArm(actor, hitLocation) {
 	const location = String(hitLocation ?? "");
 	if (location !== "leftArm" && location !== "rightArm") return "";
-	/* WFRP inventory uses dominant/non-dominant hand. Until the handedness field
-	 * reaches the printed sheet, a persistent Actor flag may override the Core
-	 * right-handed default. */
 	const dominant = String(actor.getFlag?.(FLAG_SCOPE, "dominantHand") ?? "right").toLowerCase() === "left"
 		? "left"
 		: "right";
@@ -243,18 +331,49 @@ function relativeHandForPhysicalArm(actor, hitLocation) {
 	return physical === dominant ? INVENTORY_HAND.MAIN : INVENTORY_HAND.OFF;
 }
 
-async function processPeriodicCriticals(combat, round) {
-	const actors = new Map();
-	for (const combatant of combat.combatants ?? []) {
-		const actor = combatant.actor;
-		if (actor instanceof foundry.documents.Actor) actors.set(actor.uuid, actor);
-	}
-
-	for (const actor of actors.values()) {
+async function processTimedCriticals(combat, round) {
+	for (const actor of combatActors(combat)) {
 		for (const wound of actor.items ?? []) {
 			if (wound.type !== "criticalWound") continue;
 			for (const effect of wound.effects ?? []) {
-				const periodic = effect.getFlag?.(FLAG_SCOPE, PERIODIC_FLAG_KEY);
+				const timed = effectFlag(effect, TIMED_FLAG_KEY);
+				if (!timed || effect.disabled === true || effect.duration?.expired === true) continue;
+				const durationRounds = positiveInteger(timed.durationRounds);
+				if (!durationRounds || String(timed.units ?? "") !== "rounds") continue;
+
+				if (
+					String(timed.combatId ?? "") !== String(combat.id ?? "") ||
+					nonNegativeInteger(timed.startRound) <= 0
+				) {
+					await effect.setFlag(FLAG_SCOPE, TIMED_FLAG_KEY, {
+						...foundry.utils.deepClone(timed),
+						combatId: String(combat.id ?? ""),
+						startRound: round,
+						expiredAtRound: 0,
+					});
+					continue;
+				}
+
+				if (round - nonNegativeInteger(timed.startRound) < durationRounds) continue;
+				await effect.update({
+					"duration.expired": true,
+					[`flags.${FLAG_SCOPE}.${TIMED_FLAG_KEY}`]: {
+						...foundry.utils.deepClone(timed),
+						expiredAtRound: round,
+					},
+				});
+				refreshActorSheetIfOpen(actor);
+			}
+		}
+	}
+}
+
+async function processPeriodicCriticals(combat, round) {
+	for (const actor of combatActors(combat)) {
+		for (const wound of actor.items ?? []) {
+			if (wound.type !== "criticalWound") continue;
+			for (const effect of wound.effects ?? []) {
+				const periodic = effectFlag(effect, PERIODIC_FLAG_KEY);
 				if (!periodic || effect.disabled === true || effect.duration?.expired === true) continue;
 				if (
 					String(periodic.lastCombatId ?? "") === String(combat.id ?? "") &&
@@ -300,11 +419,7 @@ async function applyPeriodicWounds(actor, wound, effect, periodic, combat, round
 			woundUuid: wound.uuid,
 		},
 	});
-	const message = await DamageChat.publish({
-		packet,
-		resolution,
-		speakerActor: actor,
-	});
+	const message = await DamageChat.publish({ packet, resolution, speakerActor: actor });
 	const transaction = await DamageChat.applyMessage(message);
 	if (!transaction) throw new Error("Critical bleeding damage could not be applied.");
 	await stampPeriodic(effect, periodic, combat, round);
@@ -316,6 +431,60 @@ async function stampPeriodic(effect, periodic, combat, round) {
 		lastCombatId: String(combat.id ?? ""),
 		lastRound: round,
 	});
+}
+
+async function repairExistingRuntimeEffects() {
+	for (const actor of game.actors ?? []) {
+		let touched = false;
+		for (const wound of actor.items ?? []) {
+			if (wound?.type !== "criticalWound") continue;
+			const runtime = runtimeState(wound);
+			const duration = runtime?.resolved?.duration;
+			if (!duration || String(duration.units ?? "") !== "rounds") continue;
+			for (const effect of wound.effects ?? []) {
+				const metadata = effectFlag(effect, EFFECT_FLAG_KEY);
+				if (metadata?.kind !== "characteristics") continue;
+				if (effectFlag(effect, TIMED_FLAG_KEY)) continue;
+				await effect.setFlag(
+					FLAG_SCOPE,
+					TIMED_FLAG_KEY,
+					timedStateFor(actor, duration),
+				);
+				touched = true;
+			}
+		}
+		if (touched) refreshActorSheetIfOpen(actor);
+	}
+}
+
+function combatActors(combat) {
+	const actors = new Map();
+	for (const combatant of combat?.combatants ?? []) {
+		const actor = combatant.actor;
+		if (actor instanceof foundry.documents.Actor) actors.set(actor.uuid, actor);
+	}
+	return [...actors.values()];
+}
+
+function activeCombatForActor(actor) {
+	if (!(actor instanceof foundry.documents.Actor)) return null;
+	for (const combat of game.combats ?? []) {
+		if (!combat?.started || nonNegativeInteger(combat.round) <= 0) continue;
+		if ([...(combat.combatants ?? [])].some((combatant) => combatant.actor?.uuid === actor.uuid)) {
+			return combat;
+		}
+	}
+	return null;
+}
+
+function effectFlag(effect, key) {
+	const direct = effect?.getFlag?.(FLAG_SCOPE, key);
+	if (direct !== undefined && direct !== null) return foundry.utils.deepClone(direct);
+	const source = effect?.toObject?.() ?? {};
+	const fallback = source.flags?.[FLAG_SCOPE]?.[key];
+	return fallback === undefined || fallback === null
+		? null
+		: foundry.utils.deepClone(fallback);
 }
 
 async function evaluateFormula(formula) {
@@ -381,9 +550,29 @@ function genericLocation(hitLocation) {
 	}
 }
 
+function nonNegativeInteger(value) {
+	const number = Number(value);
+	return Number.isFinite(number) ? Math.max(0, Math.trunc(number)) : 0;
+}
+
 function positiveInteger(value) {
 	const number = Number(value);
 	return Number.isInteger(number) && number > 0 ? number : 0;
+}
+
+function refreshActorSheetIfOpen(actor) {
+	const sheet = actor?.sheet;
+	if (!sheet?.rendered) return;
+	void sheet.render();
+}
+
+function escapeHtml(value) {
+	return String(value ?? "")
+		.replaceAll("&", "&amp;")
+		.replaceAll("<", "&lt;")
+		.replaceAll(">", "&gt;")
+		.replaceAll('"', "&quot;")
+		.replaceAll("'", "&#039;");
 }
 
 function reportConsequenceError(error) {
