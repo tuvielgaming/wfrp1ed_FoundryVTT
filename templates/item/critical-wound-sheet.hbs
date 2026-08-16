@@ -132,6 +132,27 @@
       </label>
 
       <label class="critical-wound-sheet__field">
+        <span>{{ui.periodicDurationFormula}}</span>
+        <input
+          type="text"
+          name="system.consequence.periodicWounds.duration.formula"
+          value="{{consequence.periodicWounds.duration.formula}}"
+          placeholder="2 or 1d4"
+          {{#unless editable}}disabled{{/unless}}
+        />
+      </label>
+
+      <label class="critical-wound-sheet__field">
+        <span>{{ui.periodicDurationUnits}}</span>
+        <select
+          name="system.consequence.periodicWounds.duration.units"
+          {{#unless editable}}disabled{{/unless}}
+        >
+          {{selectOptions ui.periodicDurationUnitOptions selected=consequence.periodicWounds.duration.units localize=false}}
+        </select>
+      </label>
+
+      <label class="critical-wound-sheet__field">
         <span>{{ui.periodicUntil}}</span>
         <select
           name="system.consequence.periodicWounds.until"
