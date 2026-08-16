@@ -2,6 +2,7 @@ import {
 	detailedCriticalEffectText,
 	isCoreDetailedEffectProvider,
 } from "../criticals/CoreDetailedCriticalTables.mjs";
+import { consequenceSystemSource } from "../criticals/CriticalConsequenceDefinition.mjs";
 
 const { ItemSheetV2 } = foundry.applications.sheets;
 const { DialogV2, HandlebarsApplicationMixin } =
@@ -13,16 +14,9 @@ const TABLE_RESULT_FLAG_KEY = "detailedCriticalEffect";
 /**
  * Native Foundry v14 sheet for persistent Critical Wound Items.
  *
- * The sheet intentionally distinguishes three concerns:
- * - editable injury identity/content in Item.system;
- * - read-only resolution provenance used for audit/debugging;
- * - native embedded ActiveEffects which own ongoing mechanical consequences.
- *
- * Core Rulebook wound descriptions are a special case: their text is system-
- * managed source material, not user-authored Item data. The sheet resolves that
- * description from the wound's table provenance in the current client language,
- * so Polish and English clients see the literal text from their corresponding
- * Core Rulebook even if the Item was originally created under another locale.
+ * Critical automation is authored as data on the Item. Core Rulebook wounds use
+ * the same editor/contract as custom wounds, so adding a new wound does not
+ * require a JavaScript case keyed to a Critical result number.
  */
 export class CriticalWoundItemSheet extends HandlebarsApplicationMixin(
 	ItemSheetV2,
@@ -36,8 +30,8 @@ export class CriticalWoundItemSheet extends HandlebarsApplicationMixin(
 			"wfrp1ed-parchment-window",
 		],
 		position: {
-			width: 620,
-			height: 720,
+			width: 680,
+			height: 790,
 		},
 		tag: "form",
 		form: {
@@ -49,6 +43,8 @@ export class CriticalWoundItemSheet extends HandlebarsApplicationMixin(
 			configureEffect: this.#configureEffect,
 			toggleEffect: this.#toggleEffect,
 			deleteEffect: this.#deleteEffect,
+			addConsequenceCharacteristic: this.#addConsequenceCharacteristic,
+			removeConsequenceCharacteristic: this.#removeConsequenceCharacteristic,
 		},
 	};
 
@@ -72,9 +68,49 @@ export class CriticalWoundItemSheet extends HandlebarsApplicationMixin(
 		context.provenanceRows = buildProvenancePresentation(
 			this.document.system?.resolution,
 		);
+		context.consequence = consequenceSystemSource(this.document.system?.consequence);
 		context.ui = sheetLabels();
 
 		return context;
+	}
+
+	_onRender(context, options) {
+		super._onRender(context, options);
+		if (!this.isEditable) return;
+		for (const input of this.element?.querySelectorAll?.("[data-consequence-characteristic-field]") ?? []) {
+			input.addEventListener("change", (event) => {
+				void updateConsequenceCharacteristic(this.document, event.currentTarget);
+			});
+		}
+	}
+
+	/** @this {CriticalWoundItemSheet} */
+	static async #addConsequenceCharacteristic() {
+		if (!this.isEditable) return;
+		const consequence = consequenceSystemSource(this.document.system?.consequence);
+		await this.document.update({
+			"system.consequence.enabled": true,
+			"system.consequence.characteristics": [
+				...consequence.characteristics,
+				{
+					characteristicId: "i",
+					operation: "multiply",
+					value: 0.5,
+				},
+			],
+		});
+	}
+
+	/** @this {CriticalWoundItemSheet} */
+	static async #removeConsequenceCharacteristic(_event, target) {
+		if (!this.isEditable) return;
+		const index = Number(target?.closest?.("[data-consequence-characteristic-index]")?.dataset?.consequenceCharacteristicIndex);
+		if (!Number.isInteger(index) || index < 0) return;
+		const consequence = consequenceSystemSource(this.document.system?.consequence);
+		consequence.characteristics.splice(index, 1);
+		await this.document.update({
+			"system.consequence.characteristics": consequence.characteristics,
+		});
 	}
 
 	/** @this {CriticalWoundItemSheet} */
@@ -146,6 +182,22 @@ export class CriticalWoundItemSheet extends HandlebarsApplicationMixin(
 	}
 }
 
+async function updateConsequenceCharacteristic(item, input) {
+	const row = input?.closest?.("[data-consequence-characteristic-index]");
+	const index = Number(row?.dataset?.consequenceCharacteristicIndex);
+	const field = String(input?.dataset?.consequenceCharacteristicField ?? "");
+	if (!Number.isInteger(index) || index < 0 || !["characteristicId", "operation", "value"].includes(field)) return;
+
+	const consequence = consequenceSystemSource(item.system?.consequence);
+	const entry = consequence.characteristics[index];
+	if (!entry) return;
+	entry[field] = field === "value" ? Number(input.value) : String(input.value);
+	await item.update({
+		"system.consequence.enabled": true,
+		"system.consequence.characteristics": consequence.characteristics,
+	});
+}
+
 function buildDescriptionPresentation(item) {
 	const fallback = String(item?.system?.description ?? "");
 	const resolution = item?.system?.resolution;
@@ -177,11 +229,9 @@ function buildDescriptionPresentation(item) {
 }
 
 function coreEffectNumber(resolution) {
-	/* The persisted number is authoritative and does not require RollTable access. */
 	const direct = Number(resolution?.effectNumber);
 	if (Number.isInteger(direct) && direct > 0) return direct;
 
-	/* Transitional wounds may still need their original table provenance. */
 	const tableUuid = String(resolution?.tableUuid ?? "").trim();
 	const resultId = String(resolution?.tableResultId ?? "").trim();
 	if (!tableUuid || !resultId) return 0;
@@ -202,10 +252,10 @@ function effectLocation(hitLocation) {
 	switch (String(hitLocation ?? "")) {
 		case "rightLeg":
 		case "leftLeg":
-			return "leg";
+		case "leg": return "leg";
 		case "rightArm":
 		case "leftArm":
-			return "arm";
+		case "arm": return "arm";
 		case "head": return "head";
 		case "body": return "body";
 		default: return "";
@@ -289,21 +339,53 @@ function sheetLabels() {
 			"This wound has not been linked to a detailed critical resolution yet.",
 			"Ta rana nie jest jeszcze powiązana z rozstrzygnięciem trafienia krytycznego.",
 		),
+		consequences: localize("Automatic consequences", "Automatyczne konsekwencje"),
+		consequencesHint: localize(
+			"These declarations are executed when the wound is placed on an Actor. They are not tied to a Core Critical number.",
+			"Te deklaracje są wykonywane po dodaniu rany do postaci. Nie są powiązane na stałe z numerem efektu z podręcznika.",
+		),
+		automationEnabled: localize("Enable automation", "Włącz automatykę"),
+		durationFormula: localize("Duration formula", "Formuła czasu"),
+		durationUnits: localize("Duration units", "Jednostka czasu"),
+		until: localize("Until", "Do kiedy"),
+		periodicWounds: localize("Wounds each round", "Żywotność na rundę"),
+		periodicUntil: localize("Periodic effect until", "Efekt okresowy do"),
+		dropHeld: localize("Drop held items", "Upuszczanie trzymanych przedmiotów"),
+		characteristics: localize("Characteristic changes", "Zmiany cech"),
+		addCharacteristic: localize("Add change", "Dodaj zmianę"),
+		removeCharacteristic: localize("Remove change", "Usuń zmianę"),
+		durationUnitOptions: {
+			"": localize("None", "Brak"),
+			rounds: localize("Rounds", "Rundy"),
+		},
+		untilOptions: {
+			"": localize("None", "Brak"),
+			"medical-attention": localize("Medical attention", "Pomoc medyczna"),
+		},
+		dropHeldOptions: {
+			"": localize("None", "Brak"),
+			"injured-hand": localize("Injured hand", "Zraniona ręka"),
+			all: localize("All held items", "Wszystkie trzymane przedmioty"),
+		},
+		characteristicOptions: {
+			m: localize("Movement (M)", "Szybkość (Sz)"), ws: "WW", bs: "US", s: "S", t: "Wt", w: "Żw",
+			i: localize("Initiative (I)", "Inicjatywa (I)"), a: "A", dex: "Zr", ld: "CP", int: "Int", cl: "Op", wp: "SW", fel: "Ogd",
+		},
+		operationOptions: {
+			add: localize("Add", "Dodaj"),
+			subtract: localize("Subtract", "Odejmij"),
+			multiply: localize("Multiply", "Pomnóż"),
+			override: localize("Set value", "Ustaw wartość"),
+		},
 		effects: localize("Active Effects", "Aktywne efekty"),
 		effectsHint: localize(
-			"Ongoing mechanical consequences belong to native Foundry ActiveEffects embedded in this wound Item.",
-			"Trwałe konsekwencje mechaniczne należą do natywnych Aktywnych Efektów Foundry osadzonych w tym przedmiocie rany.",
+			"Runtime consequences and any additional manual effects are represented by native Foundry ActiveEffects embedded in this wound Item.",
+			"Konsekwencje wykonawcze oraz dodatkowe ręczne efekty są reprezentowane przez natywne Aktywne Efekty Foundry osadzone w tej ranie.",
 		),
 		addEffect: localize("Add Effect", "Dodaj efekt"),
-		configureEffect: localize(
-			"Open Foundry effect settings",
-			"Otwórz ustawienia efektu Foundry",
-		),
+		configureEffect: localize("Open Foundry effect settings", "Otwórz ustawienia efektu Foundry"),
 		deleteEffect: localize("Delete effect", "Usuń efekt"),
-		noEffects: localize(
-			"No Active Effects are attached to this wound.",
-			"Do tej rany nie przypisano Aktywnych Efektów.",
-		),
+		noEffects: localize("No Active Effects are attached to this wound.", "Do tej rany nie przypisano Aktywnych Efektów."),
 		transfers: localize("Transfers to Actor", "Działa na postać"),
 	};
 }
