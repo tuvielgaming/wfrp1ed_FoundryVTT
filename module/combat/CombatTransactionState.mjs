@@ -40,11 +40,15 @@ export function combatAttackSourceForTest(message) {
 /**
  * Whether an intermediate combat Test is closed against adjudication.
  *
- * The lifecycle boundary is the first complete DamagePacket. From that moment
- * Attack, Defence and Additional Damage confirmation results are immutable.
- * They become editable again only after Damage invalidation records the packet
- * as reverted. This deliberately also locks resolved-but-not-yet-applied damage
- * and terminal 0-damage results; Apply Damage is not the transaction boundary.
+ * Positive Damage remains editable until Apply Damage creates the authoritative
+ * Actor transaction. This allows the Attack, Defence/Parry and Additional Damage
+ * confirmation results to be corrected after damage dice are rolled; the normal
+ * reconciliation path then invalidates/rebuilds that still-unapplied damage.
+ *
+ * Once damage is applied, all earlier test cards become immutable until the GM
+ * explicitly invalidates/reverts that damage transaction. A resolved zero-damage
+ * result is terminal immediately because there is no Apply Damage action to act
+ * as a later transaction boundary.
  *
  * @param {ChatMessage|null} message Attack/Defence/Additional-Damage Test card
  * @returns {boolean}
@@ -61,7 +65,11 @@ export function isCombatTestAdjudicationLocked(message) {
 		? DamageApplication.transactionFor(actor, damage.packet.id)
 		: damage.application ?? null;
 
-	return transaction?.state !== "reverted";
+	if (transaction?.state === "reverted") return false;
+	if (transaction?.state === "applied") return true;
+
+	const finalAmount = Number(damage.resolution?.finalAmount);
+	return Number.isFinite(finalAmount) && finalAmount <= 0;
 }
 
 /**
@@ -71,8 +79,8 @@ export function isCombatTestAdjudicationLocked(message) {
  */
 export function combatTestLockReason() {
 	return game.i18n.lang === "pl"
-		? "Transakcja ataku jest zamknięta. Unieważnij obrażenia, aby ponownie zmienić wcześniejsze wyniki testów."
-		: "The attack transaction is closed. Invalidate damage to change earlier test results again.";
+		? "Transakcja ataku jest zamknięta po zastosowaniu obrażeń. Unieważnij obrażenia, aby ponownie zmienić wcześniejsze wyniki testów."
+		: "The attack transaction is closed after damage was applied. Invalidate damage to change earlier test results again.";
 }
 
 function actorFromUuidSync(uuid) {

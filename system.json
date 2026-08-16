@@ -14,6 +14,7 @@
 	],
 	"esmodules": [
 		"module/effects/WfrpActiveEffectCompatibility.mjs",
+		"module/settings/WfrpRuleSettings.mjs",
 		"module/wfrp1ed.mjs",
 		"module/careers/CareerSheetIntegration.mjs",
 		"module/tests/TestResultAudienceVisibility.mjs",
@@ -56,7 +57,7 @@
 		"module/chat/TestResultIdentityChat.mjs",
 		"module/tests/TestResultModifierToggle.mjs",
 		"module/combat/CombatTransactionEditLock.mjs",
-		"module/chat/PendingInteractionCleanup.mjs",
+		"module/chat/PendingInteractionReminder.mjs",
 		"module/criticals/DetailedCriticalAdjudication.mjs",
 		"module/chat/CombatLifecyclePolish.mjs",
 		"module/criticals/CriticalResultLifecycleGuard.mjs"
