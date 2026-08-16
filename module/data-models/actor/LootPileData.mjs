@@ -13,9 +13,8 @@ const { TypeDataModel } = foundry.abstract;
  * mutable inventory snapshots inside ChatMessage HTML/flags.
  *
  * `revision` is a transaction guard. The initial automatic drop starts at zero;
- * every later add/take mutates it. A Critical rollback may therefore restore an
- * untouched automatic drop, but must refuse once somebody has interacted with
- * that pile instead of duplicating or stealing later Item transfers.
+ * every later add/take mutates it. `initialItemCount` additionally detects a
+ * direct/manual embedded-Item mutation which bypassed the transfer service.
  */
 export class LootPileData extends TypeDataModel {
 	static defineSchema() {
@@ -29,6 +28,7 @@ export class LootPileData extends TypeDataModel {
 				initial: false,
 			}),
 			revision: nonNegativeIntegerField(),
+			initialItemCount: nonNegativeIntegerField(),
 			createdAt: nonNegativeIntegerField(),
 		};
 	}
