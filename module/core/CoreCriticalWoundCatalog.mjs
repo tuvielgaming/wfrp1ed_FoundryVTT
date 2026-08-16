@@ -20,9 +20,6 @@ const LOCATION_ROLES = Object.freeze({
 });
 const LOCATIONS = Object.freeze(["arm", "head", "body", "leg"]);
 
-/* Static, indefinite characteristic effects can live directly on a compendium
- * Item. Random-duration and one-shot consequences are instead declared in
- * CoreCriticalConsequences and materialized exactly once on application. */
 const CHARACTERISTIC_EFFECTS = Object.freeze({
 	leg: Object.freeze({
 		5: halfMovementAndInitiative(),
@@ -31,7 +28,6 @@ const CHARACTERISTIC_EFFECTS = Object.freeze({
 	}),
 });
 
-/** Build the 64 canonical detailed Critical Effect Item templates. */
 export function coreCriticalWoundItemSources(language = "en") {
 	const lang = normalizeLanguage(language);
 	const results = [];
@@ -39,9 +35,7 @@ export function coreCriticalWoundItemSources(language = "en") {
 	for (const location of LOCATIONS) {
 		const role = LOCATION_ROLES[location];
 		const provider = CORE_DETAILED_EFFECT_PROVIDERS[role];
-		if (!provider?.id) {
-			throw new Error(`Missing Core detailed provider for '${location}'.`);
-		}
+		if (!provider?.id) throw new Error(`Missing Core detailed provider for '${location}'.`);
 
 		for (let effectNumber = 1; effectNumber <= 16; effectNumber += 1) {
 			const description = detailedCriticalEffectText(location, effectNumber, lang);
@@ -177,8 +171,8 @@ function halfMovementAndInitiative() {
 function criticalName(location, effectNumber, language) {
 	const label = detailedCriticalLocationLabel(location, language);
 	return language === "pl"
-		? `Rana krytyczna — ${label} ${effectNumber}`
-		: `Critical Wound — ${label} ${effectNumber}`;
+		? `${label} #${effectNumber} — Rana krytyczna`
+		: `${label} #${effectNumber} — Critical Wound`;
 }
 
 function normalizeLanguage(language) {
