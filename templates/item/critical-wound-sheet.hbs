@@ -70,6 +70,148 @@
     {{/if}}
   </details>
 
+  <section class="critical-wound-sheet__consequences">
+    <div class="critical-wound-sheet__section-heading">
+      <div>
+        <h3>{{ui.consequences}}</h3>
+        <p>{{ui.consequencesHint}}</p>
+      </div>
+
+      <label class="critical-wound-sheet__automation-toggle">
+        <input
+          type="checkbox"
+          name="system.consequence.enabled"
+          {{checked consequence.enabled}}
+          {{#unless editable}}disabled{{/unless}}
+        />
+        <span>{{ui.automationEnabled}}</span>
+      </label>
+    </div>
+
+    <div class="critical-wound-sheet__consequence-grid">
+      <label class="critical-wound-sheet__field">
+        <span>{{ui.durationFormula}}</span>
+        <input
+          type="text"
+          name="system.consequence.duration.formula"
+          value="{{consequence.duration.formula}}"
+          placeholder="1d4"
+          {{#unless editable}}disabled{{/unless}}
+        />
+      </label>
+
+      <label class="critical-wound-sheet__field">
+        <span>{{ui.durationUnits}}</span>
+        <select
+          name="system.consequence.duration.units"
+          {{#unless editable}}disabled{{/unless}}
+        >
+          {{selectOptions ui.durationUnitOptions selected=consequence.duration.units localize=false}}
+        </select>
+      </label>
+
+      <label class="critical-wound-sheet__field">
+        <span>{{ui.until}}</span>
+        <select
+          name="system.consequence.duration.until"
+          {{#unless editable}}disabled{{/unless}}
+        >
+          {{selectOptions ui.untilOptions selected=consequence.duration.until localize=false}}
+        </select>
+      </label>
+
+      <label class="critical-wound-sheet__field">
+        <span>{{ui.periodicWounds}}</span>
+        <input
+          type="text"
+          name="system.consequence.periodicWounds.formula"
+          value="{{consequence.periodicWounds.formula}}"
+          placeholder="1d4"
+          {{#unless editable}}disabled{{/unless}}
+        />
+      </label>
+
+      <label class="critical-wound-sheet__field">
+        <span>{{ui.periodicUntil}}</span>
+        <select
+          name="system.consequence.periodicWounds.until"
+          {{#unless editable}}disabled{{/unless}}
+        >
+          {{selectOptions ui.untilOptions selected=consequence.periodicWounds.until localize=false}}
+        </select>
+      </label>
+
+      <label class="critical-wound-sheet__field">
+        <span>{{ui.dropHeld}}</span>
+        <select
+          name="system.consequence.dropHeld"
+          {{#unless editable}}disabled{{/unless}}
+        >
+          {{selectOptions ui.dropHeldOptions selected=consequence.dropHeld localize=false}}
+        </select>
+      </label>
+    </div>
+
+    <div class="critical-wound-sheet__consequence-characteristics">
+      <div class="critical-wound-sheet__subheading">
+        <strong>{{ui.characteristics}}</strong>
+        {{#if editable}}
+          <button
+            type="button"
+            data-action="addConsequenceCharacteristic"
+          >
+            <i class="fa-solid fa-plus" aria-hidden="true"></i>
+            {{ui.addCharacteristic}}
+          </button>
+        {{/if}}
+      </div>
+
+      {{#if consequence.characteristics.length}}
+        <ol class="critical-wound-sheet__consequence-list">
+          {{#each consequence.characteristics}}
+            <li
+              class="critical-wound-sheet__consequence-row"
+              data-consequence-characteristic-index="{{@index}}"
+            >
+              <select
+                data-consequence-characteristic-field="characteristicId"
+                {{#unless ../editable}}disabled{{/unless}}
+              >
+                {{selectOptions ../ui.characteristicOptions selected=characteristicId localize=false}}
+              </select>
+
+              <select
+                data-consequence-characteristic-field="operation"
+                {{#unless ../editable}}disabled{{/unless}}
+              >
+                {{selectOptions ../ui.operationOptions selected=operation localize=false}}
+              </select>
+
+              <input
+                type="number"
+                step="any"
+                value="{{value}}"
+                data-consequence-characteristic-field="value"
+                {{#unless ../editable}}disabled{{/unless}}
+              />
+
+              {{#if ../editable}}
+                <button
+                  type="button"
+                  data-action="removeConsequenceCharacteristic"
+                  title="{{../ui.removeCharacteristic}}"
+                  aria-label="{{../ui.removeCharacteristic}}"
+                >
+                  <i class="fa-solid fa-trash" aria-hidden="true"></i>
+                </button>
+              {{/if}}
+            </li>
+          {{/each}}
+        </ol>
+      {{/if}}
+    </div>
+  </section>
+
   <section class="critical-wound-sheet__effects">
     <div class="critical-wound-sheet__section-heading">
       <div>
