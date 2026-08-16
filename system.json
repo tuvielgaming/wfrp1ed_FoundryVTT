@@ -15,6 +15,7 @@
 	"esmodules": [
 		"module/effects/WfrpActiveEffectCompatibility.mjs",
 		"module/settings/WfrpRuleSettings.mjs",
+		"module/loot/LootPileBootstrap.mjs",
 		"module/wfrp1ed.mjs",
 		"module/careers/CareerSheetIntegration.mjs",
 		"module/tests/TestResultAudienceVisibility.mjs",
@@ -30,12 +31,14 @@
 		"module/combat/CombatAdjudicationReconciliation.mjs",
 		"module/combat/CombatAttackAdjudicationReconciliation.mjs",
 		"module/inventory/ClassicInventoryIntegration.mjs",
+		"module/loot/LootPileChatIntegration.mjs",
 		"module/sheets/ClassicSheetScrollPreservation.mjs",
 		"module/sheets/CharacterDetailsUpdateGuard.mjs",
 		"module/sheets/DocumentImageIntegration.mjs",
 		"module/damage/DamageBootstrap.mjs",
 		"module/criticals/CriticalBootstrap.mjs",
 		"module/criticals/CriticalWoundCharacteristicEffects.mjs",
+		"module/criticals/CriticalConsequenceEngine.mjs",
 		"module/criticals/CriticalWoundPersistenceIntegration.mjs",
 		"module/criticals/CriticalWoundManagedEffectFallback.mjs",
 		"module/rules/FractionalCharacteristicPolicy.mjs",
@@ -96,6 +99,7 @@
 		"css/chat/damage-result.css",
 		"css/chat/combat-lifecycle-polish.css",
 		"css/chat/held-items-result.css",
+		"css/chat/loot-pile.css",
 		"css/effects/rule-effects.css",
 		"css/forms/checkbox.css"
 	],
@@ -185,7 +189,8 @@
 			"character": {},
 			"npc": {},
 			"creature": {},
-			"vehicle": {}
+			"vehicle": {},
+			"lootPile": {}
 		},
 		"Item": {
 			"career": {},
