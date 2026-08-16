@@ -27,7 +27,7 @@ const TIMED_FLAG_KEY = "criticalTimed";
 const RULE_CHANGES_FLAG_KEY = "ruleChanges";
 const DAMAGE_STATE_FLAG_KEY = "damageState";
 const CRITICAL_RESULT_FLAG_KEY = "criticalResult";
-const VERSION = 11;
+const VERSION = 12;
 const processingTurns = new Set();
 let processingWorldTime = false;
 
@@ -98,13 +98,11 @@ Hooks.on("createItem", (item) => {
 });
 
 /*
- * Round-based characteristic effects and periodic damage are both anchored to
- * the initiative position at which the wound was applied. The partial remainder
- * of that turn/round never consumes a declared round and never causes an early
- * periodic tick. A complete cycle is reached when initiative crosses that saved
- * turn-start boundary on a later round. If the original combatant is defeated,
- * skipped, or removed, the saved turn slot remains as a virtual boundary rather
- * than restarting the timer from another combatant.
+ * Round-based characteristic effects and periodic damage are anchored to the
+ * initiative position at which the wound was applied. The partial remainder of
+ * that turn/round never consumes a declared round and never causes an early tick.
+ * Once captured, the numeric turn boundary is authoritative: defeated/alive
+ * status and later combatant state are deliberately not inputs to the wound clock.
  */
 Hooks.on("combatTurnChange", (combat, prior, current) => {
 	if (!isPrimaryActiveGm() || !isForwardCombatProgression(prior, current)) return;
@@ -742,20 +740,19 @@ function initiativeStateHasAnchor(state, combat) {
 }
 
 function transitionCrossesInitiativeAnchor(state, combat, prior, current) {
-	const priorRound = nonNegativeInteger(prior?.round);
-	const currentRound = nonNegativeInteger(current?.round);
-	const priorTurn = combatTurnIndex(prior?.turn);
-	const currentTurn = combatTurnIndex(current?.turn);
+	const priorRound = nonNegativeInteger(prior?.round ?? combat?.previous?.round);
+	const currentRound = nonNegativeInteger(current?.round ?? combat?.round);
+	const priorTurn = combatTurnIndex(prior?.turn ?? combat?.previous?.turn);
+	const currentTurn = combatTurnIndex(current?.turn ?? combat?.turn);
 	if (currentRound <= 0 || priorTurn < 0 || currentTurn < 0) return false;
 	if (currentRound < priorRound) return false;
 
-	const anchorCombatantId = String(state?.anchorCombatantId ?? "");
-	let anchorTurn = -1;
-	if (anchorCombatantId) {
-		anchorTurn = [...(combat?.turns ?? [])]
-			.findIndex((combatant) => String(combatant?.id ?? "") === anchorCombatantId);
-	}
-	if (anchorTurn < 0) anchorTurn = virtualAnchorTurn(state, combat);
+	/*
+	 * The saved turn index is the wound's clock. Do not re-resolve this boundary
+	 * through the live Combatant document: defeated/alive status, token effects,
+	 * or Foundry's treatment of that Combatant must not change an existing wound.
+	 */
+	const anchorTurn = virtualAnchorTurn(state, combat);
 	if (anchorTurn < 0) return false;
 
 	if (currentRound === priorRound) {
