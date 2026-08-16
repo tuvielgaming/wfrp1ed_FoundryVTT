@@ -2,21 +2,23 @@ import { CombatRoundTurnState } from "./CombatRoundTurnState.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
 const BASE_INITIATIVE_FLAG = "roundBaseInitiative";
+const ROUND_ORDER_FLAG = "roundInitiativeOrder";
 const REORDER_OPTION = "wfrpRoundInitiativeReorder";
 const RESET_OPTION = "wfrpRoundInitiativeReset";
 const DRAG_MIME = "application/x-wfrp-combatant";
 
 /**
- * Round-scoped WFRP initiative ordering.
+ * Round-scoped WFRP turn ordering independent of Initiative values.
  *
- * A Combatant's baseline initiative is captured before combat. During a started
- * round the GM may edit initiative normally or drag Combat Tracker rows to
- * postpone/reorder turns. These values are temporary and reset next round.
+ * `Combatant.initiative` is the real WFRP Initiative score for the round. It is
+ * never rewritten merely to move a row in the Combat Tracker. A separate
+ * round-order flag stores the temporary list position used by WFRP delay/reorder
+ * handling. At the beginning of a new round that list is rebuilt from the real
+ * Initiative scores.
  *
- * Turn completion is owned by CombatRoundTurnState rather than by list position.
- * Reordering the active Combatant therefore transfers focus to the first
- * unfinished Combatant in the new order without marking the postponed actor as
- * finished for the round.
+ * This separation is required by the Critical initiative clock: moving an Actor
+ * in the tracker may change who occupies a timeline slot, but it must never move
+ * the numeric Initiative coordinate itself.
  */
 export class CombatRoundInitiativeOrder {
 	static async captureBaseline(combatant, { force = false } = {}) {
@@ -41,30 +43,96 @@ export class CombatRoundInitiativeOrder {
 		}
 	}
 
-	/** Restore temporary initiative changes before Foundry advances the round. */
-	static async resetBeforeNextRound(combat) {
-		if (!(combat instanceof foundry.documents.Combat)) return;
-		const updates = [];
-
-		for (const combatant of combat.combatants) {
-			const base = nullableFinite(
-				combatant.getFlag(FLAG_SCOPE, BASE_INITIATIVE_FLAG),
-			);
-			if (base === null) continue;
-			if (nullableFinite(combatant.initiative) === base) continue;
-			updates.push({ _id: combatant.id, initiative: base });
-		}
-
-		if (updates.length) {
-			await combat.updateEmbeddedDocuments(
-				"Combatant",
-				updates,
-				{ [RESET_OPTION]: true },
-			);
-		}
+	/**
+	 * Return this Combatant's explicit list position for the requested round.
+	 * Missing/stale state deliberately returns null so Foundry can fall back to
+	 * normal Initiative sorting before combat and during round transitions.
+	 */
+	static position(combatant, round = nonNegativeInteger(combatant?.parent?.round)) {
+		if (!(combatant instanceof foundry.documents.Combatant)) return null;
+		const state = combatant.getFlag?.(FLAG_SCOPE, ROUND_ORDER_FLAG);
+		if (!state || typeof state !== "object" || Array.isArray(state)) return null;
+		if (nonNegativeInteger(state.round) !== nonNegativeInteger(round)) return null;
+		const position = Number(state.position);
+		return Number.isInteger(position) && position >= 0 ? position : null;
 	}
 
-	/** Apply an explicit current-round order using temporary initiative values. */
+	/**
+	 * Comparator contribution used by Wfrp1edCombat._sortCombatants.
+	 *
+	 * A Combatant without current-round order state is placed after established
+	 * rows until the authoritative GM initializes/inserts it. If no current-round
+	 * order exists at all, return null so Foundry's Initiative comparator applies.
+	 */
+	static compare(combat, left, right) {
+		if (!(combat instanceof foundry.documents.Combat)) return null;
+		const round = nonNegativeInteger(combat.round);
+		if (!combat.started || round <= 0) return null;
+
+		const leftPosition = this.position(left, round);
+		const rightPosition = this.position(right, round);
+		if (leftPosition === null && rightPosition === null) return null;
+		if (leftPosition === null) return 1;
+		if (rightPosition === null) return -1;
+		return leftPosition - rightPosition;
+	}
+
+	/** Build the new round list from immutable Initiative values. */
+	static async initializeRound(combat) {
+		if (!(combat instanceof foundry.documents.Combat)) return;
+		const round = nonNegativeInteger(combat.round);
+		if (!combat.started || round <= 0) return;
+
+		const ordered = [...combat.combatants].sort(compareCanonicalInitiative);
+		await this.#writeOrder(combat, ordered.map((entry) => String(entry.id)), round, {
+			option: RESET_OPTION,
+		});
+	}
+
+	/**
+	 * Remove the completed round's temporary order before Foundry selects the
+	 * next round's first Combatant. Initiative values remain untouched.
+	 */
+	static async resetBeforeNextRound(combat) {
+		if (!(combat instanceof foundry.documents.Combat)) return;
+		const updates = [...combat.combatants].map((combatant) => ({
+			_id: combatant.id,
+			[`flags.${FLAG_SCOPE}.${ROUND_ORDER_FLAG}`]: null,
+		}));
+		if (!updates.length) return;
+		await combat.updateEmbeddedDocuments(
+			"Combatant",
+			updates,
+			{ [RESET_OPTION]: true },
+		);
+	}
+
+	/**
+	 * Insert a newly joined Combatant into this round without disturbing the
+	 * relative order of existing rows. The insertion slot is its canonical rank
+	 * by real Initiative; any earlier delay/reorder among existing rows survives.
+	 */
+	static async insertCombatant(combat, combatant) {
+		if (!(combat instanceof foundry.documents.Combat) || !combat.started) return;
+		assertCombatant(combatant);
+		const round = nonNegativeInteger(combat.round);
+		if (round <= 0) return;
+
+		const id = String(combatant.id);
+		const current = combat.turns
+			.map((entry) => String(entry.id))
+			.filter((entryId) => entryId !== id);
+		const canonical = [...combat.combatants].sort(compareCanonicalInitiative);
+		const canonicalIndex = Math.max(
+			0,
+			canonical.findIndex((entry) => String(entry.id) === id),
+		);
+		const insertAt = Math.min(canonicalIndex, current.length);
+		current.splice(insertAt, 0, id);
+		await this.applyOrder(combat, current);
+	}
+
+	/** Apply an explicit current-round list order without changing Initiative. */
 	static async applyOrder(combat, orderedIds, { movedCombatantId = "" } = {}) {
 		if (!(combat instanceof foundry.documents.Combat)) {
 			throw new TypeError("A Foundry Combat is required.");
@@ -74,6 +142,11 @@ export class CombatRoundInitiativeOrder {
 				"Only a GM can reorder initiative.",
 				"Tylko MG może zmieniać kolejność inicjatywy.",
 			));
+		}
+
+		const round = nonNegativeInteger(combat.round);
+		if (!combat.started || round <= 0) {
+			throw new Error("Round order can only be changed during a started combat round.");
 		}
 
 		const ids = [...orderedIds].map(String);
@@ -91,41 +164,12 @@ export class CombatRoundInitiativeOrder {
 			combat.current?.combatantId ?? combat.combatant?.id ?? "",
 		);
 
-		/*
-		 * Anchor synthetic values to the stable baseline rather than to previous
-		 * temporary values. Repeated drags cannot inflate initiative indefinitely.
-		 */
-		const baselineValues = [...combat.combatants]
-			.map((entry) => nullableFinite(
-				entry.getFlag(FLAG_SCOPE, BASE_INITIATIVE_FLAG),
-			))
-			.filter((value) => value !== null);
-		const currentValues = [...combat.combatants]
-			.map((entry) => nullableFinite(entry.initiative))
-			.filter((value) => value !== null);
-		const top = baselineValues.length
-			? Math.max(...baselineValues)
-			: currentValues.length
-				? Math.max(...currentValues)
-				: ids.length;
-
-		const updates = ids.map((id, index) => ({
-			_id: id,
-			initiative: top + ids.length - index,
-		}));
-
-		await combat.updateEmbeddedDocuments(
-			"Combatant",
-			updates,
-			{ [REORDER_OPTION]: true },
-		);
+		await this.#writeOrder(combat, ids, round, { option: REORDER_OPTION });
 
 		/*
-		 * First synchronize the lifecycle's existing active Combatant with its new
-		 * numeric index. Bulk initiative updates can make `combat.combatant` point
-		 * at another row even though `combat.current.combatantId` still records the
-		 * previous turn owner. Synchronizing first guarantees that any subsequent
-		 * focus transfer fires Foundry's normal End Turn / Start Turn workflow.
+		 * Changing the list order can change which row lives at Combat.turn's old
+		 * numeric index. Re-focus the lifecycle owner so the active Combatant stays
+		 * the same unless the active row itself was deliberately postponed.
 		 */
 		const activeBefore = activeBeforeId
 			? combat.combatants.get(activeBeforeId) ?? null
@@ -137,9 +181,7 @@ export class CombatRoundInitiativeOrder {
 		/*
 		 * - Moving a non-active row preserves the current Combatant.
 		 * - Moving the active row is a postponement: focus the first unfinished
-		 *   Combatant from the top of the new order. If everyone else has already
-		 *   finished, the postponed Combatant remains first unfinished and keeps
-		 *   focus.
+		 *   Combatant from the top of the new order.
 		 */
 		const movedActive =
 			activeBeforeId && String(movedCombatantId) === activeBeforeId;
@@ -148,15 +190,30 @@ export class CombatRoundInitiativeOrder {
 		const next = CombatRoundTurnState.firstUnfinished(combat);
 		if (next) await CombatRoundTurnState.focus(combat, next);
 	}
+
+	static async #writeOrder(combat, ids, round, { option } = {}) {
+		const updates = ids.map((id, index) => ({
+			_id: id,
+			[`flags.${FLAG_SCOPE}.${ROUND_ORDER_FLAG}`]: {
+				round,
+				position: index,
+			},
+		}));
+		if (!updates.length) return;
+		await combat.updateEmbeddedDocuments(
+			"Combatant",
+			updates,
+			option ? { [option]: true } : {},
+		);
+	}
 }
 
 /**
- * Native initiative edits before combat define the baseline. During combat they
- * are temporary. If a Combatant had no initiative when combat started, the
- * first finite value assigned becomes its baseline.
+ * Initiative edits outside a running round define the baseline. During a round,
+ * the displayed Initiative may be edited by the GM but tracker drag never does
+ * so; the current round order is a different piece of state.
  */
-Hooks.on("updateCombatant", (combatant, changes, options) => {
-	if (options?.[RESET_OPTION]) return;
+Hooks.on("updateCombatant", (combatant, changes) => {
 	if (!Object.hasOwn(changes ?? {}, "initiative")) return;
 	if (!game.user?.isGM) return;
 
@@ -199,8 +256,8 @@ function activateTrackerDrag(root, combat) {
 		row.dataset.wfrpInitiativeDrag = "true";
 		row.draggable = true;
 		row.title = localize(
-			"GM: drag to change initiative order for this round. Manual initiative edits are also temporary and reset next round.",
-			"MG: przeciągnij, aby zmienić kolejność inicjatywy w tej rundzie. Ręczna zmiana wartości inicjatywy także jest tymczasowa i resetuje się w następnej rundzie.",
+			"GM: drag to change only this round's turn order. The Initiative value is not changed.",
+			"MG: przeciągnij, aby zmienić tylko kolejność tur w tej rundzie. Wartość Inicjatywy nie jest zmieniana.",
 		);
 
 		/* Foundry's token portrait is draggable by default and can steal the drag
@@ -292,8 +349,6 @@ function activateTrackerDrag(root, combat) {
 /**
  * Keep the green target indicator honest: whenever the pointer-selected half of
  * a neighboring row would produce the exact same order, flip to the other half.
- * This makes first↔second (and any adjacent swap) happen as soon as the target
- * row is highlighted instead of requiring near-total row overlap.
  */
 function actionableDropPosition(combat, sourceId, targetId, preferredPosition) {
 	const current = combat.turns.map((entry) => String(entry.id));
@@ -438,10 +493,26 @@ function combatantId(row) {
 	).trim();
 }
 
+function compareCanonicalInitiative(left, right) {
+	const leftInitiative = nullableFinite(left?.initiative);
+	const rightInitiative = nullableFinite(right?.initiative);
+	if (leftInitiative === null && rightInitiative !== null) return 1;
+	if (rightInitiative === null && leftInitiative !== null) return -1;
+	if (leftInitiative !== null && rightInitiative !== null && leftInitiative !== rightInitiative) {
+		return rightInitiative - leftInitiative;
+	}
+	return String(left?.id ?? "").localeCompare(String(right?.id ?? ""));
+}
+
 function nullableFinite(value) {
 	if (value === null || value === undefined || value === "") return null;
 	const numeric = Number(value);
 	return Number.isFinite(numeric) ? numeric : null;
+}
+
+function nonNegativeInteger(value) {
+	const numeric = Number(value);
+	return Number.isFinite(numeric) ? Math.max(0, Math.trunc(numeric)) : 0;
 }
 
 function assertCombatant(combatant) {
