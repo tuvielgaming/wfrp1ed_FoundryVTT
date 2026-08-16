@@ -1,4 +1,6 @@
 const {
+	ArrayField,
+	BooleanField,
 	NumberField,
 	SchemaField,
 	StringField,
@@ -13,6 +15,10 @@ const { TypeDataModel } = foundry.abstract;
  * produced it remains the historical resolution event, while the Item survives
  * on the Actor and owns any embedded ActiveEffects representing ongoing
  * mechanical consequences.
+ *
+ * `consequence` is deliberately rule-result agnostic. A user-created wound and
+ * a Core Rulebook wound use the same declarative primitives; runtime consumers
+ * never need to hard-code "Leg #4", "Body #9", or any other named result.
  */
 export class CriticalWoundData extends TypeDataModel {
 	static defineSchema() {
@@ -25,6 +31,48 @@ export class CriticalWoundData extends TypeDataModel {
 
 			/** Stable mechanical hit-location value supplied by the resolver. */
 			hitLocation: textField(),
+
+			/**
+			 * Declarative automation authored on the wound itself.
+			 *
+			 * Supported primitives are intentionally generic:
+			 * - characteristic modifications;
+			 * - a random/fixed round duration or medical-attention lifetime;
+			 * - periodic direct Wound loss;
+			 * - one-shot held-item drops.
+			 *
+			 * Future status/action/limb primitives extend this schema without adding
+			 * per-Critical special cases to the engine.
+			 */
+			consequence: new SchemaField({
+				enabled: new BooleanField({
+					required: true,
+					nullable: false,
+					initial: false,
+				}),
+				characteristics: new ArrayField(
+					new SchemaField({
+						characteristicId: textField(),
+						operation: textField(),
+						value: finiteNumberField(),
+					}),
+					{
+						required: true,
+						nullable: false,
+						initial: [],
+					},
+				),
+				duration: new SchemaField({
+					formula: textField(),
+					units: textField(),
+					until: textField(),
+				}),
+				periodicWounds: new SchemaField({
+					formula: textField(),
+					until: textField(),
+				}),
+				dropHeld: textField(),
+			}),
 
 			/**
 			 * Immutable-style provenance of the resolution which created the wound.
@@ -53,12 +101,14 @@ export class CriticalWoundData extends TypeDataModel {
 	static migrateData(source, options = {}) {
 		const migrated = foundry.utils.deepClone(source ?? {});
 		const resolution = migrated.resolution ?? {};
+		const consequence = migrated.consequence ?? {};
 
 		migrated.description = unwrapText(migrated.description);
 		migrated.hitLocation = unwrapText(migrated.hitLocation);
 		migrated.criticalValue = toNonNegativeInteger(
 			unwrapValue(migrated.criticalValue),
 		);
+		migrated.consequence = normalizeConsequence(consequence);
 		migrated.resolution = {
 			damagePacketId: unwrapText(resolution.damagePacketId),
 			sourceMessageId: unwrapText(resolution.sourceMessageId),
@@ -82,6 +132,35 @@ export class CriticalWoundData extends TypeDataModel {
 	}
 }
 
+function normalizeConsequence(source) {
+	const duration = source?.duration ?? {};
+	const periodicWounds = source?.periodicWounds ?? {};
+	const characteristics = Array.isArray(source?.characteristics)
+		? source.characteristics
+			.map((entry) => ({
+				characteristicId: unwrapText(entry?.characteristicId),
+				operation: unwrapText(entry?.operation),
+				value: toFiniteNumber(unwrapValue(entry?.value)),
+			}))
+			.filter((entry) => entry.characteristicId && entry.operation)
+		: [];
+
+	return {
+		enabled: source?.enabled === true,
+		characteristics,
+		duration: {
+			formula: unwrapText(duration.formula),
+			units: unwrapText(duration.units),
+			until: unwrapText(duration.until),
+		},
+		periodicWounds: {
+			formula: unwrapText(periodicWounds.formula),
+			until: unwrapText(periodicWounds.until),
+		},
+		dropHeld: unwrapText(source?.dropHeld),
+	};
+}
+
 function textField() {
 	return new StringField({
 		required: true,
@@ -99,6 +178,14 @@ function nonNegativeIntegerField() {
 		integer: true,
 		initial: 0,
 		min: 0,
+	});
+}
+
+function finiteNumberField() {
+	return new NumberField({
+		required: true,
+		nullable: false,
+		initial: 0,
 	});
 }
 
@@ -137,4 +224,9 @@ function toNonNegativeInteger(value) {
 	return Number.isFinite(number)
 		? Math.max(0, Math.trunc(number))
 		: 0;
+}
+
+function toFiniteNumber(value) {
+	const number = Number(value);
+	return Number.isFinite(number) ? number : 0;
 }
