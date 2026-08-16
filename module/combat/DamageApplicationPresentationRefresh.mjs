@@ -21,6 +21,16 @@ const mirrorRunning = new Set();
  * identical for GM and players. Damage invalidation mirrors the reverted state
  * through the same path and therefore re-opens the Test inputs everywhere.
  */
+Hooks.once("ready", () => {
+	if (!isPrimaryActiveGM()) return;
+	void repairMirroredApplications().catch((error) => {
+		console.error(
+			"WFRP1ED | Unable to repair mirrored damage transaction state.",
+			error,
+		);
+	});
+});
+
 Hooks.on("updateActor", (actor, changes) => {
 	if (!damageApplicationsChanged(changes)) return;
 
@@ -33,6 +43,13 @@ Hooks.on("updateActor", (actor, changes) => {
 		);
 	});
 });
+
+async function repairMirroredApplications() {
+	for (const actor of game.actors ?? []) {
+		if (!hasDamageApplications(actor)) continue;
+		await mirrorDamageApplications(actor);
+	}
+}
 
 async function mirrorDamageApplications(actor) {
 	if (!(actor instanceof foundry.documents.Actor)) return;
@@ -68,6 +85,19 @@ async function mirrorDamageApplications(actor) {
 		mirrorRunning.delete(actorKey);
 		requestChatRefresh();
 	}
+}
+
+function hasDamageApplications(actor) {
+	const applications = actor?.getFlag?.(
+		FLAG_SCOPE,
+		DAMAGE_APPLICATIONS_FLAG_KEY,
+	);
+	return Boolean(
+		applications &&
+		typeof applications === "object" &&
+		!Array.isArray(applications) &&
+		Object.keys(applications).length,
+	);
 }
 
 function damageApplicationsChanged(changes) {
