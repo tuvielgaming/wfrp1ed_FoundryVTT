@@ -1,4 +1,5 @@
 import { CombatEquipmentState } from "../combat/CombatEquipmentState.mjs";
+import { CombatInitiativeClock } from "../combat/CombatInitiativeClock.mjs";
 import {
 	INVENTORY_HAND,
 	INVENTORY_MODE,
@@ -27,9 +28,7 @@ const TIMED_FLAG_KEY = "criticalTimed";
 const RULE_CHANGES_FLAG_KEY = "ruleChanges";
 const DAMAGE_STATE_FLAG_KEY = "damageState";
 const CRITICAL_RESULT_FLAG_KEY = "criticalResult";
-const VERSION = 15;
-const processingTurns = new Set();
-const lastQueuedCombatStates = new Map();
+const VERSION = 16;
 const processingPeriodicTicks = new Set();
 let processingWorldTime = false;
 
@@ -100,26 +99,23 @@ Hooks.on("createItem", (item) => {
 });
 
 /*
- * Round-based characteristic effects and periodic damage are anchored to the
- * initiative position at which the wound was applied. The partial remainder of
- * that turn/round never consumes a declared round and never causes an early tick.
- * Once captured, the numeric turn boundary is authoritative. Periodic damage is
- * reconciled from elapsed full cycles, so skipped/defeated turns do not need to
- * emit a dedicated anchor transition in order for bleeding to tick.
+ * Round-based Critical consequences use one shared immutable Initiative clock.
+ * The clock is captured from the round's canonical Initiative value, not from
+ * Foundry's mutable turn index or from the Combatant identity. Temporary order
+ * changes therefore cannot move an existing wound's lifecycle boundary.
  *
- * Foundry can expose the same post-update Combat state through more than one
- * hook. queueTurnConsequences therefore deduplicates by the live Combat state,
- * not by hook-specific history snapshots.
+ * CombatInitiativeClock is emitted only by Wfrp1edCombat's real Next Turn /
+ * Next Round progression. Tracker drag/focus changes do not age the wound. End
+ * of round is the agreed fallback boundary when the saved Initiative point was
+ * skipped or made unreachable during that round.
  */
-Hooks.on("combatTurnChange", (combat, prior, current) => {
+CombatInitiativeClock.registerConsumer(async (combat, event) => {
 	if (!isPrimaryActiveGm()) return;
-	queueTurnConsequences(combat, prior, current);
-});
-
-Hooks.on("updateCombat", (combat, changes) => {
-	if (!isPrimaryActiveGm()) return;
-	if (!Object.hasOwn(changes ?? {}, "round") && !Object.hasOwn(changes ?? {}, "turn")) return;
-	queueTurnConsequences(combat, combat.previous, combat.current);
+	try {
+		await processClockConsequences(combat, event);
+	} catch (error) {
+		reportConsequenceError(error);
+	}
 });
 
 /* Foundry v14 world time is canonical seconds. Minute/hour/day periodic
@@ -137,22 +133,9 @@ Hooks.once("ready", () => {
 	void repairExistingRuntimeEffects().catch(reportConsequenceError);
 });
 
-function queueTurnConsequences(combat, prior, current) {
-	const combatId = String(combat?.id ?? "");
-	const key = combatTransitionKey(combat, prior, current);
-	if (!combatId || !key) return;
-	if (lastQueuedCombatStates.get(combatId) === key) return;
-	lastQueuedCombatStates.set(combatId, key);
-	if (processingTurns.has(key)) return;
-	processingTurns.add(key);
-	void processTurnConsequences(combat, prior, current, key)
-		.catch(reportConsequenceError)
-		.finally(() => processingTurns.delete(key));
-}
-
-async function processTurnConsequences(combat, prior, current, transitionKey) {
-	await processTimedCriticalTurnChange(combat, prior, current, transitionKey);
-	await processPeriodicCriticalTurnChange(combat, prior, current, transitionKey);
+async function processClockConsequences(combat, event) {
+	await processTimedCriticalClock(combat, event);
+	await processPeriodicCriticalClock(combat, event);
 }
 
 async function resolveRandomState(definition) {
@@ -219,12 +202,15 @@ async function createManagedEffects(wound, definition, resolved) {
 			transfer: true,
 			changes: foundry.utils.deepClone(changes),
 			system: { changes: foundry.utils.deepClone(changes) },
-			...(resolved.duration ? {
+			/* Round duration is owned exclusively by the WFRP Initiative clock.
+			 * Giving Foundry its own round expiry here would create a second,
+			 * incompatible lifecycle. Non-round units may still use metadata. */
+			...(resolved.duration && resolved.duration.units !== "rounds" ? {
 				duration: {
 					value: resolved.duration.value,
 					units: resolved.duration.units,
 					expired: false,
-					expiry: resolved.duration.units === "rounds" ? "turnStart" : null,
+					expiry: null,
 				},
 			} : {}),
 			flags,
@@ -271,17 +257,12 @@ function consequenceEffectFlags(wound, kind, resolved) {
 
 function timedStateFor(actor, duration) {
 	const combat = activeCombatForActor(actor);
-	const current = combat?.current ?? {};
 	return {
 		version: VERSION,
 		units: "rounds",
 		durationRounds: positiveInteger(duration?.value),
-		combatId: String(combat?.id ?? ""),
-		startRound: combat ? nonNegativeInteger(combat.round ?? current.round) : 0,
-		anchorCombatantId: String(combat?.combatant?.id ?? current.combatantId ?? ""),
-		anchorTurn: combatTurnIndex(combat?.turn ?? current.turn),
+		...CombatInitiativeClock.capture(combat),
 		completedRounds: 0,
-		lastTransitionKey: "",
 		expiredAtRound: 0,
 		expiredAtTurn: -1,
 	};
@@ -292,7 +273,6 @@ function periodicStateFor(actor, definition, resolvedDuration) {
 		? foundry.utils.deepClone(resolvedDuration)
 		: null;
 	const combat = activeCombatForActor(actor);
-	const current = combat?.current ?? {};
 	const worldTime = currentWorldTime();
 	const worldSeconds = duration && duration.units !== "rounds"
 		? durationSeconds(duration.value, duration.units)
@@ -303,11 +283,7 @@ function periodicStateFor(actor, definition, resolvedDuration) {
 		formula: String(definition.formula),
 		until: String(definition.until ?? ""),
 		duration,
-		combatId: String(combat?.id ?? ""),
-		startRound: combat ? nonNegativeInteger(combat.round ?? current.round) : 0,
-		anchorCombatantId: String(combat?.combatant?.id ?? current.combatantId ?? ""),
-		anchorTurn: combatTurnIndex(combat?.turn ?? current.turn),
-		lastTransitionKey: "",
+		...CombatInitiativeClock.capture(combat),
 		lastCombatId: "",
 		lastRound: 0,
 		lastCycle: 0,
@@ -432,9 +408,9 @@ function relativeHandForPhysicalArm(actor, hitLocation) {
 	return physical === dominant ? INVENTORY_HAND.MAIN : INVENTORY_HAND.OFF;
 }
 
-async function processTimedCriticalTurnChange(combat, prior, current, transitionKey) {
-	const currentRound = nonNegativeInteger(combat?.round ?? current?.round);
-	const currentTurn = combatTurnIndex(combat?.turn ?? current?.turn);
+async function processTimedCriticalClock(combat, event) {
+	const currentRound = nonNegativeInteger(event?.round);
+	const currentTurn = combatTurnIndex(combat?.turn);
 
 	for (const actor of combatActors(combat)) {
 		for (const wound of actor.items ?? []) {
@@ -446,32 +422,31 @@ async function processTimedCriticalTurnChange(combat, prior, current, transition
 				const durationRounds = positiveInteger(timed.durationRounds);
 				if (!durationRounds || String(timed.units ?? "") !== "rounds") continue;
 
-				const hadAnchor = initiativeStateHasAnchor(timed, combat);
-				timed = timedStateWithAnchor(effect, timed, combat, current);
-				if (String(timed.lastTransitionKey ?? "") === transitionKey) continue;
-				if (!hadAnchor) {
+				const hadClock = CombatInitiativeClock.anchored(timed, combat);
+				timed = clockStateWithLegacyAnchor(timed, combat);
+				if (!hadClock) {
+					/* Legacy turn-index states are migrated conservatively. Establish the
+					 * immutable Initiative point on the first clock event and do not age
+					 * the effect on that same migration event. */
 					await effect.setFlag(FLAG_SCOPE, TIMED_FLAG_KEY, {
-						...foundry.utils.deepClone(timed),
-						lastTransitionKey: transitionKey,
+						...timed,
+						lastClockRound: Math.max(
+							nonNegativeInteger(timed.lastClockRound),
+							currentRound,
+						),
 					});
 					continue;
 				}
 
-				if (!transitionCrossesInitiativeAnchor(timed, combat, prior, current)) continue;
-				if (currentRound <= nonNegativeInteger(timed.startRound)) {
-					await effect.setFlag(FLAG_SCOPE, TIMED_FLAG_KEY, {
-						...foundry.utils.deepClone(timed),
-						lastTransitionKey: transitionKey,
-					});
-					continue;
-				}
-
+				if (!CombatInitiativeClock.isDue(timed, event)) continue;
+				timed = CombatInitiativeClock.stamp(timed, event);
 				const completedRounds = nonNegativeInteger(timed.completedRounds) + 1;
+
 				if (completedRounds < durationRounds) {
 					await effect.setFlag(FLAG_SCOPE, TIMED_FLAG_KEY, {
-						...foundry.utils.deepClone(timed),
+						...timed,
+						version: VERSION,
 						completedRounds,
-						lastTransitionKey: transitionKey,
 					});
 					continue;
 				}
@@ -480,9 +455,9 @@ async function processTimedCriticalTurnChange(combat, prior, current, transition
 					disabled: true,
 					"duration.expired": true,
 					[`flags.${FLAG_SCOPE}.${TIMED_FLAG_KEY}`]: {
-						...foundry.utils.deepClone(timed),
+						...timed,
+						version: VERSION,
 						completedRounds,
-						lastTransitionKey: transitionKey,
 						expiredAtRound: currentRound,
 						expiredAtTurn: currentTurn,
 					},
@@ -493,37 +468,8 @@ async function processTimedCriticalTurnChange(combat, prior, current, transition
 	}
 }
 
-function timedStateWithAnchor(effect, timed, combat, current) {
-	if (initiativeStateHasAnchor(timed, combat)) return timed;
-
-	const start = effect?.start ?? {};
-	const sameCombat = String(start.combat ?? "") === String(combat?.id ?? "");
-	const anchorCombatantId = sameCombat
-		? String(start.combatant ?? "")
-		: String(combat?.combatant?.id ?? current?.combatantId ?? "");
-	const startRound = sameCombat
-		? nonNegativeInteger(start.round)
-		: nonNegativeInteger(combat?.round ?? current?.round);
-	const anchorTurn = sameCombat
-		? combatTurnIndex(start.turn)
-		: combatTurnIndex(combat?.turn ?? current?.turn);
-
-	return {
-		...foundry.utils.deepClone(timed),
-		version: VERSION,
-		combatId: String(combat?.id ?? ""),
-		startRound,
-		anchorCombatantId,
-		anchorTurn,
-		completedRounds: nonNegativeInteger(timed.completedRounds),
-		lastTransitionKey: String(timed.lastTransitionKey ?? ""),
-		expiredAtRound: nonNegativeInteger(timed.expiredAtRound),
-		expiredAtTurn: combatTurnIndex(timed.expiredAtTurn),
-	};
-}
-
-async function processPeriodicCriticalTurnChange(combat, _prior, current, transitionKey) {
-	const currentRound = nonNegativeInteger(combat?.round ?? current?.round);
+async function processPeriodicCriticalClock(combat, event) {
+	const currentRound = nonNegativeInteger(event?.round);
 
 	for (const actor of combatActors(combat)) {
 		for (const wound of actor.items ?? []) {
@@ -533,61 +479,80 @@ async function processPeriodicCriticalTurnChange(combat, _prior, current, transi
 				if (!periodic || effect.disabled === true) continue;
 				if (await expirePeriodicIfWorldTimeElapsed(effect, periodic, currentWorldTime())) continue;
 
-				const hadAnchor = initiativeStateHasAnchor(periodic, combat);
-				periodic = periodicStateWithAnchor(periodic, combat, current);
-				if (!hadAnchor) {
+				const hadClock = CombatInitiativeClock.anchored(periodic, combat);
+				periodic = clockStateWithLegacyAnchor(periodic, combat);
+				if (!hadClock) {
 					await effect.setFlag(FLAG_SCOPE, PERIODIC_FLAG_KEY, {
-						...foundry.utils.deepClone(periodic),
-						lastTransitionKey: transitionKey,
+						...periodic,
+						lastClockRound: Math.max(
+							nonNegativeInteger(periodic.lastClockRound),
+							currentRound,
+						),
 					});
 					continue;
 				}
 
-				let targetTicks = completedInitiativeCycles(periodic, combat, current);
+				if (!CombatInitiativeClock.isDue(periodic, event)) continue;
 				const duration = periodic.duration && typeof periodic.duration === "object"
 					? periodic.duration
 					: null;
-				if (duration?.units === "rounds" && positiveInteger(duration.value)) {
-					targetTicks = Math.min(targetTicks, positiveInteger(duration.value));
+				const ticksApplied = nonNegativeInteger(periodic.ticksApplied);
+				if (
+					duration?.units === "rounds" &&
+					positiveInteger(duration.value) > 0 &&
+					ticksApplied >= positiveInteger(duration.value)
+				) {
+					await effect.update({
+						disabled: true,
+						"duration.expired": true,
+					});
+					continue;
 				}
 
-				let ticksApplied = nonNegativeInteger(periodic.ticksApplied);
-				if (targetTicks <= ticksApplied) continue;
-
-				while (ticksApplied < targetTicks && effect.disabled !== true) {
-					const cycleNumber = ticksApplied + 1;
-					const nextPeriodic = await applyPeriodicWounds(
-						actor,
-						wound,
-						effect,
-						periodic,
-						combat,
-						currentRound,
-						cycleNumber,
-						transitionKey,
-					);
-					if (!nextPeriodic) break;
-					periodic = nextPeriodic;
-					ticksApplied = nonNegativeInteger(periodic.ticksApplied);
-					if (positiveInteger(periodic.expiredAtRound)) break;
-				}
+				const cycleNumber = ticksApplied + 1;
+				await applyPeriodicWounds(
+					actor,
+					wound,
+					effect,
+					periodic,
+					combat,
+					event,
+					cycleNumber,
+				);
 			}
 		}
 	}
 }
 
-function periodicStateWithAnchor(periodic, combat, current) {
-	if (initiativeStateHasAnchor(periodic, combat)) return periodic;
+function clockStateWithLegacyAnchor(state, combat) {
+	if (CombatInitiativeClock.anchored(state, combat)) {
+		return foundry.utils.deepClone(state);
+	}
 
+	let clockInitiative = null;
+	const legacyId = String(state?.anchorCombatantId ?? "");
+	if (legacyId) {
+		clockInitiative = CombatInitiativeClock.canonicalInitiative(
+			combat?.combatants?.get?.(legacyId) ?? null,
+		);
+	}
+	if (clockInitiative === null) {
+		const legacyTurn = combatTurnIndex(state?.anchorTurn);
+		if (legacyTurn >= 0) {
+			clockInitiative = CombatInitiativeClock.canonicalInitiative(
+				combat?.turns?.[legacyTurn] ?? null,
+			);
+		}
+	}
+
+	const captured = CombatInitiativeClock.capture(combat);
 	return {
-		...foundry.utils.deepClone(periodic),
+		...foundry.utils.deepClone(state ?? {}),
 		version: VERSION,
-		combatId: String(combat?.id ?? ""),
-		startRound: nonNegativeInteger(combat?.round ?? current?.round),
-		anchorCombatantId: String(combat?.combatant?.id ?? current?.combatantId ?? ""),
-		anchorTurn: combatTurnIndex(combat?.turn ?? current?.turn),
-		lastTransitionKey: String(periodic.lastTransitionKey ?? ""),
-		lastCycle: nonNegativeInteger(periodic.lastCycle),
+		combatId: String(combat?.id ?? captured.combatId ?? ""),
+		startRound: nonNegativeInteger(state?.startRound) || captured.startRound,
+		clockInitiative: clockInitiative ?? captured.clockInitiative,
+		lastClockRound: nonNegativeInteger(state?.lastClockRound),
 	};
 }
 
@@ -597,9 +562,8 @@ async function applyPeriodicWounds(
 	effect,
 	periodic,
 	combat,
-	round,
+	event,
 	cycleNumber,
-	transitionKey,
 ) {
 	const packetId = `bleed-${effect.id}-${combat.id}-cycle-${cycleNumber}`;
 	const tickKey = `${actor.uuid}|${packetId}`;
@@ -613,9 +577,8 @@ async function applyPeriodicWounds(
 				effect,
 				periodic,
 				combat,
-				round,
+				event,
 				cycleNumber,
-				transitionKey,
 			);
 		}
 
@@ -644,6 +607,7 @@ async function applyPeriodicWounds(
 				roll: amount,
 				woundUuid: wound.uuid,
 				cycle: cycleNumber,
+				clockEvent: String(event?.kind ?? ""),
 			},
 		});
 		const message = await DamageChat.publish({ packet, resolution, speakerActor: actor });
@@ -653,16 +617,15 @@ async function applyPeriodicWounds(
 			effect,
 			periodic,
 			combat,
-			round,
+			event,
 			cycleNumber,
-			transitionKey,
 		);
 	} finally {
 		processingPeriodicTicks.delete(tickKey);
 	}
 }
 
-async function stampPeriodic(effect, periodic, combat, round, cycleNumber, transitionKey) {
+async function stampPeriodic(effect, periodic, combat, event, cycleNumber) {
 	const ticksApplied = Math.max(
 		nonNegativeInteger(periodic.ticksApplied) + 1,
 		nonNegativeInteger(cycleNumber),
@@ -675,14 +638,17 @@ async function stampPeriodic(effect, periodic, combat, round, cycleNumber, trans
 		positiveInteger(duration.value) > 0 &&
 		ticksApplied >= positiveInteger(duration.value)
 	);
+	const stamped = CombatInitiativeClock.stamp(periodic, event);
 	const next = {
-		...foundry.utils.deepClone(periodic),
-		lastTransitionKey: transitionKey,
+		...stamped,
+		version: VERSION,
 		lastCombatId: String(combat.id ?? ""),
-		lastRound: round,
+		lastRound: nonNegativeInteger(event?.round),
 		lastCycle: nonNegativeInteger(cycleNumber),
 		ticksApplied,
-		expiredAtRound: expiresByRounds ? round : nonNegativeInteger(periodic.expiredAtRound),
+		expiredAtRound: expiresByRounds
+			? nonNegativeInteger(event?.round)
+			: nonNegativeInteger(periodic.expiredAtRound),
 	};
 	const update = {
 		[`flags.${FLAG_SCOPE}.${PERIODIC_FLAG_KEY}`]: next,
@@ -780,75 +746,6 @@ function activeCombatForActor(actor) {
 		}
 	}
 	return null;
-}
-
-function initiativeStateHasAnchor(state, combat) {
-	return Boolean(
-		String(state?.combatId ?? "") === String(combat?.id ?? "") &&
-		nonNegativeInteger(state?.startRound) > 0 &&
-		(
-			String(state?.anchorCombatantId ?? "") ||
-			combatTurnIndex(state?.anchorTurn) >= 0
-		)
-	);
-}
-
-function completedInitiativeCycles(state, combat, current) {
-	const startRound = nonNegativeInteger(state?.startRound);
-	const currentRound = nonNegativeInteger(combat?.round ?? current?.round);
-	const currentTurn = combatTurnIndex(combat?.turn ?? current?.turn);
-	const anchorTurn = virtualAnchorTurn(state, combat);
-	if (!startRound || currentRound <= startRound || currentTurn < 0 || anchorTurn < 0) {
-		return 0;
-	}
-
-	const completed = currentRound - startRound - (currentTurn < anchorTurn ? 1 : 0);
-	return Math.max(0, completed);
-}
-
-function transitionCrossesInitiativeAnchor(state, combat, prior, current) {
-	const priorRound = nonNegativeInteger(prior?.round ?? combat?.previous?.round);
-	const currentRound = nonNegativeInteger(combat?.round ?? current?.round);
-	const priorTurn = combatTurnIndex(prior?.turn ?? combat?.previous?.turn);
-	const currentTurn = combatTurnIndex(combat?.turn ?? current?.turn);
-	if (currentRound <= 0 || priorTurn < 0 || currentTurn < 0) return false;
-	if (currentRound < priorRound) return false;
-
-	const anchorCombatantId = String(state?.anchorCombatantId ?? "");
-	const liveCurrentCombatantId = String(combat?.combatant?.id ?? "");
-	if (anchorCombatantId && liveCurrentCombatantId === anchorCombatantId) return true;
-
-	/*
-	 * If the original anchor is skipped or no longer present, the saved turn
-	 * index remains as a virtual boundary. The live Combat turn is used for the
-	 * current side so a defeated status cannot hide a visible tracker turn from
-	 * this scheduler.
-	 */
-	const anchorTurn = virtualAnchorTurn(state, combat);
-	if (anchorTurn < 0) return false;
-
-	if (currentRound === priorRound) {
-		return currentTurn > priorTurn && anchorTurn > priorTurn && anchorTurn <= currentTurn;
-	}
-	if (currentRound - priorRound > 1) return true;
-	return anchorTurn > priorTurn || anchorTurn <= currentTurn;
-}
-
-function virtualAnchorTurn(state, combat) {
-	const savedTurn = combatTurnIndex(state?.anchorTurn);
-	const turnCount = Number(combat?.turns?.length ?? 0);
-	if (savedTurn < 0 || !Number.isInteger(turnCount) || turnCount <= 0) return -1;
-	/* A saved index equal to the new turn count represents the old last slot.
-	 * Its virtual boundary is therefore crossed when Combat wraps to turn 0. */
-	return Math.min(savedTurn, turnCount);
-}
-
-function combatTransitionKey(combat, _prior, current) {
-	if (!combat?.id) return "";
-	return [
-		String(combat.id),
-		`${nonNegativeInteger(combat?.round ?? current?.round)}:${combatTurnIndex(combat?.turn ?? current?.turn)}:${String(combat?.combatant?.id ?? current?.combatantId ?? "")}`,
-	].join("|");
 }
 
 function combatTurnIndex(value) {
