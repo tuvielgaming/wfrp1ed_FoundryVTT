@@ -27,7 +27,7 @@ const TIMED_FLAG_KEY = "criticalTimed";
 const RULE_CHANGES_FLAG_KEY = "ruleChanges";
 const DAMAGE_STATE_FLAG_KEY = "damageState";
 const CRITICAL_RESULT_FLAG_KEY = "criticalResult";
-const VERSION = 8;
+const VERSION = 9;
 const processingTurns = new Set();
 let processingWorldTime = false;
 
@@ -426,7 +426,6 @@ function relativeHandForPhysicalArm(actor, hitLocation) {
 }
 
 async function processTimedCriticalTurnChange(combat, prior, current, transitionKey) {
-	const priorCombatantId = String(prior?.combatantId ?? "");
 	const priorRound = nonNegativeInteger(prior?.round);
 	const currentRound = nonNegativeInteger(current?.round ?? combat.round);
 	const currentTurn = combatTurnIndex(current?.turn ?? combat.turn);
@@ -462,7 +461,7 @@ async function processTimedCriticalTurnChange(combat, prior, current, transition
 					continue;
 				}
 
-				if (priorCombatantId !== anchorCombatantId) continue;
+				if (!transitionLeavesInitiativeAnchor(timed, combat, prior)) continue;
 				if (priorRound <= nonNegativeInteger(timed.startRound)) {
 					await effect.setFlag(FLAG_SCOPE, TIMED_FLAG_KEY, {
 						...foundry.utils.deepClone(timed),
@@ -539,7 +538,6 @@ function reanchorTimedState(timed, combat, current) {
 }
 
 async function processPeriodicCriticalTurnChange(combat, prior, current, transitionKey) {
-	const priorCombatantId = String(prior?.combatantId ?? "");
 	const priorRound = nonNegativeInteger(prior?.round);
 	const currentRound = nonNegativeInteger(current?.round ?? combat.round);
 
@@ -548,7 +546,7 @@ async function processPeriodicCriticalTurnChange(combat, prior, current, transit
 			if (wound.type !== "criticalWound") continue;
 			for (const effect of wound.effects ?? []) {
 				let periodic = effectFlag(effect, PERIODIC_FLAG_KEY);
-				if (!periodic || effect.disabled === true || effect.duration?.expired === true) continue;
+				if (!periodic || effect.disabled === true) continue;
 				if (await expirePeriodicIfWorldTimeElapsed(effect, periodic, currentWorldTime())) continue;
 
 				const hadAnchor = initiativeStateHasAnchor(periodic, combat);
@@ -572,7 +570,7 @@ async function processPeriodicCriticalTurnChange(combat, prior, current, transit
 					continue;
 				}
 
-				if (priorCombatantId !== anchorCombatantId) continue;
+				if (!transitionLeavesInitiativeAnchor(periodic, combat, prior)) continue;
 				if (priorRound <= nonNegativeInteger(periodic.startRound)) {
 					await effect.setFlag(FLAG_SCOPE, PERIODIC_FLAG_KEY, {
 						...foundry.utils.deepClone(periodic),
@@ -787,6 +785,19 @@ function initiativeStateHasAnchor(state, combat) {
 		nonNegativeInteger(state?.startRound) > 0 &&
 		String(state?.anchorCombatantId ?? "")
 	);
+}
+
+function transitionLeavesInitiativeAnchor(state, combat, prior) {
+	const anchorCombatantId = String(state?.anchorCombatantId ?? "");
+	const priorCombatantId = String(prior?.combatantId ?? "");
+	if (anchorCombatantId && priorCombatantId === anchorCombatantId) return true;
+
+	const anchorTurn = combatTurnIndex(state?.anchorTurn);
+	const priorTurn = combatTurnIndex(prior?.turn);
+	if (anchorTurn < 0 || priorTurn !== anchorTurn) return false;
+
+	const anchoredCombatant = combat?.turns?.[anchorTurn];
+	return !anchorCombatantId || String(anchoredCombatant?.id ?? "") === anchorCombatantId;
 }
 
 function isForwardCombatProgression(prior, current) {
