@@ -27,8 +27,7 @@ const TIMED_FLAG_KEY = "criticalTimed";
 const RULE_CHANGES_FLAG_KEY = "ruleChanges";
 const DAMAGE_STATE_FLAG_KEY = "damageState";
 const CRITICAL_RESULT_FLAG_KEY = "criticalResult";
-const VERSION = 6;
-const processingRounds = new Set();
+const VERSION = 7;
 const processingTurns = new Set();
 let processingWorldTime = false;
 
@@ -99,34 +98,26 @@ Hooks.on("createItem", (item) => {
 });
 
 /*
- * Round-based characteristic effects are anchored to the initiative position at
- * which they were applied. The partial remainder of that turn/round therefore
- * never consumes one of the declared rounds. Periodic damage still fires at the
- * ordinary round boundary because its duration is counted in actual ticks.
+ * Round-based characteristic effects and periodic damage are both anchored to
+ * the initiative position at which the wound was applied. The partial remainder
+ * of that turn/round never consumes a declared round and never causes an early
+ * periodic tick. Because Foundry exposes turn boundaries rather than the exact
+ * instant inside a turn, a completed cycle is counted when leaving the anchor
+ * combatant on a later round; this is deliberately conservative.
  */
 Hooks.on("combatTurnChange", (combat, prior, current) => {
 	if (!isPrimaryActiveGm() || !isForwardCombatProgression(prior, current)) return;
 	queueTurnConsequences(combat, prior, current);
-
-	const priorRound = nonNegativeInteger(prior?.round);
-	const currentRound = nonNegativeInteger(current?.round ?? combat.round);
-	if (currentRound > priorRound) queueRoundConsequences(combat, currentRound);
 });
 
 Hooks.on("updateCombat", (combat, changes) => {
 	if (!isPrimaryActiveGm()) return;
-	if (Object.hasOwn(changes ?? {}, "round") || Object.hasOwn(changes ?? {}, "turn")) {
-		const prior = combat.previous;
-		const current = combat.current;
-		if (isForwardCombatProgression(prior, current)) {
-			queueTurnConsequences(combat, prior, current);
-		}
+	if (!Object.hasOwn(changes ?? {}, "round") && !Object.hasOwn(changes ?? {}, "turn")) return;
+	const prior = combat.previous;
+	const current = combat.current;
+	if (isForwardCombatProgression(prior, current)) {
+		queueTurnConsequences(combat, prior, current);
 	}
-
-	if (!Object.hasOwn(changes ?? {}, "round")) return;
-	const currentRound = nonNegativeInteger(combat.round);
-	if (currentRound <= 0) return;
-	queueRoundConsequences(combat, currentRound);
 });
 
 /* Foundry v14 world time is canonical seconds. Minute/hour/day periodic
@@ -148,22 +139,14 @@ function queueTurnConsequences(combat, prior, current) {
 	const key = combatTransitionKey(combat, prior, current);
 	if (!combat?.id || !key || processingTurns.has(key)) return;
 	processingTurns.add(key);
-	void processTimedCriticalTurnChange(combat, prior, current, key)
+	void processTurnConsequences(combat, prior, current, key)
 		.catch(reportConsequenceError)
 		.finally(() => processingTurns.delete(key));
 }
 
-function queueRoundConsequences(combat, round) {
-	const key = `${String(combat?.id ?? "")}:${round}`;
-	if (!combat?.id || processingRounds.has(key)) return;
-	processingRounds.add(key);
-	void processRoundConsequences(combat, round)
-		.catch(reportConsequenceError)
-		.finally(() => processingRounds.delete(key));
-}
-
-async function processRoundConsequences(combat, round) {
-	await processPeriodicCriticals(combat, round);
+async function processTurnConsequences(combat, prior, current, transitionKey) {
+	await processTimedCriticalTurnChange(combat, prior, current, transitionKey);
+	await processPeriodicCriticalTurnChange(combat, prior, current, transitionKey);
 }
 
 async function resolveRandomState(definition) {
@@ -245,6 +228,7 @@ async function createManagedEffects(wound, definition, resolved) {
 	if (definition.periodicWounds?.formula) {
 		const flags = consequenceEffectFlags(wound, "periodic-wounds", resolved);
 		flags[FLAG_SCOPE][PERIODIC_FLAG_KEY] = periodicStateFor(
+			wound.parent,
 			definition.periodicWounds,
 			resolved.periodicDuration,
 		);
@@ -297,10 +281,12 @@ function timedStateFor(actor, duration) {
 	};
 }
 
-function periodicStateFor(definition, resolvedDuration) {
+function periodicStateFor(actor, definition, resolvedDuration) {
 	const duration = resolvedDuration
 		? foundry.utils.deepClone(resolvedDuration)
 		: null;
+	const combat = activeCombatForActor(actor);
+	const current = combat?.current ?? {};
 	const worldTime = currentWorldTime();
 	const worldSeconds = duration && duration.units !== "rounds"
 		? durationSeconds(duration.value, duration.units)
@@ -311,6 +297,11 @@ function periodicStateFor(definition, resolvedDuration) {
 		formula: String(definition.formula),
 		until: String(definition.until ?? ""),
 		duration,
+		combatId: String(combat?.id ?? ""),
+		startRound: combat ? nonNegativeInteger(current.round ?? combat.round) : 0,
+		anchorCombatantId: String(current.combatantId ?? combat?.combatant?.id ?? ""),
+		anchorTurn: combatTurnIndex(current.turn ?? combat?.turn),
+		lastTransitionKey: "",
 		lastCombatId: "",
 		lastRound: 0,
 		ticksApplied: 0,
@@ -545,33 +536,91 @@ function reanchorTimedState(timed, combat, current) {
 	};
 }
 
-function processPeriodicCriticals(combat, round) {
-	return processPeriodicCriticalsInternal(combat, round);
-}
+async function processPeriodicCriticalTurnChange(combat, prior, current, transitionKey) {
+	const priorCombatantId = String(prior?.combatantId ?? "");
+	const priorRound = nonNegativeInteger(prior?.round);
+	const currentRound = nonNegativeInteger(current?.round ?? combat.round);
 
-async function processPeriodicCriticalsInternal(combat, round) {
 	for (const actor of combatActors(combat)) {
 		for (const wound of actor.items ?? []) {
 			if (wound.type !== "criticalWound") continue;
 			for (const effect of wound.effects ?? []) {
-				const periodic = effectFlag(effect, PERIODIC_FLAG_KEY);
+				let periodic = effectFlag(effect, PERIODIC_FLAG_KEY);
 				if (!periodic || effect.disabled === true || effect.duration?.expired === true) continue;
 				if (await expirePeriodicIfWorldTimeElapsed(effect, periodic, currentWorldTime())) continue;
-				if (
-					String(periodic.lastCombatId ?? "") === String(combat.id ?? "") &&
-					Number(periodic.lastRound ?? 0) === round
-				) continue;
-				await applyPeriodicWounds(actor, wound, effect, periodic, combat, round);
+
+				periodic = periodicStateWithAnchor(periodic, combat, current);
+				if (String(periodic.lastTransitionKey ?? "") === transitionKey) continue;
+
+				const anchorCombatantId = String(periodic.anchorCombatantId ?? "");
+				if (!anchorCombatantId || !combatHasCombatant(combat, anchorCombatantId)) {
+					const reanchored = reanchorPeriodicState(periodic, combat, current);
+					await effect.setFlag(FLAG_SCOPE, PERIODIC_FLAG_KEY, {
+						...reanchored,
+						lastTransitionKey: transitionKey,
+					});
+					continue;
+				}
+
+				if (priorCombatantId !== anchorCombatantId) continue;
+				if (priorRound <= nonNegativeInteger(periodic.startRound)) {
+					await effect.setFlag(FLAG_SCOPE, PERIODIC_FLAG_KEY, {
+						...foundry.utils.deepClone(periodic),
+						lastTransitionKey: transitionKey,
+					});
+					continue;
+				}
+
+				await applyPeriodicWounds(
+					actor,
+					wound,
+					effect,
+					periodic,
+					combat,
+					currentRound,
+					transitionKey,
+				);
 			}
 		}
 	}
 }
 
-async function applyPeriodicWounds(actor, wound, effect, periodic, combat, round) {
+function periodicStateWithAnchor(periodic, combat, current) {
+	if (
+		String(periodic.combatId ?? "") === String(combat?.id ?? "") &&
+		nonNegativeInteger(periodic.startRound) > 0 &&
+		String(periodic.anchorCombatantId ?? "")
+	) {
+		return periodic;
+	}
+
+	return {
+		...foundry.utils.deepClone(periodic),
+		version: VERSION,
+		combatId: String(combat?.id ?? ""),
+		startRound: nonNegativeInteger(current?.round ?? combat?.round),
+		anchorCombatantId: String(current?.combatantId ?? combat?.combatant?.id ?? ""),
+		anchorTurn: combatTurnIndex(current?.turn ?? combat?.turn),
+		lastTransitionKey: String(periodic.lastTransitionKey ?? ""),
+	};
+}
+
+function reanchorPeriodicState(periodic, combat, current) {
+	return {
+		...foundry.utils.deepClone(periodic),
+		version: VERSION,
+		combatId: String(combat?.id ?? ""),
+		startRound: nonNegativeInteger(current?.round ?? combat?.round),
+		anchorCombatantId: String(current?.combatantId ?? combat?.combatant?.id ?? ""),
+		anchorTurn: combatTurnIndex(current?.turn ?? combat?.turn),
+	};
+}
+
+async function applyPeriodicWounds(actor, wound, effect, periodic, combat, round, transitionKey) {
 	const packetId = `bleed-${effect.id}-${combat.id}-${round}`;
 	const already = DamageApplication.transactionFor(actor, packetId);
 	if (already?.state === "applied") {
-		await stampPeriodic(effect, periodic, combat, round);
+		await stampPeriodic(effect, periodic, combat, round, transitionKey);
 		return;
 	}
 
@@ -604,10 +653,10 @@ async function applyPeriodicWounds(actor, wound, effect, periodic, combat, round
 	const message = await DamageChat.publish({ packet, resolution, speakerActor: actor });
 	const transaction = await DamageChat.applyMessage(message);
 	if (!transaction) throw new Error("Critical bleeding damage could not be applied.");
-	await stampPeriodic(effect, periodic, combat, round);
+	await stampPeriodic(effect, periodic, combat, round, transitionKey);
 }
 
-async function stampPeriodic(effect, periodic, combat, round) {
+async function stampPeriodic(effect, periodic, combat, round, transitionKey) {
 	const ticksApplied = nonNegativeInteger(periodic.ticksApplied) + 1;
 	const duration = periodic.duration && typeof periodic.duration === "object"
 		? foundry.utils.deepClone(periodic.duration)
@@ -619,6 +668,7 @@ async function stampPeriodic(effect, periodic, combat, round) {
 	);
 	const next = {
 		...foundry.utils.deepClone(periodic),
+		lastTransitionKey: transitionKey,
 		lastCombatId: String(combat.id ?? ""),
 		lastRound: round,
 		ticksApplied,
