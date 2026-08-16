@@ -88,92 +88,7 @@
       </label>
     </div>
 
-    <div class="critical-wound-sheet__consequence-grid">
-      <label class="critical-wound-sheet__field">
-        <span>{{ui.durationFormula}}</span>
-        <input
-          type="text"
-          name="system.consequence.duration.formula"
-          value="{{consequence.duration.formula}}"
-          placeholder="1d4"
-          {{#unless editable}}disabled{{/unless}}
-        />
-      </label>
-
-      <label class="critical-wound-sheet__field">
-        <span>{{ui.durationUnits}}</span>
-        <select
-          name="system.consequence.duration.units"
-          {{#unless editable}}disabled{{/unless}}
-        >
-          {{selectOptions ui.durationUnitOptions selected=consequence.duration.units localize=false}}
-        </select>
-      </label>
-
-      <label class="critical-wound-sheet__field">
-        <span>{{ui.until}}</span>
-        <select
-          name="system.consequence.duration.until"
-          {{#unless editable}}disabled{{/unless}}
-        >
-          {{selectOptions ui.untilOptions selected=consequence.duration.until localize=false}}
-        </select>
-      </label>
-
-      <label class="critical-wound-sheet__field">
-        <span>{{ui.periodicWounds}}</span>
-        <input
-          type="text"
-          name="system.consequence.periodicWounds.formula"
-          value="{{consequence.periodicWounds.formula}}"
-          placeholder="1d4"
-          {{#unless editable}}disabled{{/unless}}
-        />
-      </label>
-
-      <label class="critical-wound-sheet__field">
-        <span>{{ui.periodicDurationFormula}}</span>
-        <input
-          type="text"
-          name="system.consequence.periodicWounds.duration.formula"
-          value="{{consequence.periodicWounds.duration.formula}}"
-          placeholder="2 or 1d4"
-          {{#unless editable}}disabled{{/unless}}
-        />
-      </label>
-
-      <label class="critical-wound-sheet__field">
-        <span>{{ui.periodicDurationUnits}}</span>
-        <select
-          name="system.consequence.periodicWounds.duration.units"
-          {{#unless editable}}disabled{{/unless}}
-        >
-          {{selectOptions ui.periodicDurationUnitOptions selected=consequence.periodicWounds.duration.units localize=false}}
-        </select>
-      </label>
-
-      <label class="critical-wound-sheet__field">
-        <span>{{ui.periodicUntil}}</span>
-        <select
-          name="system.consequence.periodicWounds.until"
-          {{#unless editable}}disabled{{/unless}}
-        >
-          {{selectOptions ui.untilOptions selected=consequence.periodicWounds.until localize=false}}
-        </select>
-      </label>
-
-      <label class="critical-wound-sheet__field">
-        <span>{{ui.dropHeld}}</span>
-        <select
-          name="system.consequence.dropHeld"
-          {{#unless editable}}disabled{{/unless}}
-        >
-          {{selectOptions ui.dropHeldOptions selected=consequence.dropHeld localize=false}}
-        </select>
-      </label>
-    </div>
-
-    <div class="critical-wound-sheet__consequence-characteristics">
+    <section class="critical-wound-sheet__consequence-block critical-wound-sheet__consequence-block--characteristics">
       <div class="critical-wound-sheet__subheading">
         <strong>{{ui.characteristics}}</strong>
         {{#if editable}}
@@ -185,6 +100,39 @@
             {{ui.addCharacteristic}}
           </button>
         {{/if}}
+      </div>
+
+      <div class="critical-wound-sheet__consequence-grid">
+        <label class="critical-wound-sheet__field">
+          <span>{{ui.durationFormula}}</span>
+          <input
+            type="text"
+            name="system.consequence.duration.formula"
+            value="{{consequence.duration.formula}}"
+            placeholder="1d4"
+            {{#unless editable}}disabled{{/unless}}
+          />
+        </label>
+
+        <label class="critical-wound-sheet__field">
+          <span>{{ui.durationUnits}}</span>
+          <select
+            name="system.consequence.duration.units"
+            {{#unless editable}}disabled{{/unless}}
+          >
+            {{selectOptions ui.durationUnitOptions selected=consequence.duration.units localize=false}}
+          </select>
+        </label>
+
+        <label class="critical-wound-sheet__field">
+          <span>{{ui.until}}</span>
+          <select
+            name="system.consequence.duration.until"
+            {{#unless editable}}disabled{{/unless}}
+          >
+            {{selectOptions ui.untilOptions selected=consequence.duration.until localize=false}}
+          </select>
+        </label>
       </div>
 
       {{#if consequence.characteristics.length}}
@@ -230,7 +178,73 @@
           {{/each}}
         </ol>
       {{/if}}
-    </div>
+    </section>
+
+    <section class="critical-wound-sheet__consequence-block critical-wound-sheet__consequence-block--periodic">
+      <div class="critical-wound-sheet__subheading">
+        <strong>{{ui.periodicWounds}}</strong>
+      </div>
+
+      <div class="critical-wound-sheet__consequence-grid critical-wound-sheet__consequence-grid--periodic">
+        <label class="critical-wound-sheet__field">
+          <span>{{ui.periodicWounds}}</span>
+          <input
+            type="text"
+            name="system.consequence.periodicWounds.formula"
+            value="{{consequence.periodicWounds.formula}}"
+            placeholder="1d4"
+            {{#unless editable}}disabled{{/unless}}
+          />
+        </label>
+
+        <label class="critical-wound-sheet__field">
+          <span>{{ui.periodicDurationFormula}}</span>
+          <input
+            type="text"
+            name="system.consequence.periodicWounds.duration.formula"
+            value="{{consequence.periodicWounds.duration.formula}}"
+            placeholder="2 or 1d4"
+            {{#unless editable}}disabled{{/unless}}
+          />
+        </label>
+
+        <label class="critical-wound-sheet__field">
+          <span>{{ui.periodicDurationUnits}}</span>
+          <select
+            name="system.consequence.periodicWounds.duration.units"
+            {{#unless editable}}disabled{{/unless}}
+          >
+            {{selectOptions ui.periodicDurationUnitOptions selected=consequence.periodicWounds.duration.units localize=false}}
+          </select>
+        </label>
+
+        <label class="critical-wound-sheet__field">
+          <span>{{ui.periodicUntil}}</span>
+          <select
+            name="system.consequence.periodicWounds.until"
+            {{#unless editable}}disabled{{/unless}}
+          >
+            {{selectOptions ui.untilOptions selected=consequence.periodicWounds.until localize=false}}
+          </select>
+        </label>
+      </div>
+    </section>
+
+    <section class="critical-wound-sheet__consequence-block critical-wound-sheet__consequence-block--drop-held">
+      <div class="critical-wound-sheet__subheading">
+        <strong>{{ui.dropHeld}}</strong>
+      </div>
+
+      <label class="critical-wound-sheet__field critical-wound-sheet__field--drop-held">
+        <select
+          name="system.consequence.dropHeld"
+          aria-label="{{ui.dropHeld}}"
+          {{#unless editable}}disabled{{/unless}}
+        >
+          {{selectOptions ui.dropHeldOptions selected=consequence.dropHeld localize=false}}
+        </select>
+      </label>
+    </section>
   </section>
 
   <section class="critical-wound-sheet__effects">
