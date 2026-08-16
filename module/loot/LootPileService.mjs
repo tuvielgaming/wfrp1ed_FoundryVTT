@@ -16,10 +16,15 @@ const SOCKET_TIMEOUT_MS = 10000;
 /**
  * Authoritative physical Item transfer service.
  *
- * Chat cards are presentation only. A Loot Pile is a native Actor containing
+ * Chat cards are presentation only. A live Loot Pile is a native Actor containing
  * normal embedded physical Items. Every destructive move is serialized by the
  * primary active GM when one exists so a player can drop/pick up Items without
  * requiring ownership of the pile document itself.
+ *
+ * Once the last physical Item leaves a pile, the interactive ChatMessage is
+ * converted in place to a static historical message and the backing lootPile
+ * Actor is deleted. This preserves chat history without accumulating empty
+ * infrastructure Actors in the World.
  *
  * Automatic Critical drops start at revision 0. Any later add/take increments
  * the revision. A rollback is allowed only while the original pile is untouched;
@@ -147,8 +152,8 @@ export class LootPileService {
 }
 
 Hooks.once("ready", () => {
-	if (!game.socket) return;
-	game.socket.on(SOCKET_CHANNEL, (payload) => void handleSocketPayload(payload));
+	if (game.socket) game.socket.on(SOCKET_CHANNEL, (payload) => void handleSocketPayload(payload));
+	if (isPrimaryActiveGm()) void cleanupExhaustedLootPiles().catch(reportCleanupError);
 });
 
 async function handleSocketPayload(payload) {
@@ -269,6 +274,7 @@ async function takeItemAsAuthority(data, requester) {
 	if (LootPileService.isLootPile(target)) throw new Error("A Loot Pile cannot loot another Loot Pile through this action.");
 	assertActorEditPermission(target, requester);
 
+	const pileUuid = pile.uuid;
 	const item = pile.items?.get?.(text(data.itemId));
 	if (!LootPileService.isPhysicalItem(item)) throw new Error("That Loot Item no longer exists.");
 	const [created] = await target.createEmbeddedDocuments("Item", [characterItemSource(item)]);
@@ -279,9 +285,23 @@ async function takeItemAsAuthority(data, requester) {
 		await target.deleteEmbeddedDocuments("Item", [created.id]).catch(() => {});
 		throw error;
 	}
-	await mutatePileState(pile, { exhausted: pile.items.size <= 0 });
-	refreshLootPresentation(pile.uuid);
-	return { pileUuid: pile.uuid, targetActorUuid: target.uuid, itemId: created.id, revision: Number(pile.system?.revision ?? 0) };
+
+	const exhausted = [...(pile.items ?? [])].filter(LootPileService.isPhysicalItem).length === 0;
+	const revision = await mutatePileState(pile, { exhausted });
+	if (exhausted) {
+		const archived = await archiveExhaustedPile(pile);
+		return {
+			pileUuid,
+			targetActorUuid: target.uuid,
+			itemId: created.id,
+			revision,
+			exhausted: true,
+			archivedMessages: archived,
+		};
+	}
+
+	refreshLootPresentation(pileUuid);
+	return { pileUuid, targetActorUuid: target.uuid, itemId: created.id, revision };
 }
 
 async function restorePileAsAuthority(data, requester) {
@@ -327,6 +347,42 @@ async function deletePileAsAuthority(data, requester) {
 	for (const message of LootPileService.messagesForPile(pile.uuid)) await message.delete();
 	await pile.delete();
 	return { deleted: true };
+}
+
+async function cleanupExhaustedLootPiles() {
+	for (const pile of [...(game.actors ?? [])].filter(LootPileService.isLootPile)) {
+		const physicalItems = [...(pile.items ?? [])].filter(LootPileService.isPhysicalItem);
+		if (physicalItems.length > 0) continue;
+		await archiveExhaustedPile(pile);
+	}
+}
+
+/**
+ * Preserve the ChatMessage's chronological position, but remove every live Loot
+ * interaction and the backing Actor. The message becomes plain history rather
+ * than a dead interactive card.
+ */
+async function archiveExhaustedPile(pile) {
+	if (!LootPileService.isLootPile(pile)) return 0;
+	const messages = LootPileService.messagesForPile(pile.uuid);
+	const label = text(pile.system?.sourceLabel) || String(pile.name ?? localize("Loot", "Łup"));
+	const title = localize(`Loot — ${label}`, `Łup — ${label}`);
+	const content = exhaustedHistoryContent(title);
+
+	for (const message of messages) {
+		await message.update({ content });
+		await message.unsetFlag(FLAG_SCOPE, MESSAGE_FLAG_KEY);
+	}
+	await pile.delete();
+	void ui.chat?.render?.({ force: true });
+	return messages.length;
+}
+
+function exhaustedHistoryContent(title) {
+	return `<section class="wfrp1ed-loot-history"><strong>${escapeHtml(title)}</strong> — ${escapeHtml(localize(
+		"empty / exhausted; all items were taken.",
+		"pusty / wyczerpany; wszystkie przedmioty zostały zabrane.",
+	))}</section>`;
 }
 
 async function copyItemsIntoPile(pile, items, sourceActor) {
@@ -451,6 +507,19 @@ function escapeAttribute(value) {
 		.replaceAll('"', "&quot;")
 		.replaceAll("<", "&lt;")
 		.replaceAll(">", "&gt;");
+}
+
+function escapeHtml(value) {
+	return String(value ?? "")
+		.replaceAll("&", "&amp;")
+		.replaceAll("<", "&lt;")
+		.replaceAll(">", "&gt;")
+		.replaceAll('"', "&quot;")
+		.replaceAll("'", "&#039;");
+}
+
+function reportCleanupError(error) {
+	console.error("WFRP1ED | Unable to clean up an exhausted Loot Pile.", error);
 }
 
 function localize(english, polish) {
