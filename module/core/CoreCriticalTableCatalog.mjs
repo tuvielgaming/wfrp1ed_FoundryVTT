@@ -205,7 +205,7 @@ function suddenDeath(variant, language) {
 				drawn: false,
 				flags: {
 					wfrp1ed: {
-						criticalOutcome: { outcome },
+						criticalOutcome: outcome,
 					},
 				},
 			};
