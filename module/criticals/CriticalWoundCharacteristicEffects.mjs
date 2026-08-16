@@ -1,21 +1,17 @@
 import { Wfrp1edActor } from "../documents/Wfrp1edActor.mjs";
 import {
-	encodeRuleEffectChange,
 	RULE_EFFECT_APPLICABILITY,
 	RULE_EFFECT_OPERATIONS,
 	RULE_EFFECT_SIDES,
 	RuleEffectRegistry,
 } from "../effects/RuleEffectRegistry.mjs";
 import { RuleEffectResolver } from "../effects/RuleEffectResolver.mjs";
-import {
-	ensureCoreDetailedCriticalTables,
-	isCoreDetailedEffectProvider,
-} from "./CoreDetailedCriticalTables.mjs";
+import { criticalConsequenceForWound } from "./CriticalConsequenceDefinition.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
-const CORE_EFFECT_FLAG_KEY = "coreCriticalConsequence";
-const RULE_CHANGES_FLAG_KEY = "ruleChanges";
-const TABLE_RESULT_FLAG_KEY = "detailedCriticalEffect";
+const RUNTIME_FLAG_KEY = "criticalConsequenceRuntime";
+const EFFECT_FLAG_KEY = "criticalConsequenceEffect";
+const TIMED_FLAG_KEY = "criticalTimed";
 const CRITICAL_WOUND_TYPE = "criticalWound";
 
 const CHARACTERISTIC_IDS = Object.freeze([
@@ -24,41 +20,26 @@ const CHARACTERISTIC_IDS = Object.freeze([
 ]);
 const CHARACTERISTIC_ALIASES = Object.freeze({ sp: "m" });
 
-const CORE_CHARACTERISTIC_EFFECTS = Object.freeze({
-	leg: Object.freeze({
-		5: halfMovementAndInitiativeUntilMedicalAttention(),
-		6: halfMovementAndInitiativeUntilMedicalAttention(),
-		7: halfMovementAndInitiativeUntilMedicalAttention(),
-	}),
-});
-
 let originalGetCharacteristicValue = null;
 
+/**
+ * One characteristic-effect consumer for every WFRP rule source.
+ *
+ * Critical Wounds are not special-cased by result number here. Core wounds and
+ * user-authored wounds declare the same `system.consequence.characteristics`
+ * data and are consumed through the same path. Native/manual ActiveEffects from
+ * Skills, equipment, spells, etc. continue to come from RuleEffectResolver.
+ */
 Hooks.once("init", () => {
 	registerCharacteristicEffectTargets();
 	installCharacteristicValueResolver();
 });
 
-Hooks.on("createItem", (item, _options, userId) => {
-	if (
-		item?.type !== CRITICAL_WOUND_TYPE ||
-		String(userId ?? "") !== String(game.user?.id ?? "")
-	) return;
-	void synchronizeCoreCharacteristicEffect(item).catch(reportEffectError);
-});
-
-Hooks.on("updateItem", (item) => {
-	if (item?.type !== CRITICAL_WOUND_TYPE) return;
-	void synchronizeCoreCharacteristicEffect(item).catch(reportEffectError);
-});
-
-Hooks.once("ready", () => {
-	if (!isPrimaryActiveGm()) return;
-	void repairExistingCoreCharacteristicEffects().catch(reportEffectError);
-});
-
-for (const hook of ["createActiveEffect", "updateActiveEffect", "deleteActiveEffect"]) {
-	Hooks.on(hook, (effect) => refreshCriticalEffectActor(effect));
+for (const hook of [
+	"createItem", "updateItem", "deleteItem",
+	"createActiveEffect", "updateActiveEffect", "deleteActiveEffect",
+]) {
+	Hooks.on(hook, (document) => refreshAffectedActor(document));
 }
 
 Hooks.on("renderApplicationV2", (application, element) => {
@@ -106,7 +87,7 @@ function effectiveCharacteristic(actor, id, knownBase = undefined) {
 	const canonicalId = canonicalCharacteristicId(id);
 	const base = knownBase === undefined
 		? baseCharacteristicValue(actor, canonicalId)
-		: finiteNumber(knownBase, `characteristics.${canonicalId}.current`);
+		: finiteNumber(knownBase);
 	const targetId = characteristicTargetId(canonicalId);
 	const generic = RuleEffectResolver.candidates(actor, targetId).filter((candidate) =>
 		candidate.applicability === RULE_EFFECT_APPLICABILITY.AUTOMATIC &&
@@ -114,8 +95,8 @@ function effectiveCharacteristic(actor, id, knownBase = undefined) {
 	);
 	const candidates = [
 		...generic,
-		...managedCoreWoundCandidates(actor, canonicalId, targetId, generic),
-	];
+		...managedCriticalWoundCandidates(actor, canonicalId, targetId, generic),
+	].sort(compareCandidates);
 
 	let value = base;
 	const applied = [];
@@ -140,42 +121,50 @@ function effectiveCharacteristic(actor, id, knownBase = undefined) {
 	});
 }
 
-function managedCoreWoundCandidates(actor, characteristicId, targetId, existing) {
+/**
+ * Deterministic fallback for system-managed Critical consequence effects.
+ *
+ * Foundry can prepare Item-grandchild transfer effects asymmetrically: one
+ * change from a multi-change effect may surface through the generic resolver
+ * while another does not. This fallback reads the wound's declarative snapshot
+ * and adds only the missing target. That is the class of failure which caused
+ * Leg #4 Movement to halve while Initiative stayed unchanged.
+ */
+function managedCriticalWoundCandidates(actor, characteristicId, targetId, existing) {
 	if (!(actor instanceof foundry.documents.Actor)) return [];
 	const results = [];
 
 	for (const wound of actor.items ?? []) {
 		if (wound?.type !== CRITICAL_WOUND_TYPE) continue;
-		if (!isCoreDetailedEffectProvider(wound.system?.resolution?.providerId)) continue;
-		const definition = coreConsequenceForWound(wound);
-		const entry = definition?.effects?.find((effect) => effect.characteristicId === characteristicId);
+		const runtime = runtimeState(wound);
+		if (runtime?.state !== "applied") continue;
+		const definition = runtime?.definition ?? criticalConsequenceForWound(wound);
+		const entry = definition?.characteristics?.find((candidate) =>
+			String(candidate.characteristicId ?? "") === characteristicId,
+		);
 		if (!entry) continue;
 
-		const managedEffect = [...(wound.effects ?? [])].find((effect) => {
-			const flag = effect.getFlag?.(FLAG_SCOPE, CORE_EFFECT_FLAG_KEY);
-			return Boolean(flag) &&
-				Number(flag.effectNumber) === definition.effectNumber &&
-				String(flag.location ?? "") === definition.location;
-		}) ?? null;
-		if (!managedEffect || managedEffect.disabled === true || managedEffect.duration?.expired === true) continue;
+		const managedEffect = [...(wound.effects ?? [])].find((effect) =>
+			effect?.getFlag?.(FLAG_SCOPE, EFFECT_FLAG_KEY)?.kind === "characteristics"
+		) ?? null;
+		if (!managedEffect || !managedEffectAvailable(managedEffect)) continue;
 
-		if (existing.some((candidate) =>
-			String(candidate.itemUuid ?? "") === String(wound.uuid ?? "") &&
-			String(candidate.targetId ?? "") === targetId
-		)) continue;
+		if (existing.some((candidate) => sameManagedContribution(
+			candidate,
+			wound,
+			managedEffect,
+			targetId,
+		))) continue;
 
 		results.push(Object.freeze({
-			id: `core-critical:${wound.uuid}:${managedEffect.id}:${characteristicId}`,
+			id: `critical-consequence:${wound.uuid}:${managedEffect.id}:${characteristicId}`,
 			targetId,
-			operation: entry.operation,
-			formula: String(entry.value),
+			operation: String(entry.operation ?? ""),
+			formula: String(entry.value ?? ""),
 			applicability: RULE_EFFECT_APPLICABILITY.AUTOMATIC,
 			side: RULE_EFFECT_SIDES.SELF,
 			stacking: "per-acquisition",
-			condition: localize(
-				"Until medical attention is received",
-				"Do czasu otrzymania pomocy medycznej",
-			),
+			condition: consequenceCondition(definition),
 			priority: 50,
 			defaultSelected: true,
 			actorUuid: actor.uuid,
@@ -189,109 +178,20 @@ function managedCoreWoundCandidates(actor, characteristicId, targetId, existing)
 	return results;
 }
 
-async function repairExistingCoreCharacteristicEffects() {
-	await ensureCoreDetailedCriticalTables();
-	for (const actor of game.actors ?? []) {
-		let touched = false;
-		for (const item of actor.items ?? []) {
-			if (item.type !== CRITICAL_WOUND_TYPE) continue;
-			const before = item.effects?.size ?? item.effects?.length ?? 0;
-			await synchronizeCoreCharacteristicEffect(item);
-			const after = item.effects?.size ?? item.effects?.length ?? 0;
-			touched ||= before !== after;
-		}
-		if (touched) refreshActorSheetIfOpen(actor);
+function sameManagedContribution(candidate, wound, effect, targetId) {
+	if (String(candidate?.targetId ?? "") !== targetId) return false;
+	if (String(candidate?.effectUuid ?? "") === String(effect.uuid ?? "")) return true;
+	return String(candidate?.itemUuid ?? "") === String(wound.uuid ?? "") &&
+		String(candidate?.effectName ?? "") === String(effect.name ?? "");
+}
+
+function managedEffectAvailable(effect) {
+	if (effect?.disabled === true) return false;
+	const timed = effect.getFlag?.(FLAG_SCOPE, TIMED_FLAG_KEY);
+	if (timed && String(timed.units ?? "") === "rounds") {
+		return positiveInteger(timed.expiredAtRound) === 0;
 	}
-}
-
-async function synchronizeCoreCharacteristicEffect(wound) {
-	if (wound?.documentName !== "Item" || wound.type !== CRITICAL_WOUND_TYPE) return null;
-
-	const managed = [...(wound.effects ?? [])].filter((effect) =>
-		Boolean(effect.getFlag?.(FLAG_SCOPE, CORE_EFFECT_FLAG_KEY)),
-	);
-	const definition = isCoreDetailedEffectProvider(wound.system?.resolution?.providerId)
-		? coreConsequenceForWound(wound)
-		: null;
-	const matching = definition
-		? managed.find((effect) => {
-			const flag = effect.getFlag?.(FLAG_SCOPE, CORE_EFFECT_FLAG_KEY);
-			return Number(flag?.effectNumber) === definition.effectNumber &&
-				String(flag?.location ?? "") === definition.location;
-		}) ?? null
-		: null;
-
-	const staleIds = managed
-		.filter((effect) => effect !== matching)
-		.map((effect) => effect.id)
-		.filter(Boolean);
-	if (staleIds.length) await wound.deleteEmbeddedDocuments("ActiveEffect", staleIds);
-	if (!definition) return null;
-	if (matching) return matching;
-
-	const changes = definition.effects.map((entry) =>
-		encodeRuleEffectChange({
-			targetId: characteristicTargetId(entry.characteristicId),
-			operation: entry.operation,
-			formula: String(entry.value),
-			applicability: RULE_EFFECT_APPLICABILITY.AUTOMATIC,
-			side: RULE_EFFECT_SIDES.SELF,
-			stacking: "per-acquisition",
-			condition: localize(
-				"Until medical attention is received",
-				"Do czasu otrzymania pomocy medycznej",
-			),
-		}),
-	);
-	const source = {
-		name: localize(
-			"Critical Wound — Movement and Initiative halved",
-			"Rana krytyczna — Szybkość i Inicjatywa o połowę",
-		),
-		img: String(wound.img || foundry.documents.ActiveEffect.DEFAULT_ICON),
-		disabled: false,
-		transfer: true,
-		changes: foundry.utils.deepClone(changes),
-		system: { changes: foundry.utils.deepClone(changes) },
-		flags: {
-			[FLAG_SCOPE]: {
-				[RULE_CHANGES_FLAG_KEY]: foundry.utils.deepClone(changes),
-				[CORE_EFFECT_FLAG_KEY]: {
-					version: 1,
-					location: definition.location,
-					effectNumber: definition.effectNumber,
-					durationKind: "until-medical-attention",
-				},
-			},
-		},
-	};
-	const [created] = await wound.createEmbeddedDocuments("ActiveEffect", [source]);
-	return created ?? null;
-}
-
-function coreConsequenceForWound(wound) {
-	const location = effectLocation(wound.system?.hitLocation);
-	const effectNumber = coreEffectNumber(wound);
-	const effects = CORE_CHARACTERISTIC_EFFECTS[location]?.[effectNumber];
-	if (!effects) return null;
-	return { location, effectNumber, effects };
-}
-
-function coreEffectNumber(wound) {
-	const direct = positiveInteger(wound.system?.resolution?.effectNumber);
-	if (direct) return direct;
-	const tableUuid = String(wound.system?.resolution?.tableUuid ?? "").trim();
-	const resultId = String(wound.system?.resolution?.tableResultId ?? "").trim();
-	if (!tableUuid || !resultId) return 0;
-	try {
-		const table = foundry.utils.fromUuidSync(tableUuid);
-		const result = table?.results?.get?.(resultId) ??
-			[...(table?.results ?? [])].find((entry) => String(entry.id) === resultId);
-		const flag = result?.getFlag?.(FLAG_SCOPE, TABLE_RESULT_FLAG_KEY);
-		return positiveInteger(flag?.effectNumber);
-	} catch (_error) {
-		return 0;
-	}
+	return effect?.duration?.expired !== true;
 }
 
 function decorateAffectedCharacteristics(actor, root) {
@@ -304,11 +204,10 @@ function decorateAffectedCharacteristics(actor, root) {
 		if (!cell) continue;
 		setCharacteristicDisplayValue(cell, id, effect.value);
 		cell.querySelector("[data-wfrp-characteristic-effect-marker]")?.remove();
-		cell.removeAttribute("data-tooltip");
 		cell.removeAttribute("title");
 		if (!negative.length) continue;
 		const tooltip = negativeTooltip(actor, id, negative);
-		const marker = document.createElement("span");
+		const marker = root.ownerDocument.createElement("span");
 		marker.className = "characteristic-current-effect-marker";
 		marker.dataset.wfrpCharacteristicEffectMarker = "";
 		marker.textContent = "!";
@@ -330,7 +229,7 @@ function setCharacteristicDisplayValue(cell, id, value) {
 	for (const node of [...cell.childNodes]) {
 		if (node.nodeType === Node.TEXT_NODE) node.remove();
 	}
-	const valueNode = document.createElement("span");
+	const valueNode = cell.ownerDocument.createElement("span");
 	valueNode.className = "characteristic-current-profile characteristic-current-profile--effective";
 	valueNode.textContent = formatted;
 	cell.prepend(valueNode);
@@ -358,10 +257,7 @@ function negativeTooltip(actor, characteristicId, candidates) {
 function briefEffectSource(actor, candidate) {
 	const item = documentFromUuidSync(candidate.itemUuid);
 	if (item?.type === CRITICAL_WOUND_TYPE && item.parent?.uuid === actor.uuid) {
-		return localize(
-			`${hitLocationLabel(item.system?.hitLocation)} Critical Wound`,
-			`Rana krytyczna: ${hitLocationLabel(item.system?.hitLocation)}`,
-		);
+		return String(item.name ?? localize("Critical Wound", "Rana krytyczna"));
 	}
 	return String(candidate.itemName ?? candidate.effectName ?? localize("Active Effect", "Aktywny efekt")).trim();
 }
@@ -377,45 +273,70 @@ function negativeOperationLabel(candidate) {
 	if (candidate.operation === RULE_EFFECT_OPERATIONS.ADD && value < 0) {
 		return localize(`reduced by ${formatCharacteristicValue(Math.abs(value))}`, `zmniejszona o ${formatCharacteristicValue(Math.abs(value))}`);
 	}
-	if (candidate.operation === RULE_EFFECT_OPERATIONS.MULTIPLY) {
-		return localize(`multiplied by ${formatCharacteristicValue(value)}`, `pomnożona przez ${formatCharacteristicValue(value)}`);
-	}
 	if (candidate.operation === RULE_EFFECT_OPERATIONS.OVERRIDE) {
 		return localize(`set to ${formatCharacteristicValue(value)}`, `ustawiona na ${formatCharacteristicValue(value)}`);
 	}
-	return String(candidate?.formula ?? "");
+	return `${candidate.operation} ${formatCharacteristicValue(value)}`;
+}
+
+function consequenceCondition(definition) {
+	return definition?.duration?.until === "medical-attention"
+		? localize("Until medical attention is received", "Do czasu otrzymania pomocy medycznej")
+		: "";
 }
 
 function characteristicLabel(id) {
 	const labels = {
-		en: {
-			m: "Movement", ws: "Weapon Skill", bs: "Ballistic Skill", s: "Strength",
-			t: "Toughness", w: "Wounds", i: "Initiative", a: "Attacks",
-			dex: "Dexterity", ld: "Leadership", int: "Intelligence", cl: "Cool",
-			wp: "Will Power", fel: "Fellowship",
-		},
-		pl: {
-			m: "Szybkość", ws: "Walka Wręcz", bs: "Umiejętności Strzeleckie", s: "Siła",
-			t: "Wytrzymałość", w: "Żywotność", i: "Inicjatywa", a: "Atak",
-			dex: "Zręczność", ld: "Cechy Przywódcze", int: "Inteligencja", cl: "Opanowanie",
-			wp: "Siła Woli", fel: "Ogłada",
-		},
+		m: ["Movement", "Szybkość"], ws: ["Weapon Skill", "WW"], bs: ["Ballistic Skill", "US"],
+		s: ["Strength", "S"], t: ["Toughness", "Wt"], w: ["Wounds", "Żw"],
+		i: ["Initiative", "Inicjatywa"], a: ["Attacks", "A"], dex: ["Dexterity", "Zr"],
+		ld: ["Leadership", "CP"], int: ["Intelligence", "Int"], cl: ["Cool", "Op"],
+		wp: ["Will Power", "SW"], fel: ["Fellowship", "Ogd"],
 	};
-	return labels[game.i18n.lang === "pl" ? "pl" : "en"]?.[id] ?? id;
+	return localize(...(labels[id] ?? [id, id]));
 }
 
-function hitLocationLabel(hitLocation) {
-	switch (String(hitLocation ?? "")) {
-		case "head": return localize("Head", "Głowa");
-		case "rightArm": return localize("Right arm", "Prawa ręka");
-		case "leftArm": return localize("Left arm", "Lewa ręka");
-		case "arm": return localize("Arm", "Ręka");
-		case "body": return localize("Body", "Korpus");
-		case "rightLeg": return localize("Right leg", "Prawa noga");
-		case "leftLeg": return localize("Left leg", "Lewa noga");
-		case "leg": return localize("Leg", "Noga");
-		default: return localize("Critical injury", "Rana krytyczna");
+function runtimeState(wound) {
+	const value = wound?.getFlag?.(FLAG_SCOPE, RUNTIME_FLAG_KEY);
+	return value && typeof value === "object" && !Array.isArray(value)
+		? foundry.utils.deepClone(value)
+		: null;
+}
+
+function refreshAffectedActor(document) {
+	let actor = null;
+	if (document instanceof foundry.documents.Actor) actor = document;
+	else if (document instanceof foundry.documents.Item) actor = document.parent;
+	else if (document instanceof foundry.documents.ActiveEffect) {
+		actor = document.parent instanceof foundry.documents.Actor
+			? document.parent
+			: document.parent?.parent;
 	}
+	if (!(actor instanceof foundry.documents.Actor)) return;
+	if (!actor.sheet?.rendered) return;
+	void actor.sheet.render();
+}
+
+function baseCharacteristicValue(actor, id) {
+	const characteristics = actor.system?.characteristics ?? {};
+	const key = id === "m" && !Object.hasOwn(characteristics, "m") ? "sp" : id;
+	return finiteNumber(characteristics?.[key]?.current);
+}
+
+function characteristicTargetId(id) {
+	return `characteristic.${id}.current`;
+}
+
+function canonicalCharacteristicId(id) {
+	const normalized = String(id ?? "").trim().toLowerCase();
+	return CHARACTERISTIC_ALIASES[normalized] ?? normalized;
+}
+
+function compareCandidates(first, second) {
+	const firstPriority = Number.isFinite(Number(first?.priority)) ? Number(first.priority) : 50;
+	const secondPriority = Number.isFinite(Number(second?.priority)) ? Number(second.priority) : 50;
+	if (firstPriority !== secondPriority) return firstPriority - secondPriority;
+	return String(first?.id ?? "").localeCompare(String(second?.id ?? ""));
 }
 
 function documentFromUuidSync(uuid) {
@@ -428,90 +349,20 @@ function documentFromUuidSync(uuid) {
 	}
 }
 
-function refreshCriticalEffectActor(effect) {
-	const item = effect?.parent;
-	const actor = item?.parent;
-	if (item?.type !== CRITICAL_WOUND_TYPE || !(actor instanceof foundry.documents.Actor)) return;
-	requestAnimationFrame(() => refreshActorSheetIfOpen(actor));
-}
-
-function refreshActorSheetIfOpen(actor) {
-	const sheet = actor?.sheet;
-	if (!sheet?.rendered) return;
-	void sheet.render();
-}
-
-function halfMovementAndInitiativeUntilMedicalAttention() {
-	return Object.freeze([
-		Object.freeze({ characteristicId: "m", operation: RULE_EFFECT_OPERATIONS.MULTIPLY, value: 0.5 }),
-		Object.freeze({ characteristicId: "i", operation: RULE_EFFECT_OPERATIONS.MULTIPLY, value: 0.5 }),
-	]);
-}
-
-function effectLocation(hitLocation) {
-	switch (String(hitLocation ?? "")) {
-		case "rightLeg":
-		case "leftLeg":
-		case "leg": return "leg";
-		case "rightArm":
-		case "leftArm":
-		case "arm": return "arm";
-		case "head": return "head";
-		case "body": return "body";
-		default: return "";
-	}
-}
-
-function characteristicTargetId(id) {
-	return `characteristic.${canonicalCharacteristicId(id)}.current`;
-}
-
-function canonicalCharacteristicId(id) {
-	const normalized = String(id ?? "").trim().toLowerCase();
-	const canonical = CHARACTERISTIC_ALIASES[normalized] ?? normalized;
-	if (!CHARACTERISTIC_IDS.includes(canonical)) throw new Error(`Unknown WFRP characteristic '${id}'.`);
-	return canonical;
-}
-
-function baseCharacteristicValue(actor, id) {
-	const characteristic = actor.system?.characteristics?.[id] ??
-		(id === "m" ? actor.system?.characteristics?.sp : null);
-	return finiteNumber(characteristic?.current, `characteristics.${id}.current`);
-}
-
-function finiteNumber(value, label) {
-	const number = Number(value);
-	if (!Number.isFinite(number)) throw new Error(`${label} must be a finite number.`);
-	return number;
-}
-
 function positiveInteger(value) {
 	const number = Number(value);
 	return Number.isInteger(number) && number > 0 ? number : 0;
+}
+
+function finiteNumber(value) {
+	const number = Number(value);
+	return Number.isFinite(number) ? number : 0;
 }
 
 function formatCharacteristicValue(value) {
 	const number = Number(value);
 	if (!Number.isFinite(number)) return "—";
 	return Number.isInteger(number) ? String(number) : String(Math.round(number * 100) / 100);
-}
-
-function primaryActiveGm() {
-	return [...(game.users ?? [])]
-		.filter((user) => user?.active && user?.isGM)
-		.sort((left, right) => String(left.id).localeCompare(String(right.id)))[0] ?? null;
-}
-
-function isPrimaryActiveGm() {
-	return Boolean(game.user?.isGM && primaryActiveGm()?.id === game.user.id);
-}
-
-function reportEffectError(error) {
-	console.error("WFRP1ED | Unable to synchronize a Core Critical Wound Active Effect.", error);
-	ui.notifications.warn(error?.message ?? localize(
-		"A Critical Wound exists, but its automatic characteristic effect could not be synchronized.",
-		"Rana krytyczna istnieje, ale nie udało się zsynchronizować jej automatycznego wpływu na cechy.",
-	));
 }
 
 function localize(english, polish) {
