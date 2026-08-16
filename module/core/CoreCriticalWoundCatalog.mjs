@@ -1,3 +1,4 @@
+import { coreCriticalConsequence } from "../criticals/CoreCriticalConsequences.mjs";
 import {
 	CORE_DETAILED_EFFECT_PROVIDERS,
 	DETAILED_CRITICAL_OUTCOME,
@@ -19,13 +20,9 @@ const LOCATION_ROLES = Object.freeze({
 });
 const LOCATIONS = Object.freeze(["arm", "head", "body", "leg"]);
 
-/*
- * Persistent characteristic consequences already owned by the audited runtime
- * effect engine. Other Critical Effects frequently require round durations,
- * prone/unconscious state, bleeding, held-item loss, limb-use restrictions,
- * medical-treatment state, or fatal/Fate transactions. Those are intentionally
- * not represented by inert/fake ActiveEffects in the Core compendium.
- */
+/* Static, indefinite characteristic effects can live directly on a compendium
+ * Item. Random-duration and one-shot consequences are instead declared in
+ * CoreCriticalConsequences and materialized exactly once on application. */
 const CHARACTERISTIC_EFFECTS = Object.freeze({
 	leg: Object.freeze({
 		5: halfMovementAndInitiative(),
@@ -47,19 +44,17 @@ export function coreCriticalWoundItemSources(language = "en") {
 		}
 
 		for (let effectNumber = 1; effectNumber <= 16; effectNumber += 1) {
-			const description = detailedCriticalEffectText(
-				location,
-				effectNumber,
-				lang,
-			);
+			const description = detailedCriticalEffectText(location, effectNumber, lang);
 			const outcome = detailedCriticalEffectOutcome(location, effectNumber);
-			const characteristicEffects =
-				CHARACTERISTIC_EFFECTS[location]?.[effectNumber] ?? null;
+			const characteristicEffects = CHARACTERISTIC_EFFECTS[location]?.[effectNumber] ?? null;
+			const consequence = coreCriticalConsequence(location, effectNumber);
 			const automation = outcome === DETAILED_CRITICAL_OUTCOME.KILLED
 				? "fatal-transaction"
-				: characteristicEffects
-					? "active-effect"
-					: "pending-consumer";
+				: consequence
+					? "runtime-consequence"
+					: characteristicEffects
+						? "active-effect"
+						: "pending-consumer";
 
 			results.push(Object.freeze({
 				name: criticalName(location, effectNumber, lang),
@@ -85,12 +80,7 @@ export function coreCriticalWoundItemSources(language = "en") {
 					},
 				},
 				effects: characteristicEffects
-					? [characteristicActiveEffectSource(
-						location,
-						effectNumber,
-						characteristicEffects,
-						lang,
-					)]
+					? [characteristicActiveEffectSource(location, effectNumber, characteristicEffects, lang)]
 					: [],
 				flags: {
 					wfrp1ed: {
@@ -101,6 +91,7 @@ export function coreCriticalWoundItemSources(language = "en") {
 							effectNumber,
 							outcome: outcome ?? "",
 							automation,
+							consequence: consequence ?? null,
 							source: {
 								english: "Core Combat, Critical Effects, pp. 122-124",
 								polish: "Core Walka, Efekty trafień krytycznych, pp. 122-124",
@@ -147,12 +138,6 @@ function characteristicActiveEffectSource(location, effectNumber, effects, langu
 		flags: {
 			wfrp1ed: {
 				ruleChanges: structuredCloneSafe(changes),
-				/*
-				 * Compendium templates use generic Arm/Leg locations rather than a
-				 * combat hit side. Keep this separate from coreCriticalConsequence so
-				 * the side-specific runtime repair does not replace/delete the embedded
-				 * transfer effect when a GM manually drags the template to an Actor.
-				 */
 				coreCatalogEffect: {
 					version: CORE_CATALOG_VERSION,
 					location,
@@ -184,16 +169,8 @@ function ruleChange({ targetId, operation, formula, condition }) {
 
 function halfMovementAndInitiative() {
 	return Object.freeze([
-		Object.freeze({
-			characteristicId: "m",
-			operation: "multiply",
-			value: 0.5,
-		}),
-		Object.freeze({
-			characteristicId: "i",
-			operation: "multiply",
-			value: 0.5,
-		}),
+		Object.freeze({ characteristicId: "m", operation: "multiply", value: 0.5 }),
+		Object.freeze({ characteristicId: "i", operation: "multiply", value: 0.5 }),
 	]);
 }
 
@@ -205,9 +182,7 @@ function criticalName(location, effectNumber, language) {
 }
 
 function normalizeLanguage(language) {
-	return String(language ?? "en").toLowerCase().startsWith("pl")
-		? "pl"
-		: "en";
+	return String(language ?? "en").toLowerCase().startsWith("pl") ? "pl" : "en";
 }
 
 function structuredCloneSafe(value) {
