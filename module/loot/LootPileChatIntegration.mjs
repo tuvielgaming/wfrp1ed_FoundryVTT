@@ -65,8 +65,14 @@ async function renderLootCard(message, html) {
 		: root?.querySelector?.("[data-wfrp-loot-card]");
 	if (!(card instanceof HTMLElement)) return;
 
+	/*
+	 * Foundry v14 may call renderChatMessageHTML while the rendered message tree
+	 * is still detached from document. The previous isConnected guard therefore
+	 * discarded the enhancement every time on that render path, leaving only the
+	 * empty placeholder emitted by LootPileService. Mutating the detached node is
+	 * correct: Foundry inserts that same rendered tree afterwards.
+	 */
 	const pile = await LootPileService.pileFromMessage(message);
-	if (!card.isConnected) return;
 
 	if (!pile) {
 		card.replaceChildren();
