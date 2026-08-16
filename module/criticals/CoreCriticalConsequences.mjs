@@ -79,6 +79,15 @@ const CONSEQUENCES = Object.freeze({
 	}),
 	body: Object.freeze({
 		4: consequence({ dropHeld: "all" }),
+		9: consequence({
+			periodicWounds: { formula: "1", until: "medical-attention" },
+		}),
+		10: consequence({
+			periodicWounds: { formula: "1d4", until: "medical-attention" },
+		}),
+		13: consequence({
+			periodicWounds: { formula: "1d4", until: "medical-attention" },
+		}),
 	}),
 });
 
