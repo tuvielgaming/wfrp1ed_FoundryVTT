@@ -9,6 +9,10 @@ const FLAG_SCOPE = "wfrp1ed";
 const ATTACK_FLAG_KEY = "combatAttackResult";
 const TEST_FLAG_KEY = "testResultState";
 const DAMAGE_FLAG_KEY = "damageState";
+const LOCK_MARKER = "wfrpTransactionLocked";
+const PREVIOUS_READONLY = "wfrpTransactionPreviousReadonly";
+const PREVIOUS_DISABLED = "wfrpTransactionPreviousDisabled";
+const PREVIOUS_TITLE = "wfrpTransactionPreviousTitle";
 let chatRefreshQueued = false;
 
 /**
@@ -17,7 +21,8 @@ let chatRefreshQueued = false;
  * Apply Damage is the closing boundary for positive damage. Once the target
  * Actor records that application, Attack/Defence/Additional-Damage Test inputs
  * become visibly read-only on every client. Damage invalidation reopens the
- * transaction and a normal Chat rerender restores the editable controls.
+ * transaction and restores the exact interactive state those controls had before
+ * the transaction was closed.
  *
  * The authority guard remains as a fallback for a stale DOM/socket request, but
  * normal users should never be able to type into a closed Test input at all.
@@ -44,8 +49,8 @@ Hooks.once("init", () => {
 
 	/*
 	 * The authoritative damage application is mirrored into the source Attack
-	 * ChatMessage. Lock already-rendered linked Test cards immediately instead of
-	 * relying only on ChatLog deciding to reconstruct older history entries.
+	 * ChatMessage. Synchronize already-rendered linked Test cards immediately
+	 * instead of relying only on ChatLog deciding to reconstruct older history.
 	 */
 	Hooks.on("updateChatMessage", (message, changes) => {
 		if (!message?.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY)) return;
@@ -53,6 +58,8 @@ Hooks.once("init", () => {
 
 		if (isCombatTestAdjudicationLocked(message)) {
 			lockVisibleCombatFamily(message);
+		} else {
+			unlockVisibleCombatFamily(message);
 		}
 		requestChatRefresh();
 	});
@@ -107,16 +114,26 @@ function applyRenderedLockState(message, html) {
 }
 
 function lockVisibleCombatFamily(sourceMessage) {
-	if (!sourceMessage?.id) return;
+	forEachVisibleCombatTest(sourceMessage, (entry) => {
+		lockRenderedCombatTest(entry);
+	});
+}
+
+function unlockVisibleCombatFamily(sourceMessage) {
+	forEachVisibleCombatTest(sourceMessage, (entry) => {
+		unlockRenderedCombatTest(entry);
+	});
+}
+
+function forEachVisibleCombatTest(sourceMessage, callback) {
+	if (!sourceMessage?.id || typeof callback !== "function") return;
 	const sourceId = String(sourceMessage.id);
 
 	for (const message of game.messages ?? []) {
 		if (!message?.getFlag?.(FLAG_SCOPE, TEST_FLAG_KEY)) continue;
 		if (combatAttackSourceForTest(message)?.id !== sourceId) continue;
-		if (!isCombatTestAdjudicationLocked(message)) continue;
-
 		const entry = visibleMessageElement(message.id);
-		if (entry) lockRenderedCombatTest(entry);
+		if (entry) callback(entry, message);
 	}
 }
 
@@ -138,6 +155,7 @@ function lockRenderedCombatTest(html) {
 	]) {
 		for (const input of card.querySelectorAll(selector)) {
 			if (!(input instanceof HTMLInputElement)) continue;
+			rememberInputState(input);
 			input.readOnly = true;
 			input.setAttribute("aria-readonly", "true");
 			input.tabIndex = -1;
@@ -155,6 +173,7 @@ function lockRenderedCombatTest(html) {
 	]) {
 		for (const input of card.querySelectorAll(selector)) {
 			if (!(input instanceof HTMLInputElement)) continue;
+			rememberInputState(input);
 			input.disabled = true;
 			input.tabIndex = -1;
 			input.classList.remove("is-editable");
@@ -162,6 +181,53 @@ function lockRenderedCombatTest(html) {
 			input.title = reason;
 		}
 	}
+}
+
+function unlockRenderedCombatTest(html) {
+	const root = asElement(html);
+	if (!root) return;
+
+	const card = root.matches?.(".wfrp1e-test-card")
+		? root
+		: root.querySelector?.(".wfrp1e-test-card");
+	if (!card) return;
+
+	card.classList.remove("is-combat-transaction-locked");
+	for (const input of card.querySelectorAll(`input[data-${datasetAttribute(LOCK_MARKER)}]`)) {
+		if (!(input instanceof HTMLInputElement)) continue;
+		restoreInputState(input);
+	}
+}
+
+function rememberInputState(input) {
+	if (input.dataset[LOCK_MARKER] === "true") return;
+	input.dataset[LOCK_MARKER] = "true";
+	input.dataset[PREVIOUS_READONLY] = input.readOnly ? "true" : "false";
+	input.dataset[PREVIOUS_DISABLED] = input.disabled ? "true" : "false";
+	input.dataset[PREVIOUS_TITLE] = String(input.title ?? "");
+}
+
+function restoreInputState(input) {
+	const wasReadOnly = input.dataset[PREVIOUS_READONLY] === "true";
+	const wasDisabled = input.dataset[PREVIOUS_DISABLED] === "true";
+	const previousTitle = String(input.dataset[PREVIOUS_TITLE] ?? "");
+
+	input.readOnly = wasReadOnly;
+	input.disabled = wasDisabled;
+	input.removeAttribute("aria-readonly");
+	input.tabIndex = wasReadOnly || wasDisabled ? -1 : 0;
+	input.classList.toggle("is-editable", !wasReadOnly && !wasDisabled);
+	input.classList.toggle("is-readonly", wasReadOnly || wasDisabled);
+	input.title = previousTitle;
+
+	delete input.dataset[LOCK_MARKER];
+	delete input.dataset[PREVIOUS_READONLY];
+	delete input.dataset[PREVIOUS_DISABLED];
+	delete input.dataset[PREVIOUS_TITLE];
+}
+
+function datasetAttribute(datasetKey) {
+	return datasetKey.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
 }
 
 function visibleMessageElement(messageId) {
