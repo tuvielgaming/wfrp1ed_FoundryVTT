@@ -19,16 +19,10 @@ let previousGetCharacteristicValue = null;
 
 /**
  * Runtime Critical consequences such as Leg #4 are generated after the wound is
- * created and carry a system-owned round timer. Foundry can prepare the nested
- * Item ActiveEffect differently from an Actor ActiveEffect, so this bridge is a
- * final, deterministic characteristic consumer for those runtime consequences.
- *
- * The generic RuleEffectResolver is still useful for normal Active Effects, but
- * merely discovering a nested runtime candidate is not proof that an earlier
- * characteristic wrapper actually consumed it. We therefore project the value
- * once without and once with the runtime wound and compare those projections to
- * the value produced by the preceding characteristic pipeline. This avoids both
- * the former Initiative false-positive and double-applying Movement.
+ * created and carry a system-owned round timer. Foundry can expose the same
+ * transferred ActiveEffect through more than one preparation path, so this
+ * bridge identifies runtime contributions by their explicit WFRP provenance,
+ * not merely by Item UUID.
  */
 Hooks.once("init", () => {
 	if (previousGetCharacteristicValue) return;
@@ -41,9 +35,9 @@ Hooks.once("init", () => {
 });
 
 /*
- * The older Critical characteristic decorator only owns the permanent Core
- * Leg #5-#7 effects. Timed runtime consequences need the same visual contract:
- * effective value plus the `!` marker/tooltip on the Classic sheet.
+ * The older Critical characteristic decorator owns the permanent Core Leg #5-#7
+ * effects. Timed runtime consequences need the same visual contract: effective
+ * value plus the `!` marker/tooltip on the Classic sheet.
  */
 Hooks.on("renderApplicationV2", (application, element) => {
 	const actor = application?.document;
@@ -70,8 +64,17 @@ function applyMissingRuntimeCriticalConsequences(actor, id, startingValue) {
 	const runtimeWoundUuids = new Set(
 		sources.map((source) => String(source.wound?.uuid ?? "")).filter(Boolean),
 	);
+
+	/*
+	 * A transferred Item ActiveEffect can be surfaced by Foundry as an Actor-side
+	 * candidate whose candidate.itemUuid is null. The former implementation then
+	 * misclassified that runtime contribution as an unrelated effect. That is the
+	 * exact shape which allowed Leg #4 Movement to resolve while Initiative stayed
+	 * at its raw value. The effect's own criticalConsequenceEffect.woundUuid is the
+	 * authoritative identity and survives both Item-side and transferred copies.
+	 */
 	const nonRuntimeCandidates = allCandidates.filter((candidate) =>
-		!runtimeWoundUuids.has(String(candidate.itemUuid ?? "")),
+		!isRuntimeCriticalCandidate(candidate, runtimeWoundUuids),
 	);
 
 	const current = finiteNumber(startingValue);
@@ -82,9 +85,7 @@ function applyMissingRuntimeCriticalConsequences(actor, id, startingValue) {
 	/* The preceding pipeline already consumed this runtime wound. */
 	if (nearlyEqual(current, projectedWithRuntime)) return current;
 
-	/* The preceding pipeline produced the value without the runtime wound. This
-	 * is the Leg #4 Initiative failure we observed: RuleEffectResolver could see
-	 * the nested I candidate while the earlier wrapper had not consumed it. */
+	/* The preceding pipeline produced the value without the runtime wound. */
 	if (
 		nearlyEqual(current, projectedWithoutRuntime) ||
 		nearlyEqual(current, raw)
@@ -92,11 +93,11 @@ function applyMissingRuntimeCriticalConsequences(actor, id, startingValue) {
 		return applyRuntimeSources(current, sources);
 	}
 
-	/* If no runtime candidate was discoverable at all, the bridge is definitely
-	 * the sole owner and must apply it. Otherwise keep an unfamiliar transformed
-	 * value unchanged rather than risk applying the same wound twice. */
+	/* If no runtime contribution is discoverable at all, this bridge is the sole
+	 * owner and must apply it. Otherwise preserve an unfamiliar transformed value
+	 * rather than risking a duplicate application. */
 	const runtimeCandidateExists = allCandidates.some((candidate) =>
-		runtimeWoundUuids.has(String(candidate.itemUuid ?? "")),
+		isRuntimeCriticalCandidate(candidate, runtimeWoundUuids),
 	);
 	return runtimeCandidateExists
 		? current
@@ -164,6 +165,18 @@ function runtimeCharacteristicSources(actor, characteristicId) {
 	return sources;
 }
 
+function isRuntimeCriticalCandidate(candidate, runtimeWoundUuids) {
+	const directItemUuid = String(candidate?.itemUuid ?? "").trim();
+	if (directItemUuid && runtimeWoundUuids.has(directItemUuid)) return true;
+
+	const effectUuid = String(candidate?.effectUuid ?? "").trim();
+	if (!effectUuid) return false;
+	const effect = documentFromUuidSync(effectUuid);
+	const provenance = effect?.getFlag?.(FLAG_SCOPE, EFFECT_FLAG_KEY);
+	if (String(provenance?.kind ?? "") !== "characteristics") return false;
+	return runtimeWoundUuids.has(String(provenance?.woundUuid ?? "").trim());
+}
+
 function runtimeSourceTooltip(source) {
 	const woundName = String(source.wound?.name ?? localize("Critical Wound", "Rana krytyczna"));
 	const operation = String(source.entry?.operation ?? "");
@@ -221,6 +234,16 @@ function rawCharacteristicValue(actor, characteristicId) {
 
 function nearlyEqual(first, second) {
 	return Math.abs(finiteNumber(first) - finiteNumber(second)) <= EPSILON;
+}
+
+function documentFromUuidSync(uuid) {
+	const value = String(uuid ?? "").trim();
+	if (!value) return null;
+	try {
+		return foundry.utils.fromUuidSync(value) ?? null;
+	} catch (_error) {
+		return null;
+	}
 }
 
 function wfrpTimedEffectExpired(effect) {
