@@ -11,6 +11,7 @@ import { criticalConsequenceForWound } from "./CriticalConsequenceDefinition.mjs
 const FLAG_SCOPE = "wfrp1ed";
 const RUNTIME_FLAG_KEY = "criticalConsequenceRuntime";
 const EFFECT_FLAG_KEY = "criticalConsequenceEffect";
+const LEGACY_EFFECT_FLAG_KEY = "coreCriticalConsequence";
 const TIMED_FLAG_KEY = "criticalTimed";
 const CRITICAL_WOUND_TYPE = "criticalWound";
 
@@ -129,6 +130,10 @@ function effectiveCharacteristic(actor, id, knownBase = undefined) {
  * while another does not. This fallback reads the wound's declarative snapshot
  * and adds only the missing target. That is the class of failure which caused
  * Leg #4 Movement to halve while Initiative stayed unchanged.
+ *
+ * Old Core wounds created before declarative Item consequences are also accepted
+ * here, but only through their existing ActiveEffect provenance. No Core result
+ * number is hard-coded in this consumer.
  */
 function managedCriticalWoundCandidates(actor, characteristicId, targetId, existing) {
 	if (!(actor instanceof foundry.documents.Actor)) return [];
@@ -137,7 +142,7 @@ function managedCriticalWoundCandidates(actor, characteristicId, targetId, exist
 	for (const wound of actor.items ?? []) {
 		if (wound?.type !== CRITICAL_WOUND_TYPE) continue;
 		const runtime = runtimeState(wound);
-		if (runtime?.state !== "applied") continue;
+		if (runtime && runtime.state !== "applied") continue;
 		const definition = runtime?.definition ?? criticalConsequenceForWound(wound);
 		const entry = definition?.characteristics?.find((candidate) =>
 			String(candidate.characteristicId ?? "") === characteristicId,
@@ -145,7 +150,7 @@ function managedCriticalWoundCandidates(actor, characteristicId, targetId, exist
 		if (!entry) continue;
 
 		const managedEffect = [...(wound.effects ?? [])].find((effect) =>
-			effect?.getFlag?.(FLAG_SCOPE, EFFECT_FLAG_KEY)?.kind === "characteristics"
+			isManagedCharacteristicEffect(effect)
 		) ?? null;
 		if (!managedEffect || !managedEffectAvailable(managedEffect)) continue;
 
@@ -176,6 +181,11 @@ function managedCriticalWoundCandidates(actor, characteristicId, targetId, exist
 		}));
 	}
 	return results;
+}
+
+function isManagedCharacteristicEffect(effect) {
+	if (effect?.getFlag?.(FLAG_SCOPE, EFFECT_FLAG_KEY)?.kind === "characteristics") return true;
+	return Boolean(effect?.getFlag?.(FLAG_SCOPE, LEGACY_EFFECT_FLAG_KEY));
 }
 
 function sameManagedContribution(candidate, wound, effect, targetId) {
