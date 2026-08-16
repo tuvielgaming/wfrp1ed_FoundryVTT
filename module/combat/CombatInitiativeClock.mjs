@@ -13,10 +13,14 @@ export const COMBAT_INITIATIVE_CLOCK_EVENT = Object.freeze({
  * Immutable WFRP initiative-time coordinate used by effects which must measure
  * full combat cycles independently of the Combatant currently occupying a turn.
  *
- * The coordinate is the round baseline Initiative value captured before any
- * temporary tracker reorder. A clock therefore does not follow a Combatant when
- * that Combatant delays, is reordered, becomes defeated, is skipped, or is
- * removed from Combat.
+ * The clock coordinate is the Initiative band represented by the tracker slot
+ * at the moment the clock is captured. Temporary tracker reorder then changes
+ * which Combatant occupies a slot, but it never changes the clock coordinate.
+ *
+ * Timeline coordinates are derived by sorting the round's stable baseline
+ * Initiative values and assigning those values to the current tracker slots by
+ * position. This is the key distinction between "who is acting" and "what
+ * Initiative-time point is being traversed".
  *
  * One eligible round reaches the clock at the first of:
  * - round start already being at/below the clock Initiative;
@@ -43,7 +47,7 @@ export class CombatInitiativeClock {
 		}
 
 		const combatant = lifecycleCombatant(combat);
-		const initiative = this.canonicalInitiative(combatant);
+		const initiative = this.timelineInitiative(combat, combatant);
 		return {
 			combatId: String(combat.id ?? ""),
 			startRound: nonNegativeInteger(combat.round),
@@ -52,6 +56,7 @@ export class CombatInitiativeClock {
 		};
 	}
 
+	/** Stable Initiative fact owned by one Combatant for the current round. */
 	static canonicalInitiative(combatant) {
 		if (!(combatant instanceof foundry.documents.Combatant)) return null;
 		const baseline = nullableFinite(
@@ -59,6 +64,26 @@ export class CombatInitiativeClock {
 		);
 		if (baseline !== null) return baseline;
 		return nullableFinite(combatant.initiative);
+	}
+
+	/**
+	 * Initiative-time coordinate represented by a Combatant's current tracker
+	 * slot. The actor identity is deliberately irrelevant to the coordinate.
+	 */
+	static timelineInitiative(combat, combatant) {
+		if (!(combat instanceof foundry.documents.Combat)) return null;
+		if (!(combatant instanceof foundry.documents.Combatant)) return null;
+
+		const slot = [...(combat.turns ?? [])].findIndex(
+			(entry) => String(entry?.id ?? "") === String(combatant.id ?? ""),
+		);
+		if (slot < 0) return null;
+
+		const timeline = [...(combat.combatants ?? [])]
+			.map((entry) => this.canonicalInitiative(entry))
+			.filter((value) => value !== null)
+			.sort((left, right) => right - left);
+		return slot < timeline.length ? timeline[slot] : null;
 	}
 
 	static anchored(state, combat) {
@@ -121,7 +146,7 @@ export class CombatInitiativeClock {
 		return this.#emit(combat, {
 			kind: COMBAT_INITIATIVE_CLOCK_EVENT.ROUND_START,
 			round: nonNegativeInteger(combat?.round),
-			currentInitiative: this.canonicalInitiative(combatant),
+			currentInitiative: this.timelineInitiative(combat, combatant),
 			currentCombatantId: String(combatant?.id ?? ""),
 		});
 	}
@@ -130,8 +155,8 @@ export class CombatInitiativeClock {
 		return this.#emit(combat, {
 			kind: COMBAT_INITIATIVE_CLOCK_EVENT.TURN_START,
 			round: nonNegativeInteger(combat?.round),
-			priorInitiative: this.canonicalInitiative(priorCombatant),
-			currentInitiative: this.canonicalInitiative(currentCombatant),
+			priorInitiative: this.timelineInitiative(combat, priorCombatant),
+			currentInitiative: this.timelineInitiative(combat, currentCombatant),
 			priorCombatantId: String(priorCombatant?.id ?? ""),
 			currentCombatantId: String(currentCombatant?.id ?? ""),
 		});
