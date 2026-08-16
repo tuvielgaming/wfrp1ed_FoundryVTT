@@ -1,3 +1,4 @@
+import { consequenceSystemSource } from "../criticals/CriticalConsequenceDefinition.mjs";
 import { coreCriticalConsequence } from "../criticals/CoreCriticalConsequences.mjs";
 import {
 	CORE_DETAILED_EFFECT_PROVIDERS,
@@ -11,7 +12,7 @@ import {
 	CRITICAL_TABLE_VARIANT,
 } from "../criticals/CriticalTableRegistry.mjs";
 
-const CORE_CATALOG_VERSION = 1;
+const CORE_CATALOG_VERSION = 2;
 const LOCATION_ROLES = Object.freeze({
 	arm: CRITICAL_TABLE_ROLE.DETAILED_ARM,
 	head: CRITICAL_TABLE_ROLE.DETAILED_HEAD,
@@ -20,14 +21,15 @@ const LOCATION_ROLES = Object.freeze({
 });
 const LOCATIONS = Object.freeze(["arm", "head", "body", "leg"]);
 
-const CHARACTERISTIC_EFFECTS = Object.freeze({
-	leg: Object.freeze({
-		5: halfMovementAndInitiative(),
-		6: halfMovementAndInitiative(),
-		7: halfMovementAndInitiative(),
-	}),
-});
-
+/**
+ * Build the 64 Core detailed Critical Wound templates.
+ *
+ * The Compendium no longer embeds bespoke per-result ActiveEffects. Every Core
+ * wound stores the same declarative `system.consequence` data available to a
+ * user-created Critical Wound. When the Item is placed on an Actor, the generic
+ * CriticalConsequenceEngine materializes any timed/periodic/characteristic/loot
+ * runtime state from that declaration.
+ */
 export function coreCriticalWoundItemSources(language = "en") {
 	const lang = normalizeLanguage(language);
 	const results = [];
@@ -40,15 +42,12 @@ export function coreCriticalWoundItemSources(language = "en") {
 		for (let effectNumber = 1; effectNumber <= 16; effectNumber += 1) {
 			const description = detailedCriticalEffectText(location, effectNumber, lang);
 			const outcome = detailedCriticalEffectOutcome(location, effectNumber);
-			const characteristicEffects = CHARACTERISTIC_EFFECTS[location]?.[effectNumber] ?? null;
 			const consequence = coreCriticalConsequence(location, effectNumber);
 			const automation = outcome === DETAILED_CRITICAL_OUTCOME.KILLED
 				? "fatal-transaction"
 				: consequence
-					? "runtime-consequence"
-					: characteristicEffects
-						? "active-effect"
-						: "pending-consumer";
+					? "declarative-consequence"
+					: "pending-consumer";
 
 			results.push(Object.freeze({
 				name: criticalName(location, effectNumber, lang),
@@ -58,6 +57,9 @@ export function coreCriticalWoundItemSources(language = "en") {
 					description,
 					criticalValue: 0,
 					hitLocation: location,
+					consequence: consequenceSystemSource(
+						consequence ? { enabled: true, ...consequence } : { enabled: false },
+					),
 					resolution: {
 						damagePacketId: "",
 						sourceMessageId: "",
@@ -73,9 +75,7 @@ export function coreCriticalWoundItemSources(language = "en") {
 						resolvedAt: 0,
 					},
 				},
-				effects: characteristicEffects
-					? [characteristicActiveEffectSource(location, effectNumber, characteristicEffects, lang)]
-					: [],
+				effects: [],
 				flags: {
 					wfrp1ed: {
 						coreCatalog: {
@@ -85,7 +85,6 @@ export function coreCriticalWoundItemSources(language = "en") {
 							effectNumber,
 							outcome: outcome ?? "",
 							automation,
-							consequence: consequence ?? null,
 							source: {
 								english: "Core Combat, Critical Effects, pp. 122-124",
 								polish: "Core Walka, Efekty trafień krytycznych, pp. 122-124",
@@ -100,76 +99,6 @@ export function coreCriticalWoundItemSources(language = "en") {
 	return Object.freeze(results);
 }
 
-export function coreCriticalCharacteristicEffects(location, effectNumber) {
-	const normalized = String(location ?? "").trim();
-	const number = Number(effectNumber);
-	const effects = CHARACTERISTIC_EFFECTS[normalized]?.[number] ?? null;
-	return effects
-		? Object.freeze(effects.map((entry) => Object.freeze({ ...entry })))
-		: Object.freeze([]);
-}
-
-function characteristicActiveEffectSource(location, effectNumber, effects, language) {
-	const condition = language === "pl"
-		? "Do czasu otrzymania pomocy medycznej"
-		: "Until medical attention is received";
-	const changes = effects.map((entry) => ruleChange({
-		targetId: `characteristic.${entry.characteristicId}.current`,
-		operation: entry.operation,
-		formula: String(entry.value),
-		condition,
-	}));
-
-	return {
-		name: language === "pl"
-			? "Rana krytyczna — Szybkość i Inicjatywa o połowę"
-			: "Critical Wound — Movement and Initiative halved",
-		img: "icons/svg/blood.svg",
-		disabled: false,
-		transfer: true,
-		changes: structuredCloneSafe(changes),
-		system: { changes: structuredCloneSafe(changes) },
-		flags: {
-			wfrp1ed: {
-				ruleChanges: structuredCloneSafe(changes),
-				/* Use the exact provenance key owned by the runtime synchronizer so a
-				 * Compendium-dragged wound is not given a duplicate managed effect. */
-				coreCriticalConsequence: {
-					version: CORE_CATALOG_VERSION,
-					location,
-					effectNumber,
-					durationKind: "until-medical-attention",
-				},
-			},
-		},
-	};
-}
-
-function ruleChange({ targetId, operation, formula, condition }) {
-	return {
-		type: "wfrp1edRule",
-		key: targetId,
-		value: JSON.stringify({
-			version: 1,
-			operation,
-			formula,
-			applicability: "automatic",
-			side: "self",
-			stacking: "per-acquisition",
-			condition,
-		}),
-		phase: "final",
-		priority: 50,
-	};
-}
-
-function halfMovementAndInitiative() {
-	return Object.freeze([
-		Object.freeze({ characteristicId: "m", operation: "multiply", value: 0.5 }),
-		Object.freeze({ characteristicId: "i", operation: "multiply", value: 0.5 }),
-	]);
-}
-
 function criticalName(location, effectNumber, language) {
 	const label = detailedCriticalLocationLabel(location, language);
 	return language === "pl"
@@ -179,8 +108,4 @@ function criticalName(location, effectNumber, language) {
 
 function normalizeLanguage(language) {
 	return String(language ?? "en").toLowerCase().startsWith("pl") ? "pl" : "en";
-}
-
-function structuredCloneSafe(value) {
-	return JSON.parse(JSON.stringify(value));
 }
