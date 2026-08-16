@@ -64,16 +64,24 @@ async function renderLootCard(message, html) {
 	const card = root?.matches?.("[data-wfrp-loot-card]")
 		? root
 		: root?.querySelector?.("[data-wfrp-loot-card]");
-	if (!(card instanceof HTMLElement)) return;
+	if (!isElement(card)) return;
 
-	/* Foundry v14 may invoke the ChatMessage render hook while this tree is still
-	 * detached. Mutating that detached tree is correct; Foundry inserts it later. */
+	/* A detached ApplicationV2 lives in a separate browser Document. Always
+	 * create children in the card's own document and avoid cross-realm
+	 * `instanceof HTMLElement` checks. */
+	const ownerDocument = card.ownerDocument ?? document;
 	const pile = await LootPileService.pileFromMessage(message);
+
+	/* `renderLootCard` can be called repeatedly on the same ChatMessage element.
+	 * Use event-handler properties for the persistent card drop target so each
+	 * render replaces the previous handler instead of accumulating listeners. */
+	card.ondragover = null;
+	card.ondrop = null;
 
 	if (!pile) {
 		card.replaceChildren();
 		card.classList.add("is-exhausted");
-		const status = document.createElement("strong");
+		const status = ownerDocument.createElement("strong");
 		status.textContent = localize("Loot unavailable", "Łup niedostępny");
 		card.append(status);
 		return;
@@ -84,11 +92,11 @@ async function renderLootCard(message, html) {
 	card.classList.toggle("is-exhausted", exhausted);
 	card.replaceChildren();
 
-	const header = document.createElement("div");
+	const header = ownerDocument.createElement("div");
 	header.className = "wfrp1ed-loot-card__header";
-	const title = document.createElement("strong");
+	const title = ownerDocument.createElement("strong");
 	title.textContent = String(pile.name ?? localize("Loot", "Łup"));
-	const summary = document.createElement("span");
+	const summary = ownerDocument.createElement("span");
 	summary.textContent = exhausted
 		? localize("EMPTY / EXHAUSTED", "PUSTY / WYCZERPANY")
 		: localize(
@@ -99,7 +107,7 @@ async function renderLootCard(message, html) {
 	card.append(header);
 
 	if (exhausted) {
-		const empty = document.createElement("div");
+		const empty = ownerDocument.createElement("div");
 		empty.className = "wfrp1ed-loot-card__empty";
 		empty.textContent = localize(
 			"Nothing remains in this Loot Pile.",
@@ -107,15 +115,15 @@ async function renderLootCard(message, html) {
 		);
 		card.append(empty);
 	} else {
-		const toggle = document.createElement("button");
+		const toggle = ownerDocument.createElement("button");
 		toggle.type = "button";
 		toggle.className = "wfrp1ed-loot-card__toggle";
 		toggle.textContent = localize("Loot ▾", "Łup ▾");
-		const list = document.createElement("div");
+		const list = ownerDocument.createElement("div");
 		list.className = "wfrp1ed-loot-card__items";
 		list.hidden = true;
 
-		for (const item of items) list.append(itemRow(item));
+		for (const item of items) list.append(itemRow(item, ownerDocument));
 
 		toggle.addEventListener("click", () => {
 			list.hidden = !list.hidden;
@@ -127,7 +135,7 @@ async function renderLootCard(message, html) {
 	}
 
 	if (game.user?.isGM) {
-		const deleteButton = document.createElement("button");
+		const deleteButton = ownerDocument.createElement("button");
 		deleteButton.type = "button";
 		deleteButton.className = "wfrp1ed-loot-card__delete";
 		deleteButton.textContent = localize("Delete pile", "Usuń stos");
@@ -138,35 +146,36 @@ async function renderLootCard(message, html) {
 	}
 
 	/* Existing piles are universal drop targets: owned Actor Item = move,
-	 * Compendium/world Item = copy. */
-	card.addEventListener("dragover", (event) => {
+	 * Compendium/world Item = copy. Assign, don't append, these handlers because
+	 * the same card root survives multiple presentation refreshes. */
+	card.ondragover = (event) => {
 		event.preventDefault();
-		event.dataTransfer.dropEffect = "move";
-	});
-	card.addEventListener("drop", (event) => {
+		if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+	};
+	card.ondrop = (event) => {
 		event.preventDefault();
 		event.stopPropagation();
 		void addDroppedItem(pile, event).catch(reportLootError);
-	});
+	};
 }
 
-function itemRow(item) {
-	const row = document.createElement("div");
+function itemRow(item, ownerDocument = document) {
+	const row = ownerDocument.createElement("div");
 	row.className = "wfrp1ed-loot-card__item";
 	row.dataset.itemId = String(item.id ?? "");
 	row.dataset.itemUuid = String(item.uuid ?? "");
 	row.draggable = true;
 
-	const image = document.createElement("img");
+	const image = ownerDocument.createElement("img");
 	image.src = String(item.img || "icons/svg/item-bag.svg");
 	image.alt = "";
 	/* Let the containing row own dragstart. Native image dragging otherwise
 	 * produces a browser image payload instead of Foundry Item drag data. */
 	image.draggable = false;
-	const name = document.createElement("span");
+	const name = ownerDocument.createElement("span");
 	name.textContent = String(item.name ?? "");
 	const qty = Number(item.system?.quantity ?? 1);
-	const quantity = document.createElement("span");
+	const quantity = ownerDocument.createElement("span");
 	quantity.className = "wfrp1ed-loot-card__quantity";
 	quantity.textContent = Number.isFinite(qty) && qty > 1 ? `×${Math.trunc(qty)}` : "";
 	row.append(image, name, quantity);
@@ -174,9 +183,9 @@ function itemRow(item) {
 	row.addEventListener("dragstart", (event) => {
 		const data = item.toDragData();
 		const serialized = JSON.stringify(data);
-		event.dataTransfer.setData("text/plain", serialized);
-		event.dataTransfer.setData("application/json", serialized);
-		event.dataTransfer.effectAllowed = "move";
+		event.dataTransfer?.setData("text/plain", serialized);
+		event.dataTransfer?.setData("application/json", serialized);
+		if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
 	});
 	row.addEventListener("dblclick", () => void item.sheet?.render?.({ force: true }));
 	return row;
@@ -200,11 +209,10 @@ async function addDroppedItem(pile, event) {
 }
 
 /**
- * Foundry's ChatLog application does not always rebuild an already-rendered
- * message merely because an embedded Item inside a referenced Actor changed.
- * Refresh visible Loot cards directly on every client when the LootPile Actor
- * propagates its Item/update hooks. Off-screen cards are rebuilt normally the
- * next time Foundry renders them.
+ * Foundry v14 can detach an ApplicationV2 into a separate browser Document.
+ * Update visible Loot cards in every rendered host document, not only the main
+ * workspace document. The ApplicationV2 instance registry provides those host
+ * documents even after ChatLog has been detached.
  */
 function queueVisiblePileRefresh(pileUuid) {
 	const uuid = String(pileUuid ?? "");
@@ -217,19 +225,39 @@ function queueVisiblePileRefresh(pileUuid) {
 }
 
 async function refreshVisiblePileCards(pileUuid) {
+	const documents = renderedHostDocuments();
 	for (const message of LootPileService.messagesForPile(pileUuid)) {
 		const selector = `[data-message-id="${CSS.escape(String(message.id ?? ""))}"]`;
-		const messageRoots = [...document.querySelectorAll(selector)];
-		for (const messageRoot of messageRoots) {
-			await renderLootCard(message, messageRoot);
+		for (const hostDocument of documents) {
+			for (const messageRoot of hostDocument.querySelectorAll(selector)) {
+				await renderLootCard(message, messageRoot);
+			}
 		}
 	}
 }
 
+function renderedHostDocuments() {
+	const documents = new Set([document]);
+	const instances = foundry.applications?.instances;
+	if (instances?.values) {
+		for (const application of instances.values()) {
+			const hostDocument = application?.element?.ownerDocument;
+			if (hostDocument?.querySelectorAll) documents.add(hostDocument);
+		}
+	}
+	const popoutDocument = ui.chat?.popout?.element?.ownerDocument;
+	if (popoutDocument?.querySelectorAll) documents.add(popoutDocument);
+	return documents;
+}
+
 function asElement(html) {
-	if (html instanceof HTMLElement) return html;
-	if (html?.[0] instanceof HTMLElement) return html[0];
+	if (isElement(html)) return html;
+	if (isElement(html?.[0])) return html[0];
 	return null;
+}
+
+function isElement(value) {
+	return Boolean(value && value.nodeType === 1 && typeof value.querySelector === "function");
 }
 
 function polishItemCount(count) {
