@@ -56,7 +56,7 @@
 		"module/chat/TestResultIdentityChat.mjs",
 		"module/tests/TestResultModifierToggle.mjs",
 		"module/combat/CombatTransactionEditLock.mjs",
-		"module/chat/PendingInteractionCleanup.mjs",
+		"module/chat/PendingInteractionReminder.mjs",
 		"module/criticals/DetailedCriticalAdjudication.mjs",
 		"module/chat/CombatLifecyclePolish.mjs",
 		"module/criticals/CriticalResultLifecycleGuard.mjs"
@@ -132,6 +132,7 @@
 			"equipment": {},
 			"trait": {},
 			"spell": {}
+		}
 	},
 	"background": "systems/wfrp1ed/WFRP1ed.jpg",
 	"grid": {
