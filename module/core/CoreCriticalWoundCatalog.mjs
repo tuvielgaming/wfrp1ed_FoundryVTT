@@ -147,8 +147,9 @@ function characteristicActiveEffectSource(location, effectNumber, effects, langu
 		flags: {
 			wfrp1ed: {
 				ruleChanges: structuredCloneSafe(changes),
-				coreCatalogEffect: {
-					version: CORE_CATALOG_VERSION,
+				/* Same provenance key used by runtime-created Core wounds. */
+				coreCriticalConsequence: {
+					version: 1,
 					location,
 					effectNumber,
 					durationKind: "until-medical-attention",
