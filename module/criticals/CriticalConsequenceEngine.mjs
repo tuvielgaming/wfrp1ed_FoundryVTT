@@ -27,7 +27,7 @@ const TIMED_FLAG_KEY = "criticalTimed";
 const RULE_CHANGES_FLAG_KEY = "ruleChanges";
 const DAMAGE_STATE_FLAG_KEY = "damageState";
 const CRITICAL_RESULT_FLAG_KEY = "criticalResult";
-const VERSION = 7;
+const VERSION = 8;
 const processingTurns = new Set();
 let processingWorldTime = false;
 
@@ -354,7 +354,7 @@ async function ensurePhysicalArmSide(wound) {
 	if (choice !== "leftArm" && choice !== "rightArm") {
 		ui.notifications.info(localize(
 			"The Critical Wound was added, but its side-dependent automatic consequence was not applied.",
-			"Rana krytyczna została dodana, ale automatyczny skutek zależny od strony nie został zastosowany.",
+			"Rana krytyczna została utworzona, ale automatyczny skutek zależny od strony nie został zastosowany.",
 		));
 		return "";
 	}
@@ -441,8 +441,16 @@ async function processTimedCriticalTurnChange(combat, prior, current, transition
 				const durationRounds = positiveInteger(timed.durationRounds);
 				if (!durationRounds || String(timed.units ?? "") !== "rounds") continue;
 
+				const hadAnchor = initiativeStateHasAnchor(timed, combat);
 				timed = timedStateWithAnchor(effect, timed, combat, current);
 				if (String(timed.lastTransitionKey ?? "") === transitionKey) continue;
+				if (!hadAnchor) {
+					await effect.setFlag(FLAG_SCOPE, TIMED_FLAG_KEY, {
+						...foundry.utils.deepClone(timed),
+						lastTransitionKey: transitionKey,
+					});
+					continue;
+				}
 
 				const anchorCombatantId = String(timed.anchorCombatantId ?? "");
 				if (!anchorCombatantId || !combatHasCombatant(combat, anchorCombatantId)) {
@@ -491,13 +499,7 @@ async function processTimedCriticalTurnChange(combat, prior, current, transition
 }
 
 function timedStateWithAnchor(effect, timed, combat, current) {
-	if (
-		String(timed.combatId ?? "") === String(combat?.id ?? "") &&
-		nonNegativeInteger(timed.startRound) > 0 &&
-		String(timed.anchorCombatantId ?? "")
-	) {
-		return timed;
-	}
+	if (initiativeStateHasAnchor(timed, combat)) return timed;
 
 	const start = effect?.start ?? {};
 	const sameCombat = String(start.combat ?? "") === String(combat?.id ?? "");
@@ -549,8 +551,16 @@ async function processPeriodicCriticalTurnChange(combat, prior, current, transit
 				if (!periodic || effect.disabled === true || effect.duration?.expired === true) continue;
 				if (await expirePeriodicIfWorldTimeElapsed(effect, periodic, currentWorldTime())) continue;
 
+				const hadAnchor = initiativeStateHasAnchor(periodic, combat);
 				periodic = periodicStateWithAnchor(periodic, combat, current);
 				if (String(periodic.lastTransitionKey ?? "") === transitionKey) continue;
+				if (!hadAnchor) {
+					await effect.setFlag(FLAG_SCOPE, PERIODIC_FLAG_KEY, {
+						...foundry.utils.deepClone(periodic),
+						lastTransitionKey: transitionKey,
+					});
+					continue;
+				}
 
 				const anchorCombatantId = String(periodic.anchorCombatantId ?? "");
 				if (!anchorCombatantId || !combatHasCombatant(combat, anchorCombatantId)) {
@@ -586,13 +596,7 @@ async function processPeriodicCriticalTurnChange(combat, prior, current, transit
 }
 
 function periodicStateWithAnchor(periodic, combat, current) {
-	if (
-		String(periodic.combatId ?? "") === String(combat?.id ?? "") &&
-		nonNegativeInteger(periodic.startRound) > 0 &&
-		String(periodic.anchorCombatantId ?? "")
-	) {
-		return periodic;
-	}
+	if (initiativeStateHasAnchor(periodic, combat)) return periodic;
 
 	return {
 		...foundry.utils.deepClone(periodic),
@@ -775,6 +779,14 @@ function combatHasCombatant(combat, combatantId) {
 	const id = String(combatantId ?? "");
 	if (!id) return false;
 	return [...(combat?.combatants ?? [])].some((combatant) => String(combatant.id ?? "") === id);
+}
+
+function initiativeStateHasAnchor(state, combat) {
+	return Boolean(
+		String(state?.combatId ?? "") === String(combat?.id ?? "") &&
+		nonNegativeInteger(state?.startRound) > 0 &&
+		String(state?.anchorCombatantId ?? "")
+	);
 }
 
 function isForwardCombatProgression(prior, current) {
