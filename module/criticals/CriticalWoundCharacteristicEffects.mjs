@@ -204,10 +204,17 @@ function managedEffectAvailable(effect) {
 	return effect?.duration?.expired !== true;
 }
 
+/**
+ * Every active rule-driven characteristic change gets the same explicit marker.
+ *
+ * Permanent profile advancement already has its own Classic-sheet presentation;
+ * this marker is reserved for ActiveEffect/rule contributions. Positive effects
+ * are marked as deliberately as penalties so a temporarily boosted value cannot
+ * be mistaken for the Actor's underlying profile.
+ */
 function decorateAffectedCharacteristics(actor, root) {
 	for (const id of CHARACTERISTIC_IDS) {
 		const effect = effectiveCharacteristic(actor, id);
-		const negative = effect.candidates.filter((candidate) => isNegativeCandidate(candidate, effect.base));
 		if (!effect.candidates.length) continue;
 		const key = id === "m" && !root.querySelector('[data-characteristic="m"]') ? "sp" : id;
 		const cell = root.querySelector(`.characteristics-row--current [data-characteristic="${key}"]`);
@@ -215,11 +222,12 @@ function decorateAffectedCharacteristics(actor, root) {
 		setCharacteristicDisplayValue(cell, id, effect.value);
 		cell.querySelector("[data-wfrp-characteristic-effect-marker]")?.remove();
 		cell.removeAttribute("title");
-		if (!negative.length) continue;
-		const tooltip = negativeTooltip(actor, id, negative);
+
+		const tooltip = effectTooltip(actor, id, effect.candidates, effect.base);
 		const marker = root.ownerDocument.createElement("span");
 		marker.className = "characteristic-current-effect-marker";
 		marker.dataset.wfrpCharacteristicEffectMarker = "";
+		marker.dataset.effectDirection = aggregateEffectDirection(effect.candidates, effect.base);
 		marker.textContent = "!";
 		marker.title = tooltip;
 		marker.setAttribute("aria-label", tooltip);
@@ -245,22 +253,15 @@ function setCharacteristicDisplayValue(cell, id, value) {
 	cell.prepend(valueNode);
 }
 
-function isNegativeCandidate(candidate, base) {
-	const value = Number(candidate?.formula);
-	if (!Number.isFinite(value)) return false;
-	switch (candidate.operation) {
-		case RULE_EFFECT_OPERATIONS.ADD: return value < 0;
-		case RULE_EFFECT_OPERATIONS.SUBTRACT: return value > 0;
-		case RULE_EFFECT_OPERATIONS.MULTIPLY: return value >= 0 && value < 1;
-		case RULE_EFFECT_OPERATIONS.OVERRIDE: return value < Number(base);
-		default: return false;
-	}
-}
-
-function negativeTooltip(actor, characteristicId, candidates) {
+function effectTooltip(actor, characteristicId, candidates, base) {
 	return candidates.map((candidate) => {
 		const source = briefEffectSource(actor, candidate);
-		return `${source} — ${characteristicLabel(characteristicId)} ${negativeOperationLabel(candidate)}`;
+		const operation = effectOperationLabel(candidate, base);
+		const condition = String(candidate?.condition ?? "").trim();
+		return [
+			`${source} — ${characteristicLabel(characteristicId)} ${operation}`,
+			condition,
+		].filter(Boolean).join(" — ");
 	}).join("\n");
 }
 
@@ -272,21 +273,87 @@ function briefEffectSource(actor, candidate) {
 	return String(candidate.itemName ?? candidate.effectName ?? localize("Active Effect", "Aktywny efekt")).trim();
 }
 
-function negativeOperationLabel(candidate) {
+function effectOperationLabel(candidate, base) {
 	const value = Number(candidate?.formula);
-	if (candidate.operation === RULE_EFFECT_OPERATIONS.MULTIPLY && value === 0.5) {
-		return localize("halved", "zmniejszona o połowę");
+	if (!Number.isFinite(value)) return String(candidate?.operation ?? "");
+
+	if (candidate.operation === RULE_EFFECT_OPERATIONS.MULTIPLY) {
+		if (value === 0.5) return localize("halved", "zmniejszona o połowę");
+		if (value === 2) return localize("doubled", "podwojona");
+		if (value === 3) return localize("tripled", "potrojona");
+		return localize(
+			`multiplied by ${formatCharacteristicValue(value)}`,
+			`pomnożona przez ${formatCharacteristicValue(value)}`,
+		);
 	}
+
+	if (candidate.operation === RULE_EFFECT_OPERATIONS.ADD) {
+		if (value < 0) {
+			return localize(
+				`reduced by ${formatCharacteristicValue(Math.abs(value))}`,
+				`zmniejszona o ${formatCharacteristicValue(Math.abs(value))}`,
+			);
+		}
+		return localize(
+			`increased by ${formatCharacteristicValue(value)}`,
+			`zwiększona o ${formatCharacteristicValue(value)}`,
+		);
+	}
+
 	if (candidate.operation === RULE_EFFECT_OPERATIONS.SUBTRACT) {
-		return localize(`reduced by ${formatCharacteristicValue(value)}`, `zmniejszona o ${formatCharacteristicValue(value)}`);
+		if (value < 0) {
+			return localize(
+				`increased by ${formatCharacteristicValue(Math.abs(value))}`,
+				`zwiększona o ${formatCharacteristicValue(Math.abs(value))}`,
+			);
+		}
+		return localize(
+			`reduced by ${formatCharacteristicValue(value)}`,
+			`zmniejszona o ${formatCharacteristicValue(value)}`,
+		);
 	}
-	if (candidate.operation === RULE_EFFECT_OPERATIONS.ADD && value < 0) {
-		return localize(`reduced by ${formatCharacteristicValue(Math.abs(value))}`, `zmniejszona o ${formatCharacteristicValue(Math.abs(value))}`);
-	}
+
 	if (candidate.operation === RULE_EFFECT_OPERATIONS.OVERRIDE) {
-		return localize(`set to ${formatCharacteristicValue(value)}`, `ustawiona na ${formatCharacteristicValue(value)}`);
+		return localize(
+			`set to ${formatCharacteristicValue(value)} (base ${formatCharacteristicValue(base)})`,
+			`ustawiona na ${formatCharacteristicValue(value)} (bazowo ${formatCharacteristicValue(base)})`,
+		);
 	}
+
 	return `${candidate.operation} ${formatCharacteristicValue(value)}`;
+}
+
+function aggregateEffectDirection(candidates, base) {
+	let hasPositive = false;
+	let hasNegative = false;
+
+	for (const candidate of candidates) {
+		const direction = candidateDirection(candidate, base);
+		if (direction === "positive") hasPositive = true;
+		if (direction === "negative") hasNegative = true;
+	}
+
+	if (hasPositive && hasNegative) return "mixed";
+	if (hasPositive) return "positive";
+	if (hasNegative) return "negative";
+	return "neutral";
+}
+
+function candidateDirection(candidate, base) {
+	const value = Number(candidate?.formula);
+	if (!Number.isFinite(value)) return "neutral";
+	switch (candidate.operation) {
+		case RULE_EFFECT_OPERATIONS.ADD:
+			return value > 0 ? "positive" : value < 0 ? "negative" : "neutral";
+		case RULE_EFFECT_OPERATIONS.SUBTRACT:
+			return value < 0 ? "positive" : value > 0 ? "negative" : "neutral";
+		case RULE_EFFECT_OPERATIONS.MULTIPLY:
+			return value > 1 ? "positive" : value >= 0 && value < 1 ? "negative" : "neutral";
+		case RULE_EFFECT_OPERATIONS.OVERRIDE:
+			return value > Number(base) ? "positive" : value < Number(base) ? "negative" : "neutral";
+		default:
+			return "neutral";
+	}
 }
 
 function consequenceCondition(definition) {
