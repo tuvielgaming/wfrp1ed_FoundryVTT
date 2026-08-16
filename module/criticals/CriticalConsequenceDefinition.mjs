@@ -1,6 +1,8 @@
 import { coreCriticalConsequence } from "./CoreCriticalConsequences.mjs";
 import { isCoreDetailedEffectProvider } from "./CoreDetailedCriticalTables.mjs";
 
+const PERIODIC_DURATION_UNITS = new Set(["rounds", "minutes", "hours", "days"]);
+
 /**
  * Normalize the declarative automation payload stored on a Critical Wound Item.
  *
@@ -52,6 +54,7 @@ export function normalizeCriticalConsequence(source) {
 		duration.until ||
 		periodicWounds.formula ||
 		periodicWounds.until ||
+		periodicWounds.duration.formula ||
 		dropHeld
 	);
 	const hasExplicitEnabled = Object.hasOwn(raw, "enabled");
@@ -61,7 +64,10 @@ export function normalizeCriticalConsequence(source) {
 		enabled,
 		characteristics: Object.freeze(characteristics),
 		duration: Object.freeze(duration),
-		periodicWounds: Object.freeze(periodicWounds),
+		periodicWounds: Object.freeze({
+			...periodicWounds,
+			duration: Object.freeze(periodicWounds.duration),
+		}),
 		dropHeld,
 	});
 }
@@ -73,7 +79,11 @@ export function consequenceSystemSource(source) {
 		enabled: normalized.enabled,
 		characteristics: normalized.characteristics.map((entry) => ({ ...entry })),
 		duration: { ...normalized.duration },
-		periodicWounds: { ...normalized.periodicWounds },
+		periodicWounds: {
+			formula: normalized.periodicWounds.formula,
+			until: normalized.periodicWounds.until,
+			duration: { ...normalized.periodicWounds.duration },
+		},
 		dropHeld: normalized.dropHeld,
 	};
 }
@@ -93,6 +103,7 @@ export function consequenceHasContent(source) {
 		normalized.duration?.until ||
 		normalized.periodicWounds?.formula ||
 		normalized.periodicWounds?.until ||
+		normalized.periodicWounds?.duration?.formula ||
 		normalized.dropHeld
 	);
 }
@@ -117,9 +128,15 @@ function normalizeDuration(source, legacyUntil = "") {
 
 function normalizePeriodicWounds(source) {
 	const raw = source?.toObject?.() ?? source ?? {};
+	const durationRaw = raw.duration?.toObject?.() ?? raw.duration ?? {};
+	const units = String(durationRaw.units ?? "").trim();
 	return {
 		formula: cleanFormula(raw.formula),
 		until: normalizeUntil(raw.until),
+		duration: {
+			formula: cleanFormula(durationRaw.formula),
+			units: PERIODIC_DURATION_UNITS.has(units) ? units : "",
+		},
 	};
 }
 
