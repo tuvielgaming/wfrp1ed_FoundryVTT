@@ -15,17 +15,23 @@ import { isCoreDetailedEffectProvider } from "./CoreDetailedCriticalTables.mjs";
 export function criticalConsequenceForWound(wound) {
 	if (wound?.type !== "criticalWound") return null;
 
-	const authored = normalizeCriticalConsequence(wound.system?.consequence);
-	if (authored?.enabled) return authored;
+	const rawAuthored = wound.system?.consequence?.toObject?.() ?? wound.system?.consequence;
+	const authored = normalizeCriticalConsequence(rawAuthored);
 
-	/* Transitional compatibility for already-existing Core wounds. New Core
+	/* A non-empty Item-authored definition is authoritative even when deliberately
+	 * disabled. Otherwise a disabled Core template would fall through to its old
+	 * Core lookup and silently turn itself back on. */
+	if (authored && consequenceHasContent(authored)) return authored;
+
+	/* Transitional compatibility for already-existing Core wounds whose data
+	 * model has only the new empty/default consequence structure. New Core
 	 * Compendium Items persist this data directly in `system.consequence`. */
-	if (!isCoreDetailedEffectProvider(wound.system?.resolution?.providerId)) return null;
+	if (!isCoreDetailedEffectProvider(wound.system?.resolution?.providerId)) return authored;
 	const fallback = coreCriticalConsequence(
 		genericLocation(wound.system?.hitLocation),
 		positiveInteger(wound.system?.resolution?.effectNumber),
 	);
-	return fallback ? normalizeCriticalConsequence({ enabled: true, ...fallback }) : null;
+	return fallback ? normalizeCriticalConsequence({ enabled: true, ...fallback }) : authored;
 }
 
 export function normalizeCriticalConsequence(source) {
@@ -40,13 +46,16 @@ export function normalizeCriticalConsequence(source) {
 	const duration = normalizeDuration(raw.duration, raw.until);
 	const periodicWounds = normalizePeriodicWounds(raw.periodicWounds);
 	const dropHeld = normalizeDropHeld(raw.dropHeld);
-	const enabled = raw.enabled === true || Boolean(
+	const hasContent = Boolean(
 		characteristics.length ||
 		duration.formula ||
 		duration.until ||
 		periodicWounds.formula ||
+		periodicWounds.until ||
 		dropHeld
 	);
+	const hasExplicitEnabled = Object.hasOwn(raw, "enabled");
+	const enabled = hasExplicitEnabled ? raw.enabled === true : hasContent;
 
 	return Object.freeze({
 		enabled,
@@ -71,6 +80,21 @@ export function consequenceSystemSource(source) {
 
 export function consequenceHasAutomation(source) {
 	return normalizeCriticalConsequence(source)?.enabled === true;
+}
+
+export function consequenceHasContent(source) {
+	const normalized = source?.characteristics && source?.duration && source?.periodicWounds
+		? source
+		: normalizeCriticalConsequence(source);
+	if (!normalized) return false;
+	return Boolean(
+		normalized.characteristics?.length ||
+		normalized.duration?.formula ||
+		normalized.duration?.until ||
+		normalized.periodicWounds?.formula ||
+		normalized.periodicWounds?.until ||
+		normalized.dropHeld
+	);
 }
 
 function normalizeCharacteristicChange(source) {
