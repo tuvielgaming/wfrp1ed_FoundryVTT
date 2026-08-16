@@ -147,9 +147,14 @@ function characteristicActiveEffectSource(location, effectNumber, effects, langu
 		flags: {
 			wfrp1ed: {
 				ruleChanges: structuredCloneSafe(changes),
-				/* Same provenance key used by runtime-created Core wounds. */
-				coreCriticalConsequence: {
-					version: 1,
+				/*
+				 * Compendium templates use generic Arm/Leg locations rather than a
+				 * combat hit side. Keep this separate from coreCriticalConsequence so
+				 * the side-specific runtime repair does not replace/delete the embedded
+				 * transfer effect when a GM manually drags the template to an Actor.
+				 */
+				coreCatalogEffect: {
+					version: CORE_CATALOG_VERSION,
 					location,
 					effectNumber,
 					durationKind: "until-medical-attention",
