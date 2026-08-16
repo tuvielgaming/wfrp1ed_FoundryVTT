@@ -37,8 +37,8 @@ export class Wfrp1edCombat extends foundry.documents.Combat {
 	 *
 	 * Optional weapon Initiative modifiers are intentionally not guessed here.
 	 * The existing optional Weapon Modifiers world setting remains authoritative,
-	 * but combat first needs an explicit canonical "weapon currently used for
-	 * initiative" contract before a two-weapon Actor can be resolved safely.
+	 * but combat first needs a dedicated stateful resolver for entries whose
+	 * Initiative bonus changes with combat circumstances (for example polearms).
 	 *
 	 * @inheritDoc
 	 */
@@ -104,13 +104,27 @@ export class Wfrp1edCombat extends foundry.documents.Combat {
 	 * death, Skip Defeated, or a temporary reorder still completes exactly one
 	 * full cycle before the round is allowed to advance.
 	 *
+	 * After that boundary has resolved, the next round rebuilds canonical order
+	 * from each Actor's current Initiative characteristic. Any temporary reorder
+	 * from the completed round is discarded, while real characteristic changes
+	 * are naturally reflected in the following round.
+	 *
 	 * @inheritDoc
 	 */
 	async nextRound() {
 		if (this.started && Number(this.round) > 0) {
 			await CombatInitiativeClock.emitRoundEnd(this);
 		}
+
 		await CombatRoundInitiativeOrder.resetBeforeNextRound(this);
+		await this.rollInitiative(
+			[...this.combatants].map((entry) => String(entry.id)),
+			{ [CORE_INITIATIVE_OPTION]: true },
+		);
+		await CombatRoundInitiativeOrder.captureCombatBaselines(this, {
+			force: true,
+		});
+
 		const result = await super.nextRound();
 		if (this.started && Number(this.round) > 0 && this.combatant) {
 			await CombatInitiativeClock.emitRoundStart(this, this.combatant);
