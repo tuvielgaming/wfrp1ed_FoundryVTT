@@ -2,6 +2,7 @@ const FLAG_SCOPE = "wfrp1ed";
 const GENERIC_EFFECT_FLAG_KEY = "criticalConsequenceEffect";
 const RULE_CHANGES_FLAG_KEY = "ruleChanges";
 const TIMED_FLAG_KEY = "criticalTimed";
+const PERIODIC_FLAG_KEY = "criticalPeriodic";
 const repairing = new Set();
 
 for (const hookName of ["createActiveEffect", "updateActiveEffect"]) {
@@ -31,10 +32,10 @@ async function repairExisting() {
  * Critical effects.
  *
  * "Automation enabled" means execute the wound's declared consequence once
- * when the wound is applied. It is not a repeating toggle. Once the WFRP round
- * timer has stamped expiredAtRound, the generated transfer ActiveEffect must
- * remain disabled; otherwise Foundry can prepare/transfer the Item child again
- * and make a completed temporary consequence appear to re-apply.
+ * when the wound is applied. It is not a repeating toggle. Once a WFRP timer
+ * has stamped an expiry, the generated transfer ActiveEffect must remain
+ * disabled; otherwise Foundry can prepare/transfer the Item child again and
+ * make a completed temporary consequence appear to re-apply.
  */
 async function synchronizeGenericCriticalEffect(effect) {
 	const wound = effect?.parent;
@@ -47,7 +48,13 @@ async function synchronizeGenericCriticalEffect(effect) {
 
 	const update = {};
 	const timed = effect.getFlag?.(FLAG_SCOPE, TIMED_FLAG_KEY);
-	if (positiveInteger(timed?.expiredAtRound) > 0 && effect.disabled !== true) {
+	const periodic = effect.getFlag?.(FLAG_SCOPE, PERIODIC_FLAG_KEY);
+	const terminal = Boolean(
+		positiveInteger(timed?.expiredAtRound) > 0 ||
+		positiveInteger(periodic?.expiredAtRound) > 0 ||
+		positiveNumber(periodic?.expiredAtWorldTime) > 0
+	);
+	if (terminal && effect.disabled !== true) {
 		update.disabled = true;
 		update["duration.expired"] = true;
 	}
@@ -78,6 +85,11 @@ async function synchronizeGenericCriticalEffect(effect) {
 function positiveInteger(value) {
 	const number = Number(value);
 	return Number.isInteger(number) && number > 0 ? number : 0;
+}
+
+function positiveNumber(value) {
+	const number = Number(value);
+	return Number.isFinite(number) && number > 0 ? number : 0;
 }
 
 function sameJson(a, b) {
