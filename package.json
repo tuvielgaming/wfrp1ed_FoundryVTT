@@ -6,7 +6,7 @@
     "build:packs": "node scripts/build-packs.mjs"
   },
   "devDependencies": {
-    "@foundryvtt/foundryvtt-cli": "0.0.6"
+    "classic-level": "^3.0.0"
   },
   "engines": {
     "node": ">=18"
