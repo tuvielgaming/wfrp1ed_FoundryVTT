@@ -21,11 +21,10 @@ const SUPPORTED_TARGETS = new Set([
 /**
  * Last-resort reconstruction for managed Core Critical Wound effects.
  *
- * Some Foundry reload paths can report enabled transfer effects embedded in an
- * owned Item as inactive. The persistent wound/effect remains the durable game
- * fact, so reconstruct its declarative WFRP candidate only when native effect
- * discovery cannot see it. Timed generic Critical effects are never restored
- * after their Foundry duration has expired.
+ * Generic Item transfer effects are now consumed directly by RuleEffectResolver
+ * even when Foundry reports the grandchild ActiveEffect as inactive. This
+ * provider remains as a compatibility path for legacy managed wounds whose
+ * declarative changes need to be reconstructed from provenance.
  */
 RuleEffectResolver.registerCandidateProvider(PROVIDER_ID, ({ actor, targetId }) => {
 	if (!(actor instanceof foundry.documents.Actor)) return [];
@@ -41,8 +40,9 @@ RuleEffectResolver.registerCandidateProvider(PROVIDER_ID, ({ actor, targetId }) 
 
 			const generic = effect.getFlag?.(FLAG_SCOPE, GENERIC_EFFECT_FLAG_KEY);
 			if (generic?.kind === "characteristics") {
-				for (let index = 0; index < ruleChanges(effect).length; index += 1) {
-					const decoded = decodeRuleEffectChange(ruleChanges(effect)[index]);
+				const changes = ruleChanges(effect);
+				for (let index = 0; index < changes.length; index += 1) {
+					const decoded = decodeRuleEffectChange(changes[index]);
 					if (decoded?.targetId !== targetId) continue;
 					results.push(candidateFromDecoded({
 						actor,
@@ -90,7 +90,6 @@ RuleEffectResolver.registerCandidateProvider(PROVIDER_ID, ({ actor, targetId }) 
 	return results;
 });
 
-/* Persist provenance immediately for newly created/repaired legacy effects. */
 for (const hook of ["createActiveEffect", "updateActiveEffect"]) {
 	Hooks.on(hook, (effect) => {
 		void persistEffectNumberFromManagedEffect(effect).catch((error) => {
@@ -134,7 +133,16 @@ function candidateFromDecoded({ actor, wound, effect, decoded, id }) {
 }
 
 function isNativelyDiscoverable(effect, targetId) {
-	if (effect?.active === false) return false;
+	if (effect?.disabled === true || effect?.duration?.expired === true) return false;
+	const item = effect?.parent;
+	const ownedItem =
+		item instanceof foundry.documents.Item &&
+		item.parent instanceof foundry.documents.Actor;
+	if (ownedItem) {
+		if (effect.transfer === false) return false;
+	} else if (effect?.active === false) {
+		return false;
+	}
 	return ruleChanges(effect).some((change) =>
 		decodeRuleEffectChange(change)?.targetId === targetId);
 }
@@ -184,8 +192,14 @@ async function persistLegacyEffectNumbers() {
 			await wound.update({ "system.resolution.effectNumber": effectNumber });
 			touched = true;
 		}
-		if (touched) void actor.sheet?.render?.({ force: true });
+		if (touched) refreshActorSheetIfOpen(actor);
 	}
+}
+
+function refreshActorSheetIfOpen(actor) {
+	const sheet = actor?.sheet;
+	if (!sheet?.rendered) return;
+	void sheet.render();
 }
 
 function positiveInteger(value) {
