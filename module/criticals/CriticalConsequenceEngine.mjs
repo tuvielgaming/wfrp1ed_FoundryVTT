@@ -27,8 +27,10 @@ const TIMED_FLAG_KEY = "criticalTimed";
 const RULE_CHANGES_FLAG_KEY = "ruleChanges";
 const DAMAGE_STATE_FLAG_KEY = "damageState";
 const CRITICAL_RESULT_FLAG_KEY = "criticalResult";
-const VERSION = 14;
+const VERSION = 15;
 const processingTurns = new Set();
+const lastQueuedCombatStates = new Map();
+const processingPeriodicTicks = new Set();
 let processingWorldTime = false;
 
 /**
@@ -104,6 +106,10 @@ Hooks.on("createItem", (item) => {
  * Once captured, the numeric turn boundary is authoritative. Periodic damage is
  * reconciled from elapsed full cycles, so skipped/defeated turns do not need to
  * emit a dedicated anchor transition in order for bleeding to tick.
+ *
+ * Foundry can expose the same post-update Combat state through more than one
+ * hook. queueTurnConsequences therefore deduplicates by the live Combat state,
+ * not by hook-specific history snapshots.
  */
 Hooks.on("combatTurnChange", (combat, prior, current) => {
 	if (!isPrimaryActiveGm()) return;
@@ -132,8 +138,12 @@ Hooks.once("ready", () => {
 });
 
 function queueTurnConsequences(combat, prior, current) {
+	const combatId = String(combat?.id ?? "");
 	const key = combatTransitionKey(combat, prior, current);
-	if (!combat?.id || !key || processingTurns.has(key)) return;
+	if (!combatId || !key) return;
+	if (lastQueuedCombatStates.get(combatId) === key) return;
+	lastQueuedCombatStates.set(combatId, key);
+	if (processingTurns.has(key)) return;
 	processingTurns.add(key);
 	void processTurnConsequences(combat, prior, current, key)
 		.catch(reportConsequenceError)
@@ -546,7 +556,7 @@ async function processPeriodicCriticalTurnChange(combat, _prior, current, transi
 
 				while (ticksApplied < targetTicks && effect.disabled !== true) {
 					const cycleNumber = ticksApplied + 1;
-					periodic = await applyPeriodicWounds(
+					const nextPeriodic = await applyPeriodicWounds(
 						actor,
 						wound,
 						effect,
@@ -556,6 +566,8 @@ async function processPeriodicCriticalTurnChange(combat, _prior, current, transi
 						cycleNumber,
 						transitionKey,
 					);
+					if (!nextPeriodic) break;
+					periodic = nextPeriodic;
 					ticksApplied = nonNegativeInteger(periodic.ticksApplied);
 					if (positiveInteger(periodic.expiredAtRound)) break;
 				}
@@ -590,9 +602,54 @@ async function applyPeriodicWounds(
 	transitionKey,
 ) {
 	const packetId = `bleed-${effect.id}-${combat.id}-cycle-${cycleNumber}`;
-	const already = DamageApplication.transactionFor(actor, packetId);
-	if (already?.state === "applied") {
-		return stampPeriodic(
+	const tickKey = `${actor.uuid}|${packetId}`;
+	if (processingPeriodicTicks.has(tickKey)) return null;
+	processingPeriodicTicks.add(tickKey);
+
+	try {
+		const already = DamageApplication.transactionFor(actor, packetId);
+		if (already?.state === "applied") {
+			return await stampPeriodic(
+				effect,
+				periodic,
+				combat,
+				round,
+				cycleNumber,
+				transitionKey,
+			);
+		}
+
+		const roll = await evaluateFormula(periodic.formula);
+		await showDice(roll);
+		const amount = positiveInteger(roll.total);
+		const packet = new DamagePacket({
+			id: packetId,
+			rawAmount: amount,
+			targetActorUuid: actor.uuid,
+			source: {
+				kind: "critical-bleeding",
+				id: effect.id,
+				uuid: wound.uuid,
+				label: effect.name,
+			},
+			armour: DAMAGE_MITIGATION_POLICY.IGNORE,
+			toughness: DAMAGE_MITIGATION_POLICY.IGNORE,
+			criticalMode: DAMAGE_CRITICAL_MODE.SUDDEN_DEATH,
+		});
+		const resolution = DamageResolution.forPacket(packet, {
+			finalAmount: amount,
+			breakdown: {
+				source: "critical-bleeding",
+				formula: String(periodic.formula),
+				roll: amount,
+				woundUuid: wound.uuid,
+				cycle: cycleNumber,
+			},
+		});
+		const message = await DamageChat.publish({ packet, resolution, speakerActor: actor });
+		const transaction = await DamageChat.applyMessage(message);
+		if (!transaction) throw new Error("Critical bleeding damage could not be applied.");
+		return await stampPeriodic(
 			effect,
 			periodic,
 			combat,
@@ -600,46 +657,9 @@ async function applyPeriodicWounds(
 			cycleNumber,
 			transitionKey,
 		);
+	} finally {
+		processingPeriodicTicks.delete(tickKey);
 	}
-
-	const roll = await evaluateFormula(periodic.formula);
-	await showDice(roll);
-	const amount = positiveInteger(roll.total);
-	const packet = new DamagePacket({
-		id: packetId,
-		rawAmount: amount,
-		targetActorUuid: actor.uuid,
-		source: {
-			kind: "critical-bleeding",
-			id: effect.id,
-			uuid: wound.uuid,
-			label: effect.name,
-		},
-		armour: DAMAGE_MITIGATION_POLICY.IGNORE,
-		toughness: DAMAGE_MITIGATION_POLICY.IGNORE,
-		criticalMode: DAMAGE_CRITICAL_MODE.SUDDEN_DEATH,
-	});
-	const resolution = DamageResolution.forPacket(packet, {
-		finalAmount: amount,
-		breakdown: {
-			source: "critical-bleeding",
-			formula: String(periodic.formula),
-			roll: amount,
-			woundUuid: wound.uuid,
-			cycle: cycleNumber,
-		},
-	});
-	const message = await DamageChat.publish({ packet, resolution, speakerActor: actor });
-	const transaction = await DamageChat.applyMessage(message);
-	if (!transaction) throw new Error("Critical bleeding damage could not be applied.");
-	return stampPeriodic(
-		effect,
-		periodic,
-		combat,
-		round,
-		cycleNumber,
-		transitionKey,
-	);
 }
 
 async function stampPeriodic(effect, periodic, combat, round, cycleNumber, transitionKey) {
@@ -823,11 +843,10 @@ function virtualAnchorTurn(state, combat) {
 	return Math.min(savedTurn, turnCount);
 }
 
-function combatTransitionKey(combat, prior, current) {
+function combatTransitionKey(combat, _prior, current) {
 	if (!combat?.id) return "";
 	return [
 		String(combat.id),
-		`${nonNegativeInteger(prior?.round ?? combat?.previous?.round)}:${combatTurnIndex(prior?.turn ?? combat?.previous?.turn)}:${String(prior?.combatantId ?? "")}`,
 		`${nonNegativeInteger(combat?.round ?? current?.round)}:${combatTurnIndex(combat?.turn ?? current?.turn)}:${String(combat?.combatant?.id ?? current?.combatantId ?? "")}`,
 	].join("|");
 }
