@@ -6,6 +6,7 @@ import { CombatRoundTurnState } from "../combat/CombatRoundTurnState.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
 const PARRY_DEBT_REMINDER_FLAG_KEY = "parryDebtReminder";
+const ROUND_ORDER_FLAG_KEY = "roundInitiativeOrder";
 const CORE_INITIATIVE_OPTION = "wfrpCoreInitiative";
 
 /**
@@ -41,6 +42,30 @@ export class Wfrp1edCombat extends foundry.documents.Combat {
 		const roundOrder = CombatRoundInitiativeOrder.compare(this, left, right);
 		if (roundOrder !== null && roundOrder !== 0) return roundOrder;
 		return super._sortCombatants(left, right);
+	}
+
+	/**
+	 * Foundry does not guarantee that an arbitrary Combatant flag change rebuilds
+	 * the cached `Combat.turns` array. Our temporary round order is stored only in
+	 * flags, so rebuild synchronously whenever that flag changes. This keeps the
+	 * subsequent focus reconciliation and Combat Tracker render on the same order.
+	 *
+	 * This post-update workflow runs on every client, keeping their local cached
+	 * turn arrays consistent without ever rewriting the real Initiative values.
+	 *
+	 * @inheritDoc
+	 */
+	_onUpdateDescendantDocuments(parent, collection, documents, changes, options, userId) {
+		super._onUpdateDescendantDocuments(
+			parent,
+			collection,
+			documents,
+			changes,
+			options,
+			userId,
+		);
+		if (!roundOrderChanged(changes)) return;
+		this.setupTurns();
 	}
 
 	/**
@@ -259,6 +284,23 @@ export class Wfrp1edCombat extends foundry.documents.Combat {
 			0,
 		);
 	}
+}
+
+function roundOrderChanged(changes) {
+	const entries = Array.isArray(changes) ? changes : [changes];
+	return entries.some((change) => {
+		if (!change || typeof change !== "object") return false;
+		if (Object.hasOwn(
+			change,
+			`flags.${FLAG_SCOPE}.${ROUND_ORDER_FLAG_KEY}`,
+		)) return true;
+		const scoped = change.flags?.[FLAG_SCOPE];
+		return Boolean(
+			scoped &&
+			typeof scoped === "object" &&
+			Object.hasOwn(scoped, ROUND_ORDER_FLAG_KEY),
+		);
+	});
 }
 
 function normalizeCombatantIds(ids, combat) {
