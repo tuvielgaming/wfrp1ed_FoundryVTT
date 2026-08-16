@@ -13,6 +13,7 @@ const EFFECT_FLAG_KEY = "criticalConsequenceEffect";
 const TIMED_FLAG_KEY = "criticalTimed";
 const CRITICAL_WOUND_TYPE = "criticalWound";
 const CHARACTERISTIC_ALIASES = Object.freeze({ sp: "m" });
+const EPSILON = 0.000001;
 
 let previousGetCharacteristicValue = null;
 
@@ -22,9 +23,12 @@ let previousGetCharacteristicValue = null;
  * Item ActiveEffect differently from an Actor ActiveEffect, so this bridge is a
  * final, deterministic characteristic consumer for those runtime consequences.
  *
- * It applies only a consequence which the normal RuleEffectResolver did not
- * already expose as an automatic self-effect. That keeps the bridge compatible
- * with future Foundry improvements without ever halving a characteristic twice.
+ * The generic RuleEffectResolver is still useful for normal Active Effects, but
+ * merely discovering a nested runtime candidate is not proof that an earlier
+ * characteristic wrapper actually consumed it. We therefore project the value
+ * once without and once with the runtime wound and compare those projections to
+ * the value produced by the preceding characteristic pipeline. This avoids both
+ * the former Initiative false-positive and double-applying Movement.
  */
 Hooks.once("init", () => {
 	if (previousGetCharacteristicValue) return;
@@ -55,26 +59,48 @@ Hooks.on("renderApplicationV2", (application, element) => {
 function applyMissingRuntimeCriticalConsequences(actor, id, startingValue) {
 	if (!(actor instanceof foundry.documents.Actor)) return startingValue;
 	const characteristicId = canonicalCharacteristicId(id);
+	const sources = runtimeCharacteristicSources(actor, characteristicId);
+	if (!sources.length) return startingValue;
+
 	const targetId = `characteristic.${characteristicId}.current`;
-	const resolvedCandidates = RuleEffectResolver.candidates(actor, targetId).filter((candidate) =>
+	const allCandidates = RuleEffectResolver.candidates(actor, targetId).filter((candidate) =>
 		candidate.applicability === RULE_EFFECT_APPLICABILITY.AUTOMATIC &&
 		candidate.side === RULE_EFFECT_SIDES.SELF,
 	);
-	let value = finiteNumber(startingValue);
+	const runtimeWoundUuids = new Set(
+		sources.map((source) => String(source.wound?.uuid ?? "")).filter(Boolean),
+	);
+	const nonRuntimeCandidates = allCandidates.filter((candidate) =>
+		!runtimeWoundUuids.has(String(candidate.itemUuid ?? "")),
+	);
 
-	for (const source of runtimeCharacteristicSources(actor, characteristicId)) {
-		/* CriticalWoundCharacteristicEffects consumes exactly this filtered class
-		 * of RuleEffectResolver candidate before this wrapper runs. A matching
-		 * automatic/self candidate therefore means the value already includes it. */
-		if (resolvedCandidates.some((candidate) =>
-			String(candidate.itemUuid ?? "") === String(source.wound.uuid ?? "") &&
-			String(candidate.targetId ?? "") === targetId
-		)) continue;
+	const current = finiteNumber(startingValue);
+	const raw = rawCharacteristicValue(actor, characteristicId);
+	const projectedWithoutRuntime = applyCandidates(raw, nonRuntimeCandidates);
+	const projectedWithRuntime = applyRuntimeSources(projectedWithoutRuntime, sources);
 
-		value = applyOperation(value, source.entry.operation, source.entry.value);
+	/* The preceding pipeline already consumed this runtime wound. */
+	if (nearlyEqual(current, projectedWithRuntime)) return current;
+
+	/* The preceding pipeline produced the value without the runtime wound. This
+	 * is the Leg #4 Initiative failure we observed: RuleEffectResolver could see
+	 * the nested I candidate while the earlier wrapper had not consumed it. */
+	if (
+		nearlyEqual(current, projectedWithoutRuntime) ||
+		nearlyEqual(current, raw)
+	) {
+		return applyRuntimeSources(current, sources);
 	}
 
-	return value;
+	/* If no runtime candidate was discoverable at all, the bridge is definitely
+	 * the sole owner and must apply it. Otherwise keep an unfamiliar transformed
+	 * value unchanged rather than risk applying the same wound twice. */
+	const runtimeCandidateExists = allCandidates.some((candidate) =>
+		runtimeWoundUuids.has(String(candidate.itemUuid ?? "")),
+	);
+	return runtimeCandidateExists
+		? current
+		: applyRuntimeSources(current, sources);
 }
 
 function decorateRuntimeCharacteristics(actor, root) {
@@ -158,6 +184,22 @@ function runtimeSourceTooltip(source) {
 		: `${woundName} — ${consequence}`;
 }
 
+function applyRuntimeSources(value, sources) {
+	let result = finiteNumber(value);
+	for (const source of sources) {
+		result = applyOperation(result, source.entry?.operation, source.entry?.value);
+	}
+	return result;
+}
+
+function applyCandidates(value, candidates) {
+	let result = finiteNumber(value);
+	for (const candidate of candidates ?? []) {
+		result = applyOperation(result, candidate?.operation, candidate?.formula);
+	}
+	return result;
+}
+
 function applyOperation(value, operation, operandValue) {
 	const operand = finiteNumber(operandValue);
 	switch (String(operation ?? "")) {
@@ -167,6 +209,18 @@ function applyOperation(value, operation, operandValue) {
 		case RULE_EFFECT_OPERATIONS.OVERRIDE: return operand;
 		default: return value;
 	}
+}
+
+function rawCharacteristicValue(actor, characteristicId) {
+	const characteristics = actor.system?.characteristics ?? {};
+	const key = characteristicId === "m" && !Object.hasOwn(characteristics, "m")
+		? "sp"
+		: characteristicId;
+	return finiteNumber(characteristics?.[key]?.current);
+}
+
+function nearlyEqual(first, second) {
+	return Math.abs(finiteNumber(first) - finiteNumber(second)) <= EPSILON;
 }
 
 function wfrpTimedEffectExpired(effect) {
