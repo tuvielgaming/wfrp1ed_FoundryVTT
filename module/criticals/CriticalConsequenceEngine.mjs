@@ -27,8 +27,9 @@ const TIMED_FLAG_KEY = "criticalTimed";
 const RULE_CHANGES_FLAG_KEY = "ruleChanges";
 const DAMAGE_STATE_FLAG_KEY = "damageState";
 const CRITICAL_RESULT_FLAG_KEY = "criticalResult";
-const VERSION = 5;
+const VERSION = 6;
 const processingRounds = new Set();
+const processingTurns = new Set();
 let processingWorldTime = false;
 
 /**
@@ -98,20 +99,31 @@ Hooks.on("createItem", (item) => {
 });
 
 /*
- * combatTurnChange is the semantic round boundary. updateCombat is a defensive
- * second entry point for custom Combat progression; per-effect round stamps and
- * an in-memory lock make the combined path idempotent.
+ * Round-based characteristic effects are anchored to the initiative position at
+ * which they were applied. The partial remainder of that turn/round therefore
+ * never consumes one of the declared rounds. Periodic damage still fires at the
+ * ordinary round boundary because its duration is counted in actual ticks.
  */
 Hooks.on("combatTurnChange", (combat, prior, current) => {
-	if (!isPrimaryActiveGm()) return;
+	if (!isPrimaryActiveGm() || !isForwardCombatProgression(prior, current)) return;
+	queueTurnConsequences(combat, prior, current);
+
 	const priorRound = nonNegativeInteger(prior?.round);
 	const currentRound = nonNegativeInteger(current?.round ?? combat.round);
-	if (currentRound <= priorRound) return;
-	queueRoundConsequences(combat, currentRound);
+	if (currentRound > priorRound) queueRoundConsequences(combat, currentRound);
 });
 
 Hooks.on("updateCombat", (combat, changes) => {
-	if (!isPrimaryActiveGm() || !Object.hasOwn(changes ?? {}, "round")) return;
+	if (!isPrimaryActiveGm()) return;
+	if (Object.hasOwn(changes ?? {}, "round") || Object.hasOwn(changes ?? {}, "turn")) {
+		const prior = combat.previous;
+		const current = combat.current;
+		if (isForwardCombatProgression(prior, current)) {
+			queueTurnConsequences(combat, prior, current);
+		}
+	}
+
+	if (!Object.hasOwn(changes ?? {}, "round")) return;
 	const currentRound = nonNegativeInteger(combat.round);
 	if (currentRound <= 0) return;
 	queueRoundConsequences(combat, currentRound);
@@ -132,6 +144,15 @@ Hooks.once("ready", () => {
 	void repairExistingRuntimeEffects().catch(reportConsequenceError);
 });
 
+function queueTurnConsequences(combat, prior, current) {
+	const key = combatTransitionKey(combat, prior, current);
+	if (!combat?.id || !key || processingTurns.has(key)) return;
+	processingTurns.add(key);
+	void processTimedCriticalTurnChange(combat, prior, current, key)
+		.catch(reportConsequenceError)
+		.finally(() => processingTurns.delete(key));
+}
+
 function queueRoundConsequences(combat, round) {
 	const key = `${String(combat?.id ?? "")}:${round}`;
 	if (!combat?.id || processingRounds.has(key)) return;
@@ -142,7 +163,6 @@ function queueRoundConsequences(combat, round) {
 }
 
 async function processRoundConsequences(combat, round) {
-	await processTimedCriticals(combat, round);
 	await processPeriodicCriticals(combat, round);
 }
 
@@ -215,7 +235,7 @@ async function createManagedEffects(wound, definition, resolved) {
 					value: resolved.duration.value,
 					units: resolved.duration.units,
 					expired: false,
-					expiry: resolved.duration.units === "rounds" ? "roundStart" : null,
+					expiry: resolved.duration.units === "rounds" ? "turnEnd" : null,
 				},
 			} : {}),
 			flags,
@@ -261,13 +281,19 @@ function consequenceEffectFlags(wound, kind, resolved) {
 
 function timedStateFor(actor, duration) {
 	const combat = activeCombatForActor(actor);
+	const current = combat?.current ?? {};
 	return {
 		version: VERSION,
 		units: "rounds",
 		durationRounds: positiveInteger(duration?.value),
 		combatId: String(combat?.id ?? ""),
-		startRound: combat ? nonNegativeInteger(combat.round) : 0,
+		startRound: combat ? nonNegativeInteger(current.round ?? combat.round) : 0,
+		anchorCombatantId: String(current.combatantId ?? combat?.combatant?.id ?? ""),
+		anchorTurn: combatTurnIndex(current.turn ?? combat?.turn),
+		completedRounds: 0,
+		lastTransitionKey: "",
 		expiredAtRound: 0,
+		expiredAtTurn: -1,
 	};
 }
 
@@ -408,39 +434,63 @@ function relativeHandForPhysicalArm(actor, hitLocation) {
 	return physical === dominant ? INVENTORY_HAND.MAIN : INVENTORY_HAND.OFF;
 }
 
-async function processTimedCriticals(combat, round) {
+async function processTimedCriticalTurnChange(combat, prior, current, transitionKey) {
+	const priorCombatantId = String(prior?.combatantId ?? "");
+	const priorRound = nonNegativeInteger(prior?.round);
+	const currentRound = nonNegativeInteger(current?.round ?? combat.round);
+	const currentTurn = combatTurnIndex(current?.turn ?? combat.turn);
+
 	for (const actor of combatActors(combat)) {
 		for (const wound of actor.items ?? []) {
 			if (wound.type !== "criticalWound") continue;
 			for (const effect of wound.effects ?? []) {
-				const timed = effectFlag(effect, TIMED_FLAG_KEY);
+				let timed = effectFlag(effect, TIMED_FLAG_KEY);
 				if (!timed || effect.disabled === true) continue;
-				/* The WFRP timer owns expiry. Foundry's prepared duration may already
-				 * report expired for an Item grandchild before our round anchor ends. */
 				if (positiveInteger(timed.expiredAtRound)) continue;
 				const durationRounds = positiveInteger(timed.durationRounds);
 				if (!durationRounds || String(timed.units ?? "") !== "rounds") continue;
 
-				if (
-					String(timed.combatId ?? "") !== String(combat.id ?? "") ||
-					nonNegativeInteger(timed.startRound) <= 0
-				) {
+				timed = timedStateWithAnchor(effect, timed, combat, current);
+				if (String(timed.lastTransitionKey ?? "") === transitionKey) continue;
+
+				const anchorCombatantId = String(timed.anchorCombatantId ?? "");
+				if (!anchorCombatantId || !combatHasCombatant(combat, anchorCombatantId)) {
+					const reanchored = reanchorTimedState(timed, combat, current);
 					await effect.setFlag(FLAG_SCOPE, TIMED_FLAG_KEY, {
-						...foundry.utils.deepClone(timed),
-						combatId: String(combat.id ?? ""),
-						startRound: round,
-						expiredAtRound: 0,
+						...reanchored,
+						lastTransitionKey: transitionKey,
 					});
 					continue;
 				}
 
-				if (round - nonNegativeInteger(timed.startRound) < durationRounds) continue;
+				if (priorCombatantId !== anchorCombatantId) continue;
+				if (priorRound <= nonNegativeInteger(timed.startRound)) {
+					await effect.setFlag(FLAG_SCOPE, TIMED_FLAG_KEY, {
+						...foundry.utils.deepClone(timed),
+						lastTransitionKey: transitionKey,
+					});
+					continue;
+				}
+
+				const completedRounds = nonNegativeInteger(timed.completedRounds) + 1;
+				if (completedRounds < durationRounds) {
+					await effect.setFlag(FLAG_SCOPE, TIMED_FLAG_KEY, {
+						...foundry.utils.deepClone(timed),
+						completedRounds,
+						lastTransitionKey: transitionKey,
+					});
+					continue;
+				}
+
 				await effect.update({
 					disabled: true,
 					"duration.expired": true,
 					[`flags.${FLAG_SCOPE}.${TIMED_FLAG_KEY}`]: {
 						...foundry.utils.deepClone(timed),
-						expiredAtRound: round,
+						completedRounds,
+						lastTransitionKey: transitionKey,
+						expiredAtRound: currentRound,
+						expiredAtTurn: currentTurn,
 					},
 				});
 				refreshActorSheetIfOpen(actor);
@@ -449,7 +499,57 @@ async function processTimedCriticals(combat, round) {
 	}
 }
 
-async function processPeriodicCriticals(combat, round) {
+function timedStateWithAnchor(effect, timed, combat, current) {
+	if (
+		String(timed.combatId ?? "") === String(combat?.id ?? "") &&
+		nonNegativeInteger(timed.startRound) > 0 &&
+		String(timed.anchorCombatantId ?? "")
+	) {
+		return timed;
+	}
+
+	const start = effect?.start ?? {};
+	const sameCombat = String(start.combat ?? "") === String(combat?.id ?? "");
+	const anchorCombatantId = sameCombat
+		? String(start.combatant ?? "")
+		: String(current?.combatantId ?? combat?.combatant?.id ?? "");
+	const startRound = sameCombat
+		? nonNegativeInteger(start.round)
+		: nonNegativeInteger(current?.round ?? combat?.round);
+	const anchorTurn = sameCombat
+		? combatTurnIndex(start.turn)
+		: combatTurnIndex(current?.turn ?? combat?.turn);
+
+	return {
+		...foundry.utils.deepClone(timed),
+		version: VERSION,
+		combatId: String(combat?.id ?? ""),
+		startRound,
+		anchorCombatantId,
+		anchorTurn,
+		completedRounds: nonNegativeInteger(timed.completedRounds),
+		lastTransitionKey: String(timed.lastTransitionKey ?? ""),
+		expiredAtRound: nonNegativeInteger(timed.expiredAtRound),
+		expiredAtTurn: combatTurnIndex(timed.expiredAtTurn),
+	};
+}
+
+function reanchorTimedState(timed, combat, current) {
+	return {
+		...foundry.utils.deepClone(timed),
+		version: VERSION,
+		combatId: String(combat?.id ?? ""),
+		startRound: nonNegativeInteger(current?.round ?? combat?.round),
+		anchorCombatantId: String(current?.combatantId ?? combat?.combatant?.id ?? ""),
+		anchorTurn: combatTurnIndex(current?.turn ?? combat?.turn),
+	};
+}
+
+function processPeriodicCriticals(combat, round) {
+	return processPeriodicCriticalsInternal(combat, round);
+}
+
+async function processPeriodicCriticalsInternal(combat, round) {
 	for (const actor of combatActors(combat)) {
 		for (const wound of actor.items ?? []) {
 			if (wound.type !== "criticalWound") continue;
@@ -619,6 +719,37 @@ function activeCombatForActor(actor) {
 		}
 	}
 	return null;
+}
+
+function combatHasCombatant(combat, combatantId) {
+	const id = String(combatantId ?? "");
+	if (!id) return false;
+	return [...(combat?.combatants ?? [])].some((combatant) => String(combatant.id ?? "") === id);
+}
+
+function isForwardCombatProgression(prior, current) {
+	const priorRound = nonNegativeInteger(prior?.round);
+	const currentRound = nonNegativeInteger(current?.round);
+	if (currentRound <= 0) return false;
+	if (currentRound > priorRound) return true;
+	if (currentRound < priorRound) return false;
+	const priorTurn = combatTurnIndex(prior?.turn);
+	const currentTurn = combatTurnIndex(current?.turn);
+	return priorTurn >= 0 && currentTurn > priorTurn;
+}
+
+function combatTransitionKey(combat, prior, current) {
+	if (!combat?.id) return "";
+	return [
+		String(combat.id),
+		`${nonNegativeInteger(prior?.round)}:${combatTurnIndex(prior?.turn)}:${String(prior?.combatantId ?? "")}`,
+		`${nonNegativeInteger(current?.round)}:${combatTurnIndex(current?.turn)}:${String(current?.combatantId ?? "")}`,
+	].join("|");
+}
+
+function combatTurnIndex(value) {
+	const number = Number(value);
+	return Number.isInteger(number) && number >= 0 ? number : -1;
 }
 
 function effectFlag(effect, key) {
