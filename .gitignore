@@ -15,6 +15,7 @@ dist/
 public/packs/
 public/lang/
 public/help/
+.pack-build/
 
 # Misc
 /test-scripts
@@ -76,7 +77,7 @@ coverage
 # nyc test coverage
 .nyc_output
 
-# Grunt intermediate storage (http://gruntjs.com/creating-plugins#storing-task-files)
+# Grunt intermediate storage used by grunt
 .grunt
 
 # Bower dependency directory (https://bower.io/)
