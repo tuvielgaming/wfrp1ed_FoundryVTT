@@ -185,7 +185,7 @@ export class RuleEffectResolver {
 		targetId,
 		results,
 	}) {
-		if (!effect || !this.#effectAvailable(effect)) {
+		if (!effect || !this.#effectAvailable(effect, sourceItem)) {
 			return;
 		}
 
@@ -252,26 +252,27 @@ export class RuleEffectResolver {
 				if (candidate) {
 					results.push(candidate);
 				}
-			}
 		}
 	}
 
 	/**
-	 * Persistent ActiveEffect state gates discovery. Additional source-state
-	 * semantics (equipped/worn/active spell/disease stage/etc.) belong to the
-	 * source Item contract and can be supplied through `sourcePredicate` until
-	 * those Item types gain audited native data models.
+	 * Persistent ActiveEffect state gates discovery. Actor-owned effects follow
+	 * Foundry's prepared `active` state. Transfer effects embedded in an owned
+	 * Item are different: WFRP's resolver is itself the consumer of their
+	 * declarative changes, so an enabled, non-expired transfer effect remains a
+	 * valid source even if Foundry reports `active === false` for the grandchild
+	 * effect. This is especially important after reloads and for Critical Wounds.
 	 */
-	static #effectAvailable(effect) {
-		if (effect.disabled === true) {
+	static #effectAvailable(effect, sourceItem) {
+		if (effect.disabled === true || effect.duration?.expired === true) {
 			return false;
 		}
 
-		if (effect.active === false) {
-			return false;
+		if (sourceItem) {
+			return effect.transfer !== false;
 		}
 
-		return true;
+		return effect.active !== false;
 	}
 
 	static #sourceItemAvailable(item, options) {
@@ -324,18 +325,30 @@ function normalizeProvidedCandidate(raw, providerId, actor, targetId) {
 
 function ruleChanges(effect) {
 	const flagged = effect?.getFlag?.(RULE_FLAG_SCOPE, RULE_FLAG_KEY);
-
-	if (Array.isArray(flagged)) {
+	if (Array.isArray(flagged) && flagged.length) {
 		return foundry.utils.deepClone(flagged);
 	}
 
+	/* ActiveEffect changes are a top-level Foundry field. Prefer that canonical
+	 * source before the transitional system.changes compatibility copy. */
+	const source = effect?.toObject?.() ?? {};
+	const nativeChanges = Array.isArray(source.changes)
+		? source.changes
+		: Array.isArray(effect?.changes)
+			? effect.changes
+			: [];
+	if (nativeChanges.length) {
+		return foundry.utils.deepClone(
+			nativeChanges.filter((change) => Boolean(decodeRuleEffectChange(change))),
+		);
+	}
+
 	const system = effect?.system?.toObject?.() ?? {};
-	const changes = Array.isArray(system.changes)
+	const compatibilityChanges = Array.isArray(system.changes)
 		? system.changes
 		: [];
-
 	return foundry.utils.deepClone(
-		changes.filter((change) => Boolean(decodeRuleEffectChange(change))),
+		compatibilityChanges.filter((change) => Boolean(decodeRuleEffectChange(change))),
 	);
 }
 
