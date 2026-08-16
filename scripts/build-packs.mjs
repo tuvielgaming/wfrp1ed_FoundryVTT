@@ -12,12 +12,12 @@ const SOURCE_ROOT = join(ROOT, ".pack-build");
 const PACK_ROOT = join(ROOT, "packs");
 
 const PACKS = Object.freeze([
-	pack("core-skills-en", "Item", () => coreSkillItemSources("en")),
-	pack("core-skills-pl", "Item", () => coreSkillItemSources("pl")),
-	pack("core-critical-wounds-en", "Item", () => coreCriticalWoundItemSources("en")),
-	pack("core-critical-wounds-pl", "Item", () => coreCriticalWoundItemSources("pl")),
-	pack("core-critical-tables-en", "RollTable", () => coreCriticalTableSources("en")),
-	pack("core-critical-tables-pl", "RollTable", () => coreCriticalTableSources("pl")),
+	pack("core-skills-en", "Item", 133, () => coreSkillItemSources("en")),
+	pack("core-skills-pl", "Item", 134, () => coreSkillItemSources("pl")),
+	pack("core-critical-wounds-en", "Item", 64, () => coreCriticalWoundItemSources("en")),
+	pack("core-critical-wounds-pl", "Item", 64, () => coreCriticalWoundItemSources("pl")),
+	pack("core-critical-tables-en", "RollTable", 16, () => coreCriticalTableSources("en")),
+	pack("core-critical-tables-pl", "RollTable", 16, () => coreCriticalTableSources("pl")),
 ]);
 
 await rm(SOURCE_ROOT, { recursive: true, force: true });
@@ -32,6 +32,8 @@ for (const definition of PACKS) {
 
 	const documents = definition.documents().map((source, index) =>
 		prepareDocument(definition, source, index));
+	validatePack(definition, documents);
+
 	for (const document of documents) {
 		const fileName = `${safeFileName(document.name)}_${document._id}.json`;
 		await writeFile(
@@ -50,8 +52,28 @@ for (const definition of PACKS) {
 await rm(SOURCE_ROOT, { recursive: true, force: true });
 console.log("WFRP1ED | Core compendium build complete.");
 
-function pack(name, documentType, documents) {
-	return Object.freeze({ name, documentType, documents });
+function pack(name, documentType, expectedCount, documents) {
+	return Object.freeze({ name, documentType, expectedCount, documents });
+}
+
+function validatePack(definition, documents) {
+	if (documents.length !== definition.expectedCount) {
+		throw new Error(
+			`${definition.name} produced ${documents.length} documents; expected ${definition.expectedCount}.`,
+		);
+	}
+
+	const ids = new Set();
+	for (const document of documents) {
+		const id = String(document._id ?? "");
+		if (!/^[A-Za-z0-9]{16}$/.test(id)) {
+			throw new Error(`${definition.name} contains invalid document id '${id}'.`);
+		}
+		if (ids.has(id)) {
+			throw new Error(`${definition.name} contains duplicate document id '${id}'.`);
+		}
+		ids.add(id);
+	}
 }
 
 function prepareDocument(packDefinition, source, index) {
