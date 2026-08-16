@@ -7,11 +7,7 @@
 		"minimum": 14,
 		"verified": 14
 	},
-	"authors": [
-		{
-			"name": "Tuviel"
-		}
-	],
+	"authors": [{"name": "Tuviel"}],
 	"esmodules": [
 		"module/effects/WfrpActiveEffectCompatibility.mjs",
 		"module/settings/WfrpRuleSettings.mjs",
@@ -39,6 +35,7 @@
 		"module/criticals/CriticalBootstrap.mjs",
 		"module/criticals/CriticalWoundCharacteristicEffects.mjs",
 		"module/criticals/CriticalConsequenceEngine.mjs",
+		"module/criticals/CriticalConsequencePersistence.mjs",
 		"module/criticals/CriticalWoundPersistenceIntegration.mjs",
 		"module/criticals/CriticalWoundManagedEffectFallback.mjs",
 		"module/rules/FractionalCharacteristicPolicy.mjs",
@@ -106,106 +103,26 @@
 	"scripts": [],
 	"socket": true,
 	"packs": [
-		{
-			"name": "core-skills-en",
-			"label": "WFRP 1e Core — Skills (English)",
-			"path": "packs/core-skills-en",
-			"type": "Item",
-			"system": "wfrp1ed"
-		},
-		{
-			"name": "core-skills-pl",
-			"label": "WFRP 1e Core — Umiejętności (Polski)",
-			"path": "packs/core-skills-pl",
-			"type": "Item",
-			"system": "wfrp1ed"
-		},
-		{
-			"name": "core-critical-wounds-en",
-			"label": "WFRP 1e Core — Critical Wounds (English)",
-			"path": "packs/core-critical-wounds-en",
-			"type": "Item",
-			"system": "wfrp1ed"
-		},
-		{
-			"name": "core-critical-wounds-pl",
-			"label": "WFRP 1e Core — Rany krytyczne (Polski)",
-			"path": "packs/core-critical-wounds-pl",
-			"type": "Item",
-			"system": "wfrp1ed"
-		},
-		{
-			"name": "core-critical-tables-en",
-			"label": "WFRP 1e Core — Critical Tables (English)",
-			"path": "packs/core-critical-tables-en",
-			"type": "RollTable",
-			"system": "wfrp1ed"
-		},
-		{
-			"name": "core-critical-tables-pl",
-			"label": "WFRP 1e Core — Tabele krytyczne (Polski)",
-			"path": "packs/core-critical-tables-pl",
-			"type": "RollTable",
-			"system": "wfrp1ed"
-		}
+		{"name":"core-skills-en","label":"WFRP 1e Core — Skills (English)","path":"packs/core-skills-en","type":"Item","system":"wfrp1ed"},
+		{"name":"core-skills-pl","label":"WFRP 1e Core — Umiejętności (Polski)","path":"packs/core-skills-pl","type":"Item","system":"wfrp1ed"},
+		{"name":"core-critical-wounds-en","label":"WFRP 1e Core — Critical Wounds (English)","path":"packs/core-critical-wounds-en","type":"Item","system":"wfrp1ed"},
+		{"name":"core-critical-wounds-pl","label":"WFRP 1e Core — Rany krytyczne (Polski)","path":"packs/core-critical-wounds-pl","type":"Item","system":"wfrp1ed"},
+		{"name":"core-critical-tables-en","label":"WFRP 1e Core — Critical Tables (English)","path":"packs/core-critical-tables-en","type":"RollTable","system":"wfrp1ed"},
+		{"name":"core-critical-tables-pl","label":"WFRP 1e Core — Tabele krytyczne (Polski)","path":"packs/core-critical-tables-pl","type":"RollTable","system":"wfrp1ed"}
 	],
 	"packFolders": [
-		{
-			"name": "WFRP 1e Core — English",
-			"sorting": "a",
-			"packs": [
-				"core-skills-en",
-				"core-critical-wounds-en",
-				"core-critical-tables-en"
-			]
-		},
-		{
-			"name": "WFRP 1e Core — Polski",
-			"sorting": "a",
-			"packs": [
-				"core-skills-pl",
-				"core-critical-wounds-pl",
-				"core-critical-tables-pl"
-			]
-		}
+		{"name":"WFRP 1e Core — English","sorting":"a","packs":["core-skills-en","core-critical-wounds-en","core-critical-tables-en"]},
+		{"name":"WFRP 1e Core — Polski","sorting":"a","packs":["core-skills-pl","core-critical-wounds-pl","core-critical-tables-pl"]}
 	],
 	"languages": [
-		{
-			"lang": "en",
-			"name": "English",
-			"path": "lang/en.json"
-		},
-		{
-			"lang": "pl",
-			"name": "Polski",
-			"path": "lang/pl.json"
-		}
+		{"lang":"en","name":"English","path":"lang/en.json"},
+		{"lang":"pl","name":"Polski","path":"lang/pl.json"}
 	],
 	"documentTypes": {
-		"ActiveEffect": {
-			"wfrp": {}
-		},
-		"Actor": {
-			"character": {},
-			"npc": {},
-			"creature": {},
-			"vehicle": {},
-			"lootPile": {}
-		},
-		"Item": {
-			"career": {},
-			"skill": {},
-			"criticalWound": {},
-			"weapon": {},
-			"armour": {},
-			"equipment": {},
-			"trait": {},
-			"spell": {}
-		}
+		"ActiveEffect": {"wfrp": {}},
+		"Actor": {"character": {},"npc": {},"creature": {},"vehicle": {},"lootPile": {}},
+		"Item": {"career": {},"skill": {},"criticalWound": {},"weapon": {},"armour": {},"equipment": {},"trait": {},"spell": {}}
 	},
 	"background": "systems/wfrp1ed/WFRP1ed.jpg",
-	"grid": {
-		"distance": 5,
-		"units": "ft"
-	}
+	"grid": {"distance": 5,"units": "ft"}
 }
