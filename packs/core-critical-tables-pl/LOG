@@ -1,0 +1,5 @@
+2026/08/16-11:22:09.004 1500 Delete type=3 #1
+2026/08/16-11:22:09.009 6058 Level-0 table #5: started
+2026/08/16-11:22:09.013 6058 Level-0 table #5: 24856 bytes OK
+2026/08/16-11:22:09.015 6058 Delete type=0 #3
+2026/08/16-11:22:09.016 6058 Manual compaction at level-0 from '!tables!wfrpCritDCH00001' @ 72057594037927935 : 1 .. '!tables.results!wfrpCritSD000006.ae2131ccfcb56e77' @ 0 : 0; will stop at (end)
