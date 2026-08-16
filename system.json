@@ -14,6 +14,7 @@
 	],
 	"esmodules": [
 		"module/effects/WfrpActiveEffectCompatibility.mjs",
+		"module/settings/WfrpRuleSettings.mjs",
 		"module/wfrp1ed.mjs",
 		"module/careers/CareerSheetIntegration.mjs",
 		"module/tests/TestResultAudienceVisibility.mjs",
