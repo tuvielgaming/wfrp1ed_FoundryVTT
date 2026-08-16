@@ -2,11 +2,11 @@ import { createHash } from "node:crypto";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { compilePack } from "@foundryvtt/foundryvtt-cli";
 import { coreCriticalTableSources } from "../module/core/CoreCriticalTableCatalog.mjs";
 import { coreCriticalWoundItemSources } from "../module/core/CoreCriticalWoundCatalog.mjs";
 import { coreSkillItemSources } from "../module/core/CoreSkillCatalog.mjs";
 
+const compilePack = await loadCompilePack();
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const SOURCE_ROOT = join(ROOT, ".pack-build");
 const PACK_ROOT = join(ROOT, "packs");
@@ -51,6 +51,44 @@ for (const definition of PACKS) {
 
 await rm(SOURCE_ROOT, { recursive: true, force: true });
 console.log("WFRP1ED | Core compendium build complete.");
+
+async function loadCompilePack() {
+	/*
+	 * The published 0.0.6 package has existed in more than one packaging shape:
+	 * the current source entry point re-exports compilePack, while some npm
+	 * installs expose the implementation only from lib/package.mjs. Prefer the
+	 * public API, but support that published-package layout as a compatibility
+	 * fallback so the repository build is deterministic across both variants.
+	 */
+	try {
+		const api = await import("@foundryvtt/foundryvtt-cli");
+		if (typeof api.compilePack === "function") return api.compilePack;
+	} catch (error) {
+		if (error?.code !== "ERR_PACKAGE_PATH_NOT_EXPORTED") {
+			console.warn(
+				"WFRP1ED | Foundry CLI root API did not expose compilePack; trying its package implementation.",
+			);
+		}
+	}
+
+	try {
+		const implementation = await import(
+			"@foundryvtt/foundryvtt-cli/lib/package.mjs"
+		);
+		if (typeof implementation.compilePack === "function") {
+			return implementation.compilePack;
+		}
+	} catch (error) {
+		throw new Error(
+			"Unable to load compilePack from @foundryvtt/foundryvtt-cli. Run 'npm install' and verify that the installed CLI package contains lib/package.mjs.",
+			{ cause: error },
+		);
+	}
+
+	throw new Error(
+		"@foundryvtt/foundryvtt-cli is installed, but neither its public API nor lib/package.mjs exposes compilePack.",
+	);
+}
 
 function pack(name, documentType, expectedCount, documents) {
 	return Object.freeze({ name, documentType, expectedCount, documents });
