@@ -35,6 +35,7 @@ export class CriticalWoundItemSheet extends HandlebarsApplicationMixin(
 		},
 		tag: "form",
 		form: {
+			handler: this.#handleFormSubmit,
 			submitOnChange: true,
 			closeOnSubmit: false,
 		},
@@ -82,6 +83,34 @@ export class CriticalWoundItemSheet extends HandlebarsApplicationMixin(
 				void updateConsequenceCharacteristic(this.document, event.currentTarget);
 			});
 		}
+	}
+
+	/**
+	 * Persist only the form control which actually changed.
+	 *
+	 * Foundry ApplicationV2 expands the entire submitted form into an update
+	 * object. The characteristic editor deliberately uses an array which is
+	 * updated transactionally by its own handlers; submitting the rest of the
+	 * form at the same time can therefore replace `system.consequence` with a
+	 * partial object and erase sibling fields. A per-control update avoids that
+	 * destructive race and also keeps Add/Remove Change actions independent.
+	 *
+	 * @this {CriticalWoundItemSheet}
+	 */
+	static async #handleFormSubmit(event, _form, _formData) {
+		if (!this.isEditable) return;
+		const control = event?.target;
+		if (!isFormControl(control)) return;
+
+		/* Characteristic rows have an explicit array-aware update handler. Ignore
+		 * the same bubbling change event here so the two update paths cannot race. */
+		if (control.dataset?.consequenceCharacteristicField) return;
+
+		const name = String(control.name ?? "").trim();
+		if (!name) return;
+		await this.document.update({
+			[name]: formControlValue(control),
+		});
 	}
 
 	/** @this {CriticalWoundItemSheet} */
@@ -196,6 +225,25 @@ async function updateConsequenceCharacteristic(item, input) {
 		"system.consequence.enabled": true,
 		"system.consequence.characteristics": consequence.characteristics,
 	});
+}
+
+function isFormControl(value) {
+	return Boolean(
+		value &&
+		typeof value === "object" &&
+		["INPUT", "SELECT", "TEXTAREA"].includes(String(value.tagName ?? "")),
+	);
+}
+
+function formControlValue(control) {
+	if (String(control.type ?? "").toLowerCase() === "checkbox") {
+		return control.checked === true;
+	}
+	if (String(control.type ?? "").toLowerCase() === "number") {
+		const number = Number(control.value);
+		return Number.isFinite(number) ? number : 0;
+	}
+	return String(control.value ?? "");
 }
 
 function buildDescriptionPresentation(item) {
