@@ -70,6 +70,32 @@ export class Wfrp1edCombat extends foundry.documents.Combat {
 	}
 
 	/**
+	 * Starting combat fills only missing Initiative scores from the Core I
+	 * characteristic. Explicit finite values entered by the GM before combat are
+	 * preserved as adjudication/override values and become that round's baseline.
+	 *
+	 * @inheritDoc
+	 */
+	async startCombat() {
+		if (!this.started) {
+			const missing = [...this.combatants]
+				.filter((combatant) => !Number.isFinite(Number(combatant.initiative)))
+				.map((combatant) => String(combatant.id));
+
+			if (missing.length) {
+				await this.rollInitiative(missing, {
+					updateTurn: false,
+					[CORE_INITIATIVE_OPTION]: true,
+				});
+			}
+			await CombatRoundInitiativeOrder.captureCombatBaselines(this, {
+				force: true,
+			});
+		}
+		return super.startCombat();
+	}
+
+	/**
 	 * WFRP turn advancement follows unfinished round-turn state rather than the
 	 * current numeric turn index. This is necessary because the GM may reorder
 	 * initiative during the round.
