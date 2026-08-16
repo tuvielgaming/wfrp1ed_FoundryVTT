@@ -13,10 +13,11 @@ let chatRefreshQueued = false;
 /**
  * Closed combat transactions are immutable until Damage is explicitly reverted.
  *
- * This is both a presentation and an authority boundary. The render pass makes
- * the state obvious by removing all intermediate adjudication affordances, while
- * preUpdateChatMessage and the socket-facing d100 commit guard protect against
- * stale DOM, sockets or programmatic edits.
+ * The normal UX is visual rather than notification-driven: when Apply Damage
+ * closes the transaction, Attack/Defence/Additional-Damage cards rerender with
+ * their adjudication inputs read-only. Authority guards remain as a defensive
+ * fallback for stale DOM/socket requests, but a stale edit is treated as a
+ * harmless no-op and the Chat is refreshed instead of showing an error toast.
  */
 Hooks.once("init", () => {
 	installRollCommitGuard();
@@ -57,7 +58,14 @@ function installRollCommitGuard() {
 		requestingUser,
 	) {
 		if (isCombatTestAdjudicationLocked(message)) {
-			throw new Error(combatTestLockReason());
+			/*
+			 * A correctly rerendered card is already read-only, so this branch is
+			 * only for a stale DOM/socket race. Do not turn that implementation race
+			 * into a user-facing warning: restore the authoritative presentation and
+			 * return the unchanged snapshot.
+			 */
+			requestChatRefresh();
+			return closedRollSnapshot(message);
 		}
 		return original.call(this, message, value, requestingUser);
 	};
@@ -67,6 +75,19 @@ function installRollCommitGuard() {
 		"__wfrpCombatTransactionLockInstalled",
 		{ value: true, configurable: false, enumerable: false },
 	);
+}
+
+function closedRollSnapshot(message) {
+	const state = message?.getFlag?.(FLAG_SCOPE, TEST_FLAG_KEY) ?? {};
+	const roll = Number(state.roll);
+	const originalRoll = Number(state.originalRoll ?? state.roll);
+	return Object.freeze({
+		messageId: String(message?.id ?? ""),
+		roll: Number.isFinite(roll) ? roll : null,
+		originalRoll: Number.isFinite(originalRoll) ? originalRoll : null,
+		rollEdited: state.rollEdited === true,
+		locked: true,
+	});
 }
 
 function lockRenderedCombatTest(html) {
@@ -85,13 +106,15 @@ function lockRenderedCombatTest(html) {
 		"[data-wfrp-test-roll-value]",
 		"[data-wfrp-test-general-modifier]",
 	]) {
-		const input = card.querySelector(selector);
-		if (!(input instanceof HTMLInputElement)) continue;
-		input.readOnly = true;
-		input.tabIndex = -1;
-		input.classList.remove("is-editable");
-		input.classList.add("is-readonly");
-		input.title = reason;
+		for (const input of card.querySelectorAll(selector)) {
+			if (!(input instanceof HTMLInputElement)) continue;
+			input.readOnly = true;
+			input.setAttribute("aria-readonly", "true");
+			input.tabIndex = -1;
+			input.classList.remove("is-editable");
+			input.classList.add("is-readonly");
+			input.title = reason;
+		}
 	}
 
 	for (const selector of [
