@@ -16,13 +16,13 @@ const CORE_INITIATIVE_OPTION = "wfrpCoreInitiative";
  * deliberately remain equal; Foundry may serialize their UI turns, but the WFRP
  * rules layer treats the shared Initiative score as one simultaneous band.
  *
+ * The numeric Initiative score and the current-round list order are intentionally
+ * separate. Initiative is the WFRP rules value and the Critical-clock coordinate.
+ * Delaying/reordering a Combatant changes only the temporary round list position.
+ *
  * Round start is the authoritative reset point for current-round Attack/parry
  * resources. Starting a Combatant turn only opens that Combatant's attack
  * window; it never restores Attacks already lost to same-round parries.
- *
- * Initiative edits made during a started round are temporary. Turn completion
- * is tracked separately from initiative position, so postponing the current
- * Combatant cannot accidentally make Foundry think the whole round is over.
  *
  * `parryDebtReminder` is presentation-only. Default-mode debt must survive the
  * end-of-round transition, remain visible after it is paid at the Combatant's
@@ -30,6 +30,19 @@ const CORE_INITIATIVE_OPTION = "wfrpCoreInitiative";
  * the turn with Next Turn. Initiative focus changes must not clear it.
  */
 export class Wfrp1edCombat extends foundry.documents.Combat {
+	/**
+	 * Foundry calls this comparator when setupTurns builds the Combat.turns list.
+	 * During a WFRP round, use our explicit round-order positions. Before combat
+	 * and during round transitions, fall back to Foundry's normal Initiative sort.
+	 *
+	 * @inheritDoc
+	 */
+	_sortCombatants(left, right) {
+		const roundOrder = CombatRoundInitiativeOrder.compare(this, left, right);
+		if (roundOrder !== null && roundOrder !== 0) return roundOrder;
+		return super._sortCombatants(left, right);
+	}
+
 	/**
 	 * Foundry's Roll Initiative action becomes the Core WFRP procedure: assign
 	 * each requested Combatant their Actor's current Initiative characteristic.
@@ -70,20 +83,17 @@ export class Wfrp1edCombat extends foundry.documents.Combat {
 	}
 
 	/**
-	 * Starting combat fills only missing Initiative scores from the Core I
-	 * characteristic. Explicit finite values entered by the GM before combat are
-	 * preserved as adjudication/override values and become that round's baseline.
+	 * Starting combat always resolves Core Initiative for every Combatant. Any
+	 * stale or manually entered pre-combat number is replaced by the current WFRP
+	 * Initiative value so the encounter starts from one authoritative procedure.
 	 *
 	 * @inheritDoc
 	 */
 	async startCombat() {
 		if (!this.started) {
-			const missing = [...this.combatants]
-				.filter((combatant) => !Number.isFinite(Number(combatant.initiative)))
-				.map((combatant) => String(combatant.id));
-
-			if (missing.length) {
-				await this.rollInitiative(missing, {
+			const ids = [...this.combatants].map((combatant) => String(combatant.id));
+			if (ids.length) {
+				await this.rollInitiative(ids, {
 					updateTurn: false,
 					[CORE_INITIATIVE_OPTION]: true,
 				});
@@ -98,7 +108,7 @@ export class Wfrp1edCombat extends foundry.documents.Combat {
 	/**
 	 * WFRP turn advancement follows unfinished round-turn state rather than the
 	 * current numeric turn index. This is necessary because the GM may reorder
-	 * initiative during the round.
+	 * the temporary round list without changing Initiative values.
 	 *
 	 * The Combatant whose turn is currently focused is marked complete only when
 	 * the GM/player actually presses Next Turn. A drag-based postponement changes
@@ -126,14 +136,13 @@ export class Wfrp1edCombat extends foundry.documents.Combat {
 
 	/**
 	 * End-of-round is the immutable clock safety boundary. It is emitted before
-	 * temporary initiative is restored, so a clock point made unreachable by a
-	 * death, Skip Defeated, or a temporary reorder still completes exactly one
-	 * full cycle before the round is allowed to advance.
+	 * the temporary list order is cleared, so the clock sees the round exactly as
+	 * it was played.
 	 *
-	 * After that boundary has resolved, the next round rebuilds canonical order
-	 * from each Actor's current Initiative characteristic. Any temporary reorder
-	 * from the completed round is discarded, while real characteristic changes
-	 * are naturally reflected in the following round.
+	 * After the clock resolves, discard only the temporary order, refresh every
+	 * Combatant's real Initiative from the Actor, and let Foundry select the next
+	 * round's first turn from those Initiative values. _onStartRound then snapshots
+	 * that canonical order as the new mutable round list.
 	 *
 	 * @inheritDoc
 	 */
@@ -162,12 +171,12 @@ export class Wfrp1edCombat extends foundry.documents.Combat {
 	async _onStartRound(context) {
 		await super._onStartRound(context);
 
-		/* Round 1 establishes the baseline after any pre-combat initiative action. */
-		if (Number(this.round) === 1) {
-			await CombatRoundInitiativeOrder.captureCombatBaselines(this, {
-				force: true,
-			});
-		}
+		/* Every round receives a canonical Initiative snapshot and an independent
+		 * mutable list order. The latter is what tracker drag changes. */
+		await CombatRoundInitiativeOrder.captureCombatBaselines(this, {
+			force: true,
+		});
+		await CombatRoundInitiativeOrder.initializeRound(this);
 
 		await CombatRoundTurnState.resetRound(this);
 		await CombatAttackEconomy.startRound(this);
@@ -220,10 +229,27 @@ export class Wfrp1edCombat extends foundry.documents.Combat {
 		}
 	}
 
-	/** @inheritDoc */
+	/**
+	 * A Combatant joining the encounter immediately receives Core Initiative.
+	 * If combat is already running, insert the new row at its canonical Initiative
+	 * rank without disturbing the relative temporary order of existing rows.
+	 *
+	 * @inheritDoc
+	 */
 	async _onEnter(combatant) {
 		await super._onEnter(combatant);
-		await CombatRoundInitiativeOrder.captureBaseline(combatant);
+
+		await this.rollInitiative([String(combatant.id)], {
+			updateTurn: false,
+			[CORE_INITIATIVE_OPTION]: true,
+		});
+		await CombatRoundInitiativeOrder.captureBaseline(combatant, {
+			force: true,
+		});
+		if (this.started && Number(this.round) > 0) {
+			await CombatRoundInitiativeOrder.insertCombatant(this, combatant);
+		}
+
 		await CombatRoundTurnState.initializeCombatant(combatant);
 		await CombatAttackEconomy.initializeCombatant(combatant);
 		await CombatDodgeEconomy.initializeCombatant(combatant);
