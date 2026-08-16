@@ -159,6 +159,28 @@ Partial snippets are avoided whenever possible.
 - Verify before modifying.
 - Keep architecture consistent with Foundry VTT v14.
 
+## Core Compendium Build
+
+Bundled Core content is authored as deterministic JavaScript source catalogues
+under `module/core/` and compiled into Foundry v14 LevelDB packs. Do not hand-edit
+the generated `packs/` database files.
+
+After cloning/pulling a change that modifies Core compendium content:
+
+```bash
+npm install
+npm run build:packs
+```
+
+The build validates the expected Core document counts and writes the bundled
+compendium directories declared by `system.json` under `packs/`.
+
+The current Core catalogue foundation includes localized Skill Items, detailed
+Critical Wound Item templates, and the Core detailed/Sudden Death Critical
+RollTables. Additional Core content types (careers, equipment, weapons, armour,
+spells, and related items) should extend this same source-first build pipeline as
+their native data models and rule consumers are audited.
+
 ## Long-Term Vision
 
 The first milestone is a campaign-ready implementation of the Polish Classic
