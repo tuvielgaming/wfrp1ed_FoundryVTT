@@ -25,7 +25,10 @@ const RUNTIME_FLAG_KEY = "criticalConsequenceRuntime";
 const EFFECT_FLAG_KEY = "criticalConsequenceEffect";
 const PERIODIC_FLAG_KEY = "criticalPeriodic";
 const TIMED_FLAG_KEY = "criticalTimed";
-const VERSION = 2;
+const RULE_CHANGES_FLAG_KEY = "ruleChanges";
+const DAMAGE_STATE_FLAG_KEY = "damageState";
+const CRITICAL_RESULT_FLAG_KEY = "criticalResult";
+const VERSION = 3;
 const processingRounds = new Set();
 
 /**
@@ -168,6 +171,9 @@ async function createManagedEffects(wound, definition, resolved) {
 			}),
 		);
 		const flags = consequenceEffectFlags(wound, "characteristics", resolved);
+		/* Persist the same canonical change payload consumed by RuleEffectResolver
+		 * immediately, rather than waiting for an asynchronous repair hook. */
+		flags[FLAG_SCOPE][RULE_CHANGES_FLAG_KEY] = foundry.utils.deepClone(changes);
 		if (resolved.duration?.units === "rounds") {
 			flags[FLAG_SCOPE][TIMED_FLAG_KEY] = timedStateFor(
 				wound.parent,
@@ -251,6 +257,15 @@ async function ensurePhysicalArmSide(wound) {
 	if (current === "leftArm" || current === "rightArm") return current;
 	if (current !== "arm") return current;
 
+	/* A Critical Wound materialized from attack damage already has authoritative
+	 * left/right hit-location provenance. Recover it defensively before offering
+	 * the manual Compendium-template dialog. */
+	const inherited = physicalArmFromResolutionProvenance(wound);
+	if (inherited) {
+		await wound.update({ "system.hitLocation": inherited });
+		return inherited;
+	}
+
 	const { DialogV2 } = foundry.applications.api;
 	const choice = await DialogV2.wait({
 		window: {
@@ -285,6 +300,25 @@ async function ensurePhysicalArmSide(wound) {
 	}
 	await wound.update({ "system.hitLocation": choice });
 	return choice;
+}
+
+function physicalArmFromResolutionProvenance(wound) {
+	const resolution = wound.system?.resolution ?? {};
+	const sourceMessage = game.messages?.get(String(resolution.sourceMessageId ?? ""));
+	const sourceLocation = sourceMessage
+		?.getFlag?.(FLAG_SCOPE, DAMAGE_STATE_FLAG_KEY)
+		?.packet?.hitLocation;
+	if (isPhysicalArm(sourceLocation)) return String(sourceLocation);
+
+	const resultMessage = game.messages?.get(String(resolution.resultMessageId ?? ""));
+	const resultLocation = resultMessage
+		?.getFlag?.(FLAG_SCOPE, CRITICAL_RESULT_FLAG_KEY)
+		?.resolution?.hitLocation;
+	return isPhysicalArm(resultLocation) ? String(resultLocation) : "";
+}
+
+function isPhysicalArm(value) {
+	return value === "leftArm" || value === "rightArm";
 }
 
 async function executeDropHeld(wound, mode) {
@@ -337,7 +371,10 @@ async function processTimedCriticals(combat, round) {
 			if (wound.type !== "criticalWound") continue;
 			for (const effect of wound.effects ?? []) {
 				const timed = effectFlag(effect, TIMED_FLAG_KEY);
-				if (!timed || effect.disabled === true || effect.duration?.expired === true) continue;
+				if (!timed || effect.disabled === true) continue;
+				/* The WFRP timer owns expiry. Foundry's prepared duration may already
+				 * report expired for an Item grandchild before our round anchor ends. */
+				if (positiveInteger(timed.expiredAtRound)) continue;
 				const durationRounds = positiveInteger(timed.durationRounds);
 				if (!durationRounds || String(timed.units ?? "") !== "rounds") continue;
 
