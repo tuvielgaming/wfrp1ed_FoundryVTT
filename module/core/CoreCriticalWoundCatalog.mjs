@@ -132,7 +132,9 @@ function characteristicActiveEffectSource(location, effectNumber, effects, langu
 		flags: {
 			wfrp1ed: {
 				ruleChanges: structuredCloneSafe(changes),
-				coreCatalogEffect: {
+				/* Use the exact provenance key owned by the runtime synchronizer so a
+				 * Compendium-dragged wound is not given a duplicate managed effect. */
+				coreCriticalConsequence: {
 					version: CORE_CATALOG_VERSION,
 					location,
 					effectNumber,
