@@ -27,7 +27,7 @@ const TIMED_FLAG_KEY = "criticalTimed";
 const RULE_CHANGES_FLAG_KEY = "ruleChanges";
 const DAMAGE_STATE_FLAG_KEY = "damageState";
 const CRITICAL_RESULT_FLAG_KEY = "criticalResult";
-const VERSION = 9;
+const VERSION = 10;
 const processingTurns = new Set();
 let processingWorldTime = false;
 
@@ -101,9 +101,8 @@ Hooks.on("createItem", (item) => {
  * Round-based characteristic effects and periodic damage are both anchored to
  * the initiative position at which the wound was applied. The partial remainder
  * of that turn/round never consumes a declared round and never causes an early
- * periodic tick. Because Foundry exposes turn boundaries rather than the exact
- * instant inside a turn, a completed cycle is counted when leaving the anchor
- * combatant on a later round; this is deliberately conservative.
+ * periodic tick. A complete cycle is reached when initiative re-enters the
+ * anchor combatant's turn on a later round.
  */
 Hooks.on("combatTurnChange", (combat, prior, current) => {
 	if (!isPrimaryActiveGm() || !isForwardCombatProgression(prior, current)) return;
@@ -218,7 +217,7 @@ async function createManagedEffects(wound, definition, resolved) {
 					value: resolved.duration.value,
 					units: resolved.duration.units,
 					expired: false,
-					expiry: resolved.duration.units === "rounds" ? "turnEnd" : null,
+					expiry: resolved.duration.units === "rounds" ? "turnStart" : null,
 				},
 			} : {}),
 			flags,
@@ -426,7 +425,6 @@ function relativeHandForPhysicalArm(actor, hitLocation) {
 }
 
 async function processTimedCriticalTurnChange(combat, prior, current, transitionKey) {
-	const priorRound = nonNegativeInteger(prior?.round);
 	const currentRound = nonNegativeInteger(current?.round ?? combat.round);
 	const currentTurn = combatTurnIndex(current?.turn ?? combat.turn);
 
@@ -461,8 +459,8 @@ async function processTimedCriticalTurnChange(combat, prior, current, transition
 					continue;
 				}
 
-				if (!transitionLeavesInitiativeAnchor(timed, combat, prior)) continue;
-				if (priorRound <= nonNegativeInteger(timed.startRound)) {
+				if (!transitionEntersInitiativeAnchor(timed, combat, current)) continue;
+				if (currentRound <= nonNegativeInteger(timed.startRound)) {
 					await effect.setFlag(FLAG_SCOPE, TIMED_FLAG_KEY, {
 						...foundry.utils.deepClone(timed),
 						lastTransitionKey: transitionKey,
@@ -538,7 +536,6 @@ function reanchorTimedState(timed, combat, current) {
 }
 
 async function processPeriodicCriticalTurnChange(combat, prior, current, transitionKey) {
-	const priorRound = nonNegativeInteger(prior?.round);
 	const currentRound = nonNegativeInteger(current?.round ?? combat.round);
 
 	for (const actor of combatActors(combat)) {
@@ -570,8 +567,8 @@ async function processPeriodicCriticalTurnChange(combat, prior, current, transit
 					continue;
 				}
 
-				if (!transitionLeavesInitiativeAnchor(periodic, combat, prior)) continue;
-				if (priorRound <= nonNegativeInteger(periodic.startRound)) {
+				if (!transitionEntersInitiativeAnchor(periodic, combat, current)) continue;
+				if (currentRound <= nonNegativeInteger(periodic.startRound)) {
 					await effect.setFlag(FLAG_SCOPE, PERIODIC_FLAG_KEY, {
 						...foundry.utils.deepClone(periodic),
 						lastTransitionKey: transitionKey,
@@ -787,14 +784,14 @@ function initiativeStateHasAnchor(state, combat) {
 	);
 }
 
-function transitionLeavesInitiativeAnchor(state, combat, prior) {
+function transitionEntersInitiativeAnchor(state, combat, current) {
 	const anchorCombatantId = String(state?.anchorCombatantId ?? "");
-	const priorCombatantId = String(prior?.combatantId ?? "");
-	if (anchorCombatantId && priorCombatantId === anchorCombatantId) return true;
+	const currentCombatantId = String(current?.combatantId ?? "");
+	if (anchorCombatantId && currentCombatantId === anchorCombatantId) return true;
 
 	const anchorTurn = combatTurnIndex(state?.anchorTurn);
-	const priorTurn = combatTurnIndex(prior?.turn);
-	if (anchorTurn < 0 || priorTurn !== anchorTurn) return false;
+	const currentTurn = combatTurnIndex(current?.turn);
+	if (anchorTurn < 0 || currentTurn !== anchorTurn) return false;
 
 	const anchoredCombatant = combat?.turns?.[anchorTurn];
 	return !anchorCombatantId || String(anchoredCombatant?.id ?? "") === anchorCombatantId;
