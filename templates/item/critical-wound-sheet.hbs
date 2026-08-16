@@ -91,15 +91,6 @@
     <section class="critical-wound-sheet__consequence-block critical-wound-sheet__consequence-block--characteristics">
       <div class="critical-wound-sheet__subheading">
         <strong>{{ui.characteristics}}</strong>
-        {{#if editable}}
-          <button
-            type="button"
-            data-action="addConsequenceCharacteristic"
-          >
-            <i class="fa-solid fa-plus" aria-hidden="true"></i>
-            {{ui.addCharacteristic}}
-          </button>
-        {{/if}}
       </div>
 
       <div class="critical-wound-sheet__consequence-grid">
@@ -133,6 +124,18 @@
             {{selectOptions ui.untilOptions selected=consequence.duration.until localize=false}}
           </select>
         </label>
+
+        {{#if editable}}
+          <div class="critical-wound-sheet__subheading">
+            <button
+              type="button"
+              data-action="addConsequenceCharacteristic"
+            >
+              <i class="fa-solid fa-plus" aria-hidden="true"></i>
+              {{ui.addCharacteristic}}
+            </button>
+          </div>
+        {{/if}}
       </div>
 
       {{#if consequence.characteristics.length}}
@@ -182,7 +185,7 @@
 
     <section class="critical-wound-sheet__consequence-block critical-wound-sheet__consequence-block--periodic">
       <div class="critical-wound-sheet__subheading">
-        <strong>{{ui.periodicWounds}}</strong>
+        <strong>{{ui.periodicWoundsHeading}}</strong>
       </div>
 
       <div class="critical-wound-sheet__consequence-grid critical-wound-sheet__consequence-grid--periodic">
