@@ -3,6 +3,7 @@ import { LootPileService } from "./LootPileService.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
 const MESSAGE_FLAG_KEY = "lootPile";
+const pendingPileRefreshes = new Set();
 
 installLootDropHandling();
 
@@ -17,7 +18,7 @@ for (const hookName of ["createItem", "updateItem", "deleteItem", "updateActor"]
 			? document
 			: document?.parent;
 		if (!LootPileService.isLootPile(actor)) return;
-		requestAnimationFrame(() => void ui.chat?.render?.({ force: true }));
+		queueVisiblePileRefresh(actor.uuid);
 	});
 }
 
@@ -65,13 +66,8 @@ async function renderLootCard(message, html) {
 		: root?.querySelector?.("[data-wfrp-loot-card]");
 	if (!(card instanceof HTMLElement)) return;
 
-	/*
-	 * Foundry v14 may call renderChatMessageHTML while the rendered message tree
-	 * is still detached from document. The previous isConnected guard therefore
-	 * discarded the enhancement every time on that render path, leaving only the
-	 * empty placeholder emitted by LootPileService. Mutating the detached node is
-	 * correct: Foundry inserts that same rendered tree afterwards.
-	 */
+	/* Foundry v14 may invoke the ChatMessage render hook while this tree is still
+	 * detached. Mutating that detached tree is correct; Foundry inserts it later. */
 	const pile = await LootPileService.pileFromMessage(message);
 
 	if (!pile) {
@@ -158,11 +154,15 @@ function itemRow(item) {
 	const row = document.createElement("div");
 	row.className = "wfrp1ed-loot-card__item";
 	row.dataset.itemId = String(item.id ?? "");
+	row.dataset.itemUuid = String(item.uuid ?? "");
 	row.draggable = true;
 
 	const image = document.createElement("img");
 	image.src = String(item.img || "icons/svg/item-bag.svg");
 	image.alt = "";
+	/* Let the containing row own dragstart. Native image dragging otherwise
+	 * produces a browser image payload instead of Foundry Item drag data. */
+	image.draggable = false;
 	const name = document.createElement("span");
 	name.textContent = String(item.name ?? "");
 	const qty = Number(item.system?.quantity ?? 1);
@@ -197,6 +197,33 @@ async function addDroppedItem(pile, event) {
 	const sourceActor = item.parent instanceof foundry.documents.Actor ? item.parent : null;
 	const move = Boolean(sourceActor && !LootPileService.isLootPile(sourceActor));
 	await LootPileService.addItem(pile, item, { move });
+}
+
+/**
+ * Foundry's ChatLog application does not always rebuild an already-rendered
+ * message merely because an embedded Item inside a referenced Actor changed.
+ * Refresh visible Loot cards directly on every client when the LootPile Actor
+ * propagates its Item/update hooks. Off-screen cards are rebuilt normally the
+ * next time Foundry renders them.
+ */
+function queueVisiblePileRefresh(pileUuid) {
+	const uuid = String(pileUuid ?? "");
+	if (!uuid || pendingPileRefreshes.has(uuid)) return;
+	pendingPileRefreshes.add(uuid);
+	requestAnimationFrame(() => {
+		pendingPileRefreshes.delete(uuid);
+		void refreshVisiblePileCards(uuid);
+	});
+}
+
+async function refreshVisiblePileCards(pileUuid) {
+	for (const message of LootPileService.messagesForPile(pileUuid)) {
+		const selector = `[data-message-id="${CSS.escape(String(message.id ?? ""))}"]`;
+		const messageRoots = [...document.querySelectorAll(selector)];
+		for (const messageRoot of messageRoots) {
+			await renderLootCard(message, messageRoot);
+		}
+	}
 }
 
 function asElement(html) {
