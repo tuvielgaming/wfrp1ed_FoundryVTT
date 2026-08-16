@@ -148,13 +148,6 @@
 	opacity: 0.82;
 }
 
-.critical-wound-item-sheet .critical-wound-sheet__consequence-grid {
-	display: grid;
-	grid-template-columns: repeat(3, minmax(0, 1fr));
-	gap: 10px;
-	margin-top: 10px;
-}
-
 .critical-wound-item-sheet .critical-wound-sheet__automation-toggle {
 	display: inline-flex;
 	align-items: center;
@@ -171,10 +164,29 @@
 	margin: 0;
 }
 
-.critical-wound-item-sheet .critical-wound-sheet__consequence-characteristics {
+/* Each consequence primitive owns a visually distinct authoring block. This
+ * keeps duration/characteristic state, periodic Wound loss and one-shot Item
+ * movement from reading as one unrelated field grid. */
+.critical-wound-item-sheet .critical-wound-sheet__consequence-block {
 	margin-top: 12px;
 	padding-top: 10px;
 	border-top: 1px solid rgb(70 51 30 / 24%);
+}
+
+.critical-wound-item-sheet .critical-wound-sheet__consequence-grid {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 10px;
+	margin-top: 8px;
+}
+
+.critical-wound-item-sheet .critical-wound-sheet__consequence-grid--periodic {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.critical-wound-item-sheet .critical-wound-sheet__field--drop-held {
+	max-width: 310px;
+	margin-top: 8px;
 }
 
 .critical-wound-item-sheet .critical-wound-sheet__subheading {
@@ -182,6 +194,10 @@
 	align-items: center;
 	justify-content: space-between;
 	gap: 10px;
+}
+
+.critical-wound-item-sheet .critical-wound-sheet__subheading strong {
+	font-size: 13px;
 }
 
 .critical-wound-item-sheet .critical-wound-sheet__subheading button {
@@ -326,7 +342,12 @@
 }
 
 @media (max-width: 650px) {
-	.critical-wound-item-sheet .critical-wound-sheet__consequence-grid {
+	.critical-wound-item-sheet .critical-wound-sheet__consequence-grid,
+	.critical-wound-item-sheet .critical-wound-sheet__consequence-grid--periodic {
 		grid-template-columns: 1fr;
+	}
+
+	.critical-wound-item-sheet .critical-wound-sheet__field--drop-held {
+		max-width: none;
 	}
 }
