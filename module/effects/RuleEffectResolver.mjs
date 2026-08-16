@@ -5,6 +5,7 @@ import {
 
 const RULE_FLAG_SCOPE = "wfrp1ed";
 const RULE_FLAG_KEY = "ruleChanges";
+const MANAGED_TIMED_FLAG_KEY = "criticalTimed";
 const DEFAULT_PROVIDER_PRIORITY = 50;
 
 /**
@@ -146,12 +147,13 @@ export class RuleEffectResolver {
 
 	/**
 	 * Actor-owned effects follow Foundry's prepared `active` state. Transfer
-	 * effects embedded in owned Items are consumed by this resolver directly, so
-	 * an enabled, non-expired transfer effect remains valid even if Foundry
-	 * reports the grandchild effect as `active === false`.
+	 * effects embedded in owned Items are consumed by this resolver directly.
+	 * WFRP-managed Critical timers remain authoritative even if Foundry's generic
+	 * prepared duration marks the Item grandchild expired before our timer does.
 	 */
 	static #effectAvailable(effect, sourceItem) {
-		if (effect.disabled === true || effect.duration?.expired === true) return false;
+		if (effect.disabled === true) return false;
+		if (effect.duration?.expired === true && !managedTimedEffectActive(effect)) return false;
 		if (sourceItem) return effect.transfer !== false;
 		return effect.active !== false;
 	}
@@ -163,6 +165,13 @@ export class RuleEffectResolver {
 		}
 		return true;
 	}
+}
+
+function managedTimedEffectActive(effect) {
+	const timed = effect?.getFlag?.(RULE_FLAG_SCOPE, MANAGED_TIMED_FLAG_KEY);
+	if (!timed || typeof timed !== "object" || Array.isArray(timed)) return false;
+	const expiredAtRound = Number(timed.expiredAtRound ?? 0);
+	return !Number.isInteger(expiredAtRound) || expiredAtRound <= 0;
 }
 
 function normalizeProvidedCandidate(raw, providerId, actor, targetId) {
