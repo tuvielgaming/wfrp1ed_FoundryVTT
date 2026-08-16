@@ -47,11 +47,9 @@ export class Wfrp1edCombat extends foundry.documents.Combat {
 	/**
 	 * Foundry does not guarantee that an arbitrary Combatant flag change rebuilds
 	 * the cached `Combat.turns` array. Our temporary round order is stored only in
-	 * flags, so rebuild synchronously whenever that flag changes. This keeps the
-	 * subsequent focus reconciliation and Combat Tracker render on the same order.
-	 *
-	 * This post-update workflow runs on every client, keeping their local cached
-	 * turn arrays consistent without ever rewriting the real Initiative values.
+	 * flags, so use Foundry's own debounced setup pathway whenever that flag changes.
+	 * That pathway rebuilds the turn cache and re-renders the currently viewed
+	 * Combat Tracker, keeping data order and visible order synchronized.
 	 *
 	 * @inheritDoc
 	 */
@@ -65,7 +63,7 @@ export class Wfrp1edCombat extends foundry.documents.Combat {
 			userId,
 		);
 		if (!roundOrderChanged(changes)) return;
-		this.setupTurns();
+		this.debounceSetup();
 	}
 
 	/**
