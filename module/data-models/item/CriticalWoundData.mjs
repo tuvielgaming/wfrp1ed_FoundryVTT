@@ -38,7 +38,7 @@ export class CriticalWoundData extends TypeDataModel {
 			 * Supported primitives are intentionally generic:
 			 * - characteristic modifications;
 			 * - a random/fixed round duration or medical-attention lifetime;
-			 * - periodic direct Wound loss;
+			 * - periodic direct Wound loss with its own optional lifetime;
 			 * - one-shot held-item drops.
 			 *
 			 * Future status/action/limb primitives extend this schema without adding
@@ -70,6 +70,10 @@ export class CriticalWoundData extends TypeDataModel {
 				periodicWounds: new SchemaField({
 					formula: textField(),
 					until: textField(),
+					duration: new SchemaField({
+						formula: textField(),
+						units: textField(),
+					}),
 				}),
 				dropHeld: textField(),
 			}),
@@ -134,6 +138,7 @@ export class CriticalWoundData extends TypeDataModel {
 function normalizeConsequence(source) {
 	const duration = source?.duration ?? {};
 	const periodicWounds = source?.periodicWounds ?? {};
+	const periodicDuration = periodicWounds?.duration ?? {};
 	const characteristics = Array.isArray(source?.characteristics)
 		? source.characteristics
 			.map((entry) => ({
@@ -155,6 +160,10 @@ function normalizeConsequence(source) {
 		periodicWounds: {
 			formula: unwrapText(periodicWounds.formula),
 			until: unwrapText(periodicWounds.until),
+			duration: {
+				formula: unwrapText(periodicDuration.formula),
+				units: unwrapText(periodicDuration.units),
+			},
 		},
 		dropHeld: unwrapText(source?.dropHeld),
 	};
