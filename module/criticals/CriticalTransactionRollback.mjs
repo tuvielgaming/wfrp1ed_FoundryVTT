@@ -1,4 +1,8 @@
 import { DamageApplication } from "../damage/DamageApplication.mjs";
+import {
+	preflightCriticalConsequenceRollback,
+	revertCriticalConsequences,
+} from "./CriticalConsequenceRollback.mjs";
 import { synchronizeFatalStatus } from "./FatalCriticalIntegration.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
@@ -15,13 +19,13 @@ const { DialogV2 } = foundry.applications.api;
  *
  * Only the latest applied Damage transaction for the target may be rewound. A
  * non-fatal rollback deletes the Critical Wound Item (and therefore its embedded
- * Active Effects); a fatal rollback reverses the explicit defeated application.
- * The resolved Critical ChatMessage is then removed and the Damage transaction's
- * criticalResolution is cleared, returning the source Damage card to the normal
- * "Resolve Detailed Critical" step without touching the already-applied Wounds.
+ * Active Effects); one-shot external consequences such as an untouched automatic
+ * Loot Pile are reversed first. A fatal rollback reverses the explicit defeated
+ * application. The Damage transaction then returns to Resolve Detailed Critical.
  *
- * Fate intervention is deliberately a later transaction. Once a Fate Point has
- * been spent this action is blocked until a dedicated Fate rollback exists.
+ * Fate intervention and later Loot transfers are both later transactions. Once
+ * either happened, this rollback is blocked until the newer transaction is
+ * reversed rather than guessing or duplicating state.
  */
 Hooks.on("getChatMessageContextOptions", (_application, menuItems) => {
 	if (!Array.isArray(menuItems)) return;
@@ -29,9 +33,7 @@ Hooks.on("getChatMessageContextOptions", (_application, menuItems) => {
 	menuItems.push({
 		label: localize("Invalidate critical", "Unieważnij trafienie krytyczne"),
 		icon: '<i class="fa-solid fa-rotate-left"></i>',
-		visible: (target) => canInvalidateCritical(
-			messageFromContextTarget(target),
-		),
+		visible: (target) => canInvalidateCritical(messageFromContextTarget(target)),
 		onClick: (_event, target) => {
 			const message = messageFromContextTarget(target);
 			if (message) void invalidateCritical(message);
@@ -43,9 +45,7 @@ function canInvalidateCritical(message) {
 	if (!game.user?.isGM || !message?.id) return false;
 	const context = criticalContext(message);
 	if (!context) return false;
-	if (context.transaction?.state !== "applied" || !context.transaction.criticalResolution) {
-		return false;
-	}
+	if (context.transaction?.state !== "applied" || !context.transaction.criticalResolution) return false;
 	if (latestAppliedDamage(context.actor)?.packetId !== context.packetId) return false;
 
 	if (context.isFatal) {
@@ -59,21 +59,15 @@ function canInvalidateCritical(message) {
 
 async function invalidateCritical(message) {
 	try {
-		if (!game.user?.isGM) {
-			throw new Error("Only a GM can invalidate an applied critical result.");
-		}
+		if (!game.user?.isGM) throw new Error("Only a GM can invalidate an applied critical result.");
 
 		const context = criticalContext(message);
-		if (!context) {
-			throw new Error("This ChatMessage is not an applied detailed critical result.");
-		}
+		if (!context) throw new Error("This ChatMessage is not an applied detailed critical result.");
 		if (context.transaction?.state !== "applied" || !context.transaction.criticalResolution) {
 			throw new Error("The linked damage no longer owns an applied critical resolution.");
 		}
 		if (latestAppliedDamage(context.actor)?.packetId !== context.packetId) {
-			throw new Error(
-				"Only a critical belonging to the latest applied damage transaction for this Actor can be invalidated.",
-			);
+			throw new Error("Only a critical belonging to the latest applied damage transaction for this Actor can be invalidated.");
 		}
 		if (context.fateIntervention) {
 			throw new Error(localize(
@@ -88,19 +82,21 @@ async function invalidateCritical(message) {
 			throw new Error("The persistent Critical Wound has not been applied yet.");
 		}
 
+		/* Fail before presenting a destructive confirmation when newer Loot
+		 * transfers make this no longer the top transaction. */
+		if (context.wound) await preflightCriticalConsequenceRollback(context.wound);
+
 		const consequence = context.isFatal
 			? localize(
 				"the defeated/death consequence will be reverted",
 				"zostanie cofnięty skutek pokonania/śmierci",
 			)
 			: localize(
-				"the linked Critical Wound and its Active Effects will be removed",
-				"powiązana Rana Krytyczna i jej Aktywne Efekty zostaną usunięte",
+				"the linked Critical Wound and its Active Effects will be removed; untouched automatically dropped Items will be restored",
+				"powiązana Rana Krytyczna i jej Aktywne Efekty zostaną usunięte; nietknięte automatycznie upuszczone przedmioty zostaną przywrócone",
 			);
 		const confirmed = await DialogV2.confirm({
-			window: {
-				title: localize("Invalidate critical", "Unieważnij trafienie krytyczne"),
-			},
+			window: { title: localize("Invalidate critical", "Unieważnij trafienie krytyczne") },
 			content: `<p>${escapeHtml(localize(
 				`Invalidate this applied critical result? ${consequence}. Applied Wounds remain unchanged and the source Damage card returns to Resolve Detailed Critical.`,
 				`Unieważnić zastosowane trafienie krytyczne? ${consequence}. Zastosowana Żywotność pozostanie bez zmian, a źródłowa karta Obrażeń wróci do etapu Rozstrzygnij szczegółowe trafienie krytyczne.`,
@@ -109,13 +105,11 @@ async function invalidateCritical(message) {
 		if (!confirmed) return;
 
 		if (context.wound) {
+			await revertCriticalConsequences(context.wound);
 			await context.wound.delete();
 		}
 
-		const applications = applicationMap(
-			context.actor,
-			DAMAGE_APPLICATIONS_FLAG_KEY,
-		);
+		const applications = applicationMap(context.actor, DAMAGE_APPLICATIONS_FLAG_KEY);
 		const transaction = foundry.utils.deepClone(applications[context.packetId]);
 		const history = Array.isArray(transaction.criticalHistory)
 			? foundry.utils.deepClone(transaction.criticalHistory)
@@ -137,34 +131,20 @@ async function invalidateCritical(message) {
 		};
 
 		if (context.isFatal) {
-			const fatalApplications = applicationMap(
-				context.actor,
-				FATAL_APPLICATIONS_FLAG_KEY,
-			);
+			const fatalApplications = applicationMap(context.actor, FATAL_APPLICATIONS_FLAG_KEY);
 			fatalApplications[context.packetId] = {
 				...foundry.utils.deepClone(context.fatalApplication),
 				state: "reverted",
 				revertedAt: Date.now(),
 				revertedBy: String(game.user?.id ?? ""),
 			};
-			update[`flags.${FLAG_SCOPE}.${FATAL_APPLICATIONS_FLAG_KEY}`] =
-				fatalApplications;
+			update[`flags.${FLAG_SCOPE}.${FATAL_APPLICATIONS_FLAG_KEY}`] = fatalApplications;
 		}
 
 		await context.actor.update(update);
+		if (context.isFatal) await synchronizeFatalStatus(context.actor);
 
-		/*
-		 * FatalCriticalIntegration is the single owner of the derived Foundry
-		 * defeated/dead status. Reconcile only after both the damage resolution and
-		 * fatal application transaction have been atomically rewritten above.
-		 */
-		if (context.isFatal) {
-			await synchronizeFatalStatus(context.actor);
-		}
-
-		if (message.canUserModify?.(game.user, "delete")) {
-			await message.delete();
-		}
+		if (message.canUserModify?.(game.user, "delete")) await message.delete();
 		void context.actor.sheet?.render?.({ force: true });
 		void ui.chat?.render?.({ force: true });
 	} catch (error) {
