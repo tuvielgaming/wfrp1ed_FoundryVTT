@@ -57,10 +57,17 @@ export class CombatRoundInitiativeOrder {
 		);
 	}
 
-	/** Return stored current-combatant IDs in their persisted relative order. */
+	/**
+	 * Return stored current-combatant IDs in their persisted relative order.
+	 *
+	 * This method is intentionally safe during Combat data preparation. Foundry
+	 * calls setupTurns() before all derived Combat helpers (including `started`)
+	 * are guaranteed to be usable, so the persisted round number is the only
+	 * lifecycle gate required here.
+	 */
 	static storedIds(combat, round = nonNegativeInteger(combat?.round)) {
 		if (!(combat instanceof foundry.documents.Combat)) return null;
-		if (!combat.started || round <= 0) return null;
+		if (round <= 0) return null;
 
 		const state = combat.getFlag?.(FLAG_SCOPE, ROUND_ORDER_FLAG);
 		if (!state || typeof state !== "object" || Array.isArray(state)) return null;
@@ -80,7 +87,7 @@ export class CombatRoundInitiativeOrder {
 	/** Return the valid current-round ordered ID list, or null if none exists. */
 	static ids(combat, round = nonNegativeInteger(combat?.round)) {
 		if (!(combat instanceof foundry.documents.Combat)) return null;
-		if (!combat.started || round <= 0) return null;
+		if (round <= 0) return null;
 
 		const ids = this.storedIds(combat, round);
 		if (!ids) return null;
@@ -217,10 +224,22 @@ export class CombatRoundInitiativeOrder {
 
 		const movedActive =
 			activeBeforeId && String(movedCombatantId) === activeBeforeId;
-		if (!movedActive) return;
+		if (!movedActive) {
+			const active = activeBeforeId
+				? combat.combatants.get(activeBeforeId) ?? null
+				: combat.combatant ?? null;
+			if (active) await CombatRoundTurnState.focus(combat, active);
+			return;
+		}
 
 		const next = CombatRoundTurnState.firstUnfinished(combat);
-		if (!next || String(next.id) === activeBeforeId) return;
+		if (!next || String(next.id) === activeBeforeId) {
+			const active = activeBeforeId
+				? combat.combatants.get(activeBeforeId) ?? null
+				: null;
+			if (active) await CombatRoundTurnState.focus(combat, active);
+			return;
+		}
 		await CombatRoundTurnState.focus(combat, next);
 	}
 
@@ -470,13 +489,15 @@ function validateOrder(combat, orderedIds) {
 }
 
 function activeCombatantId(combat) {
-	const historyId = String(combat?.current?.combatantId ?? "").trim();
-	if (historyId && combat?.combatants?.get(historyId)) return historyId;
-
 	const turn = Number(combat?.turn);
 	const turns = Array.isArray(combat?.turns) ? combat.turns : [];
-	if (!Number.isInteger(turn) || turn < 0 || turn >= turns.length) return "";
-	return String(turns[turn]?.id ?? "");
+	if (Number.isInteger(turn) && turn >= 0 && turn < turns.length) {
+		const turnId = String(turns[turn]?.id ?? "").trim();
+		if (turnId) return turnId;
+	}
+
+	const historyId = String(combat?.current?.combatantId ?? "").trim();
+	return historyId && combat?.combatants?.get(historyId) ? historyId : "";
 }
 
 function ensureEndDropZone(list) {
