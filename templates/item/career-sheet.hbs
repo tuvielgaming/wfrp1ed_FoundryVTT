@@ -34,13 +34,24 @@
 		</div>
 	</header>
 
-	<section class="career-description-block">
-		<textarea
-			name="system.description"
-			class="career-description"
-			{{#unless editable}}readonly{{/unless}}
-		>{{system.description}}</textarea>
-	</section>
+	<div class="career-intro-grid">
+		<section class="career-description-block">
+			<textarea
+				name="system.description"
+				class="career-description"
+				{{#unless editable}}readonly{{/unless}}
+			>{{system.description}}</textarea>
+		</section>
+
+		<figure class="career-artwork-frame">
+			<img
+				class="career-item-sheet__image"
+				src="{{item.img}}"
+				alt="{{item.name}}"
+				draggable="false"
+			>
+		</figure>
+	</div>
 
 	<section class="career-section career-advance-section">
 		<h2>{{careerUi.labels.advanceScheme}}</h2>
