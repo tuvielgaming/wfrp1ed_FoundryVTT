@@ -15,16 +15,53 @@ const CORE_INITIATIVE_OPTION = "wfrpCoreInitiative";
  * Initiative characteristic rather than rolling a die. Equal Initiative values
  * deliberately remain equal.
  *
- * Foundry's native Combat.turns remains Initiative-sorted and owns focus/lifecycle
- * bookkeeping. Temporary WFRP round order is stored separately by
- * CombatRoundInitiativeOrder and decides who acts next plus how tracker rows are
- * displayed. Dragging therefore never rewrites Initiative or Foundry's turn array.
+ * Initiative and current-round acting order are intentionally separate values.
+ * Combatant.initiative remains the real WFRP rules value and Critical-clock
+ * coordinate. During a running round, CombatRoundInitiativeOrder supplies an
+ * explicit ordered-ID list which this Combat document uses to sort its native
+ * Combat.turns array. Foundry therefore owns one authoritative list for tracker
+ * rendering, turn focus, and lifecycle events while drag never rewrites Initiative.
  *
  * Round start is the authoritative reset point for current-round Attack/parry
  * resources. Starting a Combatant turn only opens that Combatant's attack
  * window; it never restores Attacks already lost to same-round parries.
  */
 export class Wfrp1edCombat extends foundry.documents.Combat {
+	/**
+	 * Foundry explicitly allows systems to override the Combatant comparator.
+	 * This mirrors Fantasy Grounds' list-sort model: current-round WFRP order is
+	 * one dedicated sort value, while Initiative remains independent rules data.
+	 *
+	 * @inheritDoc
+	 */
+	_sortCombatants(left, right) {
+		const ids = CombatRoundInitiativeOrder.ids(this);
+		if (ids) {
+			const leftIndex = ids.indexOf(String(left?.id ?? ""));
+			const rightIndex = ids.indexOf(String(right?.id ?? ""));
+			if (leftIndex >= 0 && rightIndex >= 0 && leftIndex !== rightIndex) {
+				return leftIndex - rightIndex;
+			}
+		}
+		return super._sortCombatants(left, right);
+	}
+
+	/**
+	 * A WFRP order flag is not a native Initiative change, so explicitly rebuild
+	 * Foundry's cached turn array after that update. This is the equivalent of an
+	 * immediate list re-sort: subsequent focus and attack logic sees the same order
+	 * which the tracker renders.
+	 *
+	 * @inheritDoc
+	 */
+	_onUpdate(changed, options, userId) {
+		super._onUpdate(changed, options, userId);
+		if (!CombatRoundInitiativeOrder.isOrderUpdate(changed, options)) return;
+
+		this.turns = this.setupTurns();
+		this.debounceSetup();
+	}
+
 	/**
 	 * Foundry's Roll Initiative action becomes the Core WFRP procedure: assign
 	 * each requested Combatant their Actor's current Initiative characteristic.
@@ -83,9 +120,9 @@ export class Wfrp1edCombat extends foundry.documents.Combat {
 	}
 
 	/**
-	 * WFRP turn advancement follows unfinished state in the independent temporary
-	 * acting order. Foundry focus is then moved to that Combatant using its native
-	 * Initiative-sorted turn index.
+	 * WFRP turn advancement follows unfinished state in the current temporary
+	 * acting order. Since Combat.turns is sorted by that same order, Foundry focus,
+	 * tracker display, and WFRP progression now all consume one authoritative list.
 	 *
 	 * @inheritDoc
 	 */
@@ -107,7 +144,7 @@ export class Wfrp1edCombat extends foundry.documents.Combat {
 	/**
 	 * End-of-round is the immutable clock safety boundary. After it resolves,
 	 * discard the temporary acting order, refresh real Initiative from Actors,
-	 * and let Foundry advance using its normal Initiative-sorted turn array.
+	 * and let Foundry advance using canonical Initiative for the new round.
 	 *
 	 * @inheritDoc
 	 */
