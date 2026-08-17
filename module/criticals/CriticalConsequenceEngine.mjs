@@ -71,7 +71,8 @@ export class CriticalConsequenceEngine {
 		await wound.setFlag(FLAG_SCOPE, RUNTIME_FLAG_KEY, state);
 
 		try {
-			await createManagedEffects(wound, definition, resolved);
+			const effects = await createManagedEffects(wound, definition, resolved);
+			if (effects.length) refreshActorSheetIfOpen(wound.parent);
 
 			if (definition.dropHeld) {
 				const loot = await executeDropHeld(wound, definition.dropHeld);
@@ -81,7 +82,6 @@ export class CriticalConsequenceEngine {
 			state.state = "applied";
 			state.completedAt = Date.now();
 			await wound.setFlag(FLAG_SCOPE, RUNTIME_FLAG_KEY, state);
-			refreshActorSheetIfOpen(wound.parent);
 			return foundry.utils.deepFreeze(foundry.utils.deepClone(state));
 		} catch (error) {
 			state.state = "error";
@@ -148,7 +148,7 @@ async function resolveRandomState(definition) {
 			units: String(definition.duration.units || "rounds"),
 			roll: roll.toJSON(),
 		};
-		await showDice(roll);
+		void showDice(roll);
 	}
 
 	const periodicDuration = definition.periodicWounds?.duration;
@@ -164,7 +164,7 @@ async function resolveRandomState(definition) {
 			units: String(periodicDuration.units),
 			roll: roll.toJSON(),
 		};
-		await showDice(roll);
+		void showDice(roll);
 	}
 	return resolved;
 }
@@ -583,7 +583,7 @@ async function applyPeriodicWounds(
 		}
 
 		const roll = await evaluateFormula(periodic.formula);
-		await showDice(roll);
+		void showDice(roll);
 		const amount = positiveInteger(roll.total);
 		const packet = new DamagePacket({
 			id: packetId,
@@ -617,9 +617,9 @@ async function applyPeriodicWounds(
 			effect,
 			periodic,
 			combat,
-			event,
+				event,
 			cycleNumber,
-		);
+			);
 	} finally {
 		processingPeriodicTicks.delete(tickKey);
 	}
