@@ -1,3 +1,5 @@
+import { CombatRoundInitiativeOrder } from "./CombatRoundInitiativeOrder.mjs";
+
 const FLAG_SCOPE = "wfrp1ed";
 const BASE_INITIATIVE_FLAG = "roundBaseInitiative";
 
@@ -13,22 +15,15 @@ export const COMBAT_INITIATIVE_CLOCK_EVENT = Object.freeze({
  * Immutable WFRP initiative-time coordinate used by effects which must measure
  * full combat cycles independently of the Combatant currently occupying a turn.
  *
- * The clock coordinate is the Initiative band represented by the tracker slot
- * at the moment the clock is captured. Temporary tracker reorder then changes
- * which Combatant occupies a slot, but it never changes the clock coordinate.
- *
- * Timeline coordinates are derived by sorting the round's stable baseline
- * Initiative values and assigning those values to the current tracker slots by
- * position. This is the key distinction between "who is acting" and "what
- * Initiative-time point is being traversed".
+ * Foundry's native Combat.turns remains Initiative-sorted for lifecycle/focus.
+ * The separate WFRP round-order list describes who occupies each acting slot.
+ * Timeline coordinates are therefore derived by assigning the frozen descending
+ * Initiative bands to those WFRP slots by position.
  *
  * One eligible round reaches the clock at the first of:
  * - round start already being at/below the clock Initiative;
  * - real turn progression crossing from above the clock to at/below it;
  * - round end, when the clock was not otherwise reachable in that round.
- *
- * Reordering/focus changes do not emit clock events. Wfrp1edCombat emits events
- * only from its real Next Turn / Next Round lifecycle.
  */
 export class CombatInitiativeClock {
 	static #consumers = new Set();
@@ -67,14 +62,16 @@ export class CombatInitiativeClock {
 	}
 
 	/**
-	 * Initiative-time coordinate represented by a Combatant's current tracker
-	 * slot. The actor identity is deliberately irrelevant to the coordinate.
+	 * Initiative-time coordinate represented by a Combatant's WFRP acting slot.
+	 * Actor identity is irrelevant to the coordinate itself: dragging an actor
+	 * changes which actor occupies a slot, not the Initiative band assigned there.
 	 */
 	static timelineInitiative(combat, combatant) {
 		if (!(combat instanceof foundry.documents.Combat)) return null;
 		if (!(combatant instanceof foundry.documents.Combatant)) return null;
 
-		const slot = [...(combat.turns ?? [])].findIndex(
+		const actingOrder = CombatRoundInitiativeOrder.orderedCombatants(combat);
+		const slot = actingOrder.findIndex(
 			(entry) => String(entry?.id ?? "") === String(combatant.id ?? ""),
 		);
 		if (slot < 0) return null;
@@ -125,9 +122,6 @@ export class CombatInitiativeClock {
 				return prior !== null && current !== null && prior > clock && current <= clock;
 			}
 			case COMBAT_INITIATIVE_CLOCK_EVENT.ROUND_END:
-				/* End of round is the agreed safety boundary: if a clock point was
-				 * skipped, removed, or otherwise never crossed, the cycle cannot
-				 * extend beyond the round itself. */
 				return true;
 			default:
 				return false;
@@ -194,8 +188,9 @@ export class CombatInitiativeClock {
 
 function lifecycleCombatant(combat) {
 	if (!(combat instanceof foundry.documents.Combat)) return null;
-	const id = String(combat.current?.combatantId ?? combat.combatant?.id ?? "");
-	return id ? combat.combatants.get(id) ?? combat.combatant ?? null : combat.combatant ?? null;
+	if (combat.combatant) return combat.combatant;
+	const id = String(combat.current?.combatantId ?? "");
+	return id ? combat.combatants.get(id) ?? null : null;
 }
 
 function emptyClockState() {
