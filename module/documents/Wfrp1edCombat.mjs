@@ -44,6 +44,51 @@ export class Wfrp1edCombat extends foundry.documents.Combat {
 	}
 
 	/**
+	 * Build Combat.turns explicitly from the WFRP round-order list.
+	 *
+	 * Foundry documents setupTurns() as the authoritative construction point for
+	 * the sorted turn array. We therefore enforce the persisted ordered-ID list
+	 * here directly instead of relying only on the protected comparator hook.
+	 * Initiative remains untouched and is used only when no current-round order
+	 * list exists.
+	 *
+	 * @inheritDoc
+	 */
+	setupTurns() {
+		const activeBeforeId = String(
+			this.current?.combatantId ?? this.combatant?.id ?? "",
+		);
+		const canonical = super.setupTurns();
+		const ids = CombatRoundInitiativeOrder.ids(this);
+		if (!ids) return canonical;
+
+		const byId = new Map(
+			[...this.combatants].map((combatant) => [String(combatant.id), combatant]),
+		);
+		const ordered = ids.map((id) => byId.get(String(id))).filter(Boolean);
+		if (ordered.length !== this.combatants.size) return canonical;
+
+		this.turns = ordered;
+		if (this.turn !== null && ordered.length) {
+			const currentIndex = activeBeforeId
+				? ordered.findIndex((combatant) => String(combatant.id) === activeBeforeId)
+				: -1;
+			const fallbackIndex = Math.max(
+				0,
+				Math.min(Number(this.turn) || 0, ordered.length - 1),
+			);
+			this.turn = currentIndex >= 0 ? currentIndex : fallbackIndex;
+		}
+
+		const currentCombatant = this.turn === null
+			? null
+			: ordered[this.turn] ?? null;
+		this.current = this._getCurrentState(currentCombatant);
+		if (!this.previous) this.previous = this.current;
+		return this.turns;
+	}
+
+	/**
 	 * The temporary order is a flag on this Combat document. Post-update runs on
 	 * every connected client, so rebuild the cached `turns` array everywhere and
 	 * ask Foundry's normal debounced setup pathway to refresh a viewed tracker.
