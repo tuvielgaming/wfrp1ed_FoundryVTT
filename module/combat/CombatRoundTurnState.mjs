@@ -90,24 +90,16 @@ export class CombatRoundTurnState {
 	}
 
 	/**
-	 * Focus one Combatant by its position in the current sorted order.
+	 * Focus one Combatant by its position in the current WFRP turn order.
 	 *
-	 * `combat.combatant` is derived from the numeric turn index and can become
-	 * misleading immediately after initiative values are bulk-reordered. Foundry
-	 * also keeps `combat.current.combatantId`, which records the actual lifecycle
-	 * turn owner. Use that history ID to decide whether this is index
-	 * synchronization or a real End Turn -> Start Turn transition.
+	 * The authoritative visible owner is Foundry's `combat.combatant`, derived
+	 * from the numeric `turn` index and the prepared `combat.turns` array. History
+	 * fields are useful for hooks but can legitimately lag during reorder/update
+	 * preparation, so they must not decide whether the WFRP attack window is open.
 	 *
-	 * Foundry's visual turn focus can update correctly after initiative is
-	 * reordered without necessarily reopening our system-owned Attack economy
-	 * window. After a real focus transfer we therefore reconcile the previous
-	 * and next Combatant economy states. The reconciliation is idempotent: if
-	 * Foundry already fired the normal _onEndTurn/_onStartTurn lifecycle, the
-	 * resulting state is detected and no duplicate spend/reset occurs.
-	 *
-	 * A focus change caused by initiative reordering is not a completed WFRP
-	 * turn. Presentation-only parry-debt reminders therefore survive such focus
-	 * changes and are cleared only after roundTurnState.completed becomes true.
+	 * Reconciliation runs even when the requested Combatant is already focused.
+	 * That makes this method a repair boundary: after any reorder exactly the
+	 * focused Combatant has an open attack window and stale windows are closed.
 	 */
 	static async focus(combat, combatant) {
 		assertCombat(combat);
@@ -119,43 +111,40 @@ export class CombatRoundTurnState {
 			throw new Error("The requested Combatant is not present in the current turn order.");
 		}
 
-		const lifecycleCombatantId = String(
-			combat.current?.combatantId ?? combat.combatant?.id ?? "",
-		);
 		const requestedId = String(combatant.id);
+		const focusedId = String(combat.combatant?.id ?? "");
 
-		if (lifecycleCombatantId === requestedId) {
-			if (Number(combat.turn) !== index) {
-				await combat.update(
-					{ turn: index },
-					{ [FOCUS_OPTION]: true, direction: 0 },
-				);
-			}
-			return combat;
+		if (focusedId !== requestedId || Number(combat.turn) !== index) {
+			await combat.update(
+				{ turn: index },
+				{
+					[FOCUS_OPTION]: true,
+					direction: focusedId === requestedId ? 0 : 1,
+				},
+			);
 		}
 
-		const previous = lifecycleCombatantId
-			? combat.combatants.get(lifecycleCombatantId) ?? null
-			: null;
-
-		await combat.update(
-			{ turn: index },
-			{ [FOCUS_OPTION]: true, direction: 1 },
-		);
-
-		await reconcileAttackWindows(previous, combatant);
+		await reconcileAttackWindows(combat, combatant);
 		return combat;
 	}
 }
 
-async function reconcileAttackWindows(previous, next) {
-	if (previous && String(previous.id) !== String(next.id)) {
-		const previousEconomy = CombatAttackEconomy.snapshot(previous);
-		if (previousEconomy.turnStarted && !previousEconomy.turnCompleted) {
-			await CombatAttackEconomy.endTurn(previous);
+/**
+ * Make the attack-economy owner exactly match the visible Foundry focus.
+ *
+ * Foundry's own _onEndTurn/_onStartTurn lifecycle may already have performed
+ * these transitions. Every check below is therefore state-based and idempotent.
+ */
+async function reconcileAttackWindows(combat, next) {
+	for (const candidate of combat.combatants) {
+		if (String(candidate.id) === String(next.id)) continue;
+
+		const economy = CombatAttackEconomy.snapshot(candidate);
+		if (economy.turnStarted && !economy.turnCompleted) {
+			await CombatAttackEconomy.endTurn(candidate);
 		}
-		if (CombatRoundTurnState.isCompleted(previous)) {
-			await previous.setFlag(
+		if (CombatRoundTurnState.isCompleted(candidate)) {
+			await candidate.setFlag(
 				FLAG_SCOPE,
 				PARRY_DEBT_REMINDER_FLAG_KEY,
 				0,
