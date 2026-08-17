@@ -1,0 +1,130 @@
+/* Career authoring: make chance/mode ownership obvious and keep long Skill
+ * packages usable without letting them push the rest of the sheet away. */
+
+.career-item-sheet .career-list-section[data-career-drop-zone="skills"] {
+	max-height: 260px;
+	overflow-y: auto;
+	overflow-x: hidden;
+	padding-right: 6px;
+	scrollbar-gutter: stable;
+	overscroll-behavior: contain;
+}
+
+.career-item-sheet .career-list-section[data-career-drop-zone="skills"]::-webkit-scrollbar {
+	width: 9px;
+}
+
+.career-item-sheet .career-list-section[data-career-drop-zone="skills"]::-webkit-scrollbar-thumb {
+	border: 2px solid transparent;
+	border-radius: 8px;
+	background: rgb(62 49 35 / 52%);
+	background-clip: padding-box;
+}
+
+.career-item-sheet .career-entry[data-career-entry-id] {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	grid-template-areas:
+		"meta controls"
+		"choices choices";
+	align-items: start;
+	gap: 5px 8px;
+	margin: 0 0 7px;
+	padding: 7px 8px;
+	border: 1px solid rgb(55 43 31 / 38%);
+	border-radius: 4px;
+	background: rgb(255 250 235 / 30%);
+	box-shadow: inset 0 1px 0 rgb(255 255 255 / 30%);
+}
+
+.career-item-sheet .career-entry[data-career-entry-id] .career-entry-text {
+	grid-area: meta;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 5px 7px;
+	min-width: 0;
+}
+
+/* In edit mode the chips are the canonical readable alternatives. Hiding the
+ * synthesized "A albo B albo C" sentence prevents the same content from being
+ * printed twice and makes the percentage belong unmistakably to this card. */
+.career-item-sheet .career-entry[data-career-entry-id]:has(.career-choice-editor)
+	.career-entry-text > span {
+	display: none;
+}
+
+.career-item-sheet .career-entry[data-career-entry-id] .career-entry-text > strong {
+	display: inline-flex;
+	align-items: center;
+	min-height: 22px;
+	padding: 2px 7px;
+	border: 1px solid #7a0019;
+	border-radius: 999px;
+	background: rgb(122 0 25 / 9%);
+	font-size: 12px;
+	font-weight: 800;
+	line-height: 1.2;
+	white-space: nowrap;
+	color: #5c0013;
+}
+
+.career-item-sheet .career-entry[data-career-entry-id] .career-entry-text > em {
+	display: inline-flex;
+	align-items: center;
+	min-height: 22px;
+	margin: 0;
+	padding: 2px 7px;
+	border: 1px solid rgb(55 43 31 / 34%);
+	border-radius: 999px;
+	background: rgb(69 55 39 / 8%);
+	font-size: 12px;
+	font-style: normal;
+	font-weight: 700;
+	line-height: 1.2;
+	white-space: nowrap;
+	color: #3c3025;
+}
+
+.career-item-sheet .career-entry[data-career-entry-id] .career-entry-text > small {
+	flex: 1 0 100%;
+	margin-top: 0;
+}
+
+.career-item-sheet .career-entry[data-career-entry-id] .career-entry-controls {
+	grid-area: controls;
+	align-self: start;
+	justify-self: end;
+}
+
+.career-item-sheet .career-entry[data-career-entry-id] .career-choice-editor {
+	grid-area: choices;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 5px;
+	width: auto;
+	padding: 0;
+}
+
+.career-item-sheet .career-entry[data-career-entry-id] .career-choice-chip {
+	max-width: 100%;
+	padding: 4px 5px 4px 8px;
+	border-color: rgb(55 43 31 / 48%);
+	background: rgb(255 252 242 / 58%);
+	font-size: 12px;
+	font-weight: 700;
+	line-height: 1.25;
+	white-space: normal;
+}
+
+.career-item-sheet .career-entry[data-career-entry-id]:hover,
+.career-item-sheet .career-entry[data-career-entry-id]:focus-within {
+	border-color: rgb(91 65 39 / 65%);
+	background: rgb(255 250 235 / 45%);
+}
+
+@media (max-width: 760px) {
+	.career-item-sheet .career-list-section[data-career-drop-zone="skills"] {
+		max-height: 320px;
+	}
+}
