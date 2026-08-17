@@ -140,13 +140,14 @@ async function processClockConsequences(combat, event) {
 }
 
 /**
- * Resolve random Critical values in presentation order. When a real roll is
- * involved, rules processing intentionally waits until Dice So Nice has finished
- * and the explanatory chat summary has been published. Non-random consequences
- * do not pay this presentation cost.
+ * Resolve all random setup values first. Each real roll waits for its Dice So Nice
+ * animation, but one wound publishes only one consolidated summary after all setup
+ * rolls have finished. Non-random consequences do not pay this presentation cost.
  */
 async function resolveRandomState(wound, definition) {
 	const resolved = {};
+	let rolled = false;
+
 	if (definition.duration?.formula) {
 		const roll = await evaluateFormula(definition.duration.formula);
 		resolved.duration = {
@@ -155,12 +156,8 @@ async function resolveRandomState(wound, definition) {
 			units: String(definition.duration.units || "rounds"),
 			roll: roll.toJSON(),
 		};
-		await presentCriticalRoll(wound, roll, {
-			kind: "characteristic-duration",
-			formula: resolved.duration.formula,
-			value: resolved.duration.value,
-			units: resolved.duration.units,
-		});
+		await showDice(roll);
+		rolled = true;
 	}
 
 	const periodicDuration = definition.periodicWounds?.duration;
@@ -176,53 +173,55 @@ async function resolveRandomState(wound, definition) {
 			units: String(periodicDuration.units),
 			roll: roll.toJSON(),
 		};
-		await presentCriticalRoll(wound, roll, {
-			kind: "periodic-duration",
-			formula: resolved.periodicDuration.formula,
-			value: resolved.periodicDuration.value,
-			units: resolved.periodicDuration.units,
-		});
+		await showDice(roll);
+		rolled = true;
 	}
+
+	if (rolled) await publishCriticalWoundSummary(wound, definition, resolved);
 	return resolved;
 }
 
-async function presentCriticalRoll(wound, roll, result) {
-	await showDice(roll);
-	await publishCriticalRollSummary(wound, result);
-}
-
-async function publishCriticalRollSummary(wound, result) {
+async function publishCriticalWoundSummary(wound, definition, resolved) {
 	const actor = wound.parent;
-	const kind = String(result?.kind ?? "");
-	const value = positiveInteger(result?.value);
-	const units = String(result?.units ?? "rounds");
-	const formula = String(result?.formula ?? "");
-	const purpose = kind === "periodic-duration"
-		? localize(
-			"Duration of periodic Wound loss",
-			"Czas trwania okresowej utraty Żywotności",
-		)
-		: localize(
-			"Duration of characteristic changes",
-			"Czas trwania zmian cech",
-		);
-	const determined = formatDuration(value, units);
-	const title = localize("Critical Wound roll", "Rzut rany krytycznej");
-	const labels = {
-		wound: localize("Wound", "Rana"),
-		target: localize("Target", "Cel"),
-		purpose: localize("Why this roll", "Cel rzutu"),
-		roll: localize("Roll", "Rzut"),
-		determined: localize("Determined", "Ustalono"),
-	};
+	const rows = [];
+	const characteristicsDuration = consequenceDurationSummary(
+		resolved.duration,
+		definition.duration?.until,
+	);
+	if (
+		Array.isArray(definition.characteristics) &&
+		definition.characteristics.length &&
+		characteristicsDuration
+	) {
+		rows.push({
+			label: localize("Characteristic changes", "Zmiany cech"),
+			value: characteristicsDuration,
+		});
+	}
+
+	const periodicDuration = consequenceDurationSummary(
+		resolved.periodicDuration,
+		definition.periodicWounds?.until,
+	);
+	if (definition.periodicWounds?.formula && periodicDuration) {
+		rows.push({
+			label: localize("Wound loss", "Utrata Żywotności"),
+			value: periodicDuration,
+		});
+	}
+
+	if (!rows.length) return null;
+
+	const title = `${localize("Critical Wound", "Rana krytyczna")}: ${String(wound.name ?? "—")}`;
+	const targetLabel = localize("Target", "Cel");
+	const rowsHtml = rows.map((row) =>
+		`<div><strong>${escapeHtml(row.label)}:</strong> ${escapeHtml(row.value)}</div>`,
+	).join("");
 	const content = `
 		<section class="wfrp1ed critical-roll-summary" data-wfrp-critical-roll-summary>
 			<h3>${escapeHtml(title)}</h3>
-			<div><strong>${escapeHtml(labels.target)}:</strong> ${escapeHtml(actor?.name ?? "—")}</div>
-			<div><strong>${escapeHtml(labels.wound)}:</strong> ${escapeHtml(wound.name ?? "—")}</div>
-			<div><strong>${escapeHtml(labels.purpose)}:</strong> ${escapeHtml(purpose)}</div>
-			<div><strong>${escapeHtml(labels.roll)}:</strong> ${escapeHtml(formula)} → <strong>${escapeHtml(String(value))}</strong></div>
-			<div><strong>${escapeHtml(labels.determined)}:</strong> ${escapeHtml(`${purpose}: ${determined}`)}</div>
+			<div><strong>${escapeHtml(targetLabel)}:</strong> ${escapeHtml(actor?.name ?? "—")}</div>
+			${rowsHtml}
 		</section>
 	`;
 
@@ -234,17 +233,29 @@ async function publishCriticalRollSummary(wound, result) {
 		flags: {
 			[FLAG_SCOPE]: {
 				[CRITICAL_ROLL_SUMMARY_FLAG_KEY]: {
-					version: 1,
+					version: 2,
 					woundUuid: String(wound.uuid ?? ""),
-					kind,
-					formula,
-					value,
-					units,
+					rows: rows.map((row) => ({ ...row })),
 					createdAt: Date.now(),
 				},
 			},
 		},
 	});
+	return true;
+}
+
+function consequenceDurationSummary(resolvedDuration, until) {
+	const parts = [];
+	if (resolvedDuration?.value && resolvedDuration?.units) {
+		parts.push(formatDuration(resolvedDuration.value, resolvedDuration.units));
+	}
+	if (String(until ?? "") === "medical-attention") {
+		parts.push(localize(
+			"until medical attention is received",
+			"do czasu otrzymania pomocy medycznej",
+		));
+	}
+	return parts.join(" / ");
 }
 
 async function createManagedEffects(wound, definition, resolved) {
