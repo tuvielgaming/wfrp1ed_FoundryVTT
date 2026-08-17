@@ -8,6 +8,9 @@ import {
 const { ItemSheetV2 } = foundry.applications.sheets;
 const { DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
+const FLAG_SCOPE = "wfrp1ed";
+const CORE_CATALOG_FLAG_KEY = "coreCatalog";
+
 const CHARACTERISTICS = Object.freeze([
 	["m", "Sz", "M"],
 	["ws", "WW", "WS"],
@@ -95,10 +98,13 @@ export class CareerItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
 	}
 
 	/**
-	 * Career references are authored by drag-and-drop. Dropping on a section
-	 * creates a new entry. Dropping on an existing Skill/Trapping entry adds a
-	 * new alternative choice to that entry, which is how Core constructs such as
-	 * "Scout's or Woodsman's" are represented without parsing display text.
+	 * Drop contract:
+	 * - section -> a new Career entry;
+	 * - existing entry -> a new alternative choice;
+	 * - existing choice chip -> another grant in that same choice/bundle.
+	 *
+	 * The last form is required for Core entries such as
+	 * "bow + ammunition OR crossbow + ammunition".
 	 */
 	async _onDropDocument(event, document) {
 		if (!this.isEditable) return null;
@@ -149,12 +155,13 @@ export class CareerItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
 	async #addGrantDrop(collectionName, target, document) {
 		const entries = cloneArray(this.document.system?.[collectionName]);
 		const entryId = String(target?.dataset?.careerEntryId ?? "");
+		const choiceId = String(target?.dataset?.careerChoiceId ?? "");
 		const grant = grantFromDocument(document);
 
 		if (grantAlreadyPresent(entries, grant)) {
 			ui.notifications.info(localize(
-				`${document.name} is already listed in this Career.`,
-				`${document.name} jest już wpisane w tej Profesji.`,
+				`${grantDisplayName(grant)} is already listed in this Career.`,
+				`${grantDisplayName(grant)} jest już wpisane w tej Profesji.`,
 			));
 			return null;
 		}
@@ -163,9 +170,20 @@ export class CareerItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
 			const entry = entries.find((candidate) => String(candidate?.id ?? "") === entryId);
 			if (!entry) return null;
 			entry.choices ??= [];
-			entry.choices.push(choiceFromGrant(grant));
-			if (entry.choices.length > 1 && entry.mode === CAREER_ENTRY_MODE.ALL) {
-				entry.mode = CAREER_ENTRY_MODE.PLAYER_CHOICE;
+
+			if (choiceId) {
+				const choice = entry.choices.find(
+					(candidate) => String(candidate?.id ?? "") === choiceId,
+				);
+				if (!choice) return null;
+				choice.grants ??= [];
+				choice.grants.push(grant);
+				choice.label = choice.grants.map(grantDisplayName).join(" + ");
+			} else {
+				entry.choices.push(choiceFromGrant(grant));
+				if (entry.choices.length > 1 && entry.mode === CAREER_ENTRY_MODE.ALL) {
+					entry.mode = CAREER_ENTRY_MODE.PLAYER_CHOICE;
+				}
 			}
 		} else {
 			entries.push(entryFromGrant(grant, collectionName));
@@ -343,22 +361,33 @@ function entryDisplay(entry, choices) {
 function choiceLabel(choice) {
 	if (String(choice?.label ?? "").trim()) return String(choice.label).trim();
 	return (choice?.grants ?? [])
-		.map((grant) => resolvedName(grant))
+		.map(grantDisplayName)
 		.filter(Boolean)
 		.join(" + ");
 }
 
+function grantDisplayName(grant) {
+	const document = resolvedDocument(grant);
+	const name = String(document?.name ?? grant?.name ?? grant?.rulesId ?? "").trim();
+	const specialisation = String(
+		grant?.specialisation || document?.system?.specialisation || document?.system?.specialization || "",
+	).trim();
+	return specialisation ? `${name} (${specialisation})` : name;
+}
+
 function resolvedName(reference) {
+	const document = resolvedDocument(reference);
+	return String(document?.name ?? reference?.name ?? reference?.rulesId ?? "").trim();
+}
+
+function resolvedDocument(reference) {
 	const uuid = String(reference?.uuid ?? "");
-	if (uuid) {
-		try {
-			const document = foundry.utils.fromUuidSync(uuid);
-			if (document?.name) return String(document.name);
-		} catch (_error) {
-			// Persisted fallback below remains authoritative presentation backup.
-		}
+	if (!uuid) return null;
+	try {
+		return foundry.utils.fromUuidSync(uuid);
+	} catch (_error) {
+		return null;
 	}
-	return String(reference?.name ?? reference?.rulesId ?? "").trim();
 }
 
 function entryModeLabel(mode, choiceCount) {
@@ -375,10 +404,22 @@ function entryModeLabel(mode, choiceCount) {
 
 function grantFromDocument(document) {
 	const isItem = document instanceof foundry.documents.Item;
+	const catalogue = isItem ? document.getFlag?.(FLAG_SCOPE, CORE_CATALOG_FLAG_KEY) : null;
+	const rulesId = isItem
+		? String(
+			document.system?.rulesId ||
+			catalogue?.canonicalRulesId ||
+			catalogue?.catalogId ||
+			"",
+		).trim()
+		: "";
 	return {
 		uuid: String(document.uuid ?? ""),
-		rulesId: isItem ? String(document.system?.rulesId ?? "") : "",
+		rulesId,
 		name: String(document.name ?? ""),
+		specialisation: isItem && document.type === "skill"
+			? String(document.system?.specialisation ?? document.system?.specialization ?? "").trim()
+			: "",
 		documentType: isItem ? CAREER_DOCUMENT_TYPE.ITEM : CAREER_DOCUMENT_TYPE.ACTOR,
 		documentSubtype: String(document.type ?? ""),
 		quantity: 1,
@@ -395,7 +436,7 @@ function entryFromGrant(grant, collectionName) {
 		note: "",
 		choices: [{
 			id: foundry.utils.randomID(),
-			label: grant.name,
+			label: grantDisplayName(grant),
 			grants: [{ ...grant }],
 		}],
 		collectionName,
@@ -405,7 +446,7 @@ function entryFromGrant(grant, collectionName) {
 function choiceFromGrant(grant) {
 	return {
 		id: foundry.utils.randomID(),
-		label: grant.name,
+		label: grantDisplayName(grant),
 		grants: [{ ...grant }],
 	};
 }
@@ -422,13 +463,20 @@ function grantAlreadyPresent(entries, grant) {
 }
 
 function sameReference(left, right) {
+	const leftSpecialisation = normalizeName(left?.specialisation);
+	const rightSpecialisation = normalizeName(right?.specialisation);
 	const leftRules = String(left?.rulesId ?? "");
 	const rightRules = String(right?.rulesId ?? "");
-	if (leftRules && rightRules) return leftRules === rightRules;
+	if (leftRules && rightRules) {
+		return leftRules === rightRules && leftSpecialisation === rightSpecialisation;
+	}
 	const leftUuid = String(left?.uuid ?? "");
 	const rightUuid = String(right?.uuid ?? "");
-	if (leftUuid && rightUuid) return leftUuid === rightUuid;
-	return normalizeName(left?.name) === normalizeName(right?.name);
+	if (leftUuid && rightUuid) {
+		return leftUuid === rightUuid && leftSpecialisation === rightSpecialisation;
+	}
+	return normalizeName(left?.name) === normalizeName(right?.name) &&
+		leftSpecialisation === rightSpecialisation;
 }
 
 async function configureEntryDialog(entry) {
@@ -551,8 +599,8 @@ function labels() {
 		trappings: localize("Trappings", "Wyposażenie"),
 		magicPoints: localize("Magic Points", "Punkty Magii"),
 		exits: localize("Career Exits", "Profesje wyjściowe"),
-		dropSkill: localize("Drop Skill here", "Upuść tutaj Umiejętność"),
-		dropTrapping: localize("Drop Equipment, Weapon, Armour or Creature here", "Upuść tutaj Ekwipunek, Broń, Pancerz lub Stworzenie"),
+		dropSkill: localize("Drop Skill here; drop onto an existing option to build a bundle", "Upuść tutaj Umiejętność; upuść na istniejącą opcję, aby utworzyć pakiet"),
+		dropTrapping: localize("Drop Equipment, Weapon, Armour or Creature here; drop onto an option to add to its bundle", "Upuść tutaj Ekwipunek, Broń, Pancerz lub Stworzenie; upuść na opcję, aby dodać do jej pakietu"),
 		dropExit: localize("Drop Career here", "Upuść tutaj Profesję"),
 	};
 }
