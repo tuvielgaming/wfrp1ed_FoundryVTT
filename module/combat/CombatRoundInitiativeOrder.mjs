@@ -7,16 +7,18 @@ export const ROUND_ORDER_OPTION = "wfrpRoundInitiativeOrder";
 const DRAG_MIME = "application/x-wfrp-combatant";
 
 /**
- * Round-scoped WFRP turn ordering independent of Initiative values.
+ * Round-scoped WFRP acting order independent of Foundry's native Combat.turns.
  *
- * `Combatant.initiative` is always the real WFRP Initiative score. Dragging a
- * row never rewrites it. The mutable order for one round is stored once on the
- * parent Combat as `{ round, ids }` and Wfrp1edCombat.setupTurns consumes that
- * list when Foundry prepares `combat.turns`.
+ * Combatant.initiative is always the real WFRP Initiative score. Foundry keeps
+ * its own initiative-sorted Combat.turns array for lifecycle/focus purposes.
+ * Temporary WFRP delay/reorder is stored once on the Combat document as
+ * `{ round, ids }` and is used for:
+ * - deciding who acts next;
+ * - displaying rows in the Combat Tracker;
+ * - mapping actors onto immutable initiative-clock slots.
  *
- * At the beginning of each round the list is regenerated from real Initiative.
- * Temporary delay/reorder therefore lasts only for that round and cannot move
- * the numeric Initiative coordinate used by the Critical initiative clock.
+ * This separation prevents drag-and-drop from corrupting Initiative or Foundry's
+ * turn lifecycle while still allowing an arbitrary acting order for one round.
  */
 export class CombatRoundInitiativeOrder {
 	static async captureBaseline(combatant, { force = false } = {}) {
@@ -41,7 +43,7 @@ export class CombatRoundInitiativeOrder {
 		}
 	}
 
-	/** Identify the single Combat update which owns round-order changes. */
+	/** Identify updates which change only the WFRP temporary order. */
 	static isOrderUpdate(changed, options) {
 		if (options?.[ROUND_ORDER_OPTION]) return true;
 		if (!changed || typeof changed !== "object") return false;
@@ -57,14 +59,7 @@ export class CombatRoundInitiativeOrder {
 		);
 	}
 
-	/**
-	 * Return stored current-combatant IDs in their persisted relative order.
-	 *
-	 * This method is intentionally safe during Combat data preparation. Foundry
-	 * calls setupTurns() before all derived Combat helpers (including `started`)
-	 * are guaranteed to be usable, so the persisted round number is the only
-	 * lifecycle gate required here.
-	 */
+	/** Return persisted current-combatant IDs in their relative WFRP order. */
 	static storedIds(combat, round = nonNegativeInteger(combat?.round)) {
 		if (!(combat instanceof foundry.documents.Combat)) return null;
 		if (round <= 0) return null;
@@ -84,7 +79,7 @@ export class CombatRoundInitiativeOrder {
 		});
 	}
 
-	/** Return the valid current-round ordered ID list, or null if none exists. */
+	/** Return a complete valid WFRP order, or null if none is defined. */
 	static ids(combat, round = nonNegativeInteger(combat?.round)) {
 		if (!(combat instanceof foundry.documents.Combat)) return null;
 		if (round <= 0) return null;
@@ -97,14 +92,24 @@ export class CombatRoundInitiativeOrder {
 		return ids;
 	}
 
-	/** Comparator contribution retained for Foundry callers which sort directly. */
-	static compare(combat, left, right) {
+	/** Return the acting order without changing Foundry's native Combat.turns. */
+	static orderedCombatants(combat) {
+		if (!(combat instanceof foundry.documents.Combat)) return [];
 		const ids = this.ids(combat);
-		if (!ids) return null;
-		const leftIndex = ids.indexOf(String(left?.id ?? ""));
-		const rightIndex = ids.indexOf(String(right?.id ?? ""));
-		if (leftIndex < 0 || rightIndex < 0) return null;
-		return leftIndex - rightIndex;
+		if (!ids) return [...(combat.turns ?? [])];
+		return ids
+			.map((id) => combat.combatants.get(String(id)) ?? null)
+			.filter(Boolean);
+	}
+
+	/** First unfinished WFRP turn in the temporary acting order. */
+	static firstUnfinished(combat) {
+		if (!(combat instanceof foundry.documents.Combat)) return null;
+		const skipDefeated = combat.settings?.skipDefeated === true;
+		return this.orderedCombatants(combat).find((combatant) => {
+			if (skipDefeated && combatant.defeated) return false;
+			return !CombatRoundTurnState.isCompleted(combatant);
+		}) ?? null;
 	}
 
 	/** Build the new round list from real Initiative values. */
@@ -121,43 +126,32 @@ export class CombatRoundInitiativeOrder {
 		);
 	}
 
-	/**
-	 * Clear the completed round's temporary order without changing the lifecycle
-	 * owner as Foundry falls back to canonical Initiative sorting.
-	 */
+	/** Clear only the temporary acting order before the next round. */
 	static async resetBeforeNextRound(combat) {
 		if (!(combat instanceof foundry.documents.Combat)) return;
 		if (combat.getFlag?.(FLAG_SCOPE, ROUND_ORDER_FLAG) === undefined) return;
-
-		const canonicalIds = [...combat.combatants]
-			.sort(compareCanonicalInitiative)
-			.map((entry) => String(entry.id));
-		const activeId = activeCombatantId(combat);
-		const updateData = {
-			[`flags.${FLAG_SCOPE}.${ROUND_ORDER_FLAG}`]: null,
-		};
-		const activeIndex = activeId ? canonicalIds.indexOf(activeId) : -1;
-		if (activeIndex >= 0) updateData.turn = activeIndex;
+		if (!combatIsPersisted(combat)) return;
 
 		await combat.update(
-			updateData,
-			{ [ROUND_ORDER_OPTION]: true, direction: 0 },
+			{ [`flags.${FLAG_SCOPE}.${ROUND_ORDER_FLAG}`]: null },
+			{ [ROUND_ORDER_OPTION]: true },
 		);
 	}
 
 	/**
 	 * Insert a newly joined Combatant at its canonical Initiative rank while
-	 * preserving the relative temporary order of all existing rows.
+	 * preserving the relative temporary order of existing combatants.
 	 */
 	static async insertCombatant(combat, combatant) {
 		if (!(combat instanceof foundry.documents.Combat) || !combat.started) return;
+		if (!combatIsPersisted(combat)) return;
 		assertCombatant(combatant);
 		const round = nonNegativeInteger(combat.round);
 		if (round <= 0) return;
 
 		const id = String(combatant.id);
 		const current = this.storedIds(combat, round)
-			?? combat.turns.map((entry) => String(entry.id));
+			?? [...combat.turns].map((entry) => String(entry.id));
 		const withoutNew = current.filter((entryId) => entryId !== id);
 
 		const canonical = [...combat.combatants].sort(compareCanonicalInitiative);
@@ -165,20 +159,18 @@ export class CombatRoundInitiativeOrder {
 		const canonicalIndex = canonicalIds.indexOf(id);
 		if (canonicalIndex < 0) return;
 
-		/* Find the first existing combatant which canonically belongs after the
-		 * newcomer and insert before it. This respects previous relative reorder
-		 * decisions among existing rows instead of rebuilding the whole list. */
 		const afterIds = new Set(canonicalIds.slice(canonicalIndex + 1));
 		let insertAt = withoutNew.findIndex((entryId) => afterIds.has(entryId));
 		if (insertAt < 0) insertAt = withoutNew.length;
 		withoutNew.splice(insertAt, 0, id);
 
-		await this.applyOrder(combat, withoutNew);
+		await this.#writeOrder(combat, withoutNew, round);
 	}
 
-	/** Preserve the remaining temporary order after a Combatant exits. */
+	/** Preserve the surviving temporary order after one Combatant exits. */
 	static async removeCombatant(combat) {
 		if (!(combat instanceof foundry.documents.Combat) || !combat.started) return;
+		if (!combatIsPersisted(combat)) return;
 		const round = nonNegativeInteger(combat.round);
 		if (round <= 0) return;
 
@@ -193,14 +185,7 @@ export class CombatRoundInitiativeOrder {
 		await this.#writeOrder(combat, preserved, round);
 	}
 
-	/**
-	 * Apply an explicit current-round list order without changing Initiative.
-	 *
-	 * The order flag and numeric `turn` index are written atomically so the same
-	 * lifecycle Combatant remains active while the list moves underneath it. If
-	 * the active row itself was dragged, that stable intermediate state is then
-	 * followed by one deliberate focus transfer to the first unfinished row.
-	 */
+	/** Apply an explicit current-round acting order without changing Initiative. */
 	static async applyOrder(combat, orderedIds, { movedCombatantId = "" } = {}) {
 		if (!(combat instanceof foundry.documents.Combat)) {
 			throw new TypeError("A Foundry Combat is required.");
@@ -211,6 +196,7 @@ export class CombatRoundInitiativeOrder {
 				"Tylko MG może zmieniać kolejność inicjatywy.",
 			));
 		}
+		if (!combatIsPersisted(combat)) return;
 
 		const round = nonNegativeInteger(combat.round);
 		if (!combat.started || round <= 0) {
@@ -218,62 +204,44 @@ export class CombatRoundInitiativeOrder {
 		}
 
 		const ids = validateOrder(combat, orderedIds);
-		const activeBeforeId = activeCombatantId(combat);
+		const activeBefore = combat.combatant ?? null;
+		const activeBeforeId = String(activeBefore?.id ?? "");
 
-		await this.#writeOrder(combat, ids, round, { activeId: activeBeforeId });
+		await this.#writeOrder(combat, ids, round);
 
 		const movedActive =
 			activeBeforeId && String(movedCombatantId) === activeBeforeId;
 		if (!movedActive) {
-			const active = activeBeforeId
-				? combat.combatants.get(activeBeforeId) ?? null
-				: combat.combatant ?? null;
-			if (active) await CombatRoundTurnState.focus(combat, active);
+			if (activeBefore) await CombatRoundTurnState.focus(combat, activeBefore);
 			return;
 		}
 
-		const next = CombatRoundTurnState.firstUnfinished(combat);
+		const next = this.firstUnfinished(combat);
 		if (!next || String(next.id) === activeBeforeId) {
-			const active = activeBeforeId
-				? combat.combatants.get(activeBeforeId) ?? null
-				: null;
-			if (active) await CombatRoundTurnState.focus(combat, active);
+			if (activeBefore) await CombatRoundTurnState.focus(combat, activeBefore);
 			return;
 		}
 		await CombatRoundTurnState.focus(combat, next);
 	}
 
-	static async #writeOrder(combat, ids, round, { activeId = null } = {}) {
+	static async #writeOrder(combat, ids, round) {
+		if (!combatIsPersisted(combat)) return;
 		const validated = validateOrder(combat, ids);
-		const lifecycleId = activeId === null
-			? activeCombatantId(combat)
-			: String(activeId ?? "");
-		const updateData = {
-			[`flags.${FLAG_SCOPE}.${ROUND_ORDER_FLAG}`]: {
-				round,
-				ids: validated,
-			},
-		};
-
-		/* Foundry's `turn` is only an array index. If the list order changes while
-		 * that index is left untouched, the red tracker focus silently jumps to
-		 * whichever Combatant now occupies the old slot while the WFRP attack window
-		 * remains owned by the previous Combatant. Move the index in the SAME Combat
-		 * update so prepared data resolves to the same lifecycle owner. */
-		const activeIndex = lifecycleId ? validated.indexOf(lifecycleId) : -1;
-		if (activeIndex >= 0) updateData.turn = activeIndex;
-
 		await combat.update(
-			updateData,
-			{ [ROUND_ORDER_OPTION]: true, direction: 0 },
+			{
+				[`flags.${FLAG_SCOPE}.${ROUND_ORDER_FLAG}`]: {
+					round,
+					ids: validated,
+				},
+			},
+			{ [ROUND_ORDER_OPTION]: true },
 		);
 	}
 }
 
 /**
  * Initiative edits outside a running round define the frozen per-round baseline.
- * During a round, tracker drag never changes Initiative; direct GM Initiative
- * edits are separate adjudication and do not rewrite an already-captured clock.
+ * During a round, tracker drag never changes Initiative.
  */
 Hooks.on("updateCombatant", (combatant, changes) => {
 	if (!Object.hasOwn(changes ?? {}, "initiative")) return;
@@ -293,13 +261,46 @@ Hooks.on("updateCombatant", (combatant, changes) => {
 	);
 });
 
-/** GM drag-and-drop convenience for the native Foundry v14 Combat Tracker. */
+/** Re-render a viewed tracker when only the WFRP order flag changes. */
+Hooks.on("updateCombat", (combat, changes, options) => {
+	if (!CombatRoundInitiativeOrder.isOrderUpdate(changes, options)) return;
+	if (String(game.combat?.id ?? "") !== String(combat?.id ?? "")) return;
+	void ui.combat?.render?.();
+});
+
+/**
+ * Display the WFRP acting order without replacing Foundry's native turn array.
+ * GM users additionally receive drag-and-drop controls.
+ */
 Hooks.on("renderApplicationV2", (application, element) => {
 	const CombatTracker = foundry.applications?.sidebar?.tabs?.CombatTracker;
 	if (!CombatTracker || !(application instanceof CombatTracker)) return;
-	if (!game.user?.isGM || !game.combat?.started) return;
-	activateTrackerDrag(element, game.combat);
+	const combat = game.combat;
+	if (!combat?.started) return;
+
+	applyTrackerDisplayOrder(element, combat);
+	if (game.user?.isGM) activateTrackerDrag(element, combat);
 });
+
+function applyTrackerDisplayOrder(root, combat) {
+	if (!(root instanceof HTMLElement)) return;
+	const rows = combatantRows(root);
+	if (rows.length < 2) return;
+	const list = commonParent(rows);
+	if (!(list instanceof HTMLElement)) return;
+
+	const ids = CombatRoundInitiativeOrder.ids(combat);
+	if (!ids) return;
+	const byId = new Map(rows.map((row) => [combatantId(row), row]));
+	const endZone = list.querySelector(":scope > [data-wfrp-initiative-drop-end]");
+
+	for (const id of ids) {
+		const row = byId.get(String(id));
+		if (!row) continue;
+		if (endZone) list.insertBefore(row, endZone);
+		else list.append(row);
+	}
+}
 
 function activateTrackerDrag(root, combat) {
 	if (!(root instanceof HTMLElement)) return;
@@ -400,12 +401,8 @@ function activateTrackerDrag(root, combat) {
 	}
 }
 
-/**
- * Keep the green target indicator honest: whenever the pointer-selected half of
- * a neighboring row would produce the exact same order, flip to the other half.
- */
 function actionableDropPosition(combat, sourceId, targetId, preferredPosition) {
-	const current = combat.turns.map((entry) => String(entry.id));
+	const current = currentOrderIds(combat);
 	const preferred = relativeOrder(
 		current,
 		sourceId,
@@ -427,7 +424,7 @@ function actionableDropPosition(combat, sourceId, targetId, preferredPosition) {
 
 async function reorderRelative(combat, sourceId, targetId, position) {
 	try {
-		const current = combat.turns.map((entry) => String(entry.id));
+		const current = currentOrderIds(combat);
 		const ids = relativeOrder(current, sourceId, targetId, position);
 		if (!ids || sameOrder(current, ids)) return;
 
@@ -438,6 +435,26 @@ async function reorderRelative(combat, sourceId, targetId, position) {
 		console.error("WFRP1ED | Unable to reorder initiative.", error);
 		ui.notifications.error(error?.message ?? String(error));
 	}
+}
+
+async function reorderToEnd(combat, sourceId) {
+	try {
+		const ids = currentOrderIds(combat)
+			.filter((id) => id !== String(sourceId));
+		if (!combat.combatants.get(String(sourceId))) return;
+		ids.push(String(sourceId));
+		await CombatRoundInitiativeOrder.applyOrder(combat, ids, {
+			movedCombatantId: sourceId,
+		});
+	} catch (error) {
+		console.error("WFRP1ED | Unable to move initiative to end.", error);
+		ui.notifications.error(error?.message ?? String(error));
+	}
+}
+
+function currentOrderIds(combat) {
+	return CombatRoundInitiativeOrder.ids(combat)
+		?? [...(combat?.turns ?? [])].map((entry) => String(entry.id));
 }
 
 function relativeOrder(currentIds, sourceId, targetId, position) {
@@ -459,22 +476,6 @@ function sameOrder(left, right) {
 		left.every((id, index) => String(id) === String(right[index]));
 }
 
-async function reorderToEnd(combat, sourceId) {
-	try {
-		const ids = combat.turns
-			.map((entry) => String(entry.id))
-			.filter((id) => id !== String(sourceId));
-		if (!combat.combatants.get(String(sourceId))) return;
-		ids.push(String(sourceId));
-		await CombatRoundInitiativeOrder.applyOrder(combat, ids, {
-			movedCombatantId: sourceId,
-		});
-	} catch (error) {
-		console.error("WFRP1ED | Unable to move initiative to end.", error);
-		ui.notifications.error(error?.message ?? String(error));
-	}
-}
-
 function validateOrder(combat, orderedIds) {
 	const ids = [...orderedIds].map(String);
 	const combatantIds = [...combat.combatants].map((entry) => String(entry.id));
@@ -486,18 +487,6 @@ function validateOrder(combat, orderedIds) {
 		throw new Error("Initiative reorder must include every Combatant exactly once.");
 	}
 	return ids;
-}
-
-function activeCombatantId(combat) {
-	const turn = Number(combat?.turn);
-	const turns = Array.isArray(combat?.turns) ? combat.turns : [];
-	if (Number.isInteger(turn) && turn >= 0 && turn < turns.length) {
-		const turnId = String(turns[turn]?.id ?? "").trim();
-		if (turnId) return turnId;
-	}
-
-	const historyId = String(combat?.current?.combatantId ?? "").trim();
-	return historyId && combat?.combatants?.get(historyId) ? historyId : "";
 }
 
 function ensureEndDropZone(list) {
@@ -581,6 +570,11 @@ function compareCanonicalInitiative(left, right) {
 		return rightInitiative - leftInitiative;
 	}
 	return String(left?.id ?? "").localeCompare(String(right?.id ?? ""));
+}
+
+function combatIsPersisted(combat) {
+	const id = String(combat?.id ?? "");
+	return Boolean(id && game.combats?.get?.(id) === combat);
 }
 
 function nullableFinite(value) {
