@@ -185,8 +185,15 @@ export class CombatRoundInitiativeOrder {
 		await this.#writeOrder(combat, preserved, round);
 	}
 
-	/** Apply an explicit current-round acting order without changing Initiative. */
-	static async applyOrder(combat, orderedIds, { movedCombatantId = "" } = {}) {
+	/**
+	 * Apply an explicit current-round acting order without changing Initiative.
+	 *
+	 * Reordering is an explicit declaration of the current acting sequence. After
+	 * every successful reorder, focus is reconciled to the first unfinished row in
+	 * that new sequence. The rule is deliberately direction-independent: dragging
+	 * upward and downward produces the same lifecycle result.
+	 */
+	static async applyOrder(combat, orderedIds) {
 		if (!(combat instanceof foundry.documents.Combat)) {
 			throw new TypeError("A Foundry Combat is required.");
 		}
@@ -204,24 +211,10 @@ export class CombatRoundInitiativeOrder {
 		}
 
 		const ids = validateOrder(combat, orderedIds);
-		const activeBefore = combat.combatant ?? null;
-		const activeBeforeId = String(activeBefore?.id ?? "");
-
 		await this.#writeOrder(combat, ids, round);
 
-		const movedActive =
-			activeBeforeId && String(movedCombatantId) === activeBeforeId;
-		if (!movedActive) {
-			if (activeBefore) await CombatRoundTurnState.focus(combat, activeBefore);
-			return;
-		}
-
 		const next = this.firstUnfinished(combat);
-		if (!next || String(next.id) === activeBeforeId) {
-			if (activeBefore) await CombatRoundTurnState.focus(combat, activeBefore);
-			return;
-		}
-		await CombatRoundTurnState.focus(combat, next);
+		if (next) await CombatRoundTurnState.focus(combat, next);
 	}
 
 	static async #writeOrder(combat, ids, round) {
@@ -302,6 +295,15 @@ function applyTrackerDisplayOrder(root, combat) {
 	}
 }
 
+/**
+ * Bind one drag source per row and one drop surface for the whole tracker list.
+ *
+ * The insertion index is calculated against every displayed row except the
+ * source row. A direct drag from third to first therefore writes [3,1,2] in one
+ * operation instead of degrading into an adjacent swap. The source ID is kept
+ * on the render root because browser dragover events do not reliably expose
+ * dataTransfer.getData() until the final drop event.
+ */
 function activateTrackerDrag(root, combat) {
 	if (!(root instanceof HTMLElement)) return;
 	const rows = combatantRows(root);
@@ -309,6 +311,7 @@ function activateTrackerDrag(root, combat) {
 
 	root.dataset.wfrpInitiativeDragRoot = "true";
 	const list = commonParent(rows);
+	if (!(list instanceof HTMLElement)) return;
 	const endZone = ensureEndDropZone(list);
 
 	for (const row of rows) {
@@ -327,127 +330,109 @@ function activateTrackerDrag(root, combat) {
 
 		row.addEventListener("dragstart", (event) => {
 			clearDropFeedback(root);
+			root.dataset.wfrpDragCombatantId = id;
 			root.classList.add("wfrp-initiative-dragging");
 			row.classList.add("wfrp-initiative-drag-source");
 			event.dataTransfer?.setData(DRAG_MIME, id);
 			if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
 		});
 
-		row.addEventListener("dragover", (event) => {
-			if (!hasWfrpDrag(event)) return;
-			if (row.classList.contains("wfrp-initiative-drag-source")) return;
-
-			event.preventDefault();
-			if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
-			clearDropTargets(root, row);
-
-			const rect = row.getBoundingClientRect();
-			const pointerPosition = event.clientY > rect.top + rect.height / 2
-				? "after"
-				: "before";
-			row.classList.add("wfrp-initiative-drop-target");
-			row.dataset.wfrpDropPosition = pointerPosition;
-		});
-
-		row.addEventListener("dragleave", (event) => {
-			if (event.relatedTarget instanceof Node && row.contains(event.relatedTarget)) return;
-			row.classList.remove("wfrp-initiative-drop-target");
-			delete row.dataset.wfrpDropPosition;
-		});
-
-		row.addEventListener("drop", (event) => {
-			const sourceId = event.dataTransfer?.getData(DRAG_MIME);
-			if (!sourceId || sourceId === id) return;
-			event.preventDefault();
-			event.stopPropagation();
-			const preferredPosition = row.dataset.wfrpDropPosition === "after"
-				? "after"
-				: "before";
-			const position = actionableDropPosition(
-				combat,
-				sourceId,
-				id,
-				preferredPosition,
-			);
-			clearDropFeedback(root);
-			if (!position) return;
-			void reorderRelative(combat, sourceId, id, position);
-		});
-
 		row.addEventListener("dragend", () => clearDropFeedback(root));
 	}
 
-	if (endZone && endZone.dataset.wfrpInitiativeBound !== "true") {
-		endZone.dataset.wfrpInitiativeBound = "true";
-		endZone.addEventListener("dragover", (event) => {
-			if (!hasWfrpDrag(event)) return;
-			event.preventDefault();
-			clearDropTargets(root, endZone);
-			endZone.classList.add("wfrp-initiative-drop-end--active");
-			if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
-		});
-		endZone.addEventListener("dragleave", (event) => {
-			if (event.relatedTarget instanceof Node && endZone.contains(event.relatedTarget)) return;
-			endZone.classList.remove("wfrp-initiative-drop-end--active");
-		});
-		endZone.addEventListener("drop", (event) => {
-			const sourceId = event.dataTransfer?.getData(DRAG_MIME);
-			if (!sourceId) return;
-			event.preventDefault();
-			event.stopPropagation();
-			clearDropFeedback(root);
-			void reorderToEnd(combat, sourceId);
-		});
+	if (list.dataset.wfrpInitiativeListBound === "true") return;
+	list.dataset.wfrpInitiativeListBound = "true";
+
+	list.addEventListener("dragover", (event) => {
+		if (!hasWfrpDrag(event)) return;
+		const sourceId = String(root.dataset.wfrpDragCombatantId ?? "").trim();
+		if (!sourceId) return;
+
+		event.preventDefault();
+		if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+
+		const index = insertionIndexForPointer(root, combat, sourceId, event.clientY);
+		root.dataset.wfrpDropIndex = String(index);
+		showInsertionFeedback(root, combat, sourceId, index, endZone);
+	});
+
+	list.addEventListener("drop", (event) => {
+		if (!hasWfrpDrag(event)) return;
+		const sourceId = String(
+			root.dataset.wfrpDragCombatantId ??
+			event.dataTransfer?.getData(DRAG_MIME) ??
+			"",
+		).trim();
+		if (!sourceId) return;
+
+		event.preventDefault();
+		event.stopPropagation();
+		const index = boundedInsertionIndex(
+			root.dataset.wfrpDropIndex,
+			Math.max(0, currentOrderIds(combat).length - 1),
+		);
+		clearDropFeedback(root);
+		void reorderToIndex(combat, sourceId, index, root);
+	});
+
+	list.addEventListener("dragleave", (event) => {
+		if (event.relatedTarget instanceof Node && list.contains(event.relatedTarget)) return;
+		clearDropTargets(root);
+		delete root.dataset.wfrpDropIndex;
+	});
+}
+
+function insertionIndexForPointer(root, combat, sourceId, clientY) {
+	const rowById = new Map(
+		combatantRows(root).map((row) => [combatantId(row), row]),
+	);
+	const remainingIds = currentOrderIds(combat)
+		.filter((id) => String(id) !== String(sourceId));
+
+	for (let index = 0; index < remainingIds.length; index += 1) {
+		const row = rowById.get(String(remainingIds[index]));
+		if (!row) continue;
+		const rect = row.getBoundingClientRect();
+		if (clientY < rect.top + rect.height / 2) return index;
 	}
+	return remainingIds.length;
 }
 
-function actionableDropPosition(combat, sourceId, targetId, preferredPosition) {
-	const current = currentOrderIds(combat);
-	const preferred = relativeOrder(
-		current,
-		sourceId,
-		targetId,
-		preferredPosition,
-	);
-	if (preferred && !sameOrder(current, preferred)) return preferredPosition;
+function showInsertionFeedback(root, combat, sourceId, index, endZone) {
+	clearDropTargets(root);
+	const remainingIds = currentOrderIds(combat)
+		.filter((id) => String(id) !== String(sourceId));
+	const bounded = boundedInsertionIndex(index, remainingIds.length);
 
-	const alternatePosition = preferredPosition === "after" ? "before" : "after";
-	const alternate = relativeOrder(
-		current,
-		sourceId,
-		targetId,
-		alternatePosition,
+	if (bounded >= remainingIds.length) {
+		endZone?.classList.add("wfrp-initiative-drop-end--active");
+		return;
+	}
+
+	const targetId = String(remainingIds[bounded]);
+	const targetRow = combatantRows(root).find(
+		(row) => combatantId(row) === targetId,
 	);
-	if (alternate && !sameOrder(current, alternate)) return alternatePosition;
-	return null;
+	if (!targetRow) return;
+	targetRow.classList.add("wfrp-initiative-drop-target");
+	targetRow.dataset.wfrpDropPosition = "before";
 }
 
-async function reorderRelative(combat, sourceId, targetId, position) {
+async function reorderToIndex(combat, sourceId, insertionIndex, root = null) {
 	try {
 		const current = currentOrderIds(combat);
-		const ids = relativeOrder(current, sourceId, targetId, position);
-		if (!ids || sameOrder(current, ids)) return;
+		const source = String(sourceId);
+		if (!combat.combatants.get(source) || !current.includes(source)) return;
 
-		await CombatRoundInitiativeOrder.applyOrder(combat, ids, {
-			movedCombatantId: sourceId,
-		});
+		const remaining = current.filter((id) => String(id) !== source);
+		const index = boundedInsertionIndex(insertionIndex, remaining.length);
+		remaining.splice(index, 0, source);
+		if (sameOrder(current, remaining)) return;
+
+		await CombatRoundInitiativeOrder.applyOrder(combat, remaining);
+		if (root instanceof HTMLElement) applyTrackerDisplayOrder(root, combat);
 	} catch (error) {
 		console.error("WFRP1ED | Unable to reorder initiative.", error);
-		ui.notifications.error(error?.message ?? String(error));
-	}
-}
-
-async function reorderToEnd(combat, sourceId) {
-	try {
-		const ids = currentOrderIds(combat)
-			.filter((id) => id !== String(sourceId));
-		if (!combat.combatants.get(String(sourceId))) return;
-		ids.push(String(sourceId));
-		await CombatRoundInitiativeOrder.applyOrder(combat, ids, {
-			movedCombatantId: sourceId,
-		});
-	} catch (error) {
-		console.error("WFRP1ED | Unable to move initiative to end.", error);
 		ui.notifications.error(error?.message ?? String(error));
 	}
 }
@@ -455,20 +440,6 @@ async function reorderToEnd(combat, sourceId) {
 function currentOrderIds(combat) {
 	return CombatRoundInitiativeOrder.ids(combat)
 		?? [...(combat?.turns ?? [])].map((entry) => String(entry.id));
-}
-
-function relativeOrder(currentIds, sourceId, targetId, position) {
-	const ids = [...currentIds].map(String);
-	const source = String(sourceId);
-	const target = String(targetId);
-	const from = ids.indexOf(source);
-	if (from < 0 || source === target || !ids.includes(target)) return null;
-
-	ids.splice(from, 1);
-	let insertAt = ids.indexOf(target);
-	if (position === "after") insertAt += 1;
-	ids.splice(insertAt, 0, source);
-	return ids;
 }
 
 function sameOrder(left, right) {
@@ -487,6 +458,12 @@ function validateOrder(combat, orderedIds) {
 		throw new Error("Initiative reorder must include every Combatant exactly once.");
 	}
 	return ids;
+}
+
+function boundedInsertionIndex(value, max) {
+	const numeric = Number(value);
+	const integer = Number.isFinite(numeric) ? Math.trunc(numeric) : max;
+	return Math.max(0, Math.min(integer, Math.max(0, max)));
 }
 
 function ensureEndDropZone(list) {
@@ -509,6 +486,8 @@ function commonParent(rows) {
 
 function clearDropFeedback(root) {
 	root.classList.remove("wfrp-initiative-dragging");
+	delete root.dataset.wfrpDragCombatantId;
+	delete root.dataset.wfrpDropIndex;
 	for (const row of root.querySelectorAll(
 		".wfrp-initiative-drag-source, .wfrp-initiative-drop-target",
 	)) {
@@ -523,20 +502,21 @@ function clearDropFeedback(root) {
 	}
 }
 
-function clearDropTargets(root, except = null) {
+function clearDropTargets(root) {
 	for (const row of root.querySelectorAll(".wfrp-initiative-drop-target")) {
-		if (row === except) continue;
 		row.classList.remove("wfrp-initiative-drop-target");
 		delete row.dataset.wfrpDropPosition;
 	}
 	for (const zone of root.querySelectorAll(".wfrp-initiative-drop-end--active")) {
-		if (zone === except) continue;
 		zone.classList.remove("wfrp-initiative-drop-end--active");
 	}
 }
 
 function hasWfrpDrag(event) {
-	return Boolean(event.dataTransfer?.types?.includes(DRAG_MIME));
+	return Boolean(
+		String(event.currentTarget?.closest?.("[data-wfrp-initiative-drag-root]")?.dataset?.wfrpDragCombatantId ?? "").trim() ||
+		event.dataTransfer?.types?.includes(DRAG_MIME),
+	);
 }
 
 function combatantRows(root) {
