@@ -95,7 +95,13 @@
 							</div>
 							<div class="career-choice-editor">
 								{{#each entry.choices as |choice|}}
-									<span class="career-choice-chip">
+									<span
+										class="career-choice-chip"
+										data-career-drop-zone="skills"
+										data-career-entry-id="{{../id}}"
+										data-career-choice-id="{{choice.id}}"
+										title="Drop another Skill here to add it to this same option"
+									>
 										{{choice.label}}
 										<button type="button" data-action="deleteChoice" data-career-collection="skills" data-career-entry-id="{{../id}}" data-career-choice-id="{{choice.id}}" title="Delete alternative"><i class="fa-solid fa-xmark"></i></button>
 									</span>
@@ -123,6 +129,20 @@
 							<div class="career-entry-controls">
 								<button type="button" data-action="configureEntry" data-career-collection="trappings" data-career-entry-id="{{entry.id}}" title="Configure"><i class="fa-solid fa-gear"></i></button>
 								<button type="button" data-action="deleteEntry" data-career-collection="trappings" data-career-entry-id="{{entry.id}}" title="Delete"><i class="fa-solid fa-trash"></i></button>
+							</div>
+							<div class="career-choice-editor">
+								{{#each entry.choices as |choice|}}
+									<span
+										class="career-choice-chip"
+										data-career-drop-zone="trappings"
+										data-career-entry-id="{{../id}}"
+										data-career-choice-id="{{choice.id}}"
+										title="Drop another Trapping here to add it to this same option"
+									>
+										{{choice.label}}
+										<button type="button" data-action="deleteChoice" data-career-collection="trappings" data-career-entry-id="{{../id}}" data-career-choice-id="{{choice.id}}" title="Delete alternative"><i class="fa-solid fa-xmark"></i></button>
+									</span>
+								{{/each}}
 							</div>
 						{{/if}}
 					</div>
