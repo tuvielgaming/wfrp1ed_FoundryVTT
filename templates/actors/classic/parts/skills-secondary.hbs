@@ -5,31 +5,42 @@
 	>
 		{{#each display.skills as |skill|}}
 			<li
-				class="skill-row"
-				data-item-id="{{skill.id}}"
-				data-item-uuid="{{skill.uuid}}"
+				class="skill-row{{#if skill.careerOffer}} skill-row--career-offer{{/if}}"
+				{{#unless skill.careerOffer}}data-item-id="{{skill.id}}" data-item-uuid="{{skill.uuid}}"{{/unless}}
 			>
-				<button
-					type="button"
-					class="skill-name skill-name--open"
-					data-action="openSkill"
-					data-item-id="{{skill.id}}"
-					aria-label="{{localize 'WFRP1ED.SkillSheet.OpenSkill'}}: {{skill.displayName}}"
-				>
-					{{skill.displayName}}
-				</button>
-
-				{{#if @root.editable}}
+				{{#if skill.careerOffer}}
 					<button
 						type="button"
-						class="skill-control skill-control--remove"
-						data-action="removeSkill"
-						data-item-id="{{skill.id}}"
-						aria-label="{{localize 'WFRP1ED.SkillSheet.RemoveSkill'}}: {{skill.displayName}}"
-						data-tooltip="{{localize 'WFRP1ED.SkillSheet.RemoveSkill'}}"
+						class="skill-name skill-name--career-offer"
+						data-career-skill-offer="{{skill.careerOfferKey}}"
+						aria-label="{{skill.displayName}} — {{skill.cost}} PD"
+						title="{{skill.careerName}} — {{skill.cost}} PD"
 					>
-						<i class="fa-solid fa-trash" aria-hidden="true"></i>
+						{{skill.displayName}}
 					</button>
+				{{else}}
+					<button
+						type="button"
+						class="skill-name skill-name--open"
+						data-action="openSkill"
+						data-item-id="{{skill.id}}"
+						aria-label="{{localize 'WFRP1ED.SkillSheet.OpenSkill'}}: {{skill.displayName}}"
+					>
+						{{skill.displayName}}
+					</button>
+
+					{{#if @root.editable}}
+						<button
+							type="button"
+							class="skill-control skill-control--remove"
+							data-action="removeSkill"
+							data-item-id="{{skill.id}}"
+							aria-label="{{localize 'WFRP1ED.SkillSheet.RemoveSkill'}}: {{skill.displayName}}"
+							data-tooltip="{{localize 'WFRP1ED.SkillSheet.RemoveSkill'}}"
+						>
+							<i class="fa-solid fa-trash" aria-hidden="true"></i>
+						</button>
+					{{/if}}
 				{{/if}}
 			</li>
 		{{/each}}
