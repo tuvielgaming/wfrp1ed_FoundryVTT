@@ -11,34 +11,42 @@
 	opacity: 0.62;
 }
 
+/*
+ * Reordering is an insertion operation, not a row selection. Keep the target row
+ * visually neutral and draw only the exact insertion boundary between rows.
+ */
 [data-wfrp-initiative-drag-root="true"] .wfrp-initiative-drop-target {
 	position: relative;
-	outline: 2px solid var(--color-level-success, #2f9e44);
-	outline-offset: 1px;
+	outline: none;
 }
 
 [data-wfrp-initiative-drag-root="true"] .wfrp-initiative-drop-target[data-wfrp-drop-position="before"]::before,
 [data-wfrp-initiative-drag-root="true"] .wfrp-initiative-drop-target[data-wfrp-drop-position="after"]::after {
 	content: "";
 	position: absolute;
-	left: 0;
-	right: 0;
-	height: 3px;
-	background: var(--color-level-success, #2f9e44);
+	left: 3px;
+	right: 3px;
+	height: 8px;
 	pointer-events: none;
-	z-index: 10;
+	z-index: 20;
+	background:
+		radial-gradient(circle at 4px 50%, var(--color-level-success, #2f9e44) 0 4px, transparent 4.5px),
+		radial-gradient(circle at calc(100% - 4px) 50%, var(--color-level-success, #2f9e44) 0 4px, transparent 4.5px),
+		linear-gradient(var(--color-level-success, #2f9e44), var(--color-level-success, #2f9e44)) center / calc(100% - 8px) 3px no-repeat;
+	filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.65));
 }
 
 [data-wfrp-initiative-drag-root="true"] .wfrp-initiative-drop-target[data-wfrp-drop-position="before"]::before {
-	top: -3px;
+	top: -4px;
 }
 
 [data-wfrp-initiative-drag-root="true"] .wfrp-initiative-drop-target[data-wfrp-drop-position="after"]::after {
-	bottom: -3px;
+	bottom: -4px;
 }
 
 .wfrp-initiative-drop-end {
 	display: none;
+	position: relative;
 	box-sizing: border-box;
 	min-height: 24px;
 	margin: 6px 2px 2px;
@@ -55,11 +63,28 @@
 [data-wfrp-initiative-drag-root="true"].wfrp-initiative-dragging .wfrp-initiative-drop-end {
 	display: block;
 	border-color: var(--color-border-light-2, rgba(255, 255, 255, 0.25));
-	opacity: 0.8;
+	opacity: 0.72;
 }
 
+/* The final slot uses the same insertion-line language as every other slot. */
 [data-wfrp-initiative-drag-root="true"] .wfrp-initiative-drop-end--active {
-	border-color: var(--color-level-success, #2f9e44);
-	box-shadow: inset 0 0 0 1px var(--color-level-success, #2f9e44);
+	border-color: transparent;
+	box-shadow: none;
 	opacity: 1;
+}
+
+[data-wfrp-initiative-drag-root="true"] .wfrp-initiative-drop-end--active::before {
+	content: "";
+	position: absolute;
+	left: 1px;
+	right: 1px;
+	top: -5px;
+	height: 8px;
+	pointer-events: none;
+	z-index: 20;
+	background:
+		radial-gradient(circle at 4px 50%, var(--color-level-success, #2f9e44) 0 4px, transparent 4.5px),
+		radial-gradient(circle at calc(100% - 4px) 50%, var(--color-level-success, #2f9e44) 0 4px, transparent 4.5px),
+		linear-gradient(var(--color-level-success, #2f9e44), var(--color-level-success, #2f9e44)) center / calc(100% - 8px) 3px no-repeat;
+	filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.65));
 }
