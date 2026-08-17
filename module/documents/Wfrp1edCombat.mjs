@@ -44,20 +44,17 @@ export class Wfrp1edCombat extends foundry.documents.Combat {
 	}
 
 	/**
-	 * Build Combat.turns explicitly from the WFRP round-order list.
+	 * Return the WFRP current-round turn array.
 	 *
-	 * Foundry documents setupTurns() as the authoritative construction point for
-	 * the sorted turn array. We therefore enforce the persisted ordered-ID list
-	 * here directly instead of relying only on the protected comparator hook.
-	 * Initiative remains untouched and is used only when no current-round order
-	 * list exists.
+	 * Foundry calls setupTurns() while preparing Combat derived data, before the
+	 * `turns` cache and `combatant` getter are guaranteed to be usable. Keep this
+	 * method construction-safe and side-effect free: never read `this.combatant`,
+	 * never assign `this.turns`, and never rewrite `current` here. Foundry owns
+	 * those assignments after this method returns.
 	 *
 	 * @inheritDoc
 	 */
 	setupTurns() {
-		const activeBeforeId = String(
-			this.current?.combatantId ?? this.combatant?.id ?? "",
-		);
 		const canonical = super.setupTurns();
 		const ids = CombatRoundInitiativeOrder.ids(this);
 		if (!ids) return canonical;
@@ -66,39 +63,20 @@ export class Wfrp1edCombat extends foundry.documents.Combat {
 			[...this.combatants].map((combatant) => [String(combatant.id), combatant]),
 		);
 		const ordered = ids.map((id) => byId.get(String(id))).filter(Boolean);
-		if (ordered.length !== this.combatants.size) return canonical;
-
-		this.turns = ordered;
-		if (this.turn !== null && ordered.length) {
-			const currentIndex = activeBeforeId
-				? ordered.findIndex((combatant) => String(combatant.id) === activeBeforeId)
-				: -1;
-			const fallbackIndex = Math.max(
-				0,
-				Math.min(Number(this.turn) || 0, ordered.length - 1),
-			);
-			this.turn = currentIndex >= 0 ? currentIndex : fallbackIndex;
-		}
-
-		const currentCombatant = this.turn === null
-			? null
-			: ordered[this.turn] ?? null;
-		this.current = this._getCurrentState(currentCombatant);
-		if (!this.previous) this.previous = this.current;
-		return this.turns;
+		return ordered.length === this.combatants.size ? ordered : canonical;
 	}
 
 	/**
-	 * The temporary order is a flag on this Combat document. Post-update runs on
-	 * every connected client, so rebuild the cached `turns` array everywhere and
-	 * ask Foundry's normal debounced setup pathway to refresh a viewed tracker.
+	 * The temporary order is a flag on this Combat document. Data preparation has
+	 * already rebuilt `turns` from that flag by the time this post-update workflow
+	 * runs. Use Foundry's debounced setup only to synchronize a viewed tracker on
+	 * every connected client.
 	 *
 	 * @inheritDoc
 	 */
 	_onUpdate(changed, options, userId) {
 		super._onUpdate(changed, options, userId);
 		if (!CombatRoundInitiativeOrder.isOrderUpdate(changed, options)) return;
-		this.setupTurns();
 		this.debounceSetup();
 	}
 
