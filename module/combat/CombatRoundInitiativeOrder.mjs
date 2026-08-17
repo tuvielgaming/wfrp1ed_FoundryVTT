@@ -11,8 +11,8 @@ const DRAG_MIME = "application/x-wfrp-combatant";
  *
  * `Combatant.initiative` is always the real WFRP Initiative score. Dragging a
  * row never rewrites it. The mutable order for one round is stored once on the
- * parent Combat as `{ round, ids }` and Wfrp1edCombat._sortCombatants consumes
- * that list when Foundry rebuilds `combat.turns`.
+ * parent Combat as `{ round, ids }` and Wfrp1edCombat.setupTurns consumes that
+ * list when Foundry prepares `combat.turns`.
  *
  * At the beginning of each round the list is regenerated from real Initiative.
  * Temporary delay/reorder therefore lasts only for that round and cannot move
@@ -90,7 +90,7 @@ export class CombatRoundInitiativeOrder {
 		return ids;
 	}
 
-	/** Comparator contribution used by Wfrp1edCombat._sortCombatants. */
+	/** Comparator contribution retained for Foundry callers which sort directly. */
 	static compare(combat, left, right) {
 		const ids = this.ids(combat);
 		if (!ids) return null;
@@ -115,18 +115,27 @@ export class CombatRoundInitiativeOrder {
 	}
 
 	/**
-	 * Clear the completed round's temporary order. Numeric Initiative is never
-	 * touched; Foundry immediately falls back to normal Initiative sorting until
-	 * the next round list is initialized.
+	 * Clear the completed round's temporary order without changing the lifecycle
+	 * owner as Foundry falls back to canonical Initiative sorting.
 	 */
 	static async resetBeforeNextRound(combat) {
 		if (!(combat instanceof foundry.documents.Combat)) return;
 		if (combat.getFlag?.(FLAG_SCOPE, ROUND_ORDER_FLAG) === undefined) return;
+
+		const canonicalIds = [...combat.combatants]
+			.sort(compareCanonicalInitiative)
+			.map((entry) => String(entry.id));
+		const activeId = activeCombatantId(combat);
+		const updateData = {
+			[`flags.${FLAG_SCOPE}.${ROUND_ORDER_FLAG}`]: null,
+		};
+		const activeIndex = activeId ? canonicalIds.indexOf(activeId) : -1;
+		if (activeIndex >= 0) updateData.turn = activeIndex;
+
 		await combat.update(
-			{ [`flags.${FLAG_SCOPE}.${ROUND_ORDER_FLAG}`]: null },
-			{ [ROUND_ORDER_OPTION]: true },
+			updateData,
+			{ [ROUND_ORDER_OPTION]: true, direction: 0 },
 		);
-		combat.setupTurns();
 	}
 
 	/**
@@ -177,7 +186,14 @@ export class CombatRoundInitiativeOrder {
 		await this.#writeOrder(combat, preserved, round);
 	}
 
-	/** Apply an explicit current-round list order without changing Initiative. */
+	/**
+	 * Apply an explicit current-round list order without changing Initiative.
+	 *
+	 * The order flag and numeric `turn` index are written atomically so the same
+	 * lifecycle Combatant remains active while the list moves underneath it. If
+	 * the active row itself was dragged, that stable intermediate state is then
+	 * followed by one deliberate focus transfer to the first unfinished row.
+	 */
 	static async applyOrder(combat, orderedIds, { movedCombatantId = "" } = {}) {
 		if (!(combat instanceof foundry.documents.Combat)) {
 			throw new TypeError("A Foundry Combat is required.");
@@ -195,47 +211,43 @@ export class CombatRoundInitiativeOrder {
 		}
 
 		const ids = validateOrder(combat, orderedIds);
-		const activeBeforeId = String(
-			combat.current?.combatantId ?? combat.combatant?.id ?? "",
-		);
+		const activeBeforeId = activeCombatantId(combat);
 
-		await this.#writeOrder(combat, ids, round);
-
-		/* #writeOrder rebuilds combat.turns synchronously on this client. Restore
-		 * the lifecycle owner to its new list index before deciding whether an
-		 * active-row drag means voluntary postponement. */
-		const activeBefore = activeBeforeId
-			? combat.combatants.get(activeBeforeId) ?? null
-			: null;
-		if (activeBefore) {
-			await CombatRoundTurnState.focus(combat, activeBefore);
-		}
+		await this.#writeOrder(combat, ids, round, { activeId: activeBeforeId });
 
 		const movedActive =
 			activeBeforeId && String(movedCombatantId) === activeBeforeId;
 		if (!movedActive) return;
 
 		const next = CombatRoundTurnState.firstUnfinished(combat);
-		if (next) await CombatRoundTurnState.focus(combat, next);
+		if (!next || String(next.id) === activeBeforeId) return;
+		await CombatRoundTurnState.focus(combat, next);
 	}
 
-	static async #writeOrder(combat, ids, round) {
+	static async #writeOrder(combat, ids, round, { activeId = null } = {}) {
 		const validated = validateOrder(combat, ids);
-		await combat.update(
-			{
-				[`flags.${FLAG_SCOPE}.${ROUND_ORDER_FLAG}`]: {
-					round,
-					ids: validated,
-				},
+		const lifecycleId = activeId === null
+			? activeCombatantId(combat)
+			: String(activeId ?? "");
+		const updateData = {
+			[`flags.${FLAG_SCOPE}.${ROUND_ORDER_FLAG}`]: {
+				round,
+				ids: validated,
 			},
-			{ [ROUND_ORDER_OPTION]: true },
-		);
+		};
 
-		/* Combat flag updates do not alter Initiative and do not need an embedded
-		 * document sort side effect. Rebuild immediately so all logic after this
-		 * await observes the just-written order. Remote clients rebuild in
-		 * Wfrp1edCombat._onUpdate when the same Combat update arrives. */
-		combat.setupTurns();
+		/* Foundry's `turn` is only an array index. If the list order changes while
+		 * that index is left untouched, the red tracker focus silently jumps to
+		 * whichever Combatant now occupies the old slot while the WFRP attack window
+		 * remains owned by the previous Combatant. Move the index in the SAME Combat
+		 * update so prepared data resolves to the same lifecycle owner. */
+		const activeIndex = lifecycleId ? validated.indexOf(lifecycleId) : -1;
+		if (activeIndex >= 0) updateData.turn = activeIndex;
+
+		await combat.update(
+			updateData,
+			{ [ROUND_ORDER_OPTION]: true, direction: 0 },
+		);
 	}
 }
 
@@ -455,6 +467,16 @@ function validateOrder(combat, orderedIds) {
 		throw new Error("Initiative reorder must include every Combatant exactly once.");
 	}
 	return ids;
+}
+
+function activeCombatantId(combat) {
+	const historyId = String(combat?.current?.combatantId ?? "").trim();
+	if (historyId && combat?.combatants?.get(historyId)) return historyId;
+
+	const turn = Number(combat?.turn);
+	const turns = Array.isArray(combat?.turns) ? combat.turns : [];
+	if (!Number.isInteger(turn) || turn < 0 || turn >= turns.length) return "";
+	return String(turns[turn]?.id ?? "");
 }
 
 function ensureEndDropZone(list) {
