@@ -195,6 +195,7 @@ async function publishCriticalWoundSummary(wound, definition, resolved) {
 	) {
 		rows.push({
 			label: localize("Characteristic changes", "Zmiany cech"),
+			formula: String(resolved.duration?.formula ?? ""),
 			value: characteristicsDuration,
 		});
 	}
@@ -206,6 +207,7 @@ async function publishCriticalWoundSummary(wound, definition, resolved) {
 	if (definition.periodicWounds?.formula && periodicDuration) {
 		rows.push({
 			label: localize("Wound loss", "Utrata Żywotności"),
+			formula: String(resolved.periodicDuration?.formula ?? ""),
 			value: periodicDuration,
 		});
 	}
@@ -214,9 +216,12 @@ async function publishCriticalWoundSummary(wound, definition, resolved) {
 
 	const title = `${localize("Critical Wound", "Rana krytyczna")}: ${String(wound.name ?? "—")}`;
 	const targetLabel = localize("Target", "Cel");
-	const rowsHtml = rows.map((row) =>
-		`<div><strong>${escapeHtml(row.label)}:</strong> ${escapeHtml(row.value)}</div>`,
-	).join("");
+	const rowsHtml = rows.map((row) => {
+		const rollPrefix = row.formula
+			? `${diceIconHtml(row.formula)} ${escapeHtml(row.formula)} → `
+			: "";
+		return `<div><strong>${escapeHtml(row.label)}:</strong> ${rollPrefix}${escapeHtml(row.value)}</div>`;
+	}).join("");
 	const content = `
 		<section class="wfrp1ed critical-roll-summary" data-wfrp-critical-roll-summary>
 			<h3>${escapeHtml(title)}</h3>
@@ -233,7 +238,7 @@ async function publishCriticalWoundSummary(wound, definition, resolved) {
 		flags: {
 			[FLAG_SCOPE]: {
 				[CRITICAL_ROLL_SUMMARY_FLAG_KEY]: {
-					version: 2,
+					version: 3,
 					woundUuid: String(wound.uuid ?? ""),
 					rows: rows.map((row) => ({ ...row })),
 					createdAt: Date.now(),
@@ -256,6 +261,16 @@ function consequenceDurationSummary(resolvedDuration, until) {
 		));
 	}
 	return parts.join(" / ");
+}
+
+function diceIconHtml(formula) {
+	const normalized = String(formula ?? "").toLowerCase();
+	const icon = /(?:^|\D)d?20(?:\D|$)/.test(normalized) || /d20\b/.test(normalized)
+		? "fa-dice-d20"
+		: /d6\b/.test(normalized)
+			? "fa-dice-d6"
+			: "fa-dice";
+	return `<i class="fa-solid ${icon}" aria-hidden="true"></i>`;
 }
 
 async function createManagedEffects(wound, definition, resolved) {
