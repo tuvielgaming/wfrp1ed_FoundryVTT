@@ -28,6 +28,7 @@ const TIMED_FLAG_KEY = "criticalTimed";
 const RULE_CHANGES_FLAG_KEY = "ruleChanges";
 const DAMAGE_STATE_FLAG_KEY = "damageState";
 const CRITICAL_RESULT_FLAG_KEY = "criticalResult";
+const CRITICAL_ROLL_SUMMARY_FLAG_KEY = "criticalRollSummary";
 const VERSION = 16;
 const processingPeriodicTicks = new Set();
 let processingWorldTime = false;
@@ -56,7 +57,7 @@ export class CriticalConsequenceEngine {
 			if (!selected) return null;
 		}
 
-		const resolved = await resolveRandomState(definition);
+		const resolved = await resolveRandomState(wound, definition);
 		const state = {
 			version: VERSION,
 			state: "applying",
@@ -138,7 +139,13 @@ async function processClockConsequences(combat, event) {
 	await processPeriodicCriticalClock(combat, event);
 }
 
-async function resolveRandomState(definition) {
+/**
+ * Resolve random Critical values in presentation order. When a real roll is
+ * involved, rules processing intentionally waits until Dice So Nice has finished
+ * and the explanatory chat summary has been published. Non-random consequences
+ * do not pay this presentation cost.
+ */
+async function resolveRandomState(wound, definition) {
 	const resolved = {};
 	if (definition.duration?.formula) {
 		const roll = await evaluateFormula(definition.duration.formula);
@@ -148,7 +155,12 @@ async function resolveRandomState(definition) {
 			units: String(definition.duration.units || "rounds"),
 			roll: roll.toJSON(),
 		};
-		void showDice(roll);
+		await presentCriticalRoll(wound, roll, {
+			kind: "characteristic-duration",
+			formula: resolved.duration.formula,
+			value: resolved.duration.value,
+			units: resolved.duration.units,
+		});
 	}
 
 	const periodicDuration = definition.periodicWounds?.duration;
@@ -164,9 +176,75 @@ async function resolveRandomState(definition) {
 			units: String(periodicDuration.units),
 			roll: roll.toJSON(),
 		};
-		void showDice(roll);
+		await presentCriticalRoll(wound, roll, {
+			kind: "periodic-duration",
+			formula: resolved.periodicDuration.formula,
+			value: resolved.periodicDuration.value,
+			units: resolved.periodicDuration.units,
+		});
 	}
 	return resolved;
+}
+
+async function presentCriticalRoll(wound, roll, result) {
+	await showDice(roll);
+	await publishCriticalRollSummary(wound, result);
+}
+
+async function publishCriticalRollSummary(wound, result) {
+	const actor = wound.parent;
+	const kind = String(result?.kind ?? "");
+	const value = positiveInteger(result?.value);
+	const units = String(result?.units ?? "rounds");
+	const formula = String(result?.formula ?? "");
+	const purpose = kind === "periodic-duration"
+		? localize(
+			"Duration of periodic Wound loss",
+			"Czas trwania okresowej utraty Żywotności",
+		)
+		: localize(
+			"Duration of characteristic changes",
+			"Czas trwania zmian cech",
+		);
+	const determined = formatDuration(value, units);
+	const title = localize("Critical Wound roll", "Rzut rany krytycznej");
+	const labels = {
+		wound: localize("Wound", "Rana"),
+		target: localize("Target", "Cel"),
+		purpose: localize("Why this roll", "Cel rzutu"),
+		roll: localize("Roll", "Rzut"),
+		determined: localize("Determined", "Ustalono"),
+	};
+	const content = `
+		<section class="wfrp1ed critical-roll-summary" data-wfrp-critical-roll-summary>
+			<h3>${escapeHtml(title)}</h3>
+			<div><strong>${escapeHtml(labels.target)}:</strong> ${escapeHtml(actor?.name ?? "—")}</div>
+			<div><strong>${escapeHtml(labels.wound)}:</strong> ${escapeHtml(wound.name ?? "—")}</div>
+			<div><strong>${escapeHtml(labels.purpose)}:</strong> ${escapeHtml(purpose)}</div>
+			<div><strong>${escapeHtml(labels.roll)}:</strong> ${escapeHtml(formula)} → <strong>${escapeHtml(String(value))}</strong></div>
+			<div><strong>${escapeHtml(labels.determined)}:</strong> ${escapeHtml(`${purpose}: ${determined}`)}</div>
+		</section>
+	`;
+
+	await ChatMessage.create({
+		speaker: actor instanceof foundry.documents.Actor
+			? ChatMessage.getSpeaker({ actor })
+			: ChatMessage.getSpeaker(),
+		content,
+		flags: {
+			[FLAG_SCOPE]: {
+				[CRITICAL_ROLL_SUMMARY_FLAG_KEY]: {
+					version: 1,
+					woundUuid: String(wound.uuid ?? ""),
+					kind,
+					formula,
+					value,
+					units,
+					createdAt: Date.now(),
+				},
+			},
+		},
+	});
 }
 
 async function createManagedEffects(wound, definition, resolved) {
@@ -583,7 +661,7 @@ async function applyPeriodicWounds(
 		}
 
 		const roll = await evaluateFormula(periodic.formula);
-		void showDice(roll);
+		await showDice(roll);
 		const amount = positiveInteger(roll.total);
 		const packet = new DamagePacket({
 			id: packetId,
@@ -617,9 +695,9 @@ async function applyPeriodicWounds(
 			effect,
 			periodic,
 			combat,
-				event,
+			event,
 			cycleNumber,
-			);
+		);
 	} finally {
 		processingPeriodicTicks.delete(tickKey);
 	}
@@ -777,6 +855,37 @@ async function showDice(roll) {
 	} catch (_error) {
 		/* Dice So Nice is presentation-only. */
 	}
+}
+
+function formatDuration(value, units) {
+	const amount = positiveInteger(value);
+	const unit = String(units ?? "");
+	if (game.i18n.lang !== "pl") {
+		const singular = {
+			rounds: "round",
+			minutes: "minute",
+			hours: "hour",
+			days: "day",
+		}[unit] ?? unit;
+		return `${amount} ${amount === 1 ? singular : `${singular}s`}`;
+	}
+
+	const forms = {
+		rounds: ["runda", "rundy", "rund"],
+		minutes: ["minuta", "minuty", "minut"],
+		hours: ["godzina", "godziny", "godzin"],
+		days: ["dzień", "dni", "dni"],
+	}[unit] ?? [unit, unit, unit];
+	return `${amount} ${polishPlural(amount, forms)}`;
+}
+
+function polishPlural(value, [one, few, many]) {
+	const amount = Math.abs(Math.trunc(Number(value)));
+	if (amount === 1) return one;
+	const lastTwo = amount % 100;
+	const last = amount % 10;
+	if (last >= 2 && last <= 4 && !(lastTwo >= 12 && lastTwo <= 14)) return few;
+	return many;
 }
 
 function runtimeState(wound) {
