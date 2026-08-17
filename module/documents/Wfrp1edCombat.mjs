@@ -6,7 +6,6 @@ import { CombatRoundTurnState } from "../combat/CombatRoundTurnState.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
 const PARRY_DEBT_REMINDER_FLAG_KEY = "parryDebtReminder";
-const ROUND_ORDER_FLAG_KEY = "roundInitiativeOrder";
 const CORE_INITIATIVE_OPTION = "wfrpCoreInitiative";
 
 /**
@@ -19,7 +18,7 @@ const CORE_INITIATIVE_OPTION = "wfrpCoreInitiative";
  *
  * The numeric Initiative score and the current-round list order are intentionally
  * separate. Initiative is the WFRP rules value and the Critical-clock coordinate.
- * Delaying/reordering a Combatant changes only the temporary round list position.
+ * Delaying/reordering a Combatant changes only the Combat-level round order list.
  *
  * Round start is the authoritative reset point for current-round Attack/parry
  * resources. Starting a Combatant turn only opens that Combatant's attack
@@ -33,8 +32,8 @@ const CORE_INITIATIVE_OPTION = "wfrpCoreInitiative";
 export class Wfrp1edCombat extends foundry.documents.Combat {
 	/**
 	 * Foundry calls this comparator when setupTurns builds the Combat.turns list.
-	 * During a WFRP round, use our explicit round-order positions. Before combat
-	 * and during round transitions, fall back to Foundry's normal Initiative sort.
+	 * During a WFRP round, use our explicit Combat-level ordered-ID list. Before
+	 * combat and during round transitions, fall back to Foundry's Initiative sort.
 	 *
 	 * @inheritDoc
 	 */
@@ -45,24 +44,16 @@ export class Wfrp1edCombat extends foundry.documents.Combat {
 	}
 
 	/**
-	 * Foundry does not guarantee that an arbitrary Combatant flag change rebuilds
-	 * the cached `Combat.turns` array. Our temporary round order is stored only in
-	 * flags, so use Foundry's own debounced setup pathway whenever that flag changes.
-	 * That pathway rebuilds the turn cache and re-renders the currently viewed
-	 * Combat Tracker, keeping data order and visible order synchronized.
+	 * The temporary order is a flag on this Combat document. Post-update runs on
+	 * every connected client, so rebuild the cached `turns` array everywhere and
+	 * ask Foundry's normal debounced setup pathway to refresh a viewed tracker.
 	 *
 	 * @inheritDoc
 	 */
-	_onUpdateDescendantDocuments(parent, collection, documents, changes, options, userId) {
-		super._onUpdateDescendantDocuments(
-			parent,
-			collection,
-			documents,
-			changes,
-			options,
-			userId,
-		);
-		if (!roundOrderChanged(changes)) return;
+	_onUpdate(changed, options, userId) {
+		super._onUpdate(changed, options, userId);
+		if (!CombatRoundInitiativeOrder.isOrderUpdate(changed, options)) return;
+		this.setupTurns();
 		this.debounceSetup();
 	}
 
@@ -164,8 +155,8 @@ export class Wfrp1edCombat extends foundry.documents.Combat {
 	 *
 	 * After the clock resolves, discard only the temporary order, refresh every
 	 * Combatant's real Initiative from the Actor, and let Foundry select the next
-	 * round's first turn from those Initiative values. _onStartRound then snapshots
-	 * that canonical order as the new mutable round list.
+	 * round's first turn from those Initiative values. _onStartRound then stores
+	 * that canonical sequence as the new mutable round list.
 	 *
 	 * @inheritDoc
 	 */
@@ -195,7 +186,7 @@ export class Wfrp1edCombat extends foundry.documents.Combat {
 		await super._onStartRound(context);
 
 		/* Every round receives a canonical Initiative snapshot and an independent
-		 * mutable list order. The latter is what tracker drag changes. */
+		 * mutable ordered-ID list. The latter is what tracker drag changes. */
 		await CombatRoundInitiativeOrder.captureCombatBaselines(this, {
 			force: true,
 		});
@@ -282,23 +273,14 @@ export class Wfrp1edCombat extends foundry.documents.Combat {
 			0,
 		);
 	}
-}
 
-function roundOrderChanged(changes) {
-	const entries = Array.isArray(changes) ? changes : [changes];
-	return entries.some((change) => {
-		if (!change || typeof change !== "object") return false;
-		if (Object.hasOwn(
-			change,
-			`flags.${FLAG_SCOPE}.${ROUND_ORDER_FLAG_KEY}`,
-		)) return true;
-		const scoped = change.flags?.[FLAG_SCOPE];
-		return Boolean(
-			scoped &&
-			typeof scoped === "object" &&
-			Object.hasOwn(scoped, ROUND_ORDER_FLAG_KEY),
-		);
-	});
+	/** Keep the surviving temporary order stable when a Combatant leaves. */
+	async _onExit(combatant) {
+		await super._onExit(combatant);
+		if (this.started && Number(this.round) > 0) {
+			await CombatRoundInitiativeOrder.removeCombatant(this);
+		}
+	}
 }
 
 function normalizeCombatantIds(ids, combat) {
