@@ -7,18 +7,13 @@ export const ROUND_ORDER_OPTION = "wfrpRoundInitiativeOrder";
 const DRAG_MIME = "application/x-wfrp-combatant";
 
 /**
- * Round-scoped WFRP acting order independent of Foundry's native Combat.turns.
+ * Round-scoped WFRP acting order independent of Initiative values.
  *
- * Combatant.initiative is always the real WFRP Initiative score. Foundry keeps
- * its own initiative-sorted Combat.turns array for lifecycle/focus purposes.
- * Temporary WFRP delay/reorder is stored once on the Combat document as
- * `{ round, ids }` and is used for:
- * - deciding who acts next;
- * - displaying rows in the Combat Tracker;
- * - mapping actors onto immutable initiative-clock slots.
- *
- * This separation prevents drag-and-drop from corrupting Initiative or Foundry's
- * turn lifecycle while still allowing an arbitrary acting order for one round.
+ * Combatant.initiative is always the real WFRP Initiative score. Temporary
+ * WFRP delay/reorder is stored once on the Combat document as `{ round, ids }`.
+ * Wfrp1edCombat uses that order to sort Foundry's native Combat.turns, so tracker
+ * rendering, focus, lifecycle, and WFRP progression share one authoritative list
+ * without rewriting Initiative or the Critical-clock coordinate.
  */
 export class CombatRoundInitiativeOrder {
 	static async captureBaseline(combatant, { force = false } = {}) {
@@ -92,7 +87,7 @@ export class CombatRoundInitiativeOrder {
 		return ids;
 	}
 
-	/** Return the acting order without changing Foundry's native Combat.turns. */
+	/** Return the current WFRP acting order. */
 	static orderedCombatants(combat) {
 		if (!(combat instanceof foundry.documents.Combat)) return [];
 		const ids = this.ids(combat);
@@ -187,11 +182,8 @@ export class CombatRoundInitiativeOrder {
 
 	/**
 	 * Apply an explicit current-round acting order without changing Initiative.
-	 *
-	 * Reordering is an explicit declaration of the current acting sequence. After
-	 * every successful reorder, focus is reconciled to the first unfinished row in
-	 * that new sequence. The rule is deliberately direction-independent: dragging
-	 * upward and downward produces the same lifecycle result.
+	 * After every successful reorder, focus follows the first unfinished row in
+	 * the resulting sequence.
 	 */
 	static async applyOrder(combat, orderedIds) {
 		if (!(combat instanceof foundry.documents.Combat)) {
@@ -262,8 +254,9 @@ Hooks.on("updateCombat", (combat, changes, options) => {
 });
 
 /**
- * Display the WFRP acting order without replacing Foundry's native turn array.
- * GM users additionally receive drag-and-drop controls.
+ * Keep tracker DOM order synchronized immediately while Foundry owns the same
+ * authoritative Combat.turns order underneath. GM users additionally receive
+ * drag-and-drop controls.
  */
 Hooks.on("renderApplicationV2", (application, element) => {
 	const CombatTracker = foundry.applications?.sidebar?.tabs?.CombatTracker;
@@ -298,11 +291,10 @@ function applyTrackerDisplayOrder(root, combat) {
 /**
  * Bind one drag source per row and one drop surface for the whole tracker list.
  *
- * The insertion index is calculated against every displayed row except the
- * source row. A direct drag from third to first therefore writes [3,1,2] in one
- * operation instead of degrading into an adjacent swap. The source ID is kept
- * on the render root because browser dragover events do not reliably expose
- * dataTransfer.getData() until the final drop event.
+ * The browser drag preview preserves where inside a row the user grabbed it.
+ * Reorder thresholds therefore use the reconstructed visual center of that
+ * dragged row, not the raw mouse pointer. Grabbing near either edge produces the
+ * same intuitive crossing point as grabbing exactly in the middle.
  */
 function activateTrackerDrag(root, combat) {
 	if (!(root instanceof HTMLElement)) return;
@@ -330,11 +322,21 @@ function activateTrackerDrag(root, combat) {
 
 		row.addEventListener("dragstart", (event) => {
 			clearDropFeedback(root);
+			const rect = row.getBoundingClientRect();
+			const grabOffsetY = clamp(event.clientY - rect.top, 0, rect.height);
+
 			root.dataset.wfrpDragCombatantId = id;
+			root.dataset.wfrpDragGrabOffsetY = String(grabOffsetY);
+			root.dataset.wfrpDragRowHeight = String(rect.height);
 			root.classList.add("wfrp-initiative-dragging");
 			row.classList.add("wfrp-initiative-drag-source");
+
 			event.dataTransfer?.setData(DRAG_MIME, id);
-			if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+			if (event.dataTransfer) {
+				event.dataTransfer.effectAllowed = "move";
+				const grabOffsetX = clamp(event.clientX - rect.left, 0, rect.width);
+				event.dataTransfer.setDragImage(row, grabOffsetX, grabOffsetY);
+			}
 		});
 
 		row.addEventListener("dragend", () => clearDropFeedback(root));
@@ -351,7 +353,8 @@ function activateTrackerDrag(root, combat) {
 		event.preventDefault();
 		if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
 
-		const index = insertionIndexForPointer(root, combat, sourceId, event.clientY);
+		const dragCenterY = draggedRowCenterY(root, event.clientY);
+		const index = insertionIndexForDragCenter(root, combat, sourceId, dragCenterY);
 		root.dataset.wfrpDropIndex = String(index);
 		showInsertionFeedback(root, combat, sourceId, index, endZone);
 	});
@@ -382,7 +385,15 @@ function activateTrackerDrag(root, combat) {
 	});
 }
 
-function insertionIndexForPointer(root, combat, sourceId, clientY) {
+/** Reconstruct the vertical center of the browser's dragged row preview. */
+function draggedRowCenterY(root, pointerY) {
+	const grabOffset = finiteNumber(root.dataset.wfrpDragGrabOffsetY, 0);
+	const rowHeight = Math.max(0, finiteNumber(root.dataset.wfrpDragRowHeight, 0));
+	return Number(pointerY) - grabOffset + rowHeight / 2;
+}
+
+/** Resolve the insertion slot from the dragged row's visual center. */
+function insertionIndexForDragCenter(root, combat, sourceId, dragCenterY) {
 	const rowById = new Map(
 		combatantRows(root).map((row) => [combatantId(row), row]),
 	);
@@ -393,7 +404,7 @@ function insertionIndexForPointer(root, combat, sourceId, clientY) {
 		const row = rowById.get(String(remainingIds[index]));
 		if (!row) continue;
 		const rect = row.getBoundingClientRect();
-		if (clientY < rect.top + rect.height / 2) return index;
+		if (dragCenterY < rect.top + rect.height / 2) return index;
 	}
 	return remainingIds.length;
 }
@@ -487,6 +498,8 @@ function commonParent(rows) {
 function clearDropFeedback(root) {
 	root.classList.remove("wfrp-initiative-dragging");
 	delete root.dataset.wfrpDragCombatantId;
+	delete root.dataset.wfrpDragGrabOffsetY;
+	delete root.dataset.wfrpDragRowHeight;
 	delete root.dataset.wfrpDropIndex;
 	for (const row of root.querySelectorAll(
 		".wfrp-initiative-drag-source, .wfrp-initiative-drop-target",
@@ -555,6 +568,15 @@ function compareCanonicalInitiative(left, right) {
 function combatIsPersisted(combat) {
 	const id = String(combat?.id ?? "");
 	return Boolean(id && game.combats?.get?.(id) === combat);
+}
+
+function finiteNumber(value, fallback = 0) {
+	const numeric = Number(value);
+	return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function clamp(value, min, max) {
+	return Math.max(min, Math.min(Number(value), max));
 }
 
 function nullableFinite(value) {
