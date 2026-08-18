@@ -21,6 +21,18 @@
 	background-clip: padding-box;
 }
 
+/* In edit mode the input itself now contains the exact value printed in the
+ * Core Career table (10 means +10, 2 means +2). The old derived preview merely
+ * duplicated that information and made the table look like two data rows. */
+.career-item-sheet .career-advance-preview {
+	display: none;
+}
+
+.career-item-sheet .career-advance-table input[data-wfrp-career-advance-value] {
+	font-weight: 700;
+	text-align: center;
+}
+
 .career-item-sheet .career-entry[data-career-entry-id] {
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) auto;
