@@ -1,0 +1,71 @@
+.wfrp1ed-classic-sheet .wfrp1ed-experience-panel {
+	position: absolute;
+	overflow: hidden;
+	pointer-events: none;
+}
+
+.wfrp1ed-classic-sheet .wfrp1ed-experience-field {
+	position: absolute;
+	top: 48px;
+	width: 105px;
+	height: 46px;
+	margin: 0;
+	padding: 0;
+	pointer-events: auto;
+}
+
+.wfrp1ed-classic-sheet .wfrp1ed-experience-field--current {
+	left: 13px;
+}
+
+.wfrp1ed-classic-sheet .wfrp1ed-experience-field--total {
+	right: 13px;
+}
+
+.wfrp1ed-classic-sheet .wfrp1ed-experience-field__label {
+	display: block;
+	margin-bottom: 2px;
+	font-size: 12px;
+	font-weight: 700;
+	line-height: 1;
+	text-align: center;
+}
+
+.wfrp1ed-classic-sheet .wfrp1ed-experience-field input {
+	display: block;
+	width: 100%;
+	height: 28px;
+	margin: 0;
+	padding: 1px 4px;
+	border: 1px solid rgb(25 20 15 / 35%);
+	border-radius: 2px;
+	background: rgb(255 255 255 / 38%);
+	box-shadow: none;
+	font-size: 17px;
+	font-weight: 700;
+	line-height: 1;
+	text-align: center;
+	font-variant-numeric: tabular-nums;
+	appearance: textfield;
+	-moz-appearance: textfield;
+}
+
+.wfrp1ed-classic-sheet .wfrp1ed-experience-field input::-webkit-inner-spin-button,
+.wfrp1ed-classic-sheet .wfrp1ed-experience-field input::-webkit-outer-spin-button {
+	margin: 0;
+	appearance: none;
+	-webkit-appearance: none;
+}
+
+.wfrp1ed-classic-sheet .wfrp1ed-experience-field input:focus {
+	outline: 1px solid var(--focus-color);
+	outline-offset: -1px;
+	background: rgb(255 255 255 / 78%);
+}
+
+.wfrp1ed-classic-sheet .wfrp1ed-experience-field input:disabled {
+	opacity: 1;
+	border-color: transparent;
+	background: transparent;
+	color: inherit;
+}
