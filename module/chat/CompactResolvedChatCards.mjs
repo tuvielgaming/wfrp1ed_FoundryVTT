@@ -5,8 +5,10 @@ const FLAG_SCOPE = "wfrp1ed";
 const DAMAGE_FLAG_KEY = "damageState";
 const DAMAGE_RESULT_VIEW_FLAG_KEY = "combatDamageResultView";
 const CRITICAL_RESULT_FLAG_KEY = "criticalResult";
+const FATAL_APPLICATIONS_FLAG_KEY = "fatalCriticalApplications";
 const DAMAGE_REVERTED_STATE = "reverted";
 const DAMAGE_APPLIED_STATE = "applied";
+const KILLED_OUTCOME = "killed";
 
 /*
  * Actionable chat cards keep their original full presentation. Only completed
@@ -17,6 +19,17 @@ const DAMAGE_APPLIED_STATE = "applied";
 Hooks.on("renderChatMessageHTML", (message, html) => {
 	applyDamageHistoryDisclosure(message, html);
 	applyCriticalHistoryDisclosure(message, html);
+});
+
+/* Fatal Critical application mutates the Actor and its presentation is refreshed
+ * directly on the existing chat DOM. Catch that authoritative Actor-side state
+ * transition as well so a just-applied fatal result folds without requiring a
+ * full chat rerender. */
+Hooks.on("updateActor", (actor, changes) => {
+	if (!(actor instanceof foundry.documents.Actor)) return;
+	if (!fatalApplicationsChanged(changes)) return;
+
+	requestAnimationFrame(() => refreshVisibleFatalCriticalCards(actor));
 });
 
 function applyDamageHistoryDisclosure(message, html) {
@@ -89,8 +102,7 @@ function applyCriticalHistoryDisclosure(message, html) {
 	const card = findCard(root, "[data-wfrp-detailed-critical-card]");
 	if (!(card instanceof HTMLElement)) return;
 
-	const wound = existingCriticalWound(message, state);
-	if (!wound) {
+	if (!isSettledCriticalResult(message, state)) {
 		restoreActionableCriticalCard(card);
 		return;
 	}
@@ -102,12 +114,13 @@ function applyCriticalHistoryDisclosure(message, html) {
 	}
 }
 
+function isSettledCriticalResult(message, state) {
+	if (existingCriticalWound(message, state)) return true;
+	return fatalCriticalApplied(state);
+}
+
 function existingCriticalWound(message, state) {
-	const sourceMessage = game.messages?.get(
-		String(state?.sourceMessageId ?? ""),
-	);
-	const damageState = sourceMessage?.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG_KEY);
-	const actor = actorFromUuidSync(damageState?.packet?.targetActorUuid);
+	const actor = actorForCriticalState(state);
 	if (!(actor instanceof foundry.documents.Actor)) return null;
 
 	try {
@@ -118,6 +131,66 @@ function existingCriticalWound(message, state) {
 	} catch (_error) {
 		return null;
 	}
+}
+
+function fatalCriticalApplied(state) {
+	if (state?.resolution?.outcome !== KILLED_OUTCOME) return false;
+
+	const actor = actorForCriticalState(state);
+	if (!(actor instanceof foundry.documents.Actor)) return false;
+
+	const packetId = String(state?.packetId ?? "").trim();
+	if (!packetId) return false;
+
+	const application = actor.getFlag?.(
+		FLAG_SCOPE,
+		FATAL_APPLICATIONS_FLAG_KEY,
+	)?.[packetId];
+	return application?.state === DAMAGE_APPLIED_STATE;
+}
+
+function actorForCriticalState(state) {
+	const sourceMessage = game.messages?.get(
+		String(state?.sourceMessageId ?? ""),
+	);
+	const damageState = sourceMessage?.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG_KEY);
+	return actorFromUuidSync(damageState?.packet?.targetActorUuid);
+}
+
+function refreshVisibleFatalCriticalCards(actor) {
+	for (const message of game.messages ?? []) {
+		const state = message?.getFlag?.(FLAG_SCOPE, CRITICAL_RESULT_FLAG_KEY);
+		if (!isDetailedCriticalState(state)) continue;
+		if (state?.resolution?.outcome !== KILLED_OUTCOME) continue;
+
+		const target = actorForCriticalState(state);
+		if (target?.uuid !== actor.uuid) continue;
+
+		const entry = document.querySelector(
+			`[data-message-id="${String(message.id ?? "")}"]`,
+		);
+		if (entry) applyCriticalHistoryDisclosure(message, entry);
+	}
+}
+
+function fatalApplicationsChanged(changes) {
+	if (!changes || typeof changes !== "object") return false;
+
+	const scoped = changes?.flags?.[FLAG_SCOPE];
+	if (
+		scoped &&
+		typeof scoped === "object" &&
+		(
+			Object.hasOwn(scoped, FATAL_APPLICATIONS_FLAG_KEY) ||
+			Object.hasOwn(scoped, `-=${FATAL_APPLICATIONS_FLAG_KEY}`)
+		)
+	) {
+		return true;
+	}
+
+	return Object.keys(changes).some((key) =>
+		String(key).includes(FATAL_APPLICATIONS_FLAG_KEY),
+	);
 }
 
 function compactDamageCard(card) {
