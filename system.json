@@ -15,6 +15,7 @@
 		"module/wfrp1ed.mjs",
 		"module/forms/SelectAllOnFocus.mjs",
 		"module/careers/CareerBootstrap.mjs",
+		"module/careers/CareerUpdateIntegrityGuard.mjs",
 		"module/careers/CareerSheetIntegration.mjs",
 		"module/careers/CareerItemAuthoringIntegration.mjs",
 		"module/careers/CareerTabWorkspace.mjs",
@@ -139,5 +140,5 @@
 		"Item": {"career": {},"skill": {},"criticalWound": {},"weapon": {},"armour": {},"equipment": {},"trait": {},"spell": {}}
 	},
 	"background": "systems/wfrp1ed/WFRP1ed.jpg",
-	"grid": {"distance": 5,"units": "ft"}
+	"grid": {"distance": 5,"units":"ft"}
 }
