@@ -49,11 +49,11 @@ Hooks.on("renderApplicationV2", (application, element) => {
 /**
  * The printed Character sheet row has two distinct meanings:
  * - the active Career's maximum advance allowance (+10, +2, ...), and
- * - the character's purchased progress inside that allowance.
+ * - the character's already purchased progress.
  *
  * Keep the existing advancement button/action intact and replace only its
- * presentation. Purchase markers stay visible as filled/open dots, while the
- * Career allowance is displayed as the main value in the cell.
+ * presentation. Only purchased advances are marked. Empty/open circles are
+ * deliberately omitted to keep the small printed cells readable.
  */
 function renderCharacterCareerAdvances(application, element) {
 	const actor = application?.document;
@@ -74,16 +74,21 @@ function renderCharacterCareerAdvances(application, element) {
 		const id = key === "sp" ? "m" : key;
 		const purchased = nonNegativeInteger(characteristic.purchased);
 		const career = nonNegativeInteger(characteristic.career);
-		const markerCount = Math.max(purchased, career);
 		const unit = ONE_POINT_ADVANCES.has(id) ? 1 : 10;
 		const careerValue = career * unit;
 
 		const markers = document.createElement("span");
 		markers.className = "characteristic-advance-markers";
-		markers.textContent = markerCount > 0
-			? "●".repeat(purchased) + "○".repeat(Math.max(0, markerCount - purchased))
-			: "";
+		markers.style.setProperty(
+			"--wfrp-advance-marker-count",
+			String(Math.max(1, purchased)),
+		);
 		markers.setAttribute("aria-hidden", "true");
+		for (let index = 0; index < purchased; index += 1) {
+			const marker = document.createElement("span");
+			marker.className = "characteristic-advance-marker";
+			markers.append(marker);
+		}
 
 		const allowance = document.createElement("span");
 		allowance.className = "characteristic-career-advance-value";
@@ -91,8 +96,8 @@ function renderCharacterCareerAdvances(application, element) {
 
 		cell.replaceChildren(markers, allowance);
 		cell.title = localize(
-			`Career allowance: ${allowance.textContent}; purchased: ${purchased}/${markerCount}`,
-			`Rozwój Profesji: ${allowance.textContent}; wykupiono: ${purchased}/${markerCount}`,
+			`Career allowance: ${allowance.textContent}; purchased advances: ${purchased}; career ceiling: ${career}`,
+			`Rozwój Profesji: ${allowance.textContent}; wykupione rozwinięcia: ${purchased}; limit Profesji: ${career}`,
 		);
 	}
 }
