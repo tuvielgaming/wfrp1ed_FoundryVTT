@@ -59,6 +59,15 @@ details.wfrp1e-damage-card:not([open]) > .wfrp1e-damage-card__header {
 	min-width: 0;
 }
 
+.wfrp1e-damage-card__persistent-actions {
+	margin-top: 0.28rem;
+}
+
+.wfrp1e-damage-card__persistent-actions > .wfrp1e-critical-result__action {
+	width: 100%;
+	margin: 0;
+}
+
 details.wfrp1e-critical-result > .wfrp1e-critical-result__header {
 	display: flex;
 	align-items: center;
