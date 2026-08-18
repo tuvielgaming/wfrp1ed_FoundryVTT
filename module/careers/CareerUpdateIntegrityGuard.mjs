@@ -2,24 +2,23 @@ const SYSTEM_PREFIX = "system.";
 
 /**
  * Career Items contain several sibling collections (skills, trappings,
- * magicPoints, exits) plus the nested Advance Scheme. A partial TypeDataModel
- * update must never be allowed to clean/migrate an incomplete Career system
- * object and thereby replace untouched siblings with schema defaults.
+ * magicPoints, exits) plus the nested Advance Scheme. No Career Item update is
+ * allowed to reach TypeDataModel cleaning with an incomplete Career system
+ * object, because omitted siblings could be reconstructed from schema defaults.
  *
  * Foundry's preUpdateItem hook exposes the differential update before the
- * database operation. For Career Items, whenever that differential touches
- * system data, rebuild it as a complete snapshot of the current Career system
- * with the requested differential applied on top.
+ * database operation. For every Career Item update, rebuild `changed.system` as
+ * a complete snapshot of the current Career system with any requested system
+ * differential applied on top. This also protects root-only changes such as the
+ * Career name or image.
  *
- * This guard is intentionally below every Career UI writer. It therefore covers
- * ordinary controls, Advance Scheme edits, Skill/Trapping configuration, Magic
- * Points, Career Exits, drag/drop actions, and any future Career editor that
- * uses Item.update().
+ * The guard sits below every Career UI writer, so ordinary controls,
+ * Advancements, Skills, Trappings, Magic Points, Career Exits, drag/drop, and
+ * future Career editors all share the same persistence guarantee.
  */
 Hooks.on("preUpdateItem", (item, changed) => {
 	if (item?.type !== "career") return;
 	if (!changed || typeof changed !== "object" || Array.isArray(changed)) return;
-	if (!touchesCareerSystem(changed)) return;
 
 	const system = careerSystemSource(item);
 
@@ -30,9 +29,9 @@ Hooks.on("preUpdateItem", (item, changed) => {
 		mergeDifferential(system, changed.system);
 	}
 
-	/* Dotted update paths are also legal Foundry update syntax. Fold every
-	 * system.* path into the complete system snapshot and remove the dotted key
-	 * so only one authoritative `system` payload reaches TypeDataModel cleaning. */
+	/* Dotted update paths are legal Foundry update syntax. Fold every system.*
+	 * path into the complete snapshot and remove the dotted key so one complete
+	 * authoritative `system` payload reaches TypeDataModel cleaning. */
 	for (const [path, value] of Object.entries(changed)) {
 		if (!path.startsWith(SYSTEM_PREFIX)) continue;
 		setPath(system, path.slice(SYSTEM_PREFIX.length), cloneValue(value));
@@ -41,11 +40,6 @@ Hooks.on("preUpdateItem", (item, changed) => {
 
 	changed.system = system;
 });
-
-function touchesCareerSystem(changed) {
-	if (Object.hasOwn(changed, "system")) return true;
-	return Object.keys(changed).some((key) => key.startsWith(SYSTEM_PREFIX));
-}
 
 function careerSystemSource(item) {
 	const source = item.system?.toObject?.() ?? item._source?.system ?? {};
