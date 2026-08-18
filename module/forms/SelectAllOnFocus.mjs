@@ -8,19 +8,26 @@ const SELECTABLE_TYPES = new Set([
 	"password",
 ]);
 
+const replaceOnNextInsert = new WeakSet();
+
 /**
- * WFRP sheet forms are primarily numeric/data-entry surfaces rather than prose
- * editors. When a system input receives focus, select its complete current value
- * so the first typed character replaces it instead of being inserted at the
- * clicked caret position. A second click while the field already has focus keeps
- * normal browser caret/selection behaviour.
+ * WFRP sheet forms are primarily data-entry surfaces rather than prose editors.
+ * When a system input receives focus, its current value becomes replace-on-type:
+ * the first typed/pasted value replaces the whole previous value instead of
+ * being inserted at the clicked caret position.
  *
- * Textareas are intentionally excluded: descriptions and notes remain normal
- * text editors. Native Foundry inputs outside a WFRP application are untouched.
+ * Text-like controls are additionally selected visually. Number inputs are not
+ * consistently selectable across browsers, so beforeinput provides the actual
+ * replacement guarantee for them as well.
+ *
+ * A second click while the field is already focused cancels replace-on-type and
+ * restores ordinary caret editing. Textareas are intentionally excluded.
  */
 document.addEventListener("focusin", (event) => {
 	const input = event.target;
 	if (!isManagedInput(input)) return;
+
+	replaceOnNextInsert.add(input);
 
 	/* Let the pointer/click sequence finish first. Selecting synchronously in the
 	 * focus event is commonly undone by the following mouseup in Chromium. */
@@ -29,9 +36,44 @@ document.addEventListener("focusin", (event) => {
 		try {
 			input.select();
 		} catch (_error) {
-			// Some browser/input combinations do not expose text selection.
+			// beforeinput below still guarantees replacement for number inputs.
 		}
 	}, 0);
+}, true);
+
+/* A deliberate second click means the user wants normal caret editing rather
+ * than replacing the whole value. The first click occurs before focusin and
+ * therefore does not cancel the newly-created replace marker. */
+document.addEventListener("pointerdown", (event) => {
+	const input = event.target;
+	if (!isManagedInput(input)) return;
+	if (document.activeElement === input) replaceOnNextInsert.delete(input);
+}, true);
+
+document.addEventListener("keydown", (event) => {
+	const input = event.target;
+	if (!isManagedInput(input)) return;
+	if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+		replaceOnNextInsert.delete(input);
+	}
+}, true);
+
+document.addEventListener("beforeinput", (event) => {
+	const input = event.target;
+	if (!isManagedInput(input)) return;
+	if (!replaceOnNextInsert.has(input)) return;
+
+	const inputType = String(event.inputType ?? "");
+	if (!inputType.startsWith("insert")) return;
+
+	replaceOnNextInsert.delete(input);
+	input.value = "";
+}, true);
+
+document.addEventListener("focusout", (event) => {
+	if (event.target instanceof HTMLInputElement) {
+		replaceOnNextInsert.delete(event.target);
+	}
 }, true);
 
 function isManagedInput(input) {
