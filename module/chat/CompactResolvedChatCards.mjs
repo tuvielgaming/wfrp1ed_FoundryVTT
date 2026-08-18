@@ -12,13 +12,19 @@ const KILLED_OUTCOME = "killed";
 
 /*
  * Actionable chat cards keep their original full presentation. Only completed
- * transactions become compact historical disclosures. This module is loaded
- * after the normal combat/Critical presentation layers, so it folds the final
- * rendered card without taking ownership of any rule or action lifecycle.
+ * transactions become compact historical disclosures.
+ *
+ * The normal combat/Critical presentation hooks decorate the rendered DOM with
+ * live action buttons during renderChatMessageHTML. This module can be imported
+ * before some of those hooks are registered during init, so running synchronously
+ * here may fold the card before its actions exist. Defer one animation frame and
+ * compact the final decorated DOM instead.
  */
 Hooks.on("renderChatMessageHTML", (message, html) => {
-	applyDamageHistoryDisclosure(message, html);
-	applyCriticalHistoryDisclosure(message, html);
+	requestAnimationFrame(() => {
+		applyDamageHistoryDisclosure(message, html);
+		applyCriticalHistoryDisclosure(message, html);
+	});
 });
 
 /* Fatal Critical application mutates the Actor and its presentation is refreshed
