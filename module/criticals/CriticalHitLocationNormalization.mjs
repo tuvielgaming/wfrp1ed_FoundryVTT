@@ -7,15 +7,19 @@ const DROP_WOUNDED_ARM = "injured-hand";
  * hit-location IDs expected by CriticalConsequenceEngine.
  *
  * Normalize only the embedded Actor copy, immediately before creation. The
- * sidebar template keeps its author-facing text, while the runtime wound always
+ * sidebar template keeps its author-facing value, while the runtime wound always
  * reaches the consequence engine as leftArm/rightArm/arm.
  */
-Hooks.on("preCreateItem", (item) => {
+Hooks.on("preCreateItem", (item, data) => {
 	if (item?.type !== "criticalWound") return;
 	if (!(item.parent instanceof foundry.documents.Actor)) return;
-	if (dropHeldMode(item) !== DROP_WOUNDED_ARM) return;
+	if (dropHeldMode(item, data) !== DROP_WOUNDED_ARM) return;
 
-	const current = readText(item.system?.hitLocation);
+	const current = firstText(
+		data?.system?.hitLocation,
+		item?._source?.system?.hitLocation,
+		item.system?.hitLocation,
+	);
 	const normalized = canonicalArmLocation(current);
 
 	if (normalized) {
@@ -25,18 +29,22 @@ Hooks.on("preCreateItem", (item) => {
 		return;
 	}
 
-	/* A side-dependent held-item consequence with no usable arm location is an
-	 * unresolved arm template. Canonical `arm` intentionally makes the engine
-	 * ask the user which physical arm was injured after the Item is created. */
+	/* Empty is an intentional unresolved state on the Career/Critical authoring
+	 * sheet. For a side-dependent held-item consequence, turn it into the
+	 * engine's canonical generic-arm sentinel. ensurePhysicalArmSide() then opens
+	 * the already-tested left/right selection dialog before any item is dropped. */
 	if (!current) {
 		item.updateSource({ "system.hitLocation": "arm" });
 	}
 });
 
-function dropHeldMode(item) {
-	const consequence = item.system?.consequence?.toObject?.() ??
-		item.system?.consequence ?? {};
-	return readText(consequence?.dropHeld);
+function dropHeldMode(item, data) {
+	return firstText(
+		data?.system?.consequence?.dropHeld,
+		item?._source?.system?.consequence?.dropHeld,
+		item.system?.consequence?.toObject?.()?.dropHeld,
+		item.system?.consequence?.dropHeld,
+	);
 }
 
 function canonicalArmLocation(value) {
@@ -81,6 +89,14 @@ function locationKey(value) {
 		.replace(/[\u0300-\u036f]/g, "")
 		.toLocaleLowerCase()
 		.replace(/[^a-z]/g, "");
+}
+
+function firstText(...values) {
+	for (const value of values) {
+		const text = readText(value);
+		if (text) return text;
+	}
+	return "";
 }
 
 function readText(value) {
