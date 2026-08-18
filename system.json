@@ -53,7 +53,7 @@
 		"module/combat/DamageApplicationPresentationRefresh.mjs",
 		"module/criticals/DetailedFatalCriticalPresentation.mjs",
 		"module/criticals/CriticalTransactionRollback.mjs",
-		"module/criticals/FatalStatusConsistencyGuard.mjs",
+		"module/criticals/FatalStatusTransactionIntegration.mjs",
 		"module/combat/CombatAttackDefenceUpdateGuard.mjs",
 		"module/health/HealthCategoryIntegration.mjs",
 		"module/fate/FateSheetIntegration.mjs",
@@ -67,7 +67,8 @@
 		"module/criticals/DetailedCriticalAdjudication.mjs",
 		"module/chat/CombatLifecyclePolish.mjs",
 		"module/criticals/CriticalResultLifecycleGuard.mjs",
-		"module/chat/CompactResolvedChatCards.mjs"
+		"module/chat/CompactResolvedChatCards.mjs",
+		"module/chat/ChatBottomFollow.mjs"
 	],
 	"styles": [
 		"css/myOwn.css",
