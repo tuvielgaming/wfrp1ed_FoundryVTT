@@ -15,6 +15,11 @@ const reconcilingActors = new Set();
  * ordinary damage or generic status-effect edits: reaching 0 Wounds is not a
  * death transaction, and a GM's unrelated manual status choice must not be
  * overwritten just because the Actor has old WFRP fatal history.
+ *
+ * Foundry also stores defeated state on Combatant documents. Keep that tracker
+ * state synchronized from the same fatal transaction owner so applying and
+ * rolling back a lethal Critical cannot leave the Actor and Combat Tracker in
+ * contradictory states.
  */
 Hooks.on("updateActor", (actor, changes) => {
 	if (!(actor instanceof foundry.documents.Actor)) return;
@@ -75,14 +80,51 @@ async function reconcileStrictFatalStatus(actor) {
 }
 
 async function setDefeated(actor, active) {
+	const desired = Boolean(active);
 	const statusId = defeatedStatusId();
 	if (!statusId) return;
+
 	const current = actor.statuses?.has?.(statusId) === true;
-	if (current === Boolean(active)) return;
-	await actor.toggleStatusEffect(statusId, {
-		active: Boolean(active),
-		overlay: true,
-	});
+	if (current !== desired) {
+		await actor.toggleStatusEffect(statusId, {
+			active: desired,
+			overlay: true,
+		});
+	}
+
+	/* The token/Actor status and Combatant.defeated are separate persisted state.
+	 * A status toggle may update the tracker in some Foundry paths, but fatal
+	 * rollback must not depend on that side effect. Reconcile every matching
+	 * Combatant explicitly after the Actor status has reached its desired state. */
+	await setCombatantDefeated(actor, desired);
+}
+
+async function setCombatantDefeated(actor, active) {
+	const desired = Boolean(active);
+	for (const combat of game.combats ?? []) {
+		for (const combatant of combat?.combatants ?? []) {
+			if (!combatantMatchesActor(combatant, actor)) continue;
+			if (Boolean(combatant.defeated) === desired) continue;
+			await combatant.update({ defeated: desired });
+		}
+	}
+}
+
+function combatantMatchesActor(combatant, actor) {
+	if (!combatant || !actor) return false;
+	const combatantActor = combatant.actor;
+	if (combatantActor === actor) return true;
+
+	const actorUuid = String(actor.uuid ?? "");
+	if (actorUuid && String(combatantActor?.uuid ?? "") === actorUuid) return true;
+
+	const actorId = String(actor.id ?? "");
+	if (!actorId) return false;
+	return Boolean(
+		String(combatantActor?.id ?? "") === actorId ||
+		String(combatant.actorId ?? "") === actorId ||
+		String(combatant.token?.actorId ?? "") === actorId
+	);
 }
 
 function defeatedStatusId() {
