@@ -27,6 +27,22 @@ Hooks.on("renderChatMessageHTML", (message, html) => {
 	});
 });
 
+/* A normal detailed Critical becomes historical when its persistent Critical
+ * Wound Item is created on the Actor. That embedded-document transition does not
+ * necessarily rerender the source ChatMessage, so refresh only the linked visible
+ * Critical result card using the stored resultMessageId. */
+Hooks.on("createItem", (item) => {
+	if (!(item instanceof foundry.documents.Item)) return;
+	if (item.type !== "criticalWound") return;
+
+	const resultMessageId = String(
+		item.system?.resolution?.resultMessageId ?? "",
+	).trim();
+	if (!resultMessageId) return;
+
+	requestAnimationFrame(() => refreshVisibleCriticalResult(resultMessageId));
+});
+
 /* Fatal Critical application mutates the Actor and its presentation is refreshed
  * directly on the existing chat DOM. Catch that authoritative Actor-side state
  * transition as well so a just-applied fatal result folds without requiring a
@@ -162,6 +178,16 @@ function actorForCriticalState(state) {
 	);
 	const damageState = sourceMessage?.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG_KEY);
 	return actorFromUuidSync(damageState?.packet?.targetActorUuid);
+}
+
+function refreshVisibleCriticalResult(messageId) {
+	const message = game.messages?.get(String(messageId ?? ""));
+	if (!message) return;
+
+	const entry = document.querySelector(
+		`[data-message-id="${String(message.id ?? "")}"]`,
+	);
+	if (entry) applyCriticalHistoryDisclosure(message, entry);
 }
 
 function refreshVisibleFatalCriticalCards(actor) {
