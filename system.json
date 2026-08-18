@@ -15,6 +15,7 @@
 		"module/wfrp1ed.mjs",
 		"module/forms/SelectAllOnFocus.mjs",
 		"module/careers/CareerBootstrap.mjs",
+		"module/careers/CareerPartialMigrationFix.mjs",
 		"module/careers/CareerUpdateIntegrityGuard.mjs",
 		"module/careers/CareerSheetIntegration.mjs",
 		"module/careers/CareerItemAuthoringIntegration.mjs",
