@@ -16,17 +16,21 @@ installSafeCareerFormPersistence();
 installCareerEntryPresentation();
 
 /**
- * Career Items contain nested arrays and objects. ApplicationV2's expanded
- * submit-on-change payload can replace untouched siblings when only one nested
- * control changed, so Career authoring persists exact field paths instead.
- * Skill/Trapping/Magic/Exit collections remain owned by their dedicated sheet
- * actions and drag/drop handlers.
+ * Career Items contain nested arrays and objects. ApplicationV2's generic
+ * submit-on-change payload can replace untouched siblings when a single nested
+ * control changes. Career authoring therefore owns change persistence itself.
+ *
+ * The capture-phase change handler persists only the changed field and prevents
+ * the generic form submit-on-change handler from receiving that event. Advance
+ * Scheme changes are even stricter: the current complete scheme is cloned at
+ * queue execution time, one characteristic is replaced, and the whole scheme is
+ * written back. This prevents rapid edits or model cleaning from erasing sibling
+ * characteristics.
  *
  * Advance Scheme is stored internally as purchase counts because Actor Career
- * progression uses those counts. The Career Item sheet, however, is a rulebook
- * authoring surface: it displays and accepts the printed advancement value.
- * Thus WS=10 is persisted as one purchase, WS=20 as two purchases, while S=2
- * remains two purchases because Strength advances in +1 steps.
+ * progression uses those counts. The Career Item sheet is a rulebook authoring
+ * surface and displays/accepts the printed advancement value: WS=10 is one
+ * purchase, WS=20 is two purchases, while S=2 remains two +1 purchases.
  */
 function installSafeCareerFormPersistence() {
 	if (CareerItemSheet.__wfrpSafeAuthoringInstalled === true) return;
@@ -42,20 +46,36 @@ function installSafeCareerFormPersistence() {
 
 		prepareAdvanceSchemeInputs(application.document, element);
 
-		for (const control of element.querySelectorAll("input[name], select[name], textarea[name]")) {
-			if (!isPersistedControl(control)) continue;
-			control.addEventListener("change", (event) => {
-				const current = event.currentTarget;
-				if (!isPersistedControl(current)) return;
-				const update = controlUpdate(application.document, current);
-				if (!update) return;
-				void queueItemUpdate(application.document, update)
-					.catch(reportAuthoringError);
-			});
-		}
+		/* Own Career field changes before ApplicationV2 can expand and submit the
+		 * whole nested form. This is intentionally delegated from the form because
+		 * ApplicationV2 may replace individual controls during rerenders. */
+		element.addEventListener("change", (event) => {
+			const control = event.target;
+			if (!isPersistedControl(control)) return;
 
-		/* Enter/programmatic submit is a safe flat-path snapshot rather than the
-		 * default expanded nested object submission. */
+			event.stopImmediatePropagation();
+
+			if (isAdvanceControl(control)) {
+				const parsed = parseAdvanceControl(application.document, control, {
+					notify: true,
+				});
+				if (!parsed) return;
+				control.dataset.wfrpCareerAdvanceRaw = String(parsed.value);
+				void queueAdvanceSchemeUpdate(
+					application.document,
+					parsed.id,
+					parsed.steps,
+				).catch(reportAuthoringError);
+				return;
+			}
+
+			void queueItemUpdate(application.document, {
+				[String(control.name)]: formControlValue(control),
+			}).catch(reportAuthoringError);
+		}, true);
+
+		/* Enter/programmatic submit is also a safe snapshot rather than the default
+		 * expanded nested object submission. */
 		element.addEventListener("submit", (event) => {
 			event.preventDefault();
 			event.stopImmediatePropagation();
@@ -98,73 +118,125 @@ function installCareerEntryPresentation() {
 }
 
 /**
- * Convert internal purchase counts to the exact values printed in Core Career
- * Advance Schemes. The template itself intentionally stays simple; this layer
- * owns the authoring/storage translation.
+ * Present Career advances exactly like the printed table while preserving an
+ * ordinary numeric editing experience on focus.
+ *
+ * Unfocused:  —  | +10 | +2
+ * Focused:     0  |  10 |  2
  */
 function prepareAdvanceSchemeInputs(item, form) {
 	for (const input of form.querySelectorAll(`input[name^="${ADVANCE_SCHEME_PREFIX}"]`)) {
 		const id = advanceCharacteristicId(input);
 		if (!id) continue;
+
 		const unit = advanceUnit(id);
 		const steps = nonNegativeInteger(item.system?.advanceScheme?.[id]);
-		input.value = String(steps * unit);
-		input.min = "0";
-		input.step = String(unit);
+		const value = steps * unit;
+
+		/* type=number cannot display '+' or an em dash. Keep input semantics and
+		 * numeric mobile keyboard via inputMode while using text presentation. */
+		input.type = "text";
+		input.inputMode = "numeric";
+		input.autocomplete = "off";
 		input.dataset.wfrpCareerAdvanceValue = "";
+		input.dataset.wfrpCareerAdvanceRaw = String(value);
+		input.value = formatAdvanceValue(value);
 		input.title = unit === 10
 			? localize(
-				"Enter the value shown in the Career table (for example 10 for +10).",
-				"Wpisz wartość z tabeli Profesji (np. 10 dla +10).",
+				"Enter the value shown in the Career table (0, 10, 20, 30, ...).",
+				"Wpisz wartość z tabeli Profesji (0, 10, 20, 30, ...).",
 			)
 			: localize(
 				"Enter the value shown in the Career table.",
 				"Wpisz wartość z tabeli Profesji.",
 			);
+
+		input.addEventListener("focus", () => {
+			input.value = String(nonNegativeInteger(input.dataset.wfrpCareerAdvanceRaw));
+			input.dataset.wfrpCareerAdvanceEditing = "";
+			setTimeout(() => {
+				if (document.activeElement !== input) return;
+				try { input.select(); } catch (_error) {}
+			}, 0);
+		});
+
+		input.addEventListener("blur", () => {
+			const parsed = parseAdvanceControl(item, input, { notify: false });
+			const valueAfterEdit = parsed
+				? parsed.value
+				: nonNegativeInteger(input.dataset.wfrpCareerAdvanceRaw);
+			input.dataset.wfrpCareerAdvanceRaw = String(valueAfterEdit);
+			delete input.dataset.wfrpCareerAdvanceEditing;
+			input.value = formatAdvanceValue(valueAfterEdit);
+		});
 	}
 }
 
 async function persistFormSnapshot(item, form) {
 	const update = {};
+	const scheme = cloneAdvanceScheme(item);
+	let schemeTouched = false;
+
 	for (const control of form.querySelectorAll("input[name], select[name], textarea[name]")) {
 		if (!isPersistedControl(control)) continue;
-		const partial = controlUpdate(item, control, { notify: false });
-		if (!partial) continue;
-		Object.assign(update, partial);
+
+		if (isAdvanceControl(control)) {
+			const parsed = parseAdvanceControl(item, control, { notify: false });
+			if (!parsed) continue;
+			scheme[parsed.id] = parsed.steps;
+			schemeTouched = true;
+			continue;
+		}
+
+		update[String(control.name)] = formControlValue(control);
 	}
+
+	if (schemeTouched) update["system.advanceScheme"] = scheme;
 	if (Object.keys(update).length) await queueItemUpdate(item, update);
 }
 
-function controlUpdate(item, control, { notify = true } = {}) {
-	const name = String(control?.name ?? "").trim();
-	if (!name) return null;
+function parseAdvanceControl(item, control, { notify = true } = {}) {
+	const id = advanceCharacteristicId(control);
+	if (!id) return null;
 
-	if (name.startsWith(ADVANCE_SCHEME_PREFIX)) {
-		const id = advanceCharacteristicId(control);
-		if (!id) return null;
-		const unit = advanceUnit(id);
-		const numeric = Number(String(control.value ?? "").trim().replace(",", "."));
-		const valid = Number.isInteger(numeric) && numeric >= 0 && numeric % unit === 0;
-		if (!valid) {
-			const currentSteps = nonNegativeInteger(item.system?.advanceScheme?.[id]);
-			control.value = String(currentSteps * unit);
-			if (notify) {
-				ui.notifications.warn(unit === 10
-					? localize(
-						"This characteristic advances in +10 steps. Enter 0, 10, 20, 30, ...",
-						"Ta cecha rozwija się skokami +10. Wpisz 0, 10, 20, 30, ...",
-					)
-					: localize(
-						"Enter a non-negative whole advancement value.",
-						"Wpisz nieujemną całkowitą wartość rozwinięcia.",
-					));
-			}
-			return null;
+	const unit = advanceUnit(id);
+	const text = String(control.value ?? "").trim();
+	const normalized = ["", "-", "—"].includes(text)
+		? "0"
+		: text.replace(/^\+/, "").replace(",", ".");
+	const numeric = Number(normalized);
+	const valid = Number.isInteger(numeric) && numeric >= 0 && numeric % unit === 0;
+
+	if (!valid) {
+		const currentValue = nonNegativeInteger(item.system?.advanceScheme?.[id]) * unit;
+		control.dataset.wfrpCareerAdvanceRaw = String(currentValue);
+		control.value = document.activeElement === control
+			? String(currentValue)
+			: formatAdvanceValue(currentValue);
+		if (notify) {
+			ui.notifications.warn(unit === 10
+				? localize(
+					"This characteristic advances in +10 steps. Enter 0, 10, 20, 30, ...",
+					"Ta cecha rozwija się skokami +10. Wpisz 0, 10, 20, 30, ...",
+				)
+				: localize(
+					"Enter a non-negative whole advancement value.",
+					"Wpisz nieujemną całkowitą wartość rozwinięcia.",
+				));
 		}
-		return { [name]: numeric / unit };
+		return null;
 	}
 
-	return { [name]: formControlValue(control) };
+	return {
+		id,
+		unit,
+		value: numeric,
+		steps: numeric / unit,
+	};
+}
+
+function isAdvanceControl(control) {
+	return String(control?.name ?? "").startsWith(ADVANCE_SCHEME_PREFIX);
 }
 
 function advanceCharacteristicId(control) {
@@ -175,6 +247,32 @@ function advanceCharacteristicId(control) {
 
 function advanceUnit(id) {
 	return ONE_POINT_ADVANCES.has(String(id ?? "")) ? 1 : 10;
+}
+
+function formatAdvanceValue(value) {
+	const numeric = nonNegativeInteger(value);
+	return numeric > 0 ? `+${numeric}` : "—";
+}
+
+function cloneAdvanceScheme(item) {
+	const source = item.system?.advanceScheme?.toObject?.() ??
+		item.system?.advanceScheme ?? {};
+	return foundry.utils.deepClone(source);
+}
+
+function queueAdvanceSchemeUpdate(item, id, steps) {
+	const previous = updateQueues.get(item) ?? Promise.resolve();
+	const next = previous
+		.catch(() => {})
+		.then(() => {
+			const scheme = cloneAdvanceScheme(item);
+			scheme[id] = nonNegativeInteger(steps);
+			return item.update({ "system.advanceScheme": scheme });
+		});
+	updateQueues.set(item, next);
+	return next.finally(() => {
+		if (updateQueues.get(item) === next) updateQueues.delete(item);
+	});
 }
 
 function descriptiveModeLabel(entry) {
