@@ -142,10 +142,12 @@ async function invalidateCritical(message) {
 		}
 
 		await context.actor.update(update);
-		if (context.isFatal) await synchronizeFatalStatus(context.actor);
+		if (context.isFatal) {
+			await synchronizeFatalStatus(context.actor);
+			await restoreFatalCombatTrackerState(context.actor, context.fatalApplication);
+		}
 
 		if (message.canUserModify?.(game.user, "delete")) await message.delete();
-		void context.actor.sheet?.render?.({ force: true });
 		void ui.chat?.render?.({ force: true });
 	} catch (error) {
 		console.error("WFRP1ED | Unable to invalidate critical result.", error);
@@ -220,6 +222,74 @@ function actorFromUuidSync(uuid) {
 		return null;
 	}
 	return null;
+}
+
+/**
+ * FatalCriticalIntegration restores the Actor/token status. Combatant.defeated
+ * is a separate embedded Combat field in Foundry v14, so rollback also restores
+ * the matching Combatant explicitly. This happens synchronously in the rollback
+ * transaction instead of relying on a later Actor-update consistency hook.
+ */
+async function restoreFatalCombatTrackerState(actor, fatalApplication) {
+	const desired = fatalApplication?.defeatedBefore === true;
+
+	for (const combat of game.combats ?? []) {
+		const combatants = matchingCombatants(combat, actor);
+		if (combatants.length === 0) continue;
+
+		const updates = combatants
+			.filter((combatant) => Boolean(combatant?.defeated) !== desired)
+			.map((combatant) => ({
+				_id: combatant.id,
+				defeated: desired,
+			}));
+		if (updates.length === 0) continue;
+
+		await combat.updateEmbeddedDocuments("Combatant", updates);
+	}
+}
+
+function matchingCombatants(combat, actor) {
+	const matches = new Map();
+	const add = (combatant) => {
+		if (combatant?.id) matches.set(combatant.id, combatant);
+	};
+
+	if (typeof combat?.getCombatantsByActor === "function") {
+		for (const combatant of combat.getCombatantsByActor(actor) ?? []) add(combatant);
+	}
+
+	const token = actor?.token ?? null;
+	if (token && typeof combat?.getCombatantsByToken === "function") {
+		for (const combatant of combat.getCombatantsByToken(token) ?? []) add(combatant);
+	}
+
+	for (const combatant of combat?.combatants ?? []) {
+		if (combatantMatchesActor(combatant, actor)) add(combatant);
+	}
+
+	return [...matches.values()];
+}
+
+function combatantMatchesActor(combatant, actor) {
+	if (!combatant || !actor) return false;
+	if (combatant.actor === actor) return true;
+
+	const actorUuid = String(actor.uuid ?? "");
+	if (actorUuid && String(combatant.actor?.uuid ?? "") === actorUuid) return true;
+
+	const tokenId = String(actor.token?.id ?? "");
+	if (tokenId && String(combatant.tokenId ?? combatant.token?.id ?? "") === tokenId) {
+		return true;
+	}
+
+	const actorId = String(actor.id ?? "");
+	if (!actorId) return false;
+	return Boolean(
+		String(combatant.actor?.id ?? "") === actorId ||
+		String(combatant.actorId ?? "") === actorId ||
+		String(combatant.token?.actorId ?? "") === actorId
+	);
 }
 
 function messageFromContextTarget(target) {
