@@ -1,0 +1,84 @@
+details.wfrp1e-damage-card > summary,
+details.wfrp1e-critical-result > summary {
+	list-style: none;
+	cursor: pointer;
+	user-select: none;
+}
+
+details.wfrp1e-damage-card > summary::-webkit-details-marker,
+details.wfrp1e-critical-result > summary::-webkit-details-marker {
+	display: none;
+}
+
+details.wfrp1e-damage-card > summary::after,
+details.wfrp1e-critical-result > summary::after {
+	content: "▸";
+	flex: 0 0 auto;
+	margin-left: 0.3rem;
+	font-size: 0.72rem;
+	line-height: 1;
+	opacity: 0.65;
+}
+
+details.wfrp1e-damage-card[open] > summary::after,
+details.wfrp1e-critical-result[open] > summary::after {
+	content: "▾";
+}
+
+.wfrp1e-damage-card__headline {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+	min-width: 0;
+}
+
+.wfrp1e-damage-card__compact-status {
+	margin-left: auto;
+	padding: 0.1rem 0.35rem;
+	border: 1px solid rgba(63, 42, 28, 0.28);
+	border-radius: 999px;
+	font-size: 0.7rem;
+	font-weight: 800;
+	letter-spacing: 0.035em;
+	line-height: 1.2;
+	text-transform: uppercase;
+	white-space: nowrap;
+}
+
+.wfrp1e-damage-card__compact-status[hidden] {
+	display: none;
+}
+
+details.wfrp1e-damage-card:not([open]) > .wfrp1e-damage-card__header {
+	margin-bottom: 0;
+	padding-bottom: 0;
+	border-bottom: 0;
+}
+
+.wfrp1e-damage-card__details {
+	min-width: 0;
+}
+
+details.wfrp1e-critical-result > .wfrp1e-critical-result__header {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.25rem;
+}
+
+details.wfrp1e-critical-result:not([open]) > .wfrp1e-critical-result__header {
+	margin: 0;
+}
+
+.wfrp1e-critical-result__details {
+	margin-top: 0.35rem;
+	padding-top: 0.3rem;
+	border-top: 1px solid rgba(108, 35, 35, 0.3);
+}
+
+/* Resolved/reverted messages are historical records. Keep them visually
+ * readable but quieter than pending interactive messages in the chat stream. */
+details.wfrp1e-damage-card.is-settled:not([open]) {
+	padding-top: 0.42rem;
+	padding-bottom: 0.42rem;
+}
