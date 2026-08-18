@@ -15,7 +15,7 @@
 		<div class="career-title-rule" aria-hidden="true"></div>
 
 		<div class="career-meta-row">
-			<label>
+			<label class="career-meta-field">
 				<span>{{careerUi.labels.class}}</span>
 				<select name="system.class" {{#unless editable}}disabled{{/unless}}>
 					{{#each careerUi.classOptions as |option|}}
@@ -23,7 +23,7 @@
 					{{/each}}
 				</select>
 			</label>
-			<label>
+			<label class="career-meta-field">
 				<span>{{careerUi.labels.tier}}</span>
 				<select name="system.tier" {{#unless editable}}disabled{{/unless}}>
 					{{#each careerUi.tierOptions as |option|}}
@@ -31,6 +31,26 @@
 					{{/each}}
 				</select>
 			</label>
+			<div class="career-meta-magic">
+				<span class="career-meta-magic__label">{{careerUi.labels.magicPoints}}</span>
+				<div class="career-meta-magic__values">
+					{{#each careerUi.magicPoints as |entry|}}
+						<span class="career-magic-chip" title="{{entry.note}}">
+							<strong>{{entry.formula}}</strong>
+							<small>{{entry.raceLabel}}</small>
+							{{#if @root.editable}}
+								<button type="button" data-action="editMagicPoints" data-career-index="{{entry.index}}" title="Edit"><i class="fa-solid fa-pen"></i></button>
+								<button type="button" data-action="deleteMagicPoints" data-career-index="{{entry.index}}" title="Delete"><i class="fa-solid fa-xmark"></i></button>
+							{{/if}}
+						</span>
+					{{else}}
+						<span class="career-meta-magic__empty">—</span>
+					{{/each}}
+					{{#if editable}}
+						<button type="button" class="career-meta-magic__add" data-action="addMagicPoints" title="Add Magic Points"><i class="fa-solid fa-plus"></i></button>
+					{{/if}}
+				</div>
+			</div>
 		</div>
 	</header>
 
@@ -87,123 +107,110 @@
 		</table>
 	</section>
 
-	<div class="career-columns">
-		<div class="career-column">
-			<section class="career-section career-list-section" data-career-drop-zone="skills">
-				<h2>{{careerUi.labels.skills}}</h2>
-				{{#each careerUi.skills as |entry|}}
-					<div class="career-entry" data-career-drop-zone="skills" data-career-entry-id="{{entry.id}}">
-						<div class="career-entry-text">
-							{{#if entry.chanceLabel}}<strong>{{entry.chanceLabel}}</strong> {{/if}}
-							<span>{{entry.display}}</span>
-							{{#if entry.modeLabel}}<em>({{entry.modeLabel}})</em>{{/if}}
-							{{#if entry.note}}<small>{{entry.note}}</small>{{/if}}
+	<section class="career-tab-workspace">
+		<nav class="career-tab-nav" role="tablist" aria-label="Career details">
+			<button type="button" role="tab" data-career-tab="skills">{{careerUi.labels.skills}}</button>
+			<button type="button" role="tab" data-career-tab="trappings">{{careerUi.labels.trappings}}</button>
+			<button type="button" role="tab" data-career-tab="exits">{{careerUi.labels.exits}}</button>
+		</nav>
+
+		<div class="career-tab-panels">
+			<section class="career-tab-panel career-list-section" role="tabpanel" data-career-panel="skills" data-career-drop-zone="skills">
+				<div class="career-tab-entry-grid">
+					{{#each careerUi.skills as |entry|}}
+						<div class="career-entry" data-career-drop-zone="skills" data-career-entry-id="{{entry.id}}">
+							<div class="career-entry-text">
+								{{#if entry.chanceLabel}}<strong>{{entry.chanceLabel}}</strong> {{/if}}
+								<span>{{entry.display}}</span>
+								{{#if entry.modeLabel}}<em>({{entry.modeLabel}})</em>{{/if}}
+								{{#if entry.note}}<small>{{entry.note}}</small>{{/if}}
+							</div>
+							{{#if @root.editable}}
+								<div class="career-entry-controls">
+									<button type="button" data-action="configureEntry" data-career-collection="skills" data-career-entry-id="{{entry.id}}" title="Configure"><i class="fa-solid fa-gear"></i></button>
+									<button type="button" data-action="deleteEntry" data-career-collection="skills" data-career-entry-id="{{entry.id}}" title="Delete"><i class="fa-solid fa-trash"></i></button>
+								</div>
+								<div class="career-choice-editor">
+									{{#each entry.choices as |choice|}}
+										<span
+											class="career-choice-chip"
+											data-career-drop-zone="skills"
+											data-career-entry-id="{{../id}}"
+											data-career-choice-id="{{choice.id}}"
+											title="Drop another Skill here to add it to this same option"
+										>
+											{{choice.label}}
+											<button type="button" data-action="deleteChoice" data-career-collection="skills" data-career-entry-id="{{../id}}" data-career-choice-id="{{choice.id}}" title="Delete alternative"><i class="fa-solid fa-xmark"></i></button>
+										</span>
+									{{/each}}
+								</div>
+							{{/if}}
 						</div>
-						{{#if @root.editable}}
-							<div class="career-entry-controls">
-								<button type="button" data-action="configureEntry" data-career-collection="skills" data-career-entry-id="{{entry.id}}" title="Configure"><i class="fa-solid fa-gear"></i></button>
-								<button type="button" data-action="deleteEntry" data-career-collection="skills" data-career-entry-id="{{entry.id}}" title="Delete"><i class="fa-solid fa-trash"></i></button>
-							</div>
-							<div class="career-choice-editor">
-								{{#each entry.choices as |choice|}}
-									<span
-										class="career-choice-chip"
-										data-career-drop-zone="skills"
-										data-career-entry-id="{{../id}}"
-										data-career-choice-id="{{choice.id}}"
-										title="Drop another Skill here to add it to this same option"
-									>
-										{{choice.label}}
-										<button type="button" data-action="deleteChoice" data-career-collection="skills" data-career-entry-id="{{../id}}" data-career-choice-id="{{choice.id}}" title="Delete alternative"><i class="fa-solid fa-xmark"></i></button>
-									</span>
-								{{/each}}
-							</div>
-						{{/if}}
-					</div>
-				{{else}}
-					<p class="career-empty">—</p>
-				{{/each}}
+					{{else}}
+						<p class="career-empty">—</p>
+					{{/each}}
+				</div>
 				{{#if editable}}<div class="career-drop-hint">{{careerUi.labels.dropSkill}}</div>{{/if}}
 			</section>
 
-			<section class="career-section career-list-section" data-career-drop-zone="trappings">
-				<h2>{{careerUi.labels.trappings}}</h2>
-				{{#each careerUi.trappings as |entry|}}
-					<div class="career-entry" data-career-drop-zone="trappings" data-career-entry-id="{{entry.id}}">
-						<div class="career-entry-text">
-							{{#if entry.chanceLabel}}<strong>{{entry.chanceLabel}}</strong> {{/if}}
-							<span>{{entry.display}}</span>
-							{{#if entry.modeLabel}}<em>({{entry.modeLabel}})</em>{{/if}}
-							{{#if entry.note}}<small>{{entry.note}}</small>{{/if}}
+			<section class="career-tab-panel career-list-section" role="tabpanel" data-career-panel="trappings" data-career-drop-zone="trappings">
+				<div class="career-tab-entry-grid">
+					{{#each careerUi.trappings as |entry|}}
+						<div class="career-entry" data-career-drop-zone="trappings" data-career-entry-id="{{entry.id}}">
+							<div class="career-entry-text">
+								{{#if entry.chanceLabel}}<strong>{{entry.chanceLabel}}</strong> {{/if}}
+								<span>{{entry.display}}</span>
+								{{#if entry.modeLabel}}<em>({{entry.modeLabel}})</em>{{/if}}
+								{{#if entry.note}}<small>{{entry.note}}</small>{{/if}}
+							</div>
+							{{#if @root.editable}}
+								<div class="career-entry-controls">
+									<button type="button" data-action="configureEntry" data-career-collection="trappings" data-career-entry-id="{{entry.id}}" title="Configure"><i class="fa-solid fa-gear"></i></button>
+									<button type="button" data-action="deleteEntry" data-career-collection="trappings" data-career-entry-id="{{entry.id}}" title="Delete"><i class="fa-solid fa-trash"></i></button>
+								</div>
+								<div class="career-choice-editor">
+									{{#each entry.choices as |choice|}}
+										<span
+											class="career-choice-chip"
+											data-career-drop-zone="trappings"
+											data-career-entry-id="{{../id}}"
+											data-career-choice-id="{{choice.id}}"
+											title="Drop another Trapping here to add it to this same option"
+										>
+											{{choice.label}}
+											<button type="button" data-action="deleteChoice" data-career-collection="trappings" data-career-entry-id="{{../id}}" data-career-choice-id="{{choice.id}}" title="Delete alternative"><i class="fa-solid fa-xmark"></i></button>
+										</span>
+									{{/each}}
+								</div>
+							{{/if}}
 						</div>
-						{{#if @root.editable}}
-							<div class="career-entry-controls">
-								<button type="button" data-action="configureEntry" data-career-collection="trappings" data-career-entry-id="{{entry.id}}" title="Configure"><i class="fa-solid fa-gear"></i></button>
-								<button type="button" data-action="deleteEntry" data-career-collection="trappings" data-career-entry-id="{{entry.id}}" title="Delete"><i class="fa-solid fa-trash"></i></button>
-							</div>
-							<div class="career-choice-editor">
-								{{#each entry.choices as |choice|}}
-									<span
-										class="career-choice-chip"
-										data-career-drop-zone="trappings"
-										data-career-entry-id="{{../id}}"
-										data-career-choice-id="{{choice.id}}"
-										title="Drop another Trapping here to add it to this same option"
-									>
-										{{choice.label}}
-										<button type="button" data-action="deleteChoice" data-career-collection="trappings" data-career-entry-id="{{../id}}" data-career-choice-id="{{choice.id}}" title="Delete alternative"><i class="fa-solid fa-xmark"></i></button>
-									</span>
-								{{/each}}
-							</div>
-						{{/if}}
-					</div>
-				{{else}}
-					<p class="career-empty">—</p>
-				{{/each}}
+					{{else}}
+						<p class="career-empty">—</p>
+					{{/each}}
+				</div>
 				{{#if editable}}<div class="career-drop-hint">{{careerUi.labels.dropTrapping}}</div>{{/if}}
 			</section>
-		</div>
 
-		<div class="career-column">
-			<section class="career-section career-list-section">
-				<h2>
-					{{careerUi.labels.magicPoints}}
-					{{#if editable}}<button type="button" class="career-heading-action" data-action="addMagicPoints"><i class="fa-solid fa-plus"></i></button>{{/if}}
-				</h2>
-				{{#each careerUi.magicPoints as |entry|}}
-					<div class="career-entry career-magic-entry">
-						<div class="career-entry-text"><strong>{{entry.formula}}</strong> — {{entry.raceLabel}}{{#if entry.note}} <small>{{entry.note}}</small>{{/if}}</div>
-						{{#if @root.editable}}
-							<div class="career-entry-controls">
-								<button type="button" data-action="editMagicPoints" data-career-index="{{entry.index}}"><i class="fa-solid fa-pen"></i></button>
-								<button type="button" data-action="deleteMagicPoints" data-career-index="{{entry.index}}"><i class="fa-solid fa-trash"></i></button>
+			<section class="career-tab-panel career-list-section career-exits-section" role="tabpanel" data-career-panel="exits" data-career-drop-zone="exits">
+				<div class="career-tab-entry-grid">
+					{{#each careerUi.exits as |exit|}}
+						<div class="career-entry career-exit-entry">
+							<div class="career-entry-text">
+								<span>{{exit.displayName}}</span>
+								{{#if exit.condition}}<small>{{exit.condition}}</small>{{/if}}
 							</div>
-						{{/if}}
-					</div>
-				{{else}}
-					<p class="career-empty">—</p>
-				{{/each}}
-			</section>
-
-			<section class="career-section career-list-section career-exits-section" data-career-drop-zone="exits">
-				<h2>{{careerUi.labels.exits}}</h2>
-				{{#each careerUi.exits as |exit|}}
-					<div class="career-entry">
-						<div class="career-entry-text">
-							<span>{{exit.displayName}}</span>
-							{{#if exit.condition}}<small>{{exit.condition}}</small>{{/if}}
+							{{#if @root.editable}}
+								<div class="career-entry-controls">
+									<button type="button" data-action="deleteExit" data-career-index="{{exit.index}}"><i class="fa-solid fa-trash"></i></button>
+								</div>
+							{{/if}}
 						</div>
-						{{#if @root.editable}}
-							<div class="career-entry-controls">
-								<button type="button" data-action="deleteExit" data-career-index="{{exit.index}}"><i class="fa-solid fa-trash"></i></button>
-							</div>
-						{{/if}}
-					</div>
-				{{else}}
-					<p class="career-empty">—</p>
-				{{/each}}
+					{{else}}
+						<p class="career-empty">—</p>
+					{{/each}}
+				</div>
 				{{#if editable}}<div class="career-drop-hint">{{careerUi.labels.dropExit}}</div>{{/if}}
 			</section>
 		</div>
-	</div>
+	</section>
 </div>
