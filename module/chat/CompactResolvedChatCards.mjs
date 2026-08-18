@@ -1,102 +1,133 @@
 import { DamageApplication } from "../damage/DamageApplication.mjs";
-import { DamageChat } from "../damage/DamageChat.mjs";
+import { CriticalWoundApplication } from "../criticals/CriticalWoundApplication.mjs";
 
+const FLAG_SCOPE = "wfrp1ed";
+const DAMAGE_FLAG_KEY = "damageState";
+const DAMAGE_RESULT_VIEW_FLAG_KEY = "combatDamageResultView";
+const CRITICAL_RESULT_FLAG_KEY = "criticalResult";
 const DAMAGE_REVERTED_STATE = "reverted";
 const DAMAGE_APPLIED_STATE = "applied";
 
-installDamageDisclosurePresentation();
-
-/* Existing ChatMessages store rendered HTML. Retrofit historical detailed
- * Critical cards at render time so the compact presentation is not limited to
- * messages created after this update. New messages already use <details> in the
- * Handlebars template and pass through unchanged. */
-Hooks.on("renderChatMessageHTML", (_message, html) => {
-	retrofitDetailedCriticalDisclosure(html);
+/*
+ * Actionable chat cards keep their original full presentation. Only completed
+ * transactions become compact historical disclosures. This module is loaded
+ * after the normal combat/Critical presentation layers, so it folds the final
+ * rendered card without taking ownership of any rule or action lifecycle.
+ */
+Hooks.on("renderChatMessageHTML", (message, html) => {
+	applyDamageHistoryDisclosure(message, html);
+	applyCriticalHistoryDisclosure(message, html);
 });
 
-function installDamageDisclosurePresentation() {
-	if (DamageChat.__wfrpCompactDisclosureInstalled === true) return;
+function applyDamageHistoryDisclosure(message, html) {
+	const root = asElement(html);
+	if (!root) return;
 
-	const originalContext = DamageChat._templateContext;
-	DamageChat._templateContext = function compactDamageTemplateContext(
-		state,
-		actor,
-		transaction,
-	) {
-		const context = originalContext.call(this, state, actor, transaction);
-		context.compactStatusLabel = compactDamageStatus(transaction);
-		context.collapsed = isSettledDamage(transaction);
-		return context;
-	};
+	const standalone = message?.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG_KEY);
+	if (standalone?.packet?.id) {
+		const actor = actorFromUuidSync(standalone.packet.targetActorUuid);
+		const transaction = actor
+			? DamageApplication.transactionFor(actor, standalone.packet.id)
+			: standalone.application ?? null;
+		const card = findCard(root, "[data-wfrp-damage-card]");
+		applyDamageCardState(card, transaction);
+		return;
+	}
 
-	const originalApplyClientState = DamageChat.applyClientState;
-	DamageChat.applyClientState = function compactDamageClientState(message, html) {
-		originalApplyClientState.call(this, message, html);
+	const view = message?.getFlag?.(FLAG_SCOPE, DAMAGE_RESULT_VIEW_FLAG_KEY);
+	if (!view?.packetId) return;
 
-		const state = this._stateFromMessage(message);
-		if (!state || state.presentation !== "standalone") return;
-
-		const root = asElement(html);
-		let card = root?.matches?.("[data-wfrp-damage-card]")
-			? root
-			: root?.querySelector?.("[data-wfrp-damage-card]");
-		if (!card) return;
-
-		card = retrofitDamageDisclosure(card);
-
-		const actor = this._targetActorSync(state);
-		const transaction = actor instanceof foundry.documents.Actor
-			? DamageApplication.transactionFor(actor, state.packet.id)
-			: state.application ?? null;
-		const transactionState = String(transaction?.state ?? "pending");
-		const settled = isSettledDamage(transaction);
-		const compactStatus = card.querySelector?.(
-			"[data-wfrp-damage-compact-status]",
-		);
-
-		if (compactStatus) {
-			const label = compactDamageStatus(transaction);
-			compactStatus.textContent = label;
-			compactStatus.hidden = !label;
-		}
-
-		card.classList.toggle("is-settled", settled);
-		card.classList.toggle(
-			"is-applied",
-			transactionState === DAMAGE_APPLIED_STATE,
-		);
-		card.classList.toggle(
-			"is-wfrp-transaction-reverted",
-			transactionState === DAMAGE_REVERTED_STATE,
-		);
-
-		/* Fold exactly once when the transaction crosses into a new state. The
-		 * user may expand the card afterwards and ordinary client refreshes do not
-		 * immediately force it closed again. A full chat rerender naturally starts
-		 * from the requested default-collapsed state. */
-		if (
-			card instanceof HTMLDetailsElement &&
-			card.dataset.wfrpDisclosureState !== transactionState
-		) {
-			card.dataset.wfrpDisclosureState = transactionState;
-			if (settled) card.open = false;
-		}
-	};
-
-	Object.defineProperty(
-		DamageChat,
-		"__wfrpCompactDisclosureInstalled",
-		{ value: true, configurable: false, enumerable: false },
+	const sourceMessage = game.messages?.get(
+		String(view.sourceAttackMessageId ?? ""),
 	);
+	const sourceState = sourceMessage?.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG_KEY);
+	const actor = actorFromUuidSync(
+		view.targetActorUuid ?? sourceState?.packet?.targetActorUuid,
+	);
+	const transaction = actor
+		? DamageApplication.transactionFor(actor, view.packetId)
+		: sourceState?.application ?? null;
+	const card = findCard(root, "[data-wfrp-combat-damage-result-card]");
+	applyDamageCardState(card, transaction);
 }
 
-function retrofitDamageDisclosure(card) {
-	if (card instanceof HTMLDetailsElement) return card;
+function applyDamageCardState(card, transaction) {
+	if (!(card instanceof HTMLElement)) return;
 
-	const header = [...card.children].find((element) =>
-		element.classList?.contains("wfrp1e-damage-card__header"),
+	if (!isSettledDamage(transaction)) {
+		restoreActionableDamageCard(card);
+		return;
+	}
+
+	const details = compactDamageCard(card);
+	if (!(details instanceof HTMLDetailsElement)) return;
+
+	const state = String(transaction?.state ?? "");
+	const compactStatus = details.querySelector(
+		"[data-wfrp-damage-compact-status]",
 	);
-	if (!(header instanceof HTMLElement)) return card;
+	if (compactStatus) {
+		compactStatus.textContent = compactDamageStatus(transaction);
+		compactStatus.hidden = false;
+	}
+
+	details.classList.add("is-settled");
+	details.classList.toggle("is-applied", state === DAMAGE_APPLIED_STATE);
+	details.classList.toggle(
+		"is-wfrp-transaction-reverted",
+		state === DAMAGE_REVERTED_STATE,
+	);
+	details.open = false;
+}
+
+function applyCriticalHistoryDisclosure(message, html) {
+	const state = message?.getFlag?.(FLAG_SCOPE, CRITICAL_RESULT_FLAG_KEY);
+	if (!isDetailedCriticalState(state)) return;
+
+	const root = asElement(html);
+	if (!root) return;
+	const card = findCard(root, "[data-wfrp-detailed-critical-card]");
+	if (!(card instanceof HTMLElement)) return;
+
+	const wound = existingCriticalWound(message, state);
+	if (!wound) {
+		restoreActionableCriticalCard(card);
+		return;
+	}
+
+	const details = compactCriticalCard(card);
+	if (details instanceof HTMLDetailsElement) {
+		details.open = false;
+		details.classList.add("is-settled");
+	}
+}
+
+function existingCriticalWound(message, state) {
+	const sourceMessage = game.messages?.get(
+		String(state?.sourceMessageId ?? ""),
+	);
+	const damageState = sourceMessage?.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG_KEY);
+	const actor = actorFromUuidSync(damageState?.packet?.targetActorUuid);
+	if (!(actor instanceof foundry.documents.Actor)) return null;
+
+	try {
+		return CriticalWoundApplication.existingForResolution(
+			actor,
+			{ resultMessageId: String(message?.id ?? "") },
+		) ?? null;
+	} catch (_error) {
+		return null;
+	}
+}
+
+function compactDamageCard(card) {
+	if (card instanceof HTMLDetailsElement) {
+		ensureDamageCompactStatus(card);
+		return card;
+	}
+
+	const header = directChildWithClass(card, "wfrp1e-damage-card__header");
+	if (!(header instanceof HTMLElement)) return null;
 
 	const details = document.createElement("details");
 	copyAttributes(card, details);
@@ -107,10 +138,7 @@ function retrofitDamageDisclosure(card) {
 	headline.className = "wfrp1e-damage-card__headline";
 	while (header.firstChild) headline.append(header.firstChild);
 
-	const compactStatus = document.createElement("span");
-	compactStatus.className = "wfrp1e-damage-card__compact-status";
-	compactStatus.dataset.wfrpDamageCompactStatus = "";
-	compactStatus.hidden = true;
+	const compactStatus = createCompactDamageStatus();
 	summary.append(headline, compactStatus);
 
 	const body = document.createElement("div");
@@ -125,17 +153,56 @@ function retrofitDamageDisclosure(card) {
 	return details;
 }
 
-function retrofitDetailedCriticalDisclosure(html) {
-	const root = asElement(html);
-	const card = root?.matches?.("[data-wfrp-detailed-critical-card]")
-		? root
-		: root?.querySelector?.("[data-wfrp-detailed-critical-card]");
-	if (!card || card instanceof HTMLDetailsElement) return;
+function restoreActionableDamageCard(card) {
+	if (!(card instanceof HTMLDetailsElement)) return card;
 
-	const header = [...card.children].find((element) =>
-		element.classList?.contains("wfrp1e-critical-result__header"),
+	const summary = directChildTag(card, "SUMMARY");
+	const body = directChildWithClass(card, "wfrp1e-damage-card__details");
+	if (!(summary instanceof HTMLElement) || !(body instanceof HTMLElement)) {
+		card.open = true;
+		return card;
+	}
+
+	const replacement = document.createElement(
+		card.hasAttribute("data-wfrp-combat-damage-result-card")
+			? "section"
+			: "article",
 	);
-	if (!(header instanceof HTMLElement)) return;
+	copyAttributes(card, replacement, { omit: new Set(["open"]) });
+	replacement.classList.remove("is-settled");
+
+	const header = document.createElement(
+		card.hasAttribute("data-wfrp-combat-damage-result-card")
+			? "div"
+			: "header",
+	);
+	header.className = summary.className;
+	const headline = summary.querySelector(".wfrp1e-damage-card__headline");
+	if (headline) {
+		while (headline.firstChild) header.append(headline.firstChild);
+	} else {
+		for (const child of [...summary.childNodes]) {
+			if (child instanceof HTMLElement && child.hasAttribute("data-wfrp-damage-compact-status")) continue;
+			header.append(child);
+		}
+	}
+	replacement.append(header);
+
+	while (body.firstChild) replacement.append(body.firstChild);
+	for (const child of [...card.childNodes]) {
+		if (child === summary || child === body) continue;
+		replacement.append(child);
+	}
+
+	card.replaceWith(replacement);
+	return replacement;
+}
+
+function compactCriticalCard(card) {
+	if (card instanceof HTMLDetailsElement) return card;
+
+	const header = directChildWithClass(card, "wfrp1e-critical-result__header");
+	if (!(header instanceof HTMLElement)) return null;
 
 	const details = document.createElement("details");
 	copyAttributes(card, details);
@@ -153,12 +220,87 @@ function retrofitDetailedCriticalDisclosure(html) {
 
 	details.append(summary, body);
 	card.replaceWith(details);
+	return details;
 }
 
-function copyAttributes(source, target) {
+function restoreActionableCriticalCard(card) {
+	if (!(card instanceof HTMLDetailsElement)) return card;
+
+	const summary = directChildTag(card, "SUMMARY");
+	const body = directChildWithClass(card, "wfrp1e-critical-result__details");
+	if (!(summary instanceof HTMLElement) || !(body instanceof HTMLElement)) {
+		card.open = true;
+		return card;
+	}
+
+	const section = document.createElement("section");
+	copyAttributes(card, section, { omit: new Set(["open"]) });
+	section.classList.remove("is-settled");
+
+	const header = document.createElement("div");
+	header.className = summary.className;
+	while (summary.firstChild) header.append(summary.firstChild);
+	section.append(header);
+
+	while (body.firstChild) section.append(body.firstChild);
+	for (const child of [...card.childNodes]) {
+		if (child === summary || child === body) continue;
+		section.append(child);
+	}
+
+	card.replaceWith(section);
+	return section;
+}
+
+function ensureDamageCompactStatus(details) {
+	const summary = directChildTag(details, "SUMMARY");
+	if (!(summary instanceof HTMLElement)) return;
+	if (summary.querySelector("[data-wfrp-damage-compact-status]")) return;
+	const status = createCompactDamageStatus();
+	status.hidden = true;
+	summary.append(status);
+}
+
+function createCompactDamageStatus() {
+	const status = document.createElement("span");
+	status.className = "wfrp1e-damage-card__compact-status";
+	status.dataset.wfrpDamageCompactStatus = "";
+	return status;
+}
+
+function directChildWithClass(parent, className) {
+	return [...(parent?.children ?? [])].find((element) =>
+		element.classList?.contains(className),
+	) ?? null;
+}
+
+function directChildTag(parent, tagName) {
+	return [...(parent?.children ?? [])].find((element) =>
+		String(element.tagName ?? "").toUpperCase() === tagName,
+	) ?? null;
+}
+
+function findCard(root, selector) {
+	return root.matches?.(selector)
+		? root
+		: root.querySelector?.(selector) ?? null;
+}
+
+function copyAttributes(source, target, { omit = new Set() } = {}) {
 	for (const attribute of source.attributes ?? []) {
+		if (omit.has(attribute.name)) continue;
 		target.setAttribute(attribute.name, attribute.value);
 	}
+}
+
+function isDetailedCriticalState(state) {
+	return Boolean(
+		state &&
+		typeof state === "object" &&
+		!Array.isArray(state) &&
+		state.kind === "detailed" &&
+		state.resolution,
+	);
 }
 
 function isSettledDamage(transaction) {
@@ -176,6 +318,17 @@ function compactDamageStatus(transaction) {
 			return localize("Reverted", "Cofnięto");
 		default:
 			return "";
+	}
+}
+
+function actorFromUuidSync(uuid) {
+	try {
+		const document = foundry.utils.fromUuidSync(String(uuid ?? "").trim());
+		return document?.documentName === "Actor"
+			? document
+			: document?.actor ?? null;
+	} catch (_error) {
+		return null;
 	}
 }
 
