@@ -50,6 +50,40 @@
 	outline-offset: -1px;
 }
 
+/* Character sheet Career advancement row: the large value is the active
+ * Career allowance, while the small markers show purchased/open advance slots.
+ * Keep the markers visually attached to the upper hand-drawn cell border. */
+.wfrp1ed-classic-sheet .characteristic-cell--advances {
+	position: relative;
+}
+
+.wfrp1ed-classic-sheet .characteristic-advance-markers {
+	position: absolute;
+	left: 1px;
+	right: 1px;
+	top: 2px;
+	display: block;
+	overflow: hidden;
+	font-size: 8px;
+	font-weight: 700;
+	line-height: 1;
+	letter-spacing: 0;
+	text-align: center;
+	white-space: nowrap;
+	pointer-events: none;
+}
+
+.wfrp1ed-classic-sheet .characteristic-career-advance-value {
+	display: block;
+	max-width: 100%;
+	font-size: 16px;
+	font-weight: 700;
+	line-height: 1;
+	text-align: center;
+	white-space: nowrap;
+	pointer-events: none;
+}
+
 .career-choice-dialog {
 	display: grid;
 	gap: 7px;
