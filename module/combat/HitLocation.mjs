@@ -1,33 +1,42 @@
+export const HUMANOID_HIT_LOCATIONS = Object.freeze([
+	"head",
+	"rightArm",
+	"leftArm",
+	"body",
+	"rightLeg",
+	"leftLeg",
+]);
+
 const HIT_LOCATION_RANGES = Object.freeze([
 	{
 		minimum: 1,
 		maximum: 15,
-		location: "head",
+		location: HUMANOID_HIT_LOCATIONS[0],
 	},
 	{
 		minimum: 16,
 		maximum: 35,
-		location: "rightArm",
+		location: HUMANOID_HIT_LOCATIONS[1],
 	},
 	{
 		minimum: 36,
 		maximum: 55,
-		location: "leftArm",
+		location: HUMANOID_HIT_LOCATIONS[2],
 	},
 	{
 		minimum: 56,
 		maximum: 80,
-		location: "body",
+		location: HUMANOID_HIT_LOCATIONS[3],
 	},
 	{
 		minimum: 81,
 		maximum: 90,
-		location: "rightLeg",
+		location: HUMANOID_HIT_LOCATIONS[4],
 	},
 	{
 		minimum: 91,
 		maximum: 100,
-		location: "leftLeg",
+		location: HUMANOID_HIT_LOCATIONS[5],
 	},
 ]);
 
