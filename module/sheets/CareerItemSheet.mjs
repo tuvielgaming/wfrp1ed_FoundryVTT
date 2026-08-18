@@ -462,6 +462,7 @@ function grantAlreadyPresent(entries, grant) {
 				if (sameReference(existing, grant)) return true;
 			}
 		}
+	}
 	return false;
 }
 
