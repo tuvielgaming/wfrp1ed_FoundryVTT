@@ -13,6 +13,7 @@
 		"module/settings/WfrpRuleSettings.mjs",
 		"module/loot/LootPileBootstrap.mjs",
 		"module/wfrp1ed.mjs",
+		"module/data-models/actor/CharacterPartialMigrationFix.mjs",
 		"module/forms/SelectAllOnFocus.mjs",
 		"module/careers/CareerBootstrap.mjs",
 		"module/careers/CareerPartialMigrationFix.mjs",
