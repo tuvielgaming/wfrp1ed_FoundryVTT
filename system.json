@@ -66,7 +66,8 @@
 		"module/chat/PendingInteractionReminder.mjs",
 		"module/criticals/DetailedCriticalAdjudication.mjs",
 		"module/chat/CombatLifecyclePolish.mjs",
-		"module/criticals/CriticalResultLifecycleGuard.mjs"
+		"module/criticals/CriticalResultLifecycleGuard.mjs",
+		"module/chat/CompactResolvedChatCards.mjs"
 	],
 	"styles": [
 		"css/myOwn.css",
@@ -104,6 +105,7 @@
 		"css/chat/combat-damage.css",
 		"css/chat/combat-rollback.css",
 		"css/chat/damage-result.css",
+		"css/chat/resolved-card-disclosure.css",
 		"css/chat/combat-lifecycle-polish.css",
 		"css/chat/held-items-result.css",
 		"css/chat/loot-pile.css",
