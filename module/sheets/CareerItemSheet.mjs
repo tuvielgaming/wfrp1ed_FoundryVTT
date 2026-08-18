@@ -51,7 +51,11 @@ export class CareerItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
 		},
 		tag: "form",
 		form: {
-			submitOnChange: true,
+			/* Career data contains nested arrays and an Advance Scheme object.
+			 * Never let ApplicationV2 submit an expanded whole-form snapshot when a
+			 * single control changes; CareerItemAuthoringIntegration owns exact-path
+			 * persistence and the dedicated actions own their collections. */
+			submitOnChange: false,
 			closeOnSubmit: false,
 		},
 		actions: {
@@ -458,7 +462,6 @@ function grantAlreadyPresent(entries, grant) {
 				if (sameReference(existing, grant)) return true;
 			}
 		}
-	}
 	return false;
 }
 
