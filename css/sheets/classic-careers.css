@@ -51,26 +51,40 @@
 }
 
 /* Character sheet Career advancement row: the large value is the active
- * Career allowance, while the small markers show purchased/open advance slots.
- * Keep the markers visually attached to the upper hand-drawn cell border. */
+ * Career allowance, while the small solid dots show advances already bought.
+ * Core WFRP 1e playable Careers can require as many as eight purchases in one
+ * characteristic (for example Wounds +8). The marker grid therefore gives
+ * every purchase an equal share of the available cell width; custom Careers
+ * above that count shrink cleanly instead of clipping. */
 .wfrp1ed-classic-sheet .characteristic-cell--advances {
 	position: relative;
 }
 
 .wfrp1ed-classic-sheet .characteristic-advance-markers {
 	position: absolute;
-	left: 1px;
-	right: 1px;
+	left: 2px;
+	right: 2px;
 	top: 2px;
-	display: block;
+	height: 8px;
+
+	display: grid;
+	grid-template-columns:
+		repeat(var(--wfrp-advance-marker-count, 1), minmax(0, 1fr));
+	align-items: start;
+	justify-items: center;
+	gap: 0;
+
 	overflow: hidden;
-	font-size: 8px;
-	font-weight: 700;
-	line-height: 1;
-	letter-spacing: 0;
-	text-align: center;
-	white-space: nowrap;
 	pointer-events: none;
+}
+
+.wfrp1ed-classic-sheet .characteristic-advance-marker {
+	display: block;
+	width: min(7px, 100%);
+	max-width: 7px;
+	aspect-ratio: 1;
+	border-radius: 50%;
+	background: #111;
 }
 
 .wfrp1ed-classic-sheet .characteristic-career-advance-value {
