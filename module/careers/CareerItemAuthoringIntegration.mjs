@@ -8,6 +8,8 @@ const COLLECTION_PREFIXES = Object.freeze([
 	"system.exits",
 ]);
 
+const ONE_POINT_ADVANCES = new Set(["m", "s", "t", "w", "a"]);
+const ADVANCE_SCHEME_PREFIX = "system.advanceScheme.";
 const updateQueues = new WeakMap();
 
 installSafeCareerFormPersistence();
@@ -19,6 +21,12 @@ installCareerEntryPresentation();
  * control changed, so Career authoring persists exact field paths instead.
  * Skill/Trapping/Magic/Exit collections remain owned by their dedicated sheet
  * actions and drag/drop handlers.
+ *
+ * Advance Scheme is stored internally as purchase counts because Actor Career
+ * progression uses those counts. The Career Item sheet, however, is a rulebook
+ * authoring surface: it displays and accepts the printed advancement value.
+ * Thus WS=10 is persisted as one purchase, WS=20 as two purchases, while S=2
+ * remains two purchases because Strength advances in +1 steps.
  */
 function installSafeCareerFormPersistence() {
 	if (CareerItemSheet.__wfrpSafeAuthoringInstalled === true) return;
@@ -32,14 +40,17 @@ function installSafeCareerFormPersistence() {
 		if (!(element instanceof HTMLElement)) return;
 		if (application.isEditable !== true) return;
 
+		prepareAdvanceSchemeInputs(application.document, element);
+
 		for (const control of element.querySelectorAll("input[name], select[name], textarea[name]")) {
 			if (!isPersistedControl(control)) continue;
 			control.addEventListener("change", (event) => {
 				const current = event.currentTarget;
 				if (!isPersistedControl(current)) return;
-				void queueItemUpdate(application.document, {
-					[String(current.name)]: formControlValue(current),
-				}).catch(reportAuthoringError);
+				const update = controlUpdate(application.document, current);
+				if (!update) return;
+				void queueItemUpdate(application.document, update)
+					.catch(reportAuthoringError);
 			});
 		}
 
@@ -86,6 +97,86 @@ function installCareerEntryPresentation() {
 	);
 }
 
+/**
+ * Convert internal purchase counts to the exact values printed in Core Career
+ * Advance Schemes. The template itself intentionally stays simple; this layer
+ * owns the authoring/storage translation.
+ */
+function prepareAdvanceSchemeInputs(item, form) {
+	for (const input of form.querySelectorAll(`input[name^="${ADVANCE_SCHEME_PREFIX}"]`)) {
+		const id = advanceCharacteristicId(input);
+		if (!id) continue;
+		const unit = advanceUnit(id);
+		const steps = nonNegativeInteger(item.system?.advanceScheme?.[id]);
+		input.value = String(steps * unit);
+		input.min = "0";
+		input.step = String(unit);
+		input.dataset.wfrpCareerAdvanceValue = "";
+		input.title = unit === 10
+			? localize(
+				"Enter the value shown in the Career table (for example 10 for +10).",
+				"Wpisz wartość z tabeli Profesji (np. 10 dla +10).",
+			)
+			: localize(
+				"Enter the value shown in the Career table.",
+				"Wpisz wartość z tabeli Profesji.",
+			);
+	}
+}
+
+async function persistFormSnapshot(item, form) {
+	const update = {};
+	for (const control of form.querySelectorAll("input[name], select[name], textarea[name]")) {
+		if (!isPersistedControl(control)) continue;
+		const partial = controlUpdate(item, control, { notify: false });
+		if (!partial) continue;
+		Object.assign(update, partial);
+	}
+	if (Object.keys(update).length) await queueItemUpdate(item, update);
+}
+
+function controlUpdate(item, control, { notify = true } = {}) {
+	const name = String(control?.name ?? "").trim();
+	if (!name) return null;
+
+	if (name.startsWith(ADVANCE_SCHEME_PREFIX)) {
+		const id = advanceCharacteristicId(control);
+		if (!id) return null;
+		const unit = advanceUnit(id);
+		const numeric = Number(String(control.value ?? "").trim().replace(",", "."));
+		const valid = Number.isInteger(numeric) && numeric >= 0 && numeric % unit === 0;
+		if (!valid) {
+			const currentSteps = nonNegativeInteger(item.system?.advanceScheme?.[id]);
+			control.value = String(currentSteps * unit);
+			if (notify) {
+				ui.notifications.warn(unit === 10
+					? localize(
+						"This characteristic advances in +10 steps. Enter 0, 10, 20, 30, ...",
+						"Ta cecha rozwija się skokami +10. Wpisz 0, 10, 20, 30, ...",
+					)
+					: localize(
+						"Enter a non-negative whole advancement value.",
+						"Wpisz nieujemną całkowitą wartość rozwinięcia.",
+					));
+			}
+			return null;
+		}
+		return { [name]: numeric / unit };
+	}
+
+	return { [name]: formControlValue(control) };
+}
+
+function advanceCharacteristicId(control) {
+	const name = String(control?.name ?? "");
+	if (!name.startsWith(ADVANCE_SCHEME_PREFIX)) return "";
+	return name.slice(ADVANCE_SCHEME_PREFIX.length).trim();
+}
+
+function advanceUnit(id) {
+	return ONE_POINT_ADVANCES.has(String(id ?? "")) ? 1 : 10;
+}
+
 function descriptiveModeLabel(entry) {
 	const choiceCount = Array.isArray(entry?.choices) ? entry.choices.length : 0;
 	if (choiceCount <= 1) return "";
@@ -97,15 +188,6 @@ function descriptiveModeLabel(entry) {
 		default:
 			return localize("All options", "Wszystkie opcje");
 	}
-}
-
-async function persistFormSnapshot(item, form) {
-	const update = {};
-	for (const control of form.querySelectorAll("input[name], select[name], textarea[name]")) {
-		if (!isPersistedControl(control)) continue;
-		update[String(control.name)] = formControlValue(control);
-	}
-	if (Object.keys(update).length) await queueItemUpdate(item, update);
 }
 
 function isPersistedControl(control) {
@@ -143,6 +225,11 @@ function clampPercentage(value) {
 	const numeric = Number(value);
 	if (!Number.isFinite(numeric)) return 100;
 	return Math.max(0, Math.min(100, Math.trunc(numeric)));
+}
+
+function nonNegativeInteger(value) {
+	const numeric = Number(value);
+	return Number.isFinite(numeric) ? Math.max(0, Math.trunc(numeric)) : 0;
 }
 
 function reportAuthoringError(error) {
