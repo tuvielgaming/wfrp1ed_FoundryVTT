@@ -1,29 +1,9 @@
-/* Career authoring: make chance/mode ownership obvious and keep long Skill
- * packages usable without letting them push the rest of the sheet away. */
+/* Career authoring: rulebook-style Advance Scheme, readable grant cards, and a
+ * large tabbed workspace for Skills, Trappings, and Career Exits. */
 
-.career-item-sheet .career-list-section[data-career-drop-zone="skills"] {
-	max-height: 260px;
-	overflow-y: auto;
-	overflow-x: hidden;
-	padding-right: 6px;
-	scrollbar-gutter: stable;
-	overscroll-behavior: contain;
-}
-
-.career-item-sheet .career-list-section[data-career-drop-zone="skills"]::-webkit-scrollbar {
-	width: 9px;
-}
-
-.career-item-sheet .career-list-section[data-career-drop-zone="skills"]::-webkit-scrollbar-thumb {
-	border: 2px solid transparent;
-	border-radius: 8px;
-	background: rgb(62 49 35 / 52%);
-	background-clip: padding-box;
-}
-
-/* In edit mode the input itself now contains the exact value printed in the
- * Core Career table (10 means +10, 2 means +2). The old derived preview merely
- * duplicated that information and made the table look like two data rows. */
+/* In edit mode the input itself contains the exact value printed in the Core
+ * Career table (10 means +10, 2 means +2). The old derived preview duplicated
+ * that information and made the table look like two data rows. */
 .career-item-sheet .career-advance-preview {
 	display: none;
 }
@@ -33,7 +13,218 @@
 	text-align: center;
 }
 
-.career-item-sheet .career-entry[data-career-entry-id] {
+/* ------------------------------------------------------------------------- */
+/* Top metadata + Magic Points                                               */
+/* ------------------------------------------------------------------------- */
+
+.career-item-sheet .career-meta-row {
+	display: grid;
+	grid-template-columns: max-content max-content minmax(220px, 1fr);
+	align-items: center;
+	justify-content: center;
+	gap: 18px 24px;
+}
+
+.career-item-sheet .career-meta-field {
+	white-space: nowrap;
+}
+
+.career-item-sheet .career-meta-magic {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	min-width: 0;
+	font-weight: 700;
+}
+
+.career-item-sheet .career-meta-magic__label {
+	white-space: nowrap;
+}
+
+.career-item-sheet .career-meta-magic__values {
+	display: flex;
+	flex: 1;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 4px;
+	min-width: 0;
+}
+
+.career-item-sheet .career-meta-magic__empty {
+	min-width: 18px;
+	text-align: center;
+	color: #5b4b3a;
+}
+
+.career-item-sheet .career-magic-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	max-width: 100%;
+	padding: 3px 5px 3px 7px;
+	border: 1px solid rgb(55 43 31 / 45%);
+	border-radius: 999px;
+	background: rgb(255 250 235 / 48%);
+	font-size: 11px;
+	line-height: 1.2;
+	color: #2b2118;
+}
+
+.career-item-sheet .career-magic-chip strong {
+	white-space: nowrap;
+}
+
+.career-item-sheet .career-magic-chip small {
+	max-width: 130px;
+	overflow: hidden;
+	font-size: 10px;
+	font-weight: 600;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: #514336;
+}
+
+.career-item-sheet .career-magic-chip button,
+.career-item-sheet .career-meta-magic__add {
+	width: 18px;
+	height: 18px;
+	min-height: 18px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	box-shadow: none;
+	font-size: 9px;
+	color: #30251b;
+}
+
+.career-item-sheet .career-meta-magic__add {
+	border: 1px solid rgb(55 43 31 / 48%);
+	border-radius: 3px;
+	background: rgb(255 250 235 / 40%);
+}
+
+/* ------------------------------------------------------------------------- */
+/* Full-width lower workspace                                                */
+/* ------------------------------------------------------------------------- */
+
+.career-item-sheet .career-tab-workspace {
+	display: flex;
+	flex-direction: column;
+	min-height: 360px;
+	height: 390px;
+	margin-top: 16px;
+	border: 1px solid rgb(55 43 31 / 46%);
+	border-radius: 4px;
+	background: rgb(255 250 235 / 20%);
+	box-shadow: inset 0 1px 0 rgb(255 255 255 / 34%);
+	overflow: hidden;
+}
+
+.career-item-sheet .career-tab-nav {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	flex: 0 0 auto;
+	border-bottom: 1px solid #40372d;
+	background: rgb(61 51 42 / 12%);
+}
+
+.career-item-sheet .career-tab-nav button {
+	position: relative;
+	height: 38px;
+	min-height: 38px;
+	padding: 0 12px;
+	border: 0;
+	border-right: 1px solid rgb(55 43 31 / 30%);
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+	font-family: inherit;
+	font-size: 15px;
+	font-weight: 700;
+	color: #493c30;
+}
+
+.career-item-sheet .career-tab-nav button:last-child {
+	border-right: 0;
+}
+
+.career-item-sheet .career-tab-nav button:hover,
+.career-item-sheet .career-tab-nav button:focus-visible {
+	background: rgb(255 250 235 / 35%);
+	color: #211912;
+}
+
+.career-item-sheet .career-tab-nav button.is-active {
+	background: rgb(255 248 228 / 68%);
+	color: #211912;
+}
+
+.career-item-sheet .career-tab-nav button.is-active::after {
+	content: "";
+	position: absolute;
+	left: 14px;
+	right: 14px;
+	bottom: -1px;
+	height: 3px;
+	background: #7a0019;
+}
+
+.career-item-sheet .career-tab-panels {
+	flex: 1 1 auto;
+	min-height: 0;
+}
+
+.career-item-sheet .career-tab-panel {
+	height: 100%;
+	margin: 0;
+	padding: 12px 12px 14px;
+	overflow-y: auto;
+	overflow-x: hidden;
+	scrollbar-gutter: stable;
+	overscroll-behavior: contain;
+}
+
+.career-item-sheet .career-tab-panel[hidden] {
+	display: none !important;
+}
+
+.career-item-sheet .career-tab-panel::-webkit-scrollbar {
+	width: 9px;
+}
+
+.career-item-sheet .career-tab-panel::-webkit-scrollbar-thumb {
+	border: 2px solid transparent;
+	border-radius: 8px;
+	background: rgb(62 49 35 / 52%);
+	background-clip: padding-box;
+}
+
+.career-item-sheet .career-tab-entry-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	align-content: start;
+	gap: 8px 12px;
+	min-height: 40px;
+}
+
+.career-item-sheet .career-tab-entry-grid > .career-empty {
+	grid-column: 1 / -1;
+}
+
+.career-item-sheet .career-tab-panel > .career-drop-hint {
+	position: sticky;
+	bottom: 0;
+	margin-top: 10px;
+	background: rgb(244 235 211 / 94%);
+	box-shadow: 0 -3px 6px rgb(61 46 30 / 8%);
+}
+
+/* ------------------------------------------------------------------------- */
+/* Entry cards                                                               */
+/* ------------------------------------------------------------------------- */
+
+.career-item-sheet .career-entry[data-career-entry-id],
+.career-item-sheet .career-tab-panel .career-exit-entry {
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) auto;
 	grid-template-areas:
@@ -41,15 +232,17 @@
 		"choices choices";
 	align-items: start;
 	gap: 5px 8px;
-	margin: 0 0 7px;
-	padding: 7px 8px;
+	min-width: 0;
+	margin: 0;
+	padding: 8px 9px;
 	border: 1px solid rgb(55 43 31 / 38%);
 	border-radius: 4px;
 	background: rgb(255 250 235 / 30%);
 	box-shadow: inset 0 1px 0 rgb(255 255 255 / 30%);
 }
 
-.career-item-sheet .career-entry[data-career-entry-id] .career-entry-text {
+.career-item-sheet .career-entry[data-career-entry-id] .career-entry-text,
+.career-item-sheet .career-tab-panel .career-exit-entry .career-entry-text {
 	grid-area: meta;
 	display: flex;
 	flex-wrap: wrap;
@@ -59,8 +252,7 @@
 }
 
 /* In edit mode the chips are the canonical readable alternatives. Hiding the
- * synthesized "A albo B albo C" sentence prevents the same content from being
- * printed twice and makes the percentage belong unmistakably to this card. */
+ * synthesized "A albo B albo C" sentence prevents duplicate content. */
 .career-item-sheet .career-entry[data-career-entry-id]:has(.career-choice-editor)
 	.career-entry-text > span {
 	display: none;
@@ -103,7 +295,8 @@
 	margin-top: 0;
 }
 
-.career-item-sheet .career-entry[data-career-entry-id] .career-entry-controls {
+.career-item-sheet .career-entry[data-career-entry-id] .career-entry-controls,
+.career-item-sheet .career-tab-panel .career-exit-entry .career-entry-controls {
 	grid-area: controls;
 	align-self: start;
 	justify-self: end;
@@ -130,13 +323,27 @@
 }
 
 .career-item-sheet .career-entry[data-career-entry-id]:hover,
-.career-item-sheet .career-entry[data-career-entry-id]:focus-within {
+.career-item-sheet .career-entry[data-career-entry-id]:focus-within,
+.career-item-sheet .career-tab-panel .career-exit-entry:hover,
+.career-item-sheet .career-tab-panel .career-exit-entry:focus-within {
 	border-color: rgb(91 65 39 / 65%);
 	background: rgb(255 250 235 / 45%);
 }
 
 @media (max-width: 760px) {
-	.career-item-sheet .career-list-section[data-career-drop-zone="skills"] {
-		max-height: 320px;
+	.career-item-sheet .career-meta-row {
+		grid-template-columns: 1fr 1fr;
+	}
+
+	.career-item-sheet .career-meta-magic {
+		grid-column: 1 / -1;
+	}
+
+	.career-item-sheet .career-tab-entry-grid {
+		grid-template-columns: 1fr;
+	}
+
+	.career-item-sheet .career-tab-workspace {
+		height: 430px;
 	}
 }
