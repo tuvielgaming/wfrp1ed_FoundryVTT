@@ -30,12 +30,12 @@
 
     <label class="critical-wound-sheet__field">
       <span>{{ui.hitLocation}}</span>
-      <input
-        type="text"
+      <select
         name="system.hitLocation"
-        value="{{system.hitLocation}}"
         {{#unless editable}}disabled{{/unless}}
-      />
+      >
+        {{selectOptions ui.hitLocationOptions selected=system.hitLocation localize=false}}
+      </select>
     </label>
   </section>
 
