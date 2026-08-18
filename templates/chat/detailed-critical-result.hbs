@@ -1,31 +1,29 @@
-<details
+<section
 	class="wfrp1e-critical-result wfrp1e-critical-result--standalone {{outcomeClass}}"
 	data-wfrp-critical-card
 	data-wfrp-detailed-critical-card
 >
-	<summary class="wfrp1e-critical-result__header">
+	<div class="wfrp1e-critical-result__header">
 		<strong data-wfrp-detailed-title>{{title}}</strong>
-	</summary>
-
-	<div class="wfrp1e-critical-result__details">
-		<div class="wfrp1e-critical-result__meta" data-wfrp-detailed-roll>
-			{{rollLabel}}: {{rollTotal}}
-		</div>
-
-		<div class="wfrp1e-critical-result__meta" data-wfrp-detailed-meta>
-			{{meta}}
-		</div>
-
-		<div class="wfrp1e-critical-result__outcome" data-wfrp-detailed-effect>
-			{{effectText}}
-		</div>
-
-		<div
-			class="wfrp1e-critical-result__pending"
-			data-wfrp-detailed-flee
-			{{#unless fleeText}}hidden{{/unless}}
-		>
-			{{fleeText}}
-		</div>
 	</div>
-</details>
+
+	<div class="wfrp1e-critical-result__meta" data-wfrp-detailed-roll>
+		{{rollLabel}}: {{rollTotal}}
+	</div>
+
+	<div class="wfrp1e-critical-result__meta" data-wfrp-detailed-meta>
+		{{meta}}
+	</div>
+
+	<div class="wfrp1e-critical-result__outcome" data-wfrp-detailed-effect>
+		{{effectText}}
+	</div>
+
+	<div
+		class="wfrp1e-critical-result__pending"
+		data-wfrp-detailed-flee
+		{{#unless fleeText}}hidden{{/unless}}
+	>
+		{{fleeText}}
+	</div>
+</section>
