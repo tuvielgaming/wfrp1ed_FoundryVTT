@@ -91,6 +91,7 @@ function applyDamageCardState(card, transaction) {
 		state === DAMAGE_REVERTED_STATE,
 	);
 	details.open = false;
+	syncVisibleCriticalAction(details, transaction);
 }
 
 function applyCriticalHistoryDisclosure(message, html) {
@@ -226,8 +227,52 @@ function compactDamageCard(card) {
 	return details;
 }
 
+/* Applied damage is historical, but an unresolved detailed Critical is still an
+ * actionable continuation of that damage. Keep only that action visible below
+ * the compact damage header while the full damage audit remains folded. */
+function syncVisibleCriticalAction(details, transaction) {
+	const existing = persistentCriticalActionHost(details);
+	const unresolved = Boolean(
+		String(transaction?.state ?? "") === DAMAGE_APPLIED_STATE &&
+		Number(transaction?.criticalValue) > 0 &&
+		!transaction?.criticalResolution,
+	);
+
+	if (!unresolved) {
+		existing?.remove();
+		return;
+	}
+
+	const button =
+		details.querySelector?.("[data-wfrp-resolve-detailed-critical]") ??
+		details.querySelector?.(
+			"[data-wfrp-damage-result-actions] .wfrp1e-critical-result__action",
+		);
+
+	/* If this DOM was already compacted, the live action is already outside the
+	 * details element. Keep it there until the transaction records a resolution. */
+	if (!(button instanceof HTMLButtonElement)) return;
+
+	existing?.remove();
+	const host = document.createElement("div");
+	host.className = "wfrp1e-damage-card__persistent-actions";
+	host.dataset.wfrpDamagePersistentActions = "";
+	host.append(button);
+	details.after(host);
+}
+
+function persistentCriticalActionHost(details) {
+	const sibling = details?.nextElementSibling;
+	return sibling instanceof HTMLElement &&
+		sibling.hasAttribute("data-wfrp-damage-persistent-actions")
+		? sibling
+		: null;
+}
+
 function restoreActionableDamageCard(card) {
 	if (!(card instanceof HTMLDetailsElement)) return card;
+
+	persistentCriticalActionHost(card)?.remove();
 
 	const summary = directChildTag(card, "SUMMARY");
 	const body = directChildWithClass(card, "wfrp1e-damage-card__details");
