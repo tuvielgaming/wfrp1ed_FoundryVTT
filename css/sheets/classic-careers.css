@@ -36,13 +36,20 @@
 	cursor: pointer;
 }
 
-/* Reuse the characteristic-row '?' help affordance for the Career Exit
- * transfer modifier. This marker belongs to the printed heading, not to the
- * scroll viewport below it, so it remains fixed while Exit Careers scroll. */
+/* The Career Exit viewport ends at the right edge of the header's main content
+ * area. The remaining approximately 48px strip is reserved for the fixed help
+ * affordance rather than being consumed by Career names. */
+.wfrp1ed-classic-sheet .header-field--career-exits {
+	width: 232px;
+}
+
+/* Reuse the characteristic-row '?' help affordance for Career Exit transfers.
+ * Keep it centred in the narrow right-hand header strip so it stays visually
+ * separate from the scrollable Career names. */
 .wfrp1ed-classic-sheet .header-career-exits-help {
-	right: 5px;
-	top: 168px;
-	transform: none;
+	right: 14px;
+	top: 50%;
+	transform: translateY(-50%);
 	z-index: 4;
 }
 
