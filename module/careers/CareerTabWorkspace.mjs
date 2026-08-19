@@ -2,6 +2,7 @@ import { CareerItemSheet } from "../sheets/CareerItemSheet.mjs";
 
 const TABS = Object.freeze(["skills", "trappings", "exits"]);
 const ONE_POINT_ADVANCES = new Set(["m", "s", "t", "w", "a"]);
+const PRIMARY_PURCHASE_MARKER_CAP = 8;
 const activeTabs = new WeakMap();
 
 /* Give the lower Career authoring workspace substantially more room than the
@@ -52,8 +53,9 @@ Hooks.on("renderApplicationV2", (application, element) => {
  * - the character's already purchased progress.
  *
  * Keep the existing advancement button/action intact and replace only its
- * presentation. Only purchased advances are marked. Empty/open circles are
- * deliberately omitted to keep the small printed cells readable.
+ * presentation. The first eight purchases are shown in a two-row marker block
+ * at the top of the cell (four markers per row). Any purchases beyond eight
+ * use a separate overflow layer anchored to the bottom edge of the cell.
  */
 function renderCharacterCareerAdvances(application, element) {
 	const actor = application?.document;
@@ -77,29 +79,49 @@ function renderCharacterCareerAdvances(application, element) {
 		const unit = ONE_POINT_ADVANCES.has(id) ? 1 : 10;
 		const careerValue = career * unit;
 
-		const markers = document.createElement("span");
-		markers.className = "characteristic-advance-markers";
-		markers.style.setProperty(
-			"--wfrp-advance-marker-count",
-			String(Math.max(1, purchased)),
+		const primaryPurchased = Math.min(
+			purchased,
+			PRIMARY_PURCHASE_MARKER_CAP,
 		);
-		markers.setAttribute("aria-hidden", "true");
-		for (let index = 0; index < purchased; index += 1) {
-			const marker = document.createElement("span");
-			marker.className = "characteristic-advance-marker";
-			markers.append(marker);
-		}
+		const overflowPurchased = Math.max(
+			0,
+			purchased - PRIMARY_PURCHASE_MARKER_CAP,
+		);
+
+		const primaryMarkers = buildMarkerLayer(
+			primaryPurchased,
+			"characteristic-advance-markers--primary",
+		);
+		const overflowMarkers = buildMarkerLayer(
+			overflowPurchased,
+			"characteristic-advance-markers--overflow",
+		);
 
 		const allowance = document.createElement("span");
 		allowance.className = "characteristic-career-advance-value";
 		allowance.textContent = careerValue > 0 ? `+${careerValue}` : "—";
 
-		cell.replaceChildren(markers, allowance);
+		cell.replaceChildren(primaryMarkers, allowance, overflowMarkers);
 		cell.title = localize(
 			`Career allowance: ${allowance.textContent}; purchased advances: ${purchased}; career ceiling: ${career}`,
 			`Rozwój Profesji: ${allowance.textContent}; wykupione rozwinięcia: ${purchased}; limit Profesji: ${career}`,
 		);
 	}
+}
+
+function buildMarkerLayer(count, modifierClass) {
+	const markers = document.createElement("span");
+	markers.className = `characteristic-advance-markers ${modifierClass}`;
+	markers.setAttribute("aria-hidden", "true");
+	markers.hidden = count <= 0;
+
+	for (let index = 0; index < count; index += 1) {
+		const marker = document.createElement("span");
+		marker.className = "characteristic-advance-marker";
+		markers.append(marker);
+	}
+
+	return markers;
 }
 
 function activateTab(root, selected) {
