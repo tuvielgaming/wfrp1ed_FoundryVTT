@@ -36,18 +36,75 @@
 	cursor: pointer;
 }
 
-.wfrp1ed-classic-sheet .header-field--career-exits .header-list-entry[role="button"] {
+/* Career Path and Career Exits are progression-owned navigation rather than
+ * editable text. Keep the printed appearance while making the whole row the
+ * interaction target. */
+.wfrp1ed-classic-sheet
+	.header-field--career-history .header-list,
+.wfrp1ed-classic-sheet
+	.header-field--career-exits .header-list {
+	padding-right: 0;
+}
+
+.wfrp1ed-classic-sheet
+	.header-field--career-history .header-list-entry[role="button"],
+.wfrp1ed-classic-sheet
+	.header-field--career-exits .header-list-entry[role="button"] {
 	cursor: pointer;
 	transition: background-color 120ms ease, outline-color 120ms ease;
 }
 
-.wfrp1ed-classic-sheet .header-field--career-exits .header-list-entry[role="button"]:hover {
+.wfrp1ed-classic-sheet
+	.header-field--career-history .header-list-entry[role="button"] input,
+.wfrp1ed-classic-sheet
+	.header-field--career-exits .header-list-entry[role="button"] input {
+	pointer-events: none;
+	cursor: pointer;
+}
+
+.wfrp1ed-classic-sheet
+	.header-field--career-history .header-list-entry[role="button"]:hover,
+.wfrp1ed-classic-sheet
+	.header-field--career-exits .header-list-entry[role="button"]:hover {
 	background: rgb(125 0 25 / 7%);
 }
 
-.wfrp1ed-classic-sheet .header-field--career-exits .header-list-entry[role="button"]:focus-visible {
+.wfrp1ed-classic-sheet
+	.header-field--career-history .header-list-entry[role="button"]:focus-visible,
+.wfrp1ed-classic-sheet
+	.header-field--career-exits .header-list-entry[role="button"]:focus-visible {
 	outline: 1px solid var(--focus-color);
 	outline-offset: -1px;
+}
+
+/* The original horizontal Career Exit summary becomes unreadable as soon as
+ * an active Career has several exits. Use the same printed rectangle as a
+ * compact vertical viewport instead. Two entries fit comfortably; additional
+ * exits stay available through the native scrollbar/mouse wheel. */
+.wfrp1ed-classic-sheet .header-field--career-exits .header-list {
+	flex-direction: column;
+	align-items: stretch;
+	gap: 1px;
+	padding: 0 2px 0 0;
+	overflow-x: hidden;
+	overflow-y: auto;
+	scrollbar-width: thin;
+	scrollbar-gutter: stable;
+}
+
+.wfrp1ed-classic-sheet .header-field--career-exits .header-list-entry {
+	flex: 0 0 17px;
+	min-width: 0;
+	min-height: 17px;
+	height: 17px;
+}
+
+.wfrp1ed-classic-sheet .header-field--career-exits .header-list-entry input {
+	height: 17px;
+	padding: 0 3px;
+	font-size: 12px;
+	line-height: 17px;
+	text-align: center;
 }
 
 /* Character sheet Career advancement row: the large value is the active
