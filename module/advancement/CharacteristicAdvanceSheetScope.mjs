@@ -10,32 +10,75 @@ const COMMITTED_STATE = "committed";
 /*
  * Advancement refund scope
  * ------------------------
- * A characteristic purchase may be undone only while the same Character
- * Sheet instance in which it was bought remains open. ApplicationV2 rerenders
- * do not end that session; closing the sheet does.
- *
- * The Actor still owns the authoritative purchase/refund transaction. This
- * integration adds only the UI-session boundary around that existing contract.
+ * Characteristic purchases made while one Character Sheet instance is open
+ * form a LIFO undo stack. The most recent purchase can be refunded first; once
+ * it is undone, the previous purchase from the same open-sheet session becomes
+ * the next eligible refund target. Closing the sheet commits the remaining
+ * purchases and discards the in-memory undo stack.
  */
 const sessions = new Map();
 const initializedApplications = new WeakSet();
 
+const originalPurchase = Wfrp1edActor.prototype.purchaseCharacteristicAdvance;
 const originalUndo = Wfrp1edActor.prototype.undoLastCharacteristicAdvance;
+
+Wfrp1edActor.prototype.purchaseCharacteristicAdvance = async function sheetScopedPurchase(
+	characteristicId,
+) {
+	const transaction = await originalPurchase.call(this, characteristicId);
+	const session = currentSession(this);
+
+	if (session && transactionBelongsToSession(transaction, session)) {
+		session.transactions.push(transaction);
+	}
+
+	return transaction;
+};
 
 Wfrp1edActor.prototype.undoLastCharacteristicAdvance = async function sheetScopedUndo(
 	characteristicId,
 ) {
 	const session = currentSession(this);
-	const transaction = this.getFlag(FLAG_SCOPE, FLAG_KEY);
+	const transaction = session?.transactions?.at(-1) ?? null;
 
-	if (!session || !transactionBelongsToSession(transaction, session)) {
+	if (!session || !transaction) {
 		throw new Error(localize(
-			"The refundable advancement transaction belongs to a previous Character Sheet session. Reopenings commit earlier purchases.",
-			"Transakcja zwrotu rozwinięcia należy do poprzedniej sesji Karty Postaci. Zamknięcie karty zatwierdza wcześniejsze zakupy.",
+			"There is no refundable advancement purchase in the current Character Sheet session.",
+			"W bieżącej sesji Karty Postaci nie ma zakupu rozwinięcia możliwego do zwrotu.",
 		));
 	}
 
-	return originalUndo.call(this, characteristicId);
+	if (!transactionBelongsToSession(transaction, session)) {
+		throw new Error(localize(
+			"The refundable advancement transaction belongs to a previous Character Sheet session.",
+			"Transakcja zwrotu rozwinięcia należy do poprzedniej sesji Karty Postaci.",
+		));
+	}
+
+	/* The Actor undo API validates the transaction stored in the persistent
+	 * lastCharacteristicAdvance flag. After a previous refund that flag points
+	 * at the undone transaction, so restore the current stack top first. */
+	const stored = this.getFlag(FLAG_SCOPE, FLAG_KEY);
+	if (stored?.id !== transaction.id || stored?.state !== APPLIED_STATE) {
+		await this.update({
+			[`flags.${FLAG_SCOPE}.${FLAG_KEY}`]: transaction,
+		});
+	}
+
+	const undone = await originalUndo.call(this, characteristicId);
+	session.transactions.pop();
+
+	/* Re-arm the previous purchase as the next LIFO refund target. The Actor's
+	 * current purchased count and spent XP now exactly match that transaction's
+	 * post-purchase snapshot, so the existing validation remains authoritative. */
+	const previous = session.transactions.at(-1) ?? null;
+	if (previous) {
+		await this.update({
+			[`flags.${FLAG_SCOPE}.${FLAG_KEY}`]: previous,
+		});
+	}
+
+	return undone;
 };
 
 Hooks.on("renderApplicationV2", (application) => {
@@ -45,12 +88,13 @@ Hooks.on("renderApplicationV2", (application) => {
 
 	initializedApplications.add(application);
 	const actor = application.document;
-	const session = Object.freeze({
+	const session = {
 		id: foundry.utils.randomID(),
 		actorUuid: String(actor.uuid ?? ""),
 		userId: String(game.user?.id ?? ""),
 		openedAt: Date.now(),
-	});
+		transactions: [],
+	};
 
 	sessions.set(sessionKey(actor, session.userId), session);
 });
@@ -86,8 +130,8 @@ function transactionBelongsToSession(transaction, session) {
 
 async function commitOpenTransaction(actor, session) {
 	try {
-		const transaction = actor.getFlag(FLAG_SCOPE, FLAG_KEY);
-		if (!transactionBelongsToSession(transaction, session)) return;
+		const transaction = session.transactions.at(-1) ?? null;
+		if (!transaction || !transactionBelongsToSession(transaction, session)) return;
 
 		await actor.update({
 			[`flags.${FLAG_SCOPE}.${FLAG_KEY}`]: {
