@@ -6,26 +6,42 @@ const { DialogV2 } = foundry.applications.api;
 installCareerPackageBuilder();
 
 /**
- * Build Career packages from rows which are already attached to the Career.
+ * Packages are authored from standalone Career rows only.
  *
- * The builder reorganizes existing choices; it never duplicates or recreates
- * their grants. Rows may come from standalone entries or existing packages.
- * Choices left behind in an old package remain valid, and a one-choice remainder
- * is normalized back to an ordinary standalone entry.
+ * - Every free Skill/Trapping row may start a package.
+ * - Existing package members are never candidates for another package.
+ * - A package is edited as one group: members can be detached back to free
+ *   rows, free rows can be added, and choose/chance remain package-level data.
+ * - Grant data is moved, never copied, so package editing cannot duplicate a
+ *   Skill or Trapping.
  */
 function installCareerPackageBuilder() {
 	if (CareerItemSheet.__wfrpPackageBuilderInstalled === true) return;
 
 	CareerItemSheet.DEFAULT_OPTIONS.actions ??= {};
-	CareerItemSheet.DEFAULT_OPTIONS.actions.buildPackage = buildCareerPackage;
+	delete CareerItemSheet.DEFAULT_OPTIONS.actions.buildPackage;
+	CareerItemSheet.DEFAULT_OPTIONS.actions.createPackage = createCareerPackage;
+	CareerItemSheet.DEFAULT_OPTIONS.actions.editPackage = editCareerPackage;
 
 	const originalPrepareContext = CareerItemSheet.prototype._prepareContext;
 	CareerItemSheet.prototype._prepareContext = async function packageBuilderContext(options) {
 		const context = await originalPrepareContext.call(this, options);
 		context.careerCompact ??= {};
-		context.careerCompact.packageTitle = localize(
-			"Build package from Career rows",
-			"Utwórz pakiet z wpisów Profesji",
+		context.careerCompact.skills = presentCareerGroups(
+			this.document.system?.skills,
+			"skills",
+		);
+		context.careerCompact.trappings = presentCareerGroups(
+			this.document.system?.trappings,
+			"trappings",
+		);
+		context.careerCompact.createPackageTitle = localize(
+			"Create package from this row",
+			"Utwórz pakiet z tego wpisu",
+		);
+		context.careerCompact.editPackageTitle = localize(
+			"Edit package",
+			"Edytuj pakiet",
 		);
 		return context;
 	};
@@ -38,27 +54,30 @@ function installCareerPackageBuilder() {
 }
 
 /** @this {CareerItemSheet} */
-async function buildCareerPackage(_event, target) {
+async function createCareerPackage(_event, target) {
 	if (!this.isEditable) return;
 
 	const collectionName = String(target?.dataset?.careerCollection ?? "");
-	if (!["skills", "trappings"].includes(collectionName)) return;
+	const seedEntryId = String(target?.dataset?.careerEntryId ?? "");
+	if (!["skills", "trappings"].includes(collectionName) || !seedEntryId) return;
 
 	const entries = cloneArray(this.document.system?.[collectionName]);
-	const candidates = packageCandidates(entries);
-	if (candidates.length < 2) {
+	const freeRows = freeCandidates(entries);
+	const seed = freeRows.find((candidate) => candidate.entryId === seedEntryId);
+	if (!seed) return;
+
+	if (freeRows.length < 2) {
 		ui.notifications.info(localize(
-			"Add at least two rows before creating a package.",
-			"Dodaj co najmniej dwa wpisy przed utworzeniem pakietu.",
+			"At least two free rows are required to create a package.",
+			"Do utworzenia pakietu potrzebne są co najmniej dwa wolne wpisy.",
 		));
 		return;
 	}
 
-	const result = await packageBuilderDialog(candidates, collectionName);
+	const result = await createPackageDialog(freeRows, seed, collectionName);
 	if (!result) return;
 
-	const selectedKeys = new Set(result.selectedKeys);
-	const nextEntries = rebuildEntries(entries, selectedKeys, {
+	const nextEntries = buildNewPackage(entries, result.selectedEntryIds, {
 		choose: result.choose,
 		chance: result.chance,
 	});
@@ -67,25 +86,55 @@ async function buildCareerPackage(_event, target) {
 	await this.document.update({ [`system.${collectionName}`]: nextEntries });
 }
 
-async function packageBuilderDialog(candidates, collectionName) {
+/** @this {CareerItemSheet} */
+async function editCareerPackage(_event, target) {
+	if (!this.isEditable) return;
+
+	const collectionName = String(target?.dataset?.careerCollection ?? "");
+	const packageEntryId = String(target?.dataset?.careerEntryId ?? "");
+	if (!["skills", "trappings"].includes(collectionName) || !packageEntryId) return;
+
+	const entries = cloneArray(this.document.system?.[collectionName]);
+	const packageEntry = entries.find(
+		(entry) => String(entry?.id ?? "") === packageEntryId,
+	);
+	if (!packageEntry || !Array.isArray(packageEntry.choices) || packageEntry.choices.length < 2) {
+		return;
+	}
+
+	const freeRows = freeCandidates(entries);
+	const result = await editPackageDialog(packageEntry, freeRows, collectionName);
+	if (!result) return;
+
+	const nextEntries = applyPackageEdit(entries, packageEntryId, result);
+	if (!nextEntries) return;
+
+	await this.document.update({ [`system.${collectionName}`]: nextEntries });
+}
+
+async function createPackageDialog(freeRows, seed, collectionName) {
 	const kindLabel = collectionName === "skills"
 		? localize("Skills", "Umiejętności")
 		: localize("Trappings", "Wyposażenie");
+	const defaultChance = clampPercentage(seed.chance);
 
 	const content = `
 		<div class="wfrp1ed career-package-builder">
 			<p class="career-package-builder__intro">${escapeHtml(localize(
-				`Select at least two ${kindLabel} rows which should form one package.`,
-				`Wybierz co najmniej dwa wpisy ${kindLabel}, które mają utworzyć jeden pakiet.`,
+				`Select free ${kindLabel} rows to join this row in one package.`,
+				`Wybierz wolne wpisy ${kindLabel}, które mają razem z tym wpisem utworzyć jeden pakiet.`,
 			))}</p>
 			<div class="career-package-builder__choices">
-				${candidates.map((candidate) => `
-					<label class="career-package-builder__choice">
-						<input type="checkbox" name="packageMember" value="${escapeHtml(candidate.key)}">
-						<span>${escapeHtml(candidate.label)}</span>
-						${candidate.meta ? `<small>${escapeHtml(candidate.meta)}</small>` : ""}
-					</label>
-				`).join("")}
+				${freeRows.map((candidate) => {
+					const isSeed = candidate.entryId === seed.entryId;
+					return `
+						<label class="career-package-builder__choice ${isSeed ? "career-package-builder__choice--seed" : ""}">
+							<input type="checkbox" name="packageMember" value="${escapeHtml(candidate.entryId)}" ${isSeed ? "checked disabled" : ""}>
+							<span>${escapeHtml(candidate.label)}</span>
+							${isSeed ? `<small>${escapeHtml(localize("Starting row", "Wpis początkowy"))}</small>` : ""}
+						</label>
+					`;
+				}).join("")}
 			</div>
 			<div class="career-package-builder__settings">
 				<label>${escapeHtml(localize("Player selects", "Gracz wybiera"))}
@@ -95,16 +144,14 @@ async function packageBuilderDialog(candidates, collectionName) {
 					"Initial Career acquisition chance (%)",
 					"Szansa zdobycia w Profesji początkowej (%)",
 				))}
-					<input type="number" name="chance" min="0" max="100" step="1" value="100">
+					<input type="number" name="chance" min="0" max="100" step="1" value="${defaultChance}">
 				</label>
 			</div>
 		</div>
 	`;
 
 	return DialogV2.wait({
-		window: {
-			title: localize("Build Career package", "Utwórz pakiet Profesji"),
-		},
+		window: { title: localize("Create Career package", "Utwórz pakiet Profesji") },
 		content,
 		modal: true,
 		rejectClose: false,
@@ -117,15 +164,9 @@ async function packageBuilderDialog(candidates, collectionName) {
 
 			const sync = () => {
 				const selectedCount = checkboxes.filter((input) => input.checked).length;
-				if (chooseInput instanceof HTMLInputElement) {
-					chooseInput.max = String(Math.max(1, selectedCount));
-					let choose = Math.max(1, Math.trunc(Number(chooseInput.value) || 1));
-					if (selectedCount > 0 && choose > selectedCount) choose = selectedCount;
-					chooseInput.value = String(choose);
-				}
+				syncChooseInput(chooseInput, selectedCount);
 				if (createButton instanceof HTMLButtonElement) {
-					const choose = Math.max(1, Math.trunc(Number(chooseInput?.value) || 1));
-					createButton.disabled = selectedCount < 2 || choose > selectedCount;
+					createButton.disabled = selectedCount < 2;
 				}
 			};
 
@@ -138,19 +179,15 @@ async function packageBuilderDialog(candidates, collectionName) {
 			label: localize("Create package", "Utwórz pakiet"),
 			default: true,
 			callback: (_event, button) => {
-				const form = button.form;
-				const selectedKeys = [...form.querySelectorAll(
+				const selectedEntryIds = [...button.form.querySelectorAll(
 					'input[name="packageMember"]:checked',
 				)].map((input) => String(input.value));
-				if (selectedKeys.length < 2) return false;
+				if (selectedEntryIds.length < 2) return false;
 
-				const data = new FormData(form);
-				const choose = Math.max(1, Math.trunc(Number(data.get("choose") ?? 1)));
-				if (choose > selectedKeys.length) return false;
-
+				const data = new FormData(button.form);
 				return {
-					selectedKeys,
-					choose,
+					selectedEntryIds,
+					choose: clampChoose(data.get("choose"), selectedEntryIds.length),
 					chance: clampPercentage(data.get("chance")),
 				};
 			},
@@ -158,106 +195,384 @@ async function packageBuilderDialog(candidates, collectionName) {
 	});
 }
 
-function packageCandidates(entries) {
-	const candidates = [];
-	let packageNumber = 0;
+async function editPackageDialog(packageEntry, freeRows, collectionName) {
+	const state = {
+		members: (packageEntry.choices ?? []).map((choice) => ({
+			key: `package:${String(choice?.id ?? foundry.utils.randomID())}`,
+			origin: "package",
+			choiceId: String(choice?.id ?? ""),
+			label: choiceLabel(choice),
+		})),
+	};
+	const freeById = new Map(freeRows.map((row) => [row.entryId, row]));
+	const initialChoose = clampChoose(packageEntry.choose, state.members.length);
 
-	for (let entryIndex = 0; entryIndex < entries.length; entryIndex += 1) {
-		const entry = entries[entryIndex];
-		const choices = Array.isArray(entry?.choices) ? entry.choices : [];
-		const isPackage = choices.length > 1;
-		const currentPackageNumber = isPackage ? ++packageNumber : 0;
-		const packageMeta = isPackage
-			? existingPackageMeta(entry, choices.length, currentPackageNumber)
-			: "";
+	const content = `
+		<div class="wfrp1ed career-package-editor">
+			<div class="career-package-editor__heading">
+				<strong>${escapeHtml(localize("Package members", "Elementy pakietu"))}</strong>
+				<button type="button" class="career-package-editor__add" data-package-add title="${escapeHtml(localize("Add free rows", "Dodaj wolne wpisy"))}">
+					<i class="fa-solid fa-plus"></i>
+				</button>
+			</div>
+			<div class="career-package-editor__members"></div>
+			<div class="career-package-builder__settings">
+				<label>${escapeHtml(localize("Player selects", "Gracz wybiera"))}
+					<input type="number" name="choose" min="1" step="1" value="${initialChoose}">
+				</label>
+				<label>${escapeHtml(localize(
+					"Initial Career acquisition chance (%)",
+					"Szansa zdobycia w Profesji początkowej (%)",
+				))}
+					<input type="number" name="chance" min="0" max="100" step="1" value="${clampPercentage(packageEntry.chance)}">
+				</label>
+			</div>
+			<p class="hint">${escapeHtml(localize(
+				"Removing a member here returns it to the free Career list; it does not delete the Skill or Equipment from the Career.",
+				"Usunięcie elementu tutaj przenosi go z powrotem na listę wolnych wpisów Profesji; nie usuwa Umiejętności ani Wyposażenia z Profesji.",
+			))}</p>
+		</div>
+	`;
 
-		for (let choiceIndex = 0; choiceIndex < choices.length; choiceIndex += 1) {
-			candidates.push({
-				key: candidateKey(entryIndex, choiceIndex),
-				label: choiceLabel(choices[choiceIndex]),
-				meta: packageMeta,
+	return DialogV2.wait({
+		window: { title: localize("Edit Career package", "Edytuj pakiet Profesji") },
+		content,
+		modal: true,
+		rejectClose: false,
+		render: (_event, dialog) => {
+			const memberList = dialog.element.querySelector(".career-package-editor__members");
+			const addButton = dialog.element.querySelector("[data-package-add]");
+			const chooseInput = dialog.element.querySelector('input[name="choose"]');
+
+			const availableFreeRows = () => {
+				const alreadyAdded = new Set(
+					state.members
+						.filter((member) => member.origin === "free")
+						.map((member) => member.entryId),
+				);
+				return freeRows.filter((row) => !alreadyAdded.has(row.entryId));
+			};
+
+			const sync = () => {
+				syncChooseInput(chooseInput, state.members.length);
+				if (addButton instanceof HTMLButtonElement) {
+					addButton.disabled = availableFreeRows().length === 0;
+				}
+			};
+
+			const renderMembers = () => {
+				if (!(memberList instanceof HTMLElement)) return;
+				memberList.innerHTML = state.members.length
+					? state.members.map((member) => packageMemberHtml(member)).join("")
+					: `<p class="career-package-editor__empty">${escapeHtml(localize("No members. Saving will dissolve the package.", "Brak elementów. Zapisanie rozwiąże pakiet."))}</p>`;
+				sync();
+			};
+
+			memberList?.addEventListener("click", (event) => {
+				const removeButton = event.target?.closest?.("[data-package-remove]");
+				if (!removeButton) return;
+				const key = String(removeButton.dataset.packageRemove ?? "");
+				state.members = state.members.filter((member) => member.key !== key);
+				renderMembers();
 			});
-		}
-	}
 
-	return candidates;
+			addButton?.addEventListener("click", async () => {
+				const available = availableFreeRows();
+				if (!available.length) return;
+				const selectedIds = await selectFreeRowsDialog(available, collectionName);
+				if (!Array.isArray(selectedIds) || !selectedIds.length) return;
+
+				for (const entryId of selectedIds) {
+					const row = freeById.get(entryId);
+					if (!row) continue;
+					state.members.push({
+						key: `free:${entryId}`,
+						origin: "free",
+						entryId,
+						label: row.label,
+					});
+				}
+				renderMembers();
+			});
+
+			chooseInput?.addEventListener("input", sync);
+			renderMembers();
+		},
+		buttons: [{
+			action: "savePackage",
+			label: localize("Save package", "Zapisz pakiet"),
+			default: true,
+			callback: (_event, button) => {
+				const data = new FormData(button.form);
+				return {
+					members: state.members.map((member) => ({
+						origin: member.origin,
+						choiceId: member.choiceId ?? "",
+						entryId: member.entryId ?? "",
+					})),
+					choose: clampChoose(data.get("choose"), Math.max(1, state.members.length)),
+					chance: clampPercentage(data.get("chance")),
+				};
+			},
+		}],
+	});
 }
 
-function rebuildEntries(entries, selectedKeys, { choose, chance }) {
-	const selectedChoices = [];
-	const selectedEntryIndexes = new Set();
-	let firstSelectedEntryIndex = -1;
+async function selectFreeRowsDialog(freeRows, collectionName) {
+	const kindLabel = collectionName === "skills"
+		? localize("Skills", "Umiejętności")
+		: localize("Trappings", "Wyposażenie");
+	const content = `
+		<div class="wfrp1ed career-package-add-dialog">
+			<p>${escapeHtml(localize(
+				`Select free ${kindLabel} rows to add to this package.`,
+				`Wybierz wolne wpisy ${kindLabel}, które chcesz dodać do tego pakietu.`,
+			))}</p>
+			<div class="career-package-builder__choices">
+				${freeRows.map((row) => `
+					<label class="career-package-builder__choice">
+						<input type="checkbox" name="freePackageMember" value="${escapeHtml(row.entryId)}">
+						<span>${escapeHtml(row.label)}</span>
+					</label>
+				`).join("")}
+			</div>
+		</div>
+	`;
 
-	for (let entryIndex = 0; entryIndex < entries.length; entryIndex += 1) {
-		const choices = Array.isArray(entries[entryIndex]?.choices) ? entries[entryIndex].choices : [];
-		for (let choiceIndex = 0; choiceIndex < choices.length; choiceIndex += 1) {
-			if (!selectedKeys.has(candidateKey(entryIndex, choiceIndex))) continue;
-			if (firstSelectedEntryIndex < 0) firstSelectedEntryIndex = entryIndex;
-			selectedEntryIndexes.add(entryIndex);
-			selectedChoices.push(foundry.utils.deepClone(choices[choiceIndex]));
-		}
-	}
+	return DialogV2.wait({
+		window: { title: localize("Add package members", "Dodaj elementy pakietu") },
+		content,
+		modal: true,
+		rejectClose: false,
+		render: (_event, dialog) => {
+			const checkboxes = [...dialog.element.querySelectorAll(
+				'input[name="freePackageMember"]',
+			)];
+			const addButton = dialog.element.querySelector('button[data-action="addRows"]');
+			const sync = () => {
+				if (addButton instanceof HTMLButtonElement) {
+					addButton.disabled = !checkboxes.some((checkbox) => checkbox.checked);
+				}
+			};
+			for (const checkbox of checkboxes) checkbox.addEventListener("change", sync);
+			sync();
+		},
+		buttons: [{
+			action: "addRows",
+			label: localize("Add selected", "Dodaj wybrane"),
+			default: true,
+			callback: (_event, button) => [...button.form.querySelectorAll(
+				'input[name="freePackageMember"]:checked',
+			)].map((input) => String(input.value)),
+		}],
+	});
+}
 
-	if (selectedChoices.length < 2 || firstSelectedEntryIndex < 0) return null;
+function buildNewPackage(entries, selectedEntryIds, { choose, chance }) {
+	const selected = new Set(selectedEntryIds.map(String));
+	const selectedEntries = entries.filter(
+		(entry) => selected.has(String(entry?.id ?? "")) && isFreeEntry(entry),
+	);
+	if (selectedEntries.length < 2) return null;
 
-	const selectedCount = selectedChoices.length;
-	const safeChoose = Math.max(1, Math.min(selectedCount, nonNegativeInteger(choose) || 1));
+	const firstSelectedIndex = entries.findIndex(
+		(entry) => selected.has(String(entry?.id ?? "")) && isFreeEntry(entry),
+	);
+	if (firstSelectedIndex < 0) return null;
+
+	const choices = selectedEntries.map((entry) => foundry.utils.deepClone(entry.choices[0]));
+	const safeChoose = clampChoose(choose, choices.length);
 	const packageEntry = {
 		id: foundry.utils.randomID(),
 		chance: clampPercentage(chance),
-		mode: safeChoose < selectedCount ? CAREER_ENTRY_MODE.PLAYER_CHOICE : CAREER_ENTRY_MODE.ALL,
+		mode: safeChoose < choices.length ? CAREER_ENTRY_MODE.PLAYER_CHOICE : CAREER_ENTRY_MODE.ALL,
 		choose: safeChoose,
-		note: sharedSourceNote(entries, selectedEntryIndexes),
-		choices: selectedChoices,
+		note: sharedFreeNote(selectedEntries),
+		choices,
 	};
 
 	const rebuilt = [];
-	for (let entryIndex = 0; entryIndex < entries.length; entryIndex += 1) {
-		if (entryIndex === firstSelectedEntryIndex) rebuilt.push(packageEntry);
-
-		const entry = entries[entryIndex];
-		const choices = Array.isArray(entry?.choices) ? entry.choices : [];
-		const keptChoices = choices.filter(
-			(_choice, choiceIndex) => !selectedKeys.has(candidateKey(entryIndex, choiceIndex)),
-		);
-		if (!keptChoices.length) continue;
-
-		const remaining = {
-			...foundry.utils.deepClone(entry),
-			choices: foundry.utils.deepClone(keptChoices),
-		};
-		normalizeRemainingEntry(remaining);
-		rebuilt.push(remaining);
+	for (let index = 0; index < entries.length; index += 1) {
+		const entry = entries[index];
+		if (index === firstSelectedIndex) rebuilt.push(packageEntry);
+		if (selected.has(String(entry?.id ?? "")) && isFreeEntry(entry)) continue;
+		rebuilt.push(foundry.utils.deepClone(entry));
 	}
-
 	return rebuilt;
 }
 
-function normalizeRemainingEntry(entry) {
-	const count = Array.isArray(entry?.choices) ? entry.choices.length : 0;
-	if (count <= 1) {
-		entry.mode = CAREER_ENTRY_MODE.ALL;
-		entry.choose = 1;
-		return;
+function applyPackageEdit(entries, packageEntryId, result) {
+	const packageIndex = entries.findIndex(
+		(entry) => String(entry?.id ?? "") === String(packageEntryId),
+	);
+	if (packageIndex < 0) return null;
+
+	const originalPackage = entries[packageIndex];
+	const originalChoices = Array.isArray(originalPackage?.choices)
+		? originalPackage.choices
+		: [];
+	const originalById = new Map(
+		originalChoices.map((choice) => [String(choice?.id ?? ""), choice]),
+	);
+	const freeById = new Map(
+		entries
+			.filter(isFreeEntry)
+			.map((entry) => [String(entry?.id ?? ""), entry]),
+	);
+
+	const memberChoices = [];
+	const retainedOriginalIds = new Set();
+	const absorbedFreeIds = new Set();
+
+	for (const member of result.members ?? []) {
+		if (member.origin === "package") {
+			const choice = originalById.get(String(member.choiceId ?? ""));
+			if (!choice) continue;
+			retainedOriginalIds.add(String(member.choiceId ?? ""));
+			memberChoices.push(foundry.utils.deepClone(choice));
+			continue;
+		}
+		if (member.origin === "free") {
+			const entry = freeById.get(String(member.entryId ?? ""));
+			if (!entry) continue;
+			absorbedFreeIds.add(String(member.entryId ?? ""));
+			memberChoices.push(foundry.utils.deepClone(entry.choices[0]));
+		}
 	}
-	if (String(entry.mode) === CAREER_ENTRY_MODE.PLAYER_CHOICE) {
-		entry.choose = Math.max(1, Math.min(count, nonNegativeInteger(entry.choose) || 1));
-		return;
+
+	/* A package with fewer than two members no longer has package semantics.
+	 * Dissolve the original package completely; any free rows tentatively added
+	 * during this edit stay where they already were. */
+	if (memberChoices.length < 2) {
+		const rebuilt = [];
+		for (let index = 0; index < entries.length; index += 1) {
+			if (index !== packageIndex) {
+				rebuilt.push(foundry.utils.deepClone(entries[index]));
+				continue;
+			}
+			for (const choice of originalChoices) {
+				rebuilt.push(standaloneEntryFromChoice(choice, originalPackage));
+			}
+		}
+		return rebuilt;
 	}
-	if (String(entry.mode) === CAREER_ENTRY_MODE.RANDOM_CHOICE) entry.choose = 1;
+
+	const detachedChoices = originalChoices.filter(
+		(choice) => !retainedOriginalIds.has(String(choice?.id ?? "")),
+	);
+	const safeChoose = clampChoose(result.choose, memberChoices.length);
+	const updatedPackage = {
+		...foundry.utils.deepClone(originalPackage),
+		chance: clampPercentage(result.chance),
+		mode: safeChoose < memberChoices.length ? CAREER_ENTRY_MODE.PLAYER_CHOICE : CAREER_ENTRY_MODE.ALL,
+		choose: safeChoose,
+		choices: memberChoices,
+	};
+
+	const rebuilt = [];
+	for (let index = 0; index < entries.length; index += 1) {
+		const entry = entries[index];
+		const entryId = String(entry?.id ?? "");
+		if (index === packageIndex) {
+			rebuilt.push(updatedPackage);
+			for (const choice of detachedChoices) {
+				rebuilt.push(standaloneEntryFromChoice(choice, originalPackage));
+			}
+			continue;
+		}
+		if (absorbedFreeIds.has(entryId) && isFreeEntry(entry)) continue;
+		rebuilt.push(foundry.utils.deepClone(entry));
+	}
+	return rebuilt;
 }
 
-function sharedSourceNote(entries, selectedEntryIndexes) {
-	if (selectedEntryIndexes.size !== 1) return "";
-	const [entryIndex] = selectedEntryIndexes;
-	return String(entries[entryIndex]?.note ?? "").trim();
+function presentCareerGroups(source, collectionName) {
+	const groups = [];
+	let packageNumber = 0;
+
+	for (const entry of cloneArray(source)) {
+		const choices = Array.isArray(entry?.choices) ? entry.choices : [];
+		if (!choices.length) continue;
+
+		if (choices.length === 1) {
+			groups.push({
+				isPackage: false,
+				collectionName,
+				entryId: String(entry?.id ?? ""),
+				choiceId: String(choices[0]?.id ?? ""),
+				label: choiceLabel(choices[0]),
+				note: String(entry?.note ?? "").trim(),
+				metaLabel: clampPercentage(entry?.chance) < 100
+					? `${clampPercentage(entry.chance)}%`
+					: "",
+			});
+			continue;
+		}
+
+		packageNumber += 1;
+		groups.push({
+			isPackage: true,
+			collectionName,
+			entryId: String(entry?.id ?? ""),
+			metaLabel: existingPackageMeta(entry, choices.length, packageNumber),
+			note: String(entry?.note ?? "").trim(),
+			members: choices.map((choice) => ({
+				choiceId: String(choice?.id ?? ""),
+				label: choiceLabel(choice),
+			})),
+		});
+	}
+
+	return groups;
+}
+
+function freeCandidates(entries) {
+	return entries
+		.filter(isFreeEntry)
+		.map((entry) => ({
+			entryId: String(entry?.id ?? ""),
+			label: choiceLabel(entry.choices[0]),
+			chance: clampPercentage(entry?.chance),
+		}));
+}
+
+function isFreeEntry(entry) {
+	return Array.isArray(entry?.choices) && entry.choices.length === 1;
+}
+
+function standaloneEntryFromChoice(choice, sourceEntry) {
+	return {
+		id: foundry.utils.randomID(),
+		chance: clampPercentage(sourceEntry?.chance),
+		mode: CAREER_ENTRY_MODE.ALL,
+		choose: 1,
+		note: String(sourceEntry?.note ?? "").trim(),
+		choices: [foundry.utils.deepClone(choice)],
+	};
+}
+
+function sharedFreeNote(entries) {
+	const notes = entries.map((entry) => String(entry?.note ?? "").trim());
+	if (!notes.length) return "";
+	return notes.every((note) => note === notes[0]) ? notes[0] : "";
+}
+
+function packageMemberHtml(member) {
+	return `
+		<div class="career-package-editor__member">
+			<span>${escapeHtml(member.label)}</span>
+			<button type="button" data-package-remove="${escapeHtml(member.key)}" title="${escapeHtml(localize("Remove from package", "Usuń z pakietu"))}">
+				<i class="fa-solid fa-minus"></i>
+			</button>
+		</div>
+	`;
 }
 
 function existingPackageMeta(entry, choiceCount, packageNumber) {
 	const chance = clampPercentage(entry?.chance);
 	let text;
 	if (String(entry?.mode) === CAREER_ENTRY_MODE.PLAYER_CHOICE) {
-		const choose = Math.max(1, Math.min(choiceCount, nonNegativeInteger(entry?.choose) || 1));
+		const choose = clampChoose(entry?.choose, choiceCount);
 		text = localize(
 			`Package ${packageNumber}: choose ${choose} of ${choiceCount}`,
 			`Pakiet ${packageNumber}: wybierz ${choose} z ${choiceCount}`,
@@ -304,8 +619,23 @@ function resolvedDocument(reference) {
 	}
 }
 
-function candidateKey(entryIndex, choiceIndex) {
-	return `${entryIndex}:${choiceIndex}`;
+function syncChooseInput(input, memberCount) {
+	if (!(input instanceof HTMLInputElement)) return;
+	if (memberCount <= 0) {
+		input.disabled = true;
+		input.max = "1";
+		input.value = "1";
+		return;
+	}
+	input.disabled = false;
+	input.max = String(memberCount);
+	input.value = String(clampChoose(input.value, memberCount));
+}
+
+function clampChoose(value, count) {
+	const maximum = Math.max(1, nonNegativeInteger(count) || 1);
+	const numeric = Math.max(1, nonNegativeInteger(value) || 1);
+	return Math.min(maximum, numeric);
 }
 
 function cloneArray(value) {
