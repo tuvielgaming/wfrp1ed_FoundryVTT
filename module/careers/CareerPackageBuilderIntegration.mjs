@@ -206,6 +206,7 @@ async function editPackageDialog(packageEntry, freeRows, collectionName) {
 	};
 	const freeById = new Map(freeRows.map((row) => [row.entryId, row]));
 	const initialChoose = clampChoose(packageEntry.choose, state.members.length);
+	const initialMode = String(packageEntry?.mode ?? CAREER_ENTRY_MODE.PLAYER_CHOICE);
 
 	const content = `
 		<div class="wfrp1ed career-package-editor">
@@ -312,6 +313,7 @@ async function editPackageDialog(packageEntry, freeRows, collectionName) {
 					})),
 					choose: clampChoose(data.get("choose"), Math.max(1, state.members.length)),
 					chance: clampPercentage(data.get("chance")),
+					initialMode,
 				};
 			},
 		}],
@@ -461,11 +463,16 @@ function applyPackageEdit(entries, packageEntryId, result) {
 		(choice) => !retainedOriginalIds.has(String(choice?.id ?? "")),
 	);
 	const safeChoose = clampChoose(result.choose, memberChoices.length);
+	const preserveRandom = String(result.initialMode ?? "") === CAREER_ENTRY_MODE.RANDOM_CHOICE && safeChoose === 1;
 	const updatedPackage = {
 		...foundry.utils.deepClone(originalPackage),
 		chance: clampPercentage(result.chance),
-		mode: safeChoose < memberChoices.length ? CAREER_ENTRY_MODE.PLAYER_CHOICE : CAREER_ENTRY_MODE.ALL,
-		choose: safeChoose,
+		mode: preserveRandom
+			? CAREER_ENTRY_MODE.RANDOM_CHOICE
+			: safeChoose < memberChoices.length
+				? CAREER_ENTRY_MODE.PLAYER_CHOICE
+				: CAREER_ENTRY_MODE.ALL,
+		choose: preserveRandom ? 1 : safeChoose,
 		choices: memberChoices,
 	};
 
