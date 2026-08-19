@@ -1,3 +1,4 @@
+import { coreSkillSpecialisationSuggestions } from "../core/CoreSkillSpecialisationCatalog.mjs";
 import { CAREER_ENTRY_MODE } from "../data-models/item/CareerData.mjs";
 import { CareerItemSheet } from "../sheets/CareerItemSheet.mjs";
 
@@ -10,8 +11,11 @@ installCareerSkillSpecialisationAuthoring();
  * Career data contract. Grant.specialisation already exists in CareerData and
  * is already part of Skill identity during Actor progression.
  *
- * The editor exposes one free-text Specialisation control per Skill grant. This
- * works for ordinary one-Skill entries as well as alternatives and bundles.
+ * The editor exposes one free-text Specialisation control per Skill grant. Core
+ * Skills with an audited finite specialisation list additionally receive native
+ * datalist suggestions. The datalist never validates or restricts the field:
+ * custom specialisations remain valid WFRP authoring data.
+ *
  * Duplicate validation is Career-wide and compares Skill + specialisation, so
  * the same Skill may appear repeatedly with different specialisations but the
  * same pair may not be entered twice.
@@ -92,22 +96,10 @@ async function configureEntryDialog(
 					"Skill specialisations",
 					"Specjalizacje Umiejętności",
 				))}</strong></p>
-				${specialisationFields.map((field) => `
-					<label>${escapeHtml(field.label)}
-						<input
-							type="text"
-							name="${escapeHtml(field.controlName)}"
-							value="${escapeHtml(field.value)}"
-							placeholder="${escapeHtml(localize(
-								"Optional; enter any specialisation",
-								"Opcjonalna; wpisz dowolną specjalizację",
-							))}"
-						>
-					</label>
-				`).join("")}
+				${specialisationFields.map((field) => specialisationFieldHtml(field)).join("")}
 				<p class="hint">${escapeHtml(localize(
-					"The same Skill may be listed more than once when its specialisations differ. Free text is always allowed.",
-					"Ta sama Umiejętność może występować wielokrotnie, jeśli ma różne specjalizacje. Zawsze można wpisać własną specjalizację.",
+					"Core lists are suggestions only. The same Skill may be listed more than once when its specialisations differ, and free text is always allowed.",
+					"Listy z Księgi Głównej są tylko podpowiedzią. Ta sama Umiejętność może występować wielokrotnie, jeśli ma różne specjalizacje, a własny tekst jest zawsze dozwolony.",
 				))}</p>
 			</div>
 		`
@@ -171,6 +163,44 @@ async function configureEntryDialog(
 	});
 }
 
+function specialisationFieldHtml(field) {
+	const hasSuggestions = field.suggestions.length > 0;
+	const placeholder = hasSuggestions
+		? localize(
+			"Choose a Core suggestion or enter your own",
+			"Wybierz propozycję z Księgi Głównej lub wpisz własną",
+		)
+		: localize(
+			"Optional; enter any specialisation",
+			"Opcjonalna; wpisz dowolną specjalizację",
+		);
+	const listAttribute = hasSuggestions
+		? ` list="${escapeHtml(field.listId)}"`
+		: "";
+	const datalist = hasSuggestions
+		? `
+			<datalist id="${escapeHtml(field.listId)}">
+				${field.suggestions.map((suggestion) =>
+					`<option value="${escapeHtml(suggestion)}"></option>`
+				).join("")}
+			</datalist>
+		`
+		: "";
+
+	return `
+		<label>${escapeHtml(field.label)}
+			<input
+				type="text"
+				name="${escapeHtml(field.controlName)}"
+				value="${escapeHtml(field.value)}"
+				placeholder="${escapeHtml(placeholder)}"
+				autocomplete="off"${listAttribute}
+			>
+		</label>
+		${datalist}
+	`;
+}
+
 function skillSpecialisationFields(choices) {
 	const fields = [];
 	for (let choiceIndex = 0; choiceIndex < choices.length; choiceIndex += 1) {
@@ -179,16 +209,31 @@ function skillSpecialisationFields(choices) {
 			const grant = choice.grants[grantIndex];
 			if (String(grant?.documentSubtype ?? "") !== "skill") continue;
 
+			const rulesId = skillRulesId(grant);
+			const suggestions = coreSkillSpecialisationSuggestions(
+				rulesId,
+				game.i18n.lang,
+			);
+
 			fields.push({
 				choiceIndex,
 				grantIndex,
 				controlName: `skillSpecialisation_${choiceIndex}_${grantIndex}`,
+				listId: `wfrp1ed-career-skill-specialisation-${choiceIndex}-${grantIndex}`,
 				label: `${localize("Specialisation", "Specjalizacja")} — ${grantBaseName(grant)}`,
 				value: String(grant?.specialisation ?? "").trim(),
+				suggestions,
 			});
 		}
 	}
 	return fields;
+}
+
+function skillRulesId(grant) {
+	const direct = String(grant?.rulesId ?? "").trim();
+	if (direct) return direct;
+	const document = resolvedDocument(grant);
+	return String(document?.system?.rulesId ?? "").trim();
 }
 
 function normalizeSkillChoiceLabels(entry) {
