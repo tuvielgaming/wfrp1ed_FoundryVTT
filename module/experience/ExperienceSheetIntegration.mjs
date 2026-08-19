@@ -1,3 +1,5 @@
+import "../advancement/CharacteristicAdvanceSheetScope.mjs";
+
 const SHEET_SELECTOR = ".wfrp1ed-classic-sheet";
 const PAGE_SELECTOR = '.classic-sheet-page[data-page="2"]';
 
