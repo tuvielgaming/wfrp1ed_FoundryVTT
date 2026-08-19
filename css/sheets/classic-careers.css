@@ -47,8 +47,8 @@
  * Keep it centred in the narrow right-hand header strip so it stays visually
  * separate from the scrollable Career names. */
 .wfrp1ed-classic-sheet .header-career-exits-help {
-	right: 14px;
-	top: 50%;
+	right: 16px;
+	top: 90%;
 	transform: translateY(-50%);
 	z-index: 4;
 }
