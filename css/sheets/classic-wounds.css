@@ -16,13 +16,18 @@
 .classic-actor-sheet
 	.characteristic-cell--current[data-characteristic="w"]
 	.characteristic-current-wounds {
-	display: inline-flex;
+	/* Treat current/max as one symmetric unit. The current value is an input
+	 * while the maximum is text, so content-sized flex children never share
+	 * identical metrics across digit counts. Equal numeric columns on both
+	 * sides of the slash keep 8/8, 10/10, 16/16, etc. geometrically centred. */
+	display: inline-grid;
+	grid-template-columns: 3ch auto 3ch;
 	align-items: center;
 	justify-content: center;
+	column-gap: 0.06em;
 	width: 100%;
 	box-sizing: border-box;
 	padding: 0;
-	gap: 0.08em;
 	font-size: 0.82em;
 	font-variant-numeric: tabular-nums;
 	white-space: nowrap;
@@ -30,12 +35,9 @@
 
 .classic-actor-sheet
 	.characteristic-current-wounds-input {
-	/* Size the editable current value to the digits it actually contains.
-	 * A fixed two-digit box made one-digit values such as 8/8 appear off-centre
-	 * even though the surrounding flex group itself was centred. */
-	field-sizing: content;
-	width: auto;
-	min-width: 1ch;
+	box-sizing: border-box;
+	width: 3ch;
+	min-width: 3ch;
 	max-width: 3ch;
 	height: 1.3em;
 	padding: 0;
@@ -49,6 +51,31 @@
 	font-variant-numeric: tabular-nums;
 	line-height: 1;
 	text-align: center;
+}
+
+.classic-actor-sheet
+	.characteristic-current-wounds-separator {
+	display: block;
+	line-height: 1;
+	text-align: center;
+}
+
+.classic-actor-sheet
+	.characteristic-current-wounds-max {
+	display: block;
+	width: 3ch;
+	line-height: 1;
+	text-align: center;
+	font-variant-numeric: tabular-nums;
+}
+
+.classic-actor-sheet
+	.characteristic-current-wounds-readonly {
+	display: block;
+	width: 100%;
+	line-height: 1;
+	text-align: center;
+	font-variant-numeric: tabular-nums;
 }
 
 .classic-actor-sheet
