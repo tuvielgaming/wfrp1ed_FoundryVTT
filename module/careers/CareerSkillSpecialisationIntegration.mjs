@@ -11,15 +11,13 @@ installCareerSkillSpecialisationAuthoring();
  * Career data contract. Grant.specialisation already exists in CareerData and
  * is already part of Skill identity during Actor progression.
  *
- * The editor exposes one unrestricted free-text Specialisation control per
- * Skill grant. Core Skills with an audited finite specialisation list receive a
- * separate selector containing the complete Core list. Choosing a suggestion
- * copies it into the free-text control and resets the selector, so the full list
- * remains available regardless of the current typed value.
+ * Standalone Skill rows retain their complete entry editor. A Skill which is a
+ * member of a package is edited individually: its gear opens specialisation only,
+ * while package-level choose/chance settings remain owned by the package editor.
  *
- * Duplicate validation is Career-wide and compares Skill + specialisation, so
- * the same Skill may appear repeatedly with different specialisations but the
- * same pair may not be entered twice.
+ * Core Skills with an audited finite specialisation list receive a separate
+ * selector containing the complete Core list. Choosing a suggestion copies it
+ * into the unrestricted free-text control and resets the selector.
  */
 function installCareerSkillSpecialisationAuthoring() {
 	if (CareerItemSheet.__wfrpSkillSpecialisationAuthoringInstalled === true) return;
@@ -40,6 +38,7 @@ async function configureCareerEntry(_event, target) {
 
 	const collectionName = String(target?.dataset?.careerCollection ?? "");
 	const entryId = String(target?.dataset?.careerEntryId ?? "");
+	const choiceId = String(target?.dataset?.careerChoiceId ?? "");
 	if (!["skills", "trappings"].includes(collectionName) || !entryId) return;
 
 	const entries = cloneArray(this.document.system?.[collectionName]);
@@ -49,6 +48,27 @@ async function configureCareerEntry(_event, target) {
 	if (index < 0) return;
 
 	const entry = entries[index];
+	if (
+		collectionName === "skills" &&
+		choiceId &&
+		Array.isArray(entry?.choices) &&
+		entry.choices.length > 1
+	) {
+		const nextChoices = await configurePackagedSkillChoice(entry, choiceId);
+		if (!nextChoices) return;
+
+		const updatedEntry = {
+			...entry,
+			choices: nextChoices,
+		};
+		normalizeSkillChoiceLabels(updatedEntry);
+		if (!validateNoDuplicateSkill(entries, index, updatedEntry)) return;
+
+		entries[index] = updatedEntry;
+		await this.document.update({ "system.skills": entries });
+		return;
+	}
+
 	const result = await configureEntryDialog(entry, {
 		includeSkillSpecialisations: collectionName === "skills",
 	});
@@ -65,18 +85,61 @@ async function configureCareerEntry(_event, target) {
 
 	if (collectionName === "skills") {
 		normalizeSkillChoiceLabels(updatedEntry);
-		const duplicate = duplicateSkillGrant(entries, index, updatedEntry);
-		if (duplicate) {
-			ui.notifications.warn(localize(
-				`${grantDisplayName(duplicate)} is already listed in this Career with the same specialisation.`,
-				`${grantDisplayName(duplicate)} jest już wpisane w tej Profesji z tą samą specjalizacją.`,
-			));
-			return;
-		}
+		if (!validateNoDuplicateSkill(entries, index, updatedEntry)) return;
 	}
 
 	entries[index] = updatedEntry;
 	await this.document.update({ [`system.${collectionName}`]: entries });
+}
+
+async function configurePackagedSkillChoice(entry, choiceId) {
+	const choices = cloneArray(entry?.choices);
+	const choiceIndex = choices.findIndex(
+		(choice) => String(choice?.id ?? "") === String(choiceId),
+	);
+	if (choiceIndex < 0) return null;
+
+	const workingChoices = [foundry.utils.deepClone(choices[choiceIndex])];
+	const specialisationFields = skillSpecialisationFields(workingChoices);
+	if (!specialisationFields.length) return null;
+
+	const content = `
+		<div class="wfrp1ed career-entry-dialog">
+			<div class="wfrp1ed-career-skill-specialisations">
+				<p><strong>${escapeHtml(localize(
+					"Skill specialisation",
+					"Specjalizacja Umiejętności",
+				))}</strong></p>
+				${specialisationFields.map((field) => specialisationFieldHtml(field)).join("")}
+				<p class="hint">${escapeHtml(localize(
+					"Package settings are edited from the package tab. This window changes only this Skill's specialisation.",
+					"Ustawienia pakietu edytuje się z zakładki pakietu. To okno zmienia wyłącznie specjalizację tej Umiejętności.",
+				))}</p>
+			</div>
+		</div>
+	`;
+
+	const result = await DialogV2.wait({
+		window: { title: localize("Configure Skill", "Konfiguruj Umiejętność") },
+		content,
+		modal: true,
+		rejectClose: false,
+		render: (_event, dialog) => wireSuggestionSelectors(dialog, specialisationFields),
+		buttons: [{
+			action: "save",
+			label: localize("Save", "Zapisz"),
+			default: true,
+			callback: (_event, button) => {
+				const nextChoices = cloneArray(workingChoices);
+				applySpecialisations(nextChoices, specialisationFields, new FormData(button.form));
+				return nextChoices[0] ?? null;
+			},
+		}],
+	});
+	if (!result) return null;
+
+	choices[choiceIndex] = result;
+	return choices;
 }
 
 async function configureEntryDialog(
@@ -133,28 +196,7 @@ async function configureEntryDialog(
 		content,
 		modal: true,
 		rejectClose: false,
-		render: (_event, dialog) => {
-			for (const field of specialisationFields) {
-				if (!field.suggestions.length) continue;
-				const selector = dialog.element.querySelector(
-					`select[data-wfrp-specialisation-target="${field.controlName}"]`,
-				);
-				const input = dialog.element.querySelector(
-					`input[name="${field.controlName}"]`,
-				);
-				if (!(selector instanceof HTMLSelectElement) || !(input instanceof HTMLInputElement)) {
-					continue;
-				}
-				selector.addEventListener("change", () => {
-					const suggestion = String(selector.value ?? "").trim();
-					if (!suggestion) return;
-					input.value = suggestion;
-					input.dispatchEvent(new Event("input", { bubbles: true }));
-					selector.value = "";
-					input.focus();
-				});
-			}
-		},
+		render: (_event, dialog) => wireSuggestionSelectors(dialog, specialisationFields),
 		buttons: [{
 			action: "save",
 			label: localize("Save", "Zapisz"),
@@ -162,15 +204,7 @@ async function configureEntryDialog(
 			callback: (_event, button) => {
 				const data = new FormData(button.form);
 				const nextChoices = cloneArray(choices);
-
-				for (const field of specialisationFields) {
-					const grant = nextChoices?.[field.choiceIndex]
-						?.grants?.[field.grantIndex];
-					if (!grant) continue;
-					grant.specialisation = String(
-						data.get(field.controlName) ?? "",
-					).trim();
-				}
+				applySpecialisations(nextChoices, specialisationFields, data);
 
 				return {
 					chance: clampPercentage(data.get("chance")),
@@ -184,6 +218,37 @@ async function configureEntryDialog(
 			},
 		}],
 	});
+}
+
+function wireSuggestionSelectors(dialog, specialisationFields) {
+	for (const field of specialisationFields) {
+		if (!field.suggestions.length) continue;
+		const selector = dialog.element.querySelector(
+			`select[data-wfrp-specialisation-target="${field.controlName}"]`,
+		);
+		const input = dialog.element.querySelector(
+			`input[name="${field.controlName}"]`,
+		);
+		if (!(selector instanceof HTMLSelectElement) || !(input instanceof HTMLInputElement)) {
+			continue;
+		}
+		selector.addEventListener("change", () => {
+			const suggestion = String(selector.value ?? "").trim();
+			if (!suggestion) return;
+			input.value = suggestion;
+			input.dispatchEvent(new Event("input", { bubbles: true }));
+			selector.value = "";
+			input.focus();
+		});
+	}
+}
+
+function applySpecialisations(choices, specialisationFields, data) {
+	for (const field of specialisationFields) {
+		const grant = choices?.[field.choiceIndex]?.grants?.[field.grantIndex];
+		if (!grant) continue;
+		grant.specialisation = String(data.get(field.controlName) ?? "").trim();
+	}
 }
 
 function specialisationFieldHtml(field) {
@@ -244,6 +309,16 @@ function skillSpecialisationFields(choices) {
 		}
 	}
 	return fields;
+}
+
+function validateNoDuplicateSkill(entries, editedIndex, editedEntry) {
+	const duplicate = duplicateSkillGrant(entries, editedIndex, editedEntry);
+	if (!duplicate) return true;
+	ui.notifications.warn(localize(
+		`${grantDisplayName(duplicate)} is already listed in this Career with the same specialisation.`,
+		`${grantDisplayName(duplicate)} jest już wpisane w tej Profesji z tą samą specjalizacją.`,
+	));
+	return false;
 }
 
 function skillRulesId(grant) {
