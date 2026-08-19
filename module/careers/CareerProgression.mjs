@@ -536,6 +536,20 @@ async function chooseEntryChoices(entry, kind) {
 		content,
 		modal: true,
 		rejectClose: false,
+		render: (_event, dialog) => {
+			if (type !== "checkbox") return;
+			const inputs = [...dialog.element.querySelectorAll(
+				`input[type="checkbox"][name="${groupName}"]`,
+			)];
+			const syncSelectionLimit = () => {
+				const limitReached = inputs.filter((input) => input.checked).length >= choose;
+				for (const input of inputs) {
+					input.disabled = limitReached && !input.checked;
+				}
+			};
+			for (const input of inputs) input.addEventListener("change", syncSelectionLimit);
+			syncSelectionLimit();
+		},
 		buttons: [{
 			action: "choose",
 			label: localize("Choose", "Wybierz"),
