@@ -88,13 +88,11 @@ export class WfrpRuleSettings {
 			game.system.id,
 			ADVANCED_CAREER_COMPLETION_SETTING_KEY,
 			{
-				name: localizedSettingText(
-					"Require complete Career before Advanced Career",
-					"Wymagaj ukończenia Profesji przed Profesją Zaawansowaną",
+				name: game.i18n.localize(
+					"WFRP1ED.Settings.CareerCompletionAdvanced.Name",
 				),
-				hint: localizedSettingText(
-					"Optional stricter campaign rule. When enabled, entering a valid Advanced Career requires every characteristic advance in the current Career and every Career Skill still shown as purchasable on the character sheet. Career-specific Core requirements apply independently. Disabled by default; standard WFRP 1e Career-change rules remain unchanged when this option is off.",
-					"Opcjonalna, bardziej rygorystyczna zasada kampanii. Po włączeniu przejście do dozwolonej Profesji Zaawansowanej wymaga wykupienia wszystkich rozwinięć cech aktualnej Profesji oraz wszystkich Umiejętności Profesji nadal widocznych na karcie jako możliwe do wykupienia. Szczególne wymagania konkretnych ścieżek z zasad podstawowych obowiązują niezależnie. Domyślnie wyłączone; po wyłączeniu standardowa procedura zmiany Profesji WFRP 1e pozostaje bez zmian.",
+				hint: game.i18n.localize(
+					"WFRP1ED.Settings.CareerCompletionAdvanced.Hint",
 				),
 				scope: "world",
 				config: true,
@@ -182,10 +180,6 @@ export class WfrpRuleSettings {
 			return Boolean(fallback);
 		}
 	}
-}
-
-function localizedSettingText(english, polish) {
-	return game.i18n.lang === "pl" ? polish : english;
 }
 
 Hooks.once("init", () => WfrpRuleSettings.register());
