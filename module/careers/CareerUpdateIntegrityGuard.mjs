@@ -1,4 +1,10 @@
+import { CareerItemSheet } from "../sheets/CareerItemSheet.mjs";
+
 const SYSTEM_PREFIX = "system.";
+const FLAG_SCOPE = "wfrp1ed";
+const CORE_CATALOG_FLAG_KEY = "coreCatalog";
+
+installCareerExitSelfDropGuard();
 
 /**
  * Career Items contain several sibling collections (skills, trappings,
@@ -38,26 +44,84 @@ Hooks.on("preUpdateItem", (item, changed) => {
 		delete changed[path];
 	}
 
-	/* A Career can never be one of its own Career Exits. Enforce this below all
-	 * authoring paths rather than relying only on drag/drop UI. Exact UUID is
-	 * authoritative for custom/world Careers; matching non-empty rulesId also
-	 * protects canonical Core copies which may have different document UUIDs. */
+	/* Final persistence safety net. The sheet-level guard below rejects the
+	 * invalid drop before any update, while this filter also protects imports,
+	 * macros, migrations, and future Career editors. */
 	const exits = Array.isArray(system.exits) ? system.exits : [];
 	const filteredExits = exits.filter((exit) => !isSelfCareerReference(item, exit));
 	if (filteredExits.length !== exits.length) {
 		system.exits = filteredExits;
-		ui.notifications.warn(localize(
-			"A Career cannot list itself as a Career Exit.",
-			"Profesja nie może wskazywać samej siebie jako Profesji wyjściowej.",
-		));
+		ui.notifications.warn(selfExitMessage());
 	}
 
 	changed.system = system;
 });
 
+/**
+ * Reject a Career dropped onto its own Career Exit zone before the private
+ * CareerItemSheet #addExit handler can append it. This is intentionally owned
+ * by the drop pipeline because a rejected self-exit should never flash into the
+ * UI or depend on a later preUpdate cleanup.
+ */
+function installCareerExitSelfDropGuard() {
+	if (CareerItemSheet.prototype.__wfrpSelfExitDropGuardInstalled === true) return;
+
+	const original = CareerItemSheet.prototype._onDropDocument;
+	CareerItemSheet.prototype._onDropDocument = async function guardedCareerExitDrop(
+		event,
+		document,
+	) {
+		const target = event?.target?.closest?.("[data-career-drop-zone]");
+		const zone = String(target?.dataset?.careerDropZone ?? "");
+		const isCareer = document instanceof foundry.documents.Item && document.type === "career";
+
+		if (zone === "exits" && isCareer && sameCareerDocument(this.document, document)) {
+			ui.notifications.warn(selfExitMessage());
+			return null;
+		}
+
+		return original.call(this, event, document);
+	};
+
+	Object.defineProperty(
+		CareerItemSheet.prototype,
+		"__wfrpSelfExitDropGuardInstalled",
+		{ value: true, configurable: false, enumerable: false },
+	);
+}
+
 function careerSystemSource(item) {
 	const source = item.system?.toObject?.() ?? item._source?.system ?? {};
 	return cloneValue(source);
+}
+
+function sameCareerDocument(current, dropped) {
+	if (!current || !dropped) return false;
+	if (current === dropped) return true;
+
+	const currentUuid = String(current.uuid ?? "").trim();
+	const droppedUuid = String(dropped.uuid ?? "").trim();
+	if (currentUuid && droppedUuid && currentUuid === droppedUuid) return true;
+
+	const currentRules = canonicalRulesId(current);
+	const droppedRules = canonicalRulesId(dropped);
+	if (currentRules && droppedRules) return currentRules === droppedRules;
+
+	const currentSource = sourceDocumentId(current);
+	const droppedSource = sourceDocumentId(dropped);
+	if (currentSource && droppedSource) return currentSource === droppedSource;
+
+	/* Custom Careers often have no rulesId/catalog identity. In that case their
+	 * normalized Career name is the only stable authoring identity available.
+	 * Do not use the name fallback when both Careers have conflicting canonical
+	 * ids; those are deliberately distinct Careers even if localized alike. */
+	if (!currentRules && !droppedRules && !currentSource && !droppedSource) {
+		const currentName = normalizeName(current.name);
+		const droppedName = normalizeName(dropped.name);
+		return Boolean(currentName && droppedName && currentName === droppedName);
+	}
+
+	return false;
 }
 
 function isSelfCareerReference(item, reference) {
@@ -65,13 +129,37 @@ function isSelfCareerReference(item, reference) {
 	const referenceUuid = String(reference?.uuid ?? "").trim();
 	if (itemUuid && referenceUuid && itemUuid === referenceUuid) return true;
 
-	const itemRulesId = String(item?.system?.rulesId ?? "").trim();
+	const itemRulesId = canonicalRulesId(item);
 	const referenceRulesId = String(reference?.rulesId ?? "").trim();
-	return Boolean(
-		itemRulesId &&
-		referenceRulesId &&
-		itemRulesId === referenceRulesId
-	);
+	if (itemRulesId && referenceRulesId) return itemRulesId === referenceRulesId;
+
+	/* References persisted before canonical ids existed may contain only their
+	 * display name. Use that fallback only when neither side has a canonical id. */
+	if (!itemRulesId && !referenceRulesId) {
+		const itemName = normalizeName(item?.name);
+		const referenceName = normalizeName(reference?.name);
+		return Boolean(itemName && referenceName && itemName === referenceName);
+	}
+
+	return false;
+}
+
+function canonicalRulesId(item) {
+	const catalogue = item?.getFlag?.(FLAG_SCOPE, CORE_CATALOG_FLAG_KEY);
+	return String(
+		item?.system?.rulesId ||
+		catalogue?.canonicalRulesId ||
+		catalogue?.catalogId ||
+		"",
+	).trim();
+}
+
+function sourceDocumentId(item) {
+	return String(
+		item?._stats?.compendiumSource ||
+		item?.getFlag?.("core", "sourceId") ||
+		"",
+	).trim();
 }
 
 function mergeDifferential(target, differential) {
@@ -123,6 +211,17 @@ function cloneValue(value) {
 
 function isRecord(value) {
 	return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function normalizeName(value) {
+	return String(value ?? "").trim().toLocaleLowerCase();
+}
+
+function selfExitMessage() {
+	return localize(
+		"A Career cannot list itself as a Career Exit.",
+		"Profesja nie może wskazywać samej siebie jako Profesji wyjściowej.",
+	);
 }
 
 function localize(english, polish) {
