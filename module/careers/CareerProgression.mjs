@@ -537,18 +537,24 @@ async function chooseEntryChoices(entry, kind) {
 		modal: true,
 		rejectClose: false,
 		render: (_event, dialog) => {
-			if (type !== "checkbox") return;
 			const inputs = [...dialog.element.querySelectorAll(
-				`input[type="checkbox"][name="${groupName}"]`,
+				`input[name="${groupName}"]`,
 			)];
-			const syncSelectionLimit = () => {
-				const limitReached = inputs.filter((input) => input.checked).length >= choose;
-				for (const input of inputs) {
-					input.disabled = limitReached && !input.checked;
+			const chooseButton = dialog.element.querySelector('button[data-action="choose"]');
+			const syncSelectionState = () => {
+				const selectedCount = inputs.filter((input) => input.checked).length;
+				if (type === "checkbox") {
+					const limitReached = selectedCount >= choose;
+					for (const input of inputs) {
+						input.disabled = limitReached && !input.checked;
+					}
+				}
+				if (chooseButton instanceof HTMLButtonElement) {
+					chooseButton.disabled = selectedCount !== choose;
 				}
 			};
-			for (const input of inputs) input.addEventListener("change", syncSelectionLimit);
-			syncSelectionLimit();
+			for (const input of inputs) input.addEventListener("change", syncSelectionState);
+			syncSelectionState();
 		},
 		buttons: [{
 			action: "choose",
