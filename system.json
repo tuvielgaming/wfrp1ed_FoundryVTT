@@ -20,6 +20,7 @@
 		"module/careers/CareerUpdateIntegrityGuard.mjs",
 		"module/careers/CareerSheetIntegration.mjs",
 		"module/careers/CareerItemAuthoringIntegration.mjs",
+		"module/careers/CareerSkillSpecialisationIntegration.mjs",
 		"module/careers/CareerTabWorkspace.mjs",
 		"module/careers/CareerProgressionIntegration.mjs",
 		"module/careers/CareerCompletionIntegration.mjs",
