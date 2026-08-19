@@ -16,15 +16,12 @@
 .classic-actor-sheet
 	.characteristic-cell--current[data-characteristic="w"]
 	.characteristic-current-wounds {
-	/* Treat current/max as one symmetric unit. The current value is an input
-	 * while the maximum is text, so content-sized flex children never share
-	 * identical metrics across digit counts. Equal numeric columns on both
-	 * sides of the slash keep 8/8, 10/10, 16/16, etc. geometrically centred. */
+	/* Anchor the slash at the exact centre of the Wounds cell. The editable
+	 * current value grows to the left and the maximum grows to the right, so
+	 * changing digit counts cannot move the visual centre. */
 	display: inline-grid;
-	grid-template-columns: 3ch auto 3ch;
+	grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
 	align-items: center;
-	justify-content: center;
-	column-gap: 0.06em;
 	width: 100%;
 	box-sizing: border-box;
 	padding: 0;
@@ -35,11 +32,13 @@
 
 .classic-actor-sheet
 	.characteristic-current-wounds-input {
+	justify-self: end;
 	box-sizing: border-box;
 	width: 3ch;
 	min-width: 3ch;
 	max-width: 3ch;
 	height: 1.3em;
+	margin: 0 2px 0 0;
 	padding: 0;
 	border: 0;
 	border-bottom: 1px dotted currentColor;
@@ -50,22 +49,27 @@
 	font: inherit;
 	font-variant-numeric: tabular-nums;
 	line-height: 1;
-	text-align: center;
+	text-align: right;
 }
 
 .classic-actor-sheet
 	.characteristic-current-wounds-separator {
+	justify-self: center;
 	display: block;
+	margin: 0;
+	padding: 0;
 	line-height: 1;
 	text-align: center;
 }
 
 .classic-actor-sheet
 	.characteristic-current-wounds-max {
+	justify-self: start;
 	display: block;
 	width: 3ch;
+	margin: 0 0 0 2px;
 	line-height: 1;
-	text-align: center;
+	text-align: left;
 	font-variant-numeric: tabular-nums;
 }
 
