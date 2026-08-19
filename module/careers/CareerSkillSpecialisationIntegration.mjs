@@ -11,10 +11,11 @@ installCareerSkillSpecialisationAuthoring();
  * Career data contract. Grant.specialisation already exists in CareerData and
  * is already part of Skill identity during Actor progression.
  *
- * The editor exposes one free-text Specialisation control per Skill grant. Core
- * Skills with an audited finite specialisation list additionally receive native
- * datalist suggestions. The datalist never validates or restricts the field:
- * custom specialisations remain valid WFRP authoring data.
+ * The editor exposes one unrestricted free-text Specialisation control per
+ * Skill grant. Core Skills with an audited finite specialisation list receive a
+ * separate selector containing the complete Core list. Choosing a suggestion
+ * copies it into the free-text control and resets the selector, so the full list
+ * remains available regardless of the current typed value.
  *
  * Duplicate validation is Career-wide and compares Skill + specialisation, so
  * the same Skill may appear repeatedly with different specialisations but the
@@ -98,8 +99,8 @@ async function configureEntryDialog(
 				))}</strong></p>
 				${specialisationFields.map((field) => specialisationFieldHtml(field)).join("")}
 				<p class="hint">${escapeHtml(localize(
-					"Core lists are suggestions only. The same Skill may be listed more than once when its specialisations differ, and free text is always allowed.",
-					"Listy z Księgi Głównej są tylko podpowiedzią. Ta sama Umiejętność może występować wielokrotnie, jeśli ma różne specjalizacje, a własny tekst jest zawsze dozwolony.",
+					"Core suggestions are always shown in a separate list and only copy a value into the free-text field. You may replace that value, type any custom specialisation, or choose another Core suggestion at any time.",
+					"Propozycje z Księgi Głównej są zawsze dostępne na osobnej liście i jedynie kopiują wartość do pola tekstowego. Możesz ją zmienić, wpisać dowolną własną specjalizację albo w każdej chwili wybrać inną propozycję z Księgi Głównej.",
 				))}</p>
 			</div>
 		`
@@ -132,6 +133,28 @@ async function configureEntryDialog(
 		content,
 		modal: true,
 		rejectClose: false,
+		render: (_event, dialog) => {
+			for (const field of specialisationFields) {
+				if (!field.suggestions.length) continue;
+				const selector = dialog.element.querySelector(
+					`select[data-wfrp-specialisation-target="${field.controlName}"]`,
+				);
+				const input = dialog.element.querySelector(
+					`input[name="${field.controlName}"]`,
+				);
+				if (!(selector instanceof HTMLSelectElement) || !(input instanceof HTMLInputElement)) {
+					continue;
+				}
+				selector.addEventListener("change", () => {
+					const suggestion = String(selector.value ?? "").trim();
+					if (!suggestion) return;
+					input.value = suggestion;
+					input.dispatchEvent(new Event("input", { bubbles: true }));
+					selector.value = "";
+					input.focus();
+				});
+			}
+		},
 		buttons: [{
 			action: "save",
 			label: localize("Save", "Zapisz"),
@@ -165,25 +188,20 @@ async function configureEntryDialog(
 
 function specialisationFieldHtml(field) {
 	const hasSuggestions = field.suggestions.length > 0;
-	const placeholder = hasSuggestions
-		? localize(
-			"Choose a Core suggestion or enter your own",
-			"Wybierz propozycję z Księgi Głównej lub wpisz własną",
-		)
-		: localize(
-			"Optional; enter any specialisation",
-			"Opcjonalna; wpisz dowolną specjalizację",
-		);
-	const listAttribute = hasSuggestions
-		? ` list="${escapeHtml(field.listId)}"`
-		: "";
-	const datalist = hasSuggestions
+	const placeholder = localize(
+		"Optional; enter any specialisation",
+		"Opcjonalna; wpisz dowolną specjalizację",
+	);
+	const suggestionSelector = hasSuggestions
 		? `
-			<datalist id="${escapeHtml(field.listId)}">
-				${field.suggestions.map((suggestion) =>
-					`<option value="${escapeHtml(suggestion)}"></option>`
-				).join("")}
-			</datalist>
+			<label>${escapeHtml(localize("Core suggestions", "Propozycje z Księgi Głównej"))}
+				<select data-wfrp-specialisation-target="${escapeHtml(field.controlName)}">
+					<option value="">${escapeHtml(localize("Choose a Core suggestion…", "Wybierz propozycję z Księgi Głównej…"))}</option>
+					${field.suggestions.map((suggestion) =>
+						`<option value="${escapeHtml(suggestion)}">${escapeHtml(suggestion)}</option>`
+					).join("")}
+				</select>
+			</label>
 		`
 		: "";
 
@@ -194,10 +212,10 @@ function specialisationFieldHtml(field) {
 				name="${escapeHtml(field.controlName)}"
 				value="${escapeHtml(field.value)}"
 				placeholder="${escapeHtml(placeholder)}"
-				autocomplete="off"${listAttribute}
+				autocomplete="off"
 			>
 		</label>
-		${datalist}
+		${suggestionSelector}
 	`;
 }
 
@@ -219,7 +237,6 @@ function skillSpecialisationFields(choices) {
 				choiceIndex,
 				grantIndex,
 				controlName: `skillSpecialisation_${choiceIndex}_${grantIndex}`,
-				listId: `wfrp1ed-career-skill-specialisation-${choiceIndex}-${grantIndex}`,
 				label: `${localize("Specialisation", "Specjalizacja")} — ${grantBaseName(grant)}`,
 				value: String(grant?.specialisation ?? "").trim(),
 				suggestions,
