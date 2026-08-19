@@ -150,7 +150,9 @@
 }
 
 .career-item-sheet .career-compact-row:hover .career-compact-row__controls,
-.career-item-sheet .career-compact-row:focus-within .career-compact-row__controls {
+.career-item-sheet
+	.career-compact-row:focus-within
+	.career-compact-row__controls {
 	opacity: 1;
 }
 
@@ -198,7 +200,7 @@
 	padding-top: 9px;
 	border: 1px solid rgb(91 65 39 / 48%);
 	border-radius: 4px;
-	background: rgb(255 250 235 / 20%);
+	background: rgb(72 0 0 / 20%);
 	box-shadow: inset 0 1px 0 rgb(255 255 255 / 28%);
 }
 
