@@ -21,7 +21,7 @@
 	justify-content: center;
 	width: 100%;
 	box-sizing: border-box;
-	padding-right: 0.58em;
+	padding: 0;
 	gap: 0.08em;
 	font-size: 0.82em;
 	font-variant-numeric: tabular-nums;
@@ -30,8 +30,13 @@
 
 .classic-actor-sheet
 	.characteristic-current-wounds-input {
-	width: 1.7em;
-	min-width: 0;
+	/* Size the editable current value to the digits it actually contains.
+	 * A fixed two-digit box made one-digit values such as 8/8 appear off-centre
+	 * even though the surrounding flex group itself was centred. */
+	field-sizing: content;
+	width: auto;
+	min-width: 1ch;
+	max-width: 3ch;
 	height: 1.3em;
 	padding: 0;
 	border: 0;
@@ -43,7 +48,7 @@
 	font: inherit;
 	font-variant-numeric: tabular-nums;
 	line-height: 1;
-	text-align: right;
+	text-align: center;
 }
 
 .classic-actor-sheet
