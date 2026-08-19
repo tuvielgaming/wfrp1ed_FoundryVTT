@@ -16,7 +16,7 @@
 	display: flex;
 	align-items: center;
 	gap: 6px;
-	margin: 0;
+	margin: 0 0 6px;
 	padding: 3px 6px;
 	border-bottom: 1px dashed rgb(61 51 38 / 34%);
 	font-size: 10px;
@@ -176,18 +176,109 @@
 	color: #17120e;
 }
 
+.career-item-sheet .career-compact-row__package {
+	border: 1px solid rgb(91 65 39 / 28%) !important;
+	background: rgb(255 250 235 / 26%) !important;
+}
+
+.career-item-sheet .career-compact-row__package:hover,
+.career-item-sheet .career-compact-row__package:focus-visible {
+	border-color: rgb(91 65 39 / 58%) !important;
+	background: rgb(255 250 235 / 62%) !important;
+}
+
 .career-item-sheet .career-compact-row--exit .career-compact-row__name {
 	font-weight: 700;
 }
 
-/* Package builder dialog -------------------------------------------------- */
-.career-package-builder {
+/* Grouped package presentation ------------------------------------------- */
+.career-item-sheet .career-compact-package {
+	position: relative;
+	margin: 15px 3px 8px;
+	padding-top: 9px;
+	border: 1px solid rgb(91 65 39 / 48%);
+	border-radius: 4px;
+	background: rgb(255 250 235 / 20%);
+	box-shadow: inset 0 1px 0 rgb(255 255 255 / 28%);
+}
+
+.career-item-sheet .career-compact-package__meta {
+	position: absolute;
+	top: -11px;
+	left: 8px;
+	display: inline-flex;
+	align-items: center;
+	min-height: 20px;
+	max-width: calc(100% - 58px);
+	padding: 2px 7px;
+	border: 1px solid rgb(91 65 39 / 46%);
+	border-radius: 999px;
+	background: rgb(244 235 211 / 98%);
+	overflow: hidden;
+	font-size: 10px;
+	font-weight: 800;
+	line-height: 1.15;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: #4b3526;
+}
+
+.career-item-sheet .career-compact-package__tab {
+	position: absolute;
+	top: -15px;
+	right: 7px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 30px;
+	height: 25px;
+	min-height: 25px;
+	padding: 0;
+	border: 1px solid rgb(91 65 39 / 58%);
+	border-bottom-color: rgb(244 235 211 / 98%);
+	border-radius: 5px 5px 0 0;
+	background: rgb(244 235 211 / 98%);
+	box-shadow: none;
+	font-size: 11px;
+	color: #392a20;
+	z-index: 2;
+}
+
+.career-item-sheet .career-compact-package__tab:hover,
+.career-item-sheet .career-compact-package__tab:focus-visible {
+	background: rgb(255 249 230 / 100%);
+	color: #17120e;
+}
+
+.career-item-sheet .career-compact-package__members {
+	display: flex;
+	flex-direction: column;
+}
+
+.career-item-sheet .career-compact-package__member {
+	padding-left: 9px;
+	padding-right: 5px;
+}
+
+.career-item-sheet .career-compact-package__member:first-child {
+	border-top: 0;
+}
+
+.career-item-sheet .career-compact-package__member:last-child {
+	border-bottom: 0;
+}
+
+/* Package builder / editor dialogs --------------------------------------- */
+.career-package-builder,
+.career-package-editor,
+.career-package-add-dialog {
 	display: grid;
 	gap: 12px;
 	min-width: min(560px, 80vw);
 }
 
-.career-package-builder__intro {
+.career-package-builder__intro,
+.career-package-add-dialog > p {
 	margin: 0;
 }
 
@@ -227,6 +318,10 @@
 	opacity: 0.78;
 }
 
+.career-package-builder__choice--seed {
+	background: rgb(255 255 255 / 5%);
+}
+
 .career-package-builder__settings {
 	display: grid;
 	grid-template-columns: 1fr 1fr;
@@ -242,6 +337,67 @@
 
 .career-package-builder__settings input {
 	text-align: center;
+}
+
+.career-package-editor__heading {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.career-package-editor__add {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 30px;
+	height: 26px;
+	min-height: 26px;
+	padding: 0;
+}
+
+.career-package-editor__members {
+	display: flex;
+	flex-direction: column;
+	max-height: 320px;
+	overflow-y: auto;
+	border: 1px solid var(--color-border-light-primary, #666);
+	border-radius: 4px;
+}
+
+.career-package-editor__member {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 8px;
+	min-height: 34px;
+	padding: 5px 8px 5px 10px;
+	border-bottom: 1px solid rgb(128 128 128 / 22%);
+}
+
+.career-package-editor__member:last-child {
+	border-bottom: 0;
+}
+
+.career-package-editor__member > span {
+	font-weight: 700;
+}
+
+.career-package-editor__member button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 24px;
+	min-height: 24px;
+	padding: 0;
+}
+
+.career-package-editor__empty {
+	margin: 0;
+	padding: 10px;
+	font-style: italic;
+	opacity: 0.75;
 }
 
 /* The old card/drop affordances are intentionally retired from the compact
