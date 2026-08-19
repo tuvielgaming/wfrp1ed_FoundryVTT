@@ -117,30 +117,48 @@
 		<div class="career-tab-panels">
 			<section class="career-tab-panel career-list-section" role="tabpanel" data-career-panel="skills" data-career-drop-zone="skills">
 				{{#if editable}}
-					<div class="career-compact-toolbar">
-						<div class="career-compact-drop-hint"><i class="fa-solid fa-arrow-down"></i> {{careerCompact.hints.skills}}</div>
-						<button type="button" class="career-compact-package-button" data-action="buildPackage" data-career-collection="skills" title="{{careerCompact.packageTitle}}"><i class="fa-solid fa-boxes-stacked"></i></button>
-					</div>
+					<div class="career-compact-drop-hint"><i class="fa-solid fa-arrow-down"></i> {{careerCompact.hints.skills}}</div>
 				{{/if}}
 				<div class="career-compact-list">
-					{{#each careerCompact.skills as |row|}}
-						<div
-							class="career-compact-row {{#if row.isPackage}}career-compact-row--package{{/if}}"
-							data-career-entry-id="{{row.entryId}}"
-							data-career-choice-id="{{row.choiceId}}"
-						>
-							<div class="career-compact-row__content">
-								<span class="career-compact-row__name">{{row.label}}</span>
-								{{#if row.note}}<small>{{row.note}}</small>{{/if}}
-							</div>
-							{{#if row.metaLabel}}<span class="career-compact-row__meta">{{row.metaLabel}}</span>{{/if}}
-							{{#if @root.editable}}
-								<div class="career-compact-row__controls">
-									<button type="button" data-action="configureEntry" data-career-collection="skills" data-career-entry-id="{{row.entryId}}" title="Configure"><i class="fa-solid fa-gear"></i></button>
-									<button type="button" data-action="deleteChoice" data-career-collection="skills" data-career-entry-id="{{row.entryId}}" data-career-choice-id="{{row.choiceId}}" title="Delete"><i class="fa-solid fa-trash"></i></button>
+					{{#each careerCompact.skills as |group|}}
+						{{#if group.isPackage}}
+							<section class="career-compact-package" data-career-entry-id="{{group.entryId}}">
+								<span class="career-compact-package__meta">{{group.metaLabel}}</span>
+								{{#if @root.editable}}
+									<button type="button" class="career-compact-package__tab" data-action="editPackage" data-career-collection="skills" data-career-entry-id="{{group.entryId}}" title="{{@root.careerCompact.editPackageTitle}}"><i class="fa-solid fa-boxes-stacked"></i></button>
+								{{/if}}
+								<div class="career-compact-package__members">
+									{{#each group.members as |row|}}
+										<div class="career-compact-row career-compact-package__member" data-career-entry-id="{{../entryId}}" data-career-choice-id="{{row.choiceId}}">
+											<div class="career-compact-row__content">
+												<span class="career-compact-row__name">{{row.label}}</span>
+											</div>
+											{{#if @root.editable}}
+												<div class="career-compact-row__controls">
+													<button type="button" data-action="configureEntry" data-career-collection="skills" data-career-entry-id="{{../entryId}}" data-career-choice-id="{{row.choiceId}}" title="Configure"><i class="fa-solid fa-gear"></i></button>
+													<button type="button" data-action="deleteChoice" data-career-collection="skills" data-career-entry-id="{{../entryId}}" data-career-choice-id="{{row.choiceId}}" title="Delete from Career"><i class="fa-solid fa-trash"></i></button>
+												</div>
+											{{/if}}
+										</div>
+									{{/each}}
 								</div>
-							{{/if}}
-						</div>
+							</section>
+						{{else}}
+							<div class="career-compact-row" data-career-entry-id="{{group.entryId}}" data-career-choice-id="{{group.choiceId}}">
+								<div class="career-compact-row__content">
+									<span class="career-compact-row__name">{{group.label}}</span>
+									{{#if group.note}}<small>{{group.note}}</small>{{/if}}
+								</div>
+								{{#if group.metaLabel}}<span class="career-compact-row__meta">{{group.metaLabel}}</span>{{/if}}
+								{{#if @root.editable}}
+									<div class="career-compact-row__controls">
+										<button type="button" class="career-compact-row__package" data-action="createPackage" data-career-collection="skills" data-career-entry-id="{{group.entryId}}" title="{{@root.careerCompact.createPackageTitle}}"><i class="fa-solid fa-boxes-stacked"></i></button>
+										<button type="button" data-action="configureEntry" data-career-collection="skills" data-career-entry-id="{{group.entryId}}" data-career-choice-id="{{group.choiceId}}" title="Configure"><i class="fa-solid fa-gear"></i></button>
+										<button type="button" data-action="deleteChoice" data-career-collection="skills" data-career-entry-id="{{group.entryId}}" data-career-choice-id="{{group.choiceId}}" title="Delete"><i class="fa-solid fa-trash"></i></button>
+									</div>
+								{{/if}}
+							</div>
+						{{/if}}
 					{{else}}
 						<p class="career-empty">—</p>
 					{{/each}}
@@ -149,30 +167,47 @@
 
 			<section class="career-tab-panel career-list-section" role="tabpanel" data-career-panel="trappings" data-career-drop-zone="trappings">
 				{{#if editable}}
-					<div class="career-compact-toolbar">
-						<div class="career-compact-drop-hint"><i class="fa-solid fa-arrow-down"></i> {{careerCompact.hints.trappings}}</div>
-						<button type="button" class="career-compact-package-button" data-action="buildPackage" data-career-collection="trappings" title="{{careerCompact.packageTitle}}"><i class="fa-solid fa-boxes-stacked"></i></button>
-					</div>
+					<div class="career-compact-drop-hint"><i class="fa-solid fa-arrow-down"></i> {{careerCompact.hints.trappings}}</div>
 				{{/if}}
 				<div class="career-compact-list">
-					{{#each careerCompact.trappings as |row|}}
-						<div
-							class="career-compact-row {{#if row.isPackage}}career-compact-row--package{{/if}}"
-							data-career-entry-id="{{row.entryId}}"
-							data-career-choice-id="{{row.choiceId}}"
-						>
-							<div class="career-compact-row__content">
-								<span class="career-compact-row__name">{{row.label}}</span>
-								{{#if row.note}}<small>{{row.note}}</small>{{/if}}
-							</div>
-							{{#if row.metaLabel}}<span class="career-compact-row__meta">{{row.metaLabel}}</span>{{/if}}
-							{{#if @root.editable}}
-								<div class="career-compact-row__controls">
-									<button type="button" data-action="configureEntry" data-career-collection="trappings" data-career-entry-id="{{row.entryId}}" title="Configure"><i class="fa-solid fa-gear"></i></button>
-									<button type="button" data-action="deleteChoice" data-career-collection="trappings" data-career-entry-id="{{row.entryId}}" data-career-choice-id="{{row.choiceId}}" title="Delete"><i class="fa-solid fa-trash"></i></button>
+					{{#each careerCompact.trappings as |group|}}
+						{{#if group.isPackage}}
+							<section class="career-compact-package" data-career-entry-id="{{group.entryId}}">
+								<span class="career-compact-package__meta">{{group.metaLabel}}</span>
+								{{#if @root.editable}}
+									<button type="button" class="career-compact-package__tab" data-action="editPackage" data-career-collection="trappings" data-career-entry-id="{{group.entryId}}" title="{{@root.careerCompact.editPackageTitle}}"><i class="fa-solid fa-boxes-stacked"></i></button>
+								{{/if}}
+								<div class="career-compact-package__members">
+									{{#each group.members as |row|}}
+										<div class="career-compact-row career-compact-package__member" data-career-entry-id="{{../entryId}}" data-career-choice-id="{{row.choiceId}}">
+											<div class="career-compact-row__content">
+												<span class="career-compact-row__name">{{row.label}}</span>
+											</div>
+											{{#if @root.editable}}
+												<div class="career-compact-row__controls">
+													<button type="button" data-action="deleteChoice" data-career-collection="trappings" data-career-entry-id="{{../entryId}}" data-career-choice-id="{{row.choiceId}}" title="Delete from Career"><i class="fa-solid fa-trash"></i></button>
+												</div>
+											{{/if}}
+										</div>
+									{{/each}}
 								</div>
-							{{/if}}
-						</div>
+							</section>
+						{{else}}
+							<div class="career-compact-row" data-career-entry-id="{{group.entryId}}" data-career-choice-id="{{group.choiceId}}">
+								<div class="career-compact-row__content">
+									<span class="career-compact-row__name">{{group.label}}</span>
+									{{#if group.note}}<small>{{group.note}}</small>{{/if}}
+								</div>
+								{{#if group.metaLabel}}<span class="career-compact-row__meta">{{group.metaLabel}}</span>{{/if}}
+								{{#if @root.editable}}
+									<div class="career-compact-row__controls">
+										<button type="button" class="career-compact-row__package" data-action="createPackage" data-career-collection="trappings" data-career-entry-id="{{group.entryId}}" title="{{@root.careerCompact.createPackageTitle}}"><i class="fa-solid fa-boxes-stacked"></i></button>
+										<button type="button" data-action="configureEntry" data-career-collection="trappings" data-career-entry-id="{{group.entryId}}" title="Configure"><i class="fa-solid fa-gear"></i></button>
+										<button type="button" data-action="deleteChoice" data-career-collection="trappings" data-career-entry-id="{{group.entryId}}" data-career-choice-id="{{group.choiceId}}" title="Delete"><i class="fa-solid fa-trash"></i></button>
+									</div>
+								{{/if}}
+							</div>
+						{{/if}}
 					{{else}}
 						<p class="career-empty">—</p>
 					{{/each}}
