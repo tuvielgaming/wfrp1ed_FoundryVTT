@@ -106,6 +106,7 @@ function installCareerSheetInteractions() {
 
 		wireSkillOffers(application, element);
 		wireCareerExits(application, element);
+		wireCareerHistory(application, element);
 		wireCurrentCareer(application, element);
 	});
 }
@@ -200,6 +201,58 @@ async function handleCareerExitClick(sheet, index, event) {
 		ui.notifications.error(error?.message ?? localize(
 			"Unable to use the Career Exit.",
 			"Nie udało się użyć Profesji wyjściowej.",
+		));
+	}
+}
+
+function wireCareerHistory(sheet, element) {
+	const history = Array.isArray(sheet.document?.system?.details?.careerHistory)
+		? sheet.document.system.details.careerHistory
+		: [];
+	const entries = [...element.querySelectorAll(
+		".header-field--career-history .header-list-entry",
+	)];
+
+	for (let index = 0; index < entries.length; index += 1) {
+		const entry = entries[index];
+		const historyEntry = history[index];
+		const uuid = String(historyEntry?.uuid ?? "").trim();
+		if (!uuid) continue;
+
+		entry.dataset.careerHistoryIndex = String(index);
+		entry.tabIndex = 0;
+		entry.setAttribute("role", "button");
+		entry.title = localize(
+			`Click to open ${historyEntry?.name ?? "this Career"}.`,
+			`Kliknij, aby otworzyć ${historyEntry?.name ?? "tę Profesję"}.`,
+		);
+		entry.addEventListener("click", (event) => {
+			event.preventDefault();
+			void openCareerHistoryEntry(uuid);
+		});
+		entry.addEventListener("keydown", (event) => {
+			if (event.key !== "Enter" && event.key !== " ") return;
+			event.preventDefault();
+			void openCareerHistoryEntry(uuid);
+		});
+	}
+}
+
+async function openCareerHistoryEntry(uuid) {
+	try {
+		const career = await foundry.utils.fromUuid(uuid);
+		if (!(career instanceof foundry.documents.Item) || career.type !== "career") {
+			throw new Error(localize(
+				"The Career stored in Career Path is no longer available.",
+				"Profesja zapisana w Przebiegu kariery nie jest już dostępna.",
+			));
+		}
+		await career.sheet.render({ force: true });
+	} catch (error) {
+		console.error("WFRP1ED | Career Path action failed.", error);
+		ui.notifications.error(error?.message ?? localize(
+			"Unable to open the Career from Career Path.",
+			"Nie udało się otworzyć Profesji z Przebiegu kariery.",
 		));
 	}
 }
