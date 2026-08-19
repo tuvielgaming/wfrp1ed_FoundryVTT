@@ -106,6 +106,7 @@ function installCareerSheetInteractions() {
 
 		wireSkillOffers(application, element);
 		wireCareerExits(application, element);
+		wireCareerExitHelp(element);
 		wireCareerHistory(application, element);
 		wireCurrentCareer(application, element);
 	});
@@ -175,6 +176,29 @@ function wireCareerExits(sheet, element) {
 			void handleCareerExitClick(sheet, index, event);
 		});
 	}
+}
+
+/**
+ * Reuse the same circular '?' affordance as the characteristic-row helpers.
+ * It lives outside the scroll viewport so the instruction remains visible even
+ * while the Career Exit list itself is being scrolled.
+ */
+function wireCareerExitHelp(element) {
+	const header = element.querySelector(".sheet-header");
+	if (!(header instanceof HTMLElement)) return;
+	if (header.querySelector("[data-wfrp-career-exit-help]")) return;
+
+	const help = document.createElement("span");
+	help.className = "characteristics-help header-career-exits-help";
+	help.dataset.wfrpCareerExitHelp = "";
+	help.dataset.tooltip = localize(
+		"Ctrl/Cmd + click a Career Exit to transfer to that Career for Experience Points.",
+		"Ctrl/Cmd + kliknięcie Profesji wyjściowej: przejdź do tej Profesji za Punkty Doświadczenia.",
+	);
+	help.setAttribute("aria-label", help.dataset.tooltip);
+	help.tabIndex = 0;
+	help.textContent = "?";
+	header.append(help);
 }
 
 async function handleCareerExitClick(sheet, index, event) {
