@@ -6,7 +6,7 @@
 
 .wfrp1ed-classic-sheet .wfrp1ed-experience-field {
 	position: absolute;
-	top: 48px;
+	top: 70px;
 	width: 105px;
 	height: 46px;
 	margin: 0;
@@ -15,11 +15,11 @@
 }
 
 .wfrp1ed-classic-sheet .wfrp1ed-experience-field--current {
-	left: 13px;
+	left: 20px;
 }
 
 .wfrp1ed-classic-sheet .wfrp1ed-experience-field--total {
-	right: 13px;
+	right: 10px;
 }
 
 .wfrp1ed-classic-sheet .wfrp1ed-experience-field__label {
