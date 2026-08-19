@@ -74,6 +74,10 @@ installCareerCompletionTransferGuard();
  * Every transfer attempt refreshes it from Actor progression before the existing
  * progression service evaluates an Exit's `requiresComplete` restriction.
  *
+ * The matching Career History entry is synchronized from the same derived state
+ * at the same time. This keeps the historical completion marker accurate even if
+ * the player later cancels the transfer confirmation.
+ *
  * The optional World Setting adds one extra gate only to otherwise recognizable
  * Advanced Career Exits. Illegal arbitrary Advanced-Career drops are left for
  * the existing transfer policy so they retain their proper error reason.
@@ -112,6 +116,7 @@ function installCareerCompletionTransferGuard() {
 
 		const state = CareerCompletion.state(actor, current);
 		await synchronizeCompletionCache(current, state.complete);
+		await synchronizeHistoryCompletion(actor, current, state.complete);
 
 		const exit = matchingExitOffer(actor, targetCareer, options?.exitIndex);
 		const exitRequiresCompletion = exit?.requiresComplete === true;
@@ -138,6 +143,41 @@ function installCareerCompletionTransferGuard() {
 async function synchronizeCompletionCache(career, complete) {
 	if (readBoolean(career.system?.complete) === Boolean(complete)) return;
 	await career.update({ "system.complete": Boolean(complete) });
+}
+
+async function synchronizeHistoryCompletion(actor, career, complete) {
+	const source = actor.system?.details?.careerHistory;
+	if (!Array.isArray(source) || source.length === 0) return;
+
+	const history = foundry.utils.deepClone(source);
+	const careerUuid = String(career?.uuid ?? "").trim();
+	const careerName = normalizeReference(career?.name);
+
+	let index = -1;
+	for (let candidate = history.length - 1; candidate >= 0; candidate -= 1) {
+		const entry = history[candidate];
+		if (!entry || typeof entry !== "object") continue;
+		const entryUuid = String(entry.uuid ?? "").trim();
+		if (careerUuid && entryUuid && entryUuid === careerUuid) {
+			index = candidate;
+			break;
+		}
+	}
+
+	if (index < 0 && careerName) {
+		for (let candidate = history.length - 1; candidate >= 0; candidate -= 1) {
+			const entry = history[candidate];
+			if (!entry || typeof entry !== "object") continue;
+			if (normalizeReference(entry.name) === careerName) {
+				index = candidate;
+				break;
+			}
+	}
+	}
+
+	if (index < 0 || Boolean(history[index].completed) === Boolean(complete)) return;
+	history[index].completed = Boolean(complete);
+	await actor.update({ "system.details.careerHistory": history });
 }
 
 function matchingExitOffer(actor, targetCareer, exitIndex) {
