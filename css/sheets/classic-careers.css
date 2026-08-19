@@ -51,38 +51,49 @@
 }
 
 /* Character sheet Career advancement row: the large value is the active
- * Career allowance, while the small solid dots show advances already bought.
- * Core WFRP 1e playable Careers can require as many as eight purchases in one
- * characteristic (for example Wounds +8). The marker grid therefore gives
- * every purchase an equal share of the available cell width; custom Careers
- * above that count shrink cleanly instead of clipping. */
+ * Career allowance, while solid dots show advances already bought.
+ *
+ * Keep dots readable instead of shrinking them to fit one line. The first
+ * eight purchases occupy a top marker layer, four per row. Any purchases above
+ * eight use a separate bottom-anchored overflow layer, also four per row. */
 .wfrp1ed-classic-sheet .characteristic-cell--advances {
 	position: relative;
 }
 
 .wfrp1ed-classic-sheet .characteristic-advance-markers {
 	position: absolute;
-	left: 2px;
-	right: 2px;
-	top: 2px;
-	height: 8px;
+	left: 50%;
+	width: 41px;
+	transform: translateX(-50%);
 
-	display: grid;
-	grid-template-columns:
-		repeat(var(--wfrp-advance-marker-count, 1), minmax(0, 1fr));
-	align-items: start;
-	justify-items: center;
-	gap: 0;
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	align-content: flex-start;
+	column-gap: 3px;
+	row-gap: 1px;
 
-	overflow: hidden;
 	pointer-events: none;
+}
+
+.wfrp1ed-classic-sheet .characteristic-advance-markers[hidden] {
+	display: none;
+}
+
+.wfrp1ed-classic-sheet .characteristic-advance-markers--primary {
+	top: 2px;
+}
+
+.wfrp1ed-classic-sheet .characteristic-advance-markers--overflow {
+	bottom: 2px;
+	align-content: flex-end;
 }
 
 .wfrp1ed-classic-sheet .characteristic-advance-marker {
 	display: block;
-	width: min(7px, 100%);
-	max-width: 7px;
-	aspect-ratio: 1;
+	flex: 0 0 8px;
+	width: 8px;
+	height: 8px;
 	border-radius: 50%;
 	background: #111;
 }
