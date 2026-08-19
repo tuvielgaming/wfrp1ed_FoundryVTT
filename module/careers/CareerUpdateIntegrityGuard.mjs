@@ -38,12 +38,40 @@ Hooks.on("preUpdateItem", (item, changed) => {
 		delete changed[path];
 	}
 
+	/* A Career can never be one of its own Career Exits. Enforce this below all
+	 * authoring paths rather than relying only on drag/drop UI. Exact UUID is
+	 * authoritative for custom/world Careers; matching non-empty rulesId also
+	 * protects canonical Core copies which may have different document UUIDs. */
+	const exits = Array.isArray(system.exits) ? system.exits : [];
+	const filteredExits = exits.filter((exit) => !isSelfCareerReference(item, exit));
+	if (filteredExits.length !== exits.length) {
+		system.exits = filteredExits;
+		ui.notifications.warn(localize(
+			"A Career cannot list itself as a Career Exit.",
+			"Profesja nie może wskazywać samej siebie jako Profesji wyjściowej.",
+		));
+	}
+
 	changed.system = system;
 });
 
 function careerSystemSource(item) {
 	const source = item.system?.toObject?.() ?? item._source?.system ?? {};
 	return cloneValue(source);
+}
+
+function isSelfCareerReference(item, reference) {
+	const itemUuid = String(item?.uuid ?? "").trim();
+	const referenceUuid = String(reference?.uuid ?? "").trim();
+	if (itemUuid && referenceUuid && itemUuid === referenceUuid) return true;
+
+	const itemRulesId = String(item?.system?.rulesId ?? "").trim();
+	const referenceRulesId = String(reference?.rulesId ?? "").trim();
+	return Boolean(
+		itemRulesId &&
+		referenceRulesId &&
+		itemRulesId === referenceRulesId
+	);
 }
 
 function mergeDifferential(target, differential) {
@@ -95,4 +123,8 @@ function cloneValue(value) {
 
 function isRecord(value) {
 	return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function localize(english, polish) {
+	return game.i18n.lang === "pl" ? polish : english;
 }
