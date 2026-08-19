@@ -119,24 +119,32 @@
 	color: #5f5445;
 }
 
+/* Chance is operational data, not prose. A clean numeric face and a stronger
+ * compact tag make values such as 25% readable at a glance without changing
+ * the reserved metadata column or shifting the action buttons. */
 .career-item-sheet .career-compact-row__meta {
 	grid-column: 2;
 	justify-self: end;
 	display: inline-flex;
 	align-items: center;
-	min-height: 19px;
+	justify-content: center;
+	min-width: 38px;
+	min-height: 21px;
 	max-width: 52px;
-	padding: 1px 6px;
-	border: 1px solid rgb(87 65 43 / 30%);
-	border-radius: 999px;
-	background: rgb(87 65 43 / 7%);
+	padding: 1px 7px;
+	border: 1px solid rgb(72 52 35 / 56%);
+	border-radius: 4px;
+	background: rgb(248 235 203 / 78%);
 	overflow: hidden;
-	font-size: 10px;
+	font-family: Arial, Helvetica, sans-serif;
+	font-size: 11px;
 	font-weight: 700;
+	font-variant-numeric: tabular-nums;
 	line-height: 1.15;
+	text-align: center;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-	color: #493b2f;
+	color: #21170f;
 }
 
 .career-item-sheet .career-compact-row--package .career-compact-row__meta {
