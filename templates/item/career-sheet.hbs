@@ -117,7 +117,10 @@
 		<div class="career-tab-panels">
 			<section class="career-tab-panel career-list-section" role="tabpanel" data-career-panel="skills" data-career-drop-zone="skills">
 				{{#if editable}}
-					<div class="career-compact-drop-hint"><i class="fa-solid fa-arrow-down"></i> {{careerCompact.hints.skills}}</div>
+					<div class="career-compact-toolbar">
+						<div class="career-compact-drop-hint"><i class="fa-solid fa-arrow-down"></i> {{careerCompact.hints.skills}}</div>
+						<button type="button" class="career-compact-package-button" data-action="buildPackage" data-career-collection="skills" title="{{careerCompact.packageTitle}}"><i class="fa-solid fa-boxes-stacked"></i></button>
+					</div>
 				{{/if}}
 				<div class="career-compact-list">
 					{{#each careerCompact.skills as |row|}}
@@ -146,7 +149,10 @@
 
 			<section class="career-tab-panel career-list-section" role="tabpanel" data-career-panel="trappings" data-career-drop-zone="trappings">
 				{{#if editable}}
-					<div class="career-compact-drop-hint"><i class="fa-solid fa-arrow-down"></i> {{careerCompact.hints.trappings}}</div>
+					<div class="career-compact-toolbar">
+						<div class="career-compact-drop-hint"><i class="fa-solid fa-arrow-down"></i> {{careerCompact.hints.trappings}}</div>
+						<button type="button" class="career-compact-package-button" data-action="buildPackage" data-career-collection="trappings" title="{{careerCompact.packageTitle}}"><i class="fa-solid fa-boxes-stacked"></i></button>
+					</div>
 				{{/if}}
 				<div class="career-compact-list">
 					{{#each careerCompact.trappings as |row|}}
