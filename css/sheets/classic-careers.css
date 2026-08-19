@@ -40,13 +40,6 @@
  * editable text. Keep the printed appearance while making the whole row the
  * interaction target. */
 .wfrp1ed-classic-sheet
-	.header-field--career-history .header-list,
-.wfrp1ed-classic-sheet
-	.header-field--career-exits .header-list {
-	padding-right: 0;
-}
-
-.wfrp1ed-classic-sheet
 	.header-field--career-history .header-list-entry[role="button"],
 .wfrp1ed-classic-sheet
 	.header-field--career-exits .header-list-entry[role="button"] {
@@ -77,10 +70,11 @@
 	outline-offset: -1px;
 }
 
-/* The original horizontal Career Exit summary becomes unreadable as soon as
- * an active Career has several exits. Use the same printed rectangle as a
- * compact vertical viewport instead. Two entries fit comfortably; additional
- * exits stay available through the native scrollbar/mouse wheel. */
+/* Horizontal Career summaries become unreadable once several Careers exist.
+ * Career Path and Career Exits therefore use their printed rectangles as
+ * compact vertical viewports. Each Career receives the full row width; two
+ * entries fit comfortably and additional entries remain available by scrolling. */
+.wfrp1ed-classic-sheet .header-field--career-history .header-list,
 .wfrp1ed-classic-sheet .header-field--career-exits .header-list {
 	flex-direction: column;
 	align-items: stretch;
@@ -92,6 +86,7 @@
 	scrollbar-gutter: stable;
 }
 
+.wfrp1ed-classic-sheet .header-field--career-history .header-list-entry,
 .wfrp1ed-classic-sheet .header-field--career-exits .header-list-entry {
 	flex: 0 0 17px;
 	min-width: 0;
@@ -99,6 +94,7 @@
 	height: 17px;
 }
 
+.wfrp1ed-classic-sheet .header-field--career-history .header-list-entry input,
 .wfrp1ed-classic-sheet .header-field--career-exits .header-list-entry input {
 	height: 17px;
 	padding: 0 3px;
