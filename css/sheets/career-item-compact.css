@@ -1,0 +1,175 @@
+/* Compact Career authoring lists.
+ *
+ * Skills, Trappings, and Career Exits are authored as dense rows. Packages are
+ * represented by metadata rather than by large nested cards, leaving package
+ * construction to the dedicated builder workflow. */
+
+.career-item-sheet .career-compact-drop-hint {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin: 0 0 6px;
+	padding: 3px 6px;
+	border-bottom: 1px dashed rgb(61 51 38 / 34%);
+	font-size: 10px;
+	font-style: italic;
+	line-height: 1.2;
+	color: #655b4d;
+}
+
+.career-item-sheet .career-compact-drop-hint i {
+	font-size: 9px;
+	opacity: 0.7;
+}
+
+.career-item-sheet .career-compact-list {
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	min-height: 24px;
+}
+
+.career-item-sheet .career-compact-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) max-content auto;
+	align-items: center;
+	gap: 8px;
+	min-height: 31px;
+	padding: 3px 5px 3px 8px;
+	border-bottom: 1px solid rgb(66 54 39 / 23%);
+	background: transparent;
+	color: #261e17;
+	transition: background-color 100ms ease;
+}
+
+.career-item-sheet .career-compact-row:first-child {
+	border-top: 1px solid rgb(66 54 39 / 23%);
+}
+
+.career-item-sheet .career-compact-row:hover,
+.career-item-sheet .career-compact-row:focus-within {
+	background: rgb(255 250 235 / 42%);
+}
+
+.career-item-sheet .career-compact-row--package {
+	border-left: 3px solid rgb(122 0 25 / 42%);
+	padding-left: 6px;
+}
+
+.career-item-sheet .career-compact-row__content {
+	display: flex;
+	align-items: baseline;
+	gap: 7px;
+	min-width: 0;
+}
+
+.career-item-sheet .career-compact-row__name {
+	overflow: hidden;
+	font-size: 13px;
+	font-weight: 700;
+	line-height: 1.2;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.career-item-sheet .career-compact-row__content small {
+	overflow: hidden;
+	min-width: 0;
+	font-size: 10px;
+	font-style: italic;
+	font-weight: 400;
+	line-height: 1.15;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: #5f5445;
+}
+
+.career-item-sheet .career-compact-row__meta {
+	display: inline-flex;
+	align-items: center;
+	min-height: 19px;
+	max-width: 250px;
+	padding: 1px 6px;
+	border: 1px solid rgb(87 65 43 / 30%);
+	border-radius: 999px;
+	background: rgb(87 65 43 / 7%);
+	overflow: hidden;
+	font-size: 10px;
+	font-weight: 700;
+	line-height: 1.15;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: #493b2f;
+}
+
+.career-item-sheet .career-compact-row--package .career-compact-row__meta {
+	border-color: rgb(122 0 25 / 38%);
+	background: rgb(122 0 25 / 7%);
+	color: #650016;
+}
+
+.career-item-sheet .career-compact-row__controls {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 1px;
+	min-width: 43px;
+	opacity: 0.42;
+	transition: opacity 100ms ease;
+}
+
+.career-item-sheet .career-compact-row:hover .career-compact-row__controls,
+.career-item-sheet .career-compact-row:focus-within .career-compact-row__controls {
+	opacity: 1;
+}
+
+.career-item-sheet .career-compact-row__controls button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 20px;
+	height: 20px;
+	min-height: 20px;
+	padding: 0;
+	border: 0;
+	border-radius: 2px;
+	background: transparent;
+	box-shadow: none;
+	font-size: 10px;
+	color: #3f3429;
+}
+
+.career-item-sheet .career-compact-row__controls button:hover,
+.career-item-sheet .career-compact-row__controls button:focus-visible {
+	background: rgb(255 255 255 / 46%);
+	color: #17120e;
+}
+
+.career-item-sheet .career-compact-row--exit .career-compact-row__name {
+	font-weight: 700;
+}
+
+/* The old card/drop affordances are intentionally retired from the compact
+ * authoring surface. Existing data still uses the same entry/choice structure. */
+.career-item-sheet .career-tab-panel > .career-drop-hint,
+.career-item-sheet .career-choice-editor {
+	display: none;
+}
+
+@media (max-width: 760px) {
+	.career-item-sheet .career-compact-row {
+		grid-template-columns: minmax(0, 1fr) auto;
+	}
+
+	.career-item-sheet .career-compact-row__meta {
+		grid-column: 1 / -1;
+		grid-row: 2;
+		justify-self: start;
+		max-width: 100%;
+	}
+
+	.career-item-sheet .career-compact-row__controls {
+		grid-column: 2;
+		grid-row: 1;
+	}
+}
