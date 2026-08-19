@@ -60,9 +60,12 @@
 	min-height: 24px;
 }
 
+/* Free rows reserve independent slots for chance metadata and actions.
+ * This keeps package/config/delete icons vertically aligned whether or not a
+ * row has a percentage badge. */
 .career-item-sheet .career-compact-row {
 	display: grid;
-	grid-template-columns: minmax(0, 1fr) max-content auto;
+	grid-template-columns: minmax(0, 1fr) 52px 63px;
 	align-items: center;
 	gap: 8px;
 	min-height: 31px;
@@ -88,6 +91,7 @@
 }
 
 .career-item-sheet .career-compact-row__content {
+	grid-column: 1;
 	display: flex;
 	align-items: baseline;
 	gap: 7px;
@@ -116,10 +120,12 @@
 }
 
 .career-item-sheet .career-compact-row__meta {
+	grid-column: 2;
+	justify-self: end;
 	display: inline-flex;
 	align-items: center;
 	min-height: 19px;
-	max-width: 250px;
+	max-width: 52px;
 	padding: 1px 6px;
 	border: 1px solid rgb(87 65 43 / 30%);
 	border-radius: 999px;
@@ -140,11 +146,13 @@
 }
 
 .career-item-sheet .career-compact-row__controls {
+	grid-column: 3;
 	display: flex;
 	align-items: center;
 	justify-content: flex-end;
 	gap: 1px;
-	min-width: 43px;
+	width: 63px;
+	min-width: 63px;
 	opacity: 0.42;
 	transition: opacity 100ms ease;
 }
@@ -187,6 +195,15 @@
 .career-item-sheet .career-compact-row__package:focus-visible {
 	border-color: rgb(91 65 39 / 58%) !important;
 	background: rgb(255 250 235 / 62%) !important;
+}
+
+/* Career Exit rows have no chance/package slot. */
+.career-item-sheet .career-compact-row--exit {
+	grid-template-columns: minmax(0, 1fr) 63px;
+}
+
+.career-item-sheet .career-compact-row--exit .career-compact-row__controls {
+	grid-column: 2;
 }
 
 .career-item-sheet .career-compact-row--exit .career-compact-row__name {
@@ -257,9 +274,16 @@
 	flex-direction: column;
 }
 
+/* Package members have no chance/package-creation slot; their controls stay
+ * aligned against the package's right edge. */
 .career-item-sheet .career-compact-package__member {
+	grid-template-columns: minmax(0, 1fr) 63px;
 	padding-left: 9px;
 	padding-right: 5px;
+}
+
+.career-item-sheet .career-compact-package__member .career-compact-row__controls {
+	grid-column: 2;
 }
 
 .career-item-sheet .career-compact-package__member:first-child {
@@ -411,19 +435,16 @@
 
 @media (max-width: 760px) {
 	.career-item-sheet .career-compact-row {
-		grid-template-columns: minmax(0, 1fr) auto;
+		grid-template-columns: minmax(0, 1fr) 48px 63px;
 	}
 
 	.career-item-sheet .career-compact-row__meta {
-		grid-column: 1 / -1;
-		grid-row: 2;
-		justify-self: start;
-		max-width: 100%;
+		max-width: 48px;
 	}
 
-	.career-item-sheet .career-compact-row__controls {
-		grid-column: 2;
-		grid-row: 1;
+	.career-item-sheet .career-compact-row--exit,
+	.career-item-sheet .career-compact-package__member {
+		grid-template-columns: minmax(0, 1fr) 63px;
 	}
 
 	.career-package-builder__settings {
