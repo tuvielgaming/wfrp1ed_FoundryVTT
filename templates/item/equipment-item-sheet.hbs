@@ -51,7 +51,16 @@
 			</label>
 		</div>
 
-		<div class="combat-item-sheet__grid combat-item-sheet__grid--2">
+		<div class="combat-item-sheet__grid combat-item-sheet__grid--3">
+			<label class="combat-item-sheet__field">
+				<span>{{ui.section}}</span>
+				<select name="system.inventorySection" {{#unless editable}}disabled{{/unless}}>
+					{{#each sectionOptions as |option|}}
+						<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>
+					{{/each}}
+				</select>
+			</label>
+
 			<label class="combat-item-sheet__field">
 				<span>{{ui.storageLocation}}</span>
 				<input type="text" name="system.storageLocation" value="{{system.storageLocation}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}>
