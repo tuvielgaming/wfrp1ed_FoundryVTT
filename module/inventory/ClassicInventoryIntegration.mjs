@@ -50,6 +50,8 @@ function renderInventory(host, actor, editable, section) {
 	 * The scan supplies the left Ekwipunek/Majątek header cell. The two narrow
 	 * right cells are completed digitally so their localized labels remain
 	 * readable and visually continuous with the printed black heading strip.
+	 * Equipment and Wealth hosts have separate CSS tuning variables because the
+	 * two printed header strips are not vertically identical in the scan.
 	 */
 	const paperHeader = document.createElement("div");
 	paperHeader.className = "classic-inventory__paper-header";
@@ -68,11 +70,6 @@ function renderInventory(host, actor, editable, section) {
 
 	paperHeader.append(nameHeader, locationHeader, encumbranceHeader);
 
-	/* Preserve the ruled-paper row start used by the original overlay. */
-	const paperHeaderSpacer = document.createElement("div");
-	paperHeaderSpacer.className = "classic-inventory__paper-header-spacer";
-	paperHeaderSpacer.setAttribute("aria-hidden", "true");
-
 	const list = document.createElement("div");
 	list.className = "classic-inventory__list";
 
@@ -80,7 +77,7 @@ function renderInventory(host, actor, editable, section) {
 		list.append(inventoryRow(item, editable));
 	}
 
-	host.append(toolbar, paperHeader, paperHeaderSpacer, list);
+	host.append(toolbar, paperHeader, list);
 }
 
 function createEquipmentButton(actor, section) {
@@ -146,20 +143,14 @@ function inventoryRow(item, editable) {
 		void item.sheet?.render?.({ force: true });
 	});
 
+	const nameCell = document.createElement("span");
+	nameCell.className = "classic-inventory__name-cell";
+
 	const name = document.createElement("span");
 	name.className = "classic-inventory__name";
 	name.textContent = String(item.name ?? "");
 	name.title = String(item.name ?? "");
-
-	const location = document.createElement("span");
-	location.className = "classic-inventory__location";
-	location.textContent = String(item.system?.storageLocation ?? "");
-	location.title = location.textContent;
-
-	const encumbrance = textCell(nonNegativeNumber(item.system?.encumbrance));
-	encumbrance.classList.add("classic-inventory__number");
-
-	row.append(name, location, encumbrance);
+	nameCell.append(name);
 
 	if (editable) {
 		const deleteButton = document.createElement("button");
@@ -188,9 +179,18 @@ function inventoryRow(item, editable) {
 			void deleteItem(item);
 		});
 
-		row.append(deleteButton);
+		nameCell.append(deleteButton);
 	}
 
+	const location = document.createElement("span");
+	location.className = "classic-inventory__location";
+	location.textContent = String(item.system?.storageLocation ?? "");
+	location.title = location.textContent;
+
+	const encumbrance = textCell(nonNegativeNumber(item.system?.encumbrance));
+	encumbrance.classList.add("classic-inventory__number");
+
+	row.append(nameCell, location, encumbrance);
 	return row;
 }
 
