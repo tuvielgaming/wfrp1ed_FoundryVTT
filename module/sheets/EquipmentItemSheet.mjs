@@ -89,6 +89,7 @@ function equipmentUi() {
 		name: localize("Name", "Nazwa"),
 		inventory: localize("Inventory", "Ekwipunek"),
 		wealth: localize("Wealth", "Majątek"),
+		container: localize("Container", "Pojemnik"),
 		quantity: localize("Quantity", "Ilość"),
 		encumbrance: localize("Encumbrance", "Obciążenie"),
 		availability: localize("Availability", "Dostępność"),
