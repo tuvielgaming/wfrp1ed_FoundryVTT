@@ -17,18 +17,21 @@
 /*
  * The two printed header strips are not vertically identical in the scan.
  * Keep their tuning independent so adjusting Majątek can never disturb the
- * verified Ekwipunek alignment.
+ * verified Ekwipunek alignment. Quantity also needs a small section-specific
+ * horizontal correction inside the first printed column.
  */
 .wfrp1ed-classic-sheet .classic-inventory--equipment {
 	--classic-inventory-header-top: 27px;
 	--classic-inventory-header-height: 26px;
 	--classic-inventory-header-font-size: 22px;
+	--classic-inventory-quantity-right: 5px;
 }
 
 .wfrp1ed-classic-sheet .classic-inventory--wealth {
 	--classic-inventory-header-top: 30px;
 	--classic-inventory-header-height: 26px;
 	--classic-inventory-header-font-size: 22px;
+	--classic-inventory-quantity-right: 7px;
 }
 
 .wfrp1ed-classic-sheet .classic-inventory__toolbar {
@@ -192,13 +195,14 @@
 
 /*
  * Current owned quantity lives inside the Item/name column. It therefore does
- * not alter the verified paper-grid geometry for LOK/OBC. The field looks like
- * a compact paper value until double-clicked for direct numeric editing.
+ * not alter the verified paper-grid geometry for LOK/OBC. Equipment and Wealth
+ * use independent right offsets because their scanned first-column geometry is
+ * slightly different.
  */
 .wfrp1ed-classic-sheet .classic-inventory__quantity {
 	position: absolute;
 	top: 4px;
-	right: 1px;
+	right: var(--classic-inventory-quantity-right);
 	box-sizing: border-box;
 	width: 39px;
 	height: 19px;
@@ -266,18 +270,30 @@
 	outline-offset: 0;
 }
 
+.wfrp1ed-classic-sheet .classic-inventory__encumbrance-cell {
+	position: relative;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 0;
+	height: 100%;
+}
+
 .wfrp1ed-classic-sheet .classic-inventory__number {
+	display: block;
+	width: 100%;
 	text-align: center;
 }
 
 /*
- * Delete belongs to the Item-name column. It appears immediately before the
- * fixed quantity field on hover, so neither control covers LOK/LOC or OBC/ENC.
+ * Delete belongs to the final OBC/ENC column. It appears only on row hover at
+ * the far-right edge of that cell, after the Encumbrance value, without moving
+ * any printed column or changing quantity positioning.
  */
 .wfrp1ed-classic-sheet .classic-inventory__delete {
 	position: absolute;
 	top: 5px;
-	right: 43px;
+	right: 0;
 	width: 17px;
 	height: 17px;
 	border-radius: 3px;
