@@ -63,7 +63,7 @@
  */
 .wfrp1ed-classic-sheet .classic-inventory__paper-header {
 	position: absolute;
-	top: 8px;
+	top: 28px;
 	left: 10px;
 	right: 10px;
 	display: grid;
@@ -90,7 +90,7 @@
 		"Book Antiqua",
 		"Times New Roman",
 		serif;
-	font-size: 14px;
+	font-size: 22px;
 	font-weight: 900;
 	line-height: 1;
 	letter-spacing: 0.01em;
@@ -103,7 +103,7 @@
 
 /* Preserve the ruled-paper row start used by the original overlay. */
 .wfrp1ed-classic-sheet .classic-inventory__paper-header-spacer {
-	height: 20px;
+	/* height: 20px; */
 }
 
 .wfrp1ed-classic-sheet .classic-inventory__list {
