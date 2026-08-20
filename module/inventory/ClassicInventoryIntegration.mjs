@@ -7,6 +7,8 @@ const INVENTORY_SECTION = Object.freeze({
 	WEALTH: "wealth",
 });
 
+const QUANTITY_CLICK_DELAY_MS = 220;
+
 Hooks.on("renderApplicationV2", (application, element) => {
 	const actor = application?.document;
 	if (actor?.documentName !== "Actor") return;
@@ -133,8 +135,8 @@ function inventoryRow(item, editable) {
 	row.className = "classic-inventory__row";
 	row.dataset.itemId = String(item.id ?? "");
 	row.title = localize(
-		`Double-click to open ${item.name}.`,
-		`Kliknij dwukrotnie, aby otworzyć ${item.name}.`,
+		`Double-click the item name to open ${item.name}.`,
+		`Kliknij dwukrotnie nazwę, aby otworzyć ${item.name}.`,
 	);
 
 	row.addEventListener("dblclick", (event) => {
@@ -153,45 +155,251 @@ function inventoryRow(item, editable) {
 	nameCell.append(name);
 
 	if (editable) {
-		const deleteButton = document.createElement("button");
-		deleteButton.type = "button";
-		deleteButton.className = "classic-inventory__delete";
-		deleteButton.title = localize(
-			"Delete this Item from the character.",
-			"Usuń ten przedmiot z postaci.",
-		);
-		deleteButton.setAttribute("aria-label", deleteButton.title);
-
-		const icon = document.createElement("i");
-		icon.className = "fas fa-trash";
-		icon.setAttribute("aria-hidden", "true");
-		deleteButton.append(icon);
-
-		for (const eventName of ["pointerdown", "dblclick"]) {
-			deleteButton.addEventListener(eventName, (event) => {
-				event.stopPropagation();
-			});
-		}
-
-		deleteButton.addEventListener("click", (event) => {
-			event.preventDefault();
-			event.stopPropagation();
-			void deleteItem(item);
-		});
-
-		nameCell.append(deleteButton);
+		nameCell.append(createDeleteButton(item));
 	}
 
-	const location = document.createElement("span");
-	location.className = "classic-inventory__location";
-	location.textContent = String(item.system?.storageLocation ?? "");
-	location.title = location.textContent;
+	nameCell.append(createQuantityControl(item, editable));
 
-	const encumbrance = textCell(nonNegativeNumber(item.system?.encumbrance));
+	const location = createLocationControl(item, editable);
+
+	const encumbrance = textCell(
+		formatNumber(
+			nonNegativeNumber(
+				item.system?.totalEncumbrance ?? item.system?.encumbrance,
+			),
+		),
+	);
 	encumbrance.classList.add("classic-inventory__number");
+	encumbrance.title = localize(
+		"Current stack Encumbrance.",
+		"Aktualne Obciążenie całej ilości.",
+	);
 
 	row.append(nameCell, location, encumbrance);
 	return row;
+}
+
+function createDeleteButton(item) {
+	const deleteButton = document.createElement("button");
+	deleteButton.type = "button";
+	deleteButton.className = "classic-inventory__delete";
+	deleteButton.title = localize(
+		"Delete this Item from the character.",
+		"Usuń ten przedmiot z postaci.",
+	);
+	deleteButton.setAttribute("aria-label", deleteButton.title);
+
+	const icon = document.createElement("i");
+	icon.className = "fas fa-trash";
+	icon.setAttribute("aria-hidden", "true");
+	deleteButton.append(icon);
+
+	for (const eventName of ["pointerdown", "dblclick"]) {
+		deleteButton.addEventListener(eventName, (event) => {
+			event.stopPropagation();
+		});
+	}
+
+	deleteButton.addEventListener("click", (event) => {
+		event.preventDefault();
+		event.stopPropagation();
+		void deleteItem(item);
+	});
+
+	return deleteButton;
+}
+
+function createQuantityControl(item, editable) {
+	const input = document.createElement("input");
+	input.type = "number";
+	input.min = "0";
+	input.step = "1";
+	input.inputMode = "numeric";
+	input.className = "classic-inventory__quantity";
+	input.value = String(nonNegativeInteger(item.system?.quantity));
+	input.readOnly = true;
+	input.disabled = !editable;
+	input.title = localize(
+		"Quantity: left-click +1, Shift/Ctrl-click +10, right-click -1, Shift/Ctrl-right-click -10, double-click to type a value.",
+		"Ilość: lewy klik +1, Shift/Ctrl+klik +10, prawy klik -1, Shift/Ctrl+prawy klik -10, dwuklik pozwala wpisać wartość.",
+	);
+	input.setAttribute("aria-label", localize("Current quantity", "Aktualna ilość"));
+
+	const pendingClicks = new Set();
+	let editing = false;
+	let editStartValue = input.value;
+
+	const clearPendingClicks = () => {
+		for (const timer of pendingClicks) clearTimeout(timer);
+		pendingClicks.clear();
+	};
+
+	input.addEventListener("click", (event) => {
+		event.preventDefault();
+		event.stopPropagation();
+		if (!editable || editing) return;
+
+		const step = quantityStep(event);
+		const timer = setTimeout(() => {
+			pendingClicks.delete(timer);
+			void adjustQuantity(item, input, step);
+		}, QUANTITY_CLICK_DELAY_MS);
+		pendingClicks.add(timer);
+	});
+
+	input.addEventListener("dblclick", (event) => {
+		event.preventDefault();
+		event.stopPropagation();
+		if (!editable) return;
+
+		clearPendingClicks();
+		editing = true;
+		editStartValue = String(nonNegativeInteger(item.system?.quantity));
+		input.readOnly = false;
+		input.value = editStartValue;
+		input.focus();
+		input.select();
+	});
+
+	input.addEventListener("contextmenu", (event) => {
+		event.preventDefault();
+		event.stopPropagation();
+		if (!editable || editing) return;
+		void adjustQuantity(item, input, -quantityStep(event));
+	});
+
+	input.addEventListener("keydown", (event) => {
+		event.stopPropagation();
+		if (!editing) return;
+
+		if (event.key === "Enter") {
+			event.preventDefault();
+			void commitQuantityEdit(item, input).then(() => {
+				editing = false;
+				input.readOnly = true;
+				input.blur();
+			});
+			return;
+		}
+
+		if (event.key === "Escape") {
+			event.preventDefault();
+			input.value = editStartValue;
+			editing = false;
+			input.readOnly = true;
+			input.blur();
+		}
+	});
+
+	input.addEventListener("blur", () => {
+		if (!editing) return;
+		editing = false;
+		input.readOnly = true;
+		void commitQuantityEdit(item, input);
+	});
+
+	return input;
+}
+
+function createLocationControl(item, editable) {
+	const input = document.createElement("input");
+	input.type = "text";
+	input.className = "classic-inventory__location";
+	input.value = String(item.system?.storageLocation ?? "");
+	input.readOnly = true;
+	input.disabled = !editable;
+	input.autocomplete = "off";
+	input.title = editable
+		? localize(
+			"Double-click to edit location.",
+			"Kliknij dwukrotnie, aby edytować miejsce.",
+		)
+		: input.value;
+	input.setAttribute("aria-label", localize("Location", "Miejsce"));
+
+	let editing = false;
+	let editStartValue = input.value;
+
+	input.addEventListener("dblclick", (event) => {
+		event.preventDefault();
+		event.stopPropagation();
+		if (!editable) return;
+
+		editing = true;
+		editStartValue = String(item.system?.storageLocation ?? "");
+		input.readOnly = false;
+		input.value = editStartValue;
+		input.focus();
+		input.select();
+	});
+
+	input.addEventListener("keydown", (event) => {
+		event.stopPropagation();
+		if (!editing) return;
+
+		if (event.key === "Enter") {
+			event.preventDefault();
+			void commitLocationEdit(item, input).then(() => {
+				editing = false;
+				input.readOnly = true;
+				input.blur();
+			});
+			return;
+		}
+
+		if (event.key === "Escape") {
+			event.preventDefault();
+			input.value = editStartValue;
+			editing = false;
+			input.readOnly = true;
+			input.blur();
+		}
+	});
+
+	input.addEventListener("blur", () => {
+		if (!editing) return;
+		editing = false;
+		input.readOnly = true;
+		void commitLocationEdit(item, input);
+	});
+
+	return input;
+}
+
+async function adjustQuantity(item, input, delta) {
+	const current = nonNegativeInteger(item.system?.quantity);
+	const next = Math.max(0, current + Math.trunc(delta));
+	if (next === current) {
+		input.value = String(current);
+		return;
+	}
+
+	await item.update({ "system.quantity": next });
+	input.value = String(next);
+}
+
+async function commitQuantityEdit(item, input) {
+	const next = nonNegativeInteger(input.value);
+	const current = nonNegativeInteger(item.system?.quantity);
+	input.value = String(next);
+	if (next === current) return;
+	await item.update({ "system.quantity": next });
+}
+
+async function commitLocationEdit(item, input) {
+	const next = String(input.value ?? "").trim();
+	const current = String(item.system?.storageLocation ?? "");
+	input.value = next;
+	input.title = localize(
+		"Double-click to edit location.",
+		"Kliknij dwukrotnie, aby edytować miejsce.",
+	);
+	if (next === current) return;
+	await item.update({ "system.storageLocation": next });
+}
+
+function quantityStep(event) {
+	return event.shiftKey || event.ctrlKey || event.metaKey ? 10 : 1;
 }
 
 async function createEquipment(actor, section) {
@@ -244,16 +452,29 @@ function sectionItems(actor, section) {
 	);
 }
 
+function textCell(value) {
+	const span = document.createElement("span");
+	span.textContent = String(value ?? "");
+	return span;
+}
+
+function formatNumber(value) {
+	const number = Number(value);
+	if (!Number.isFinite(number)) return "0";
+	if (Number.isInteger(number)) return String(number);
+	return String(Number(number.toFixed(2)));
+}
+
 function normalizeSection(value) {
 	return String(value ?? "").trim().toLowerCase() === INVENTORY_SECTION.WEALTH
 		? INVENTORY_SECTION.WEALTH
 		: INVENTORY_SECTION.EQUIPMENT;
 }
 
-function textCell(value) {
-	const span = document.createElement("span");
-	span.textContent = String(value ?? "");
-	return span;
+function nonNegativeInteger(value) {
+	const number = Number(value);
+	if (!Number.isFinite(number)) return 0;
+	return Math.max(0, Math.trunc(number));
 }
 
 function nonNegativeNumber(value) {
