@@ -195,6 +195,26 @@
 					</section>
 				{{/if}}
 
+				{{#if page.sections.wealth}}
+					<section
+						class="sheet-overlay sheet-overlay--wealth"
+						data-section="wealth"
+						style="
+							{{page.sections.wealth.cssVariables}};
+							position: absolute;
+							left: var(--section-x);
+							top: var(--section-y);
+							width: var(--section-width);
+							height: var(--section-height);
+						"
+					>
+						{{>
+							"systems/wfrp1ed/templates/actors/classic/parts/wealth.hbs"
+							@root
+						}}
+					</section>
+				{{/if}}
+
 				{{#if page.sections.psychology}}
 					<section
 						class="sheet-overlay sheet-overlay--psychology"
