@@ -56,9 +56,10 @@
 }
 
 /*
- * The localized artwork keeps the black header cells but the Miejsce/Obc.
- * lettering is not legible. Overlay only the right two labels, using the same
- * column geometry as the list rows so the text sits inside those printed cells.
+ * The scan supplies the left Ekwipunek/Majątek black heading cell. The two
+ * narrow right cells are completed digitally. Their full black backgrounds
+ * extend across each data column, while the transparent grid gap preserves the
+ * same white separation used by the printed heading blocks.
  */
 .wfrp1ed-classic-sheet .classic-inventory__paper-header {
 	position: absolute;
@@ -78,13 +79,18 @@
 	display: flex;
 	align-items: center;
 	justify-content: center;
+	box-sizing: border-box;
+	width: 100%;
+	height: 26px;
 	min-width: 0;
+	padding: 1px 3px 0;
+	background: #050403;
 	color: #fff;
 	font-family:
 		"Book Antiqua",
 		"Times New Roman",
 		serif;
-	font-size: 13px;
+	font-size: 14px;
 	font-weight: 900;
 	line-height: 1;
 	letter-spacing: 0.01em;
