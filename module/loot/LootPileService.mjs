@@ -469,7 +469,11 @@ function clearInventoryLocation(source) {
 function restoreInventoryLocation(source, item, targetActor) {
 	if (source?.type !== "equipment" || !source.system) return;
 	const origin = item?.flags?.[FLAG_SCOPE]?.[ITEM_ORIGIN_FLAG_KEY];
-	const location = origin?.inventoryLocation;
+	const location = origin?.inventoryLocation ?? (
+		origin && Number(origin.version ?? 1) < 2
+			? inventoryLocationSnapshot(item)
+			: null
+	);
 	if (!location || typeof location !== "object") return;
 
 	const originalContainerId = text(location.containerId);
