@@ -10,7 +10,9 @@ const { HandlebarsApplicationMixin } = foundry.applications.api;
  */
 Hooks.on("preUpdateItem", (item, changes) => {
 	if (item?.type !== "equipment") return;
-	if (item?.parent?.documentName === "Actor") return;
+
+	const actor = item?.actor ?? item?.parent;
+	if (actor?.documentName === "Actor") return;
 
 	const directKey = "system.referenceQuantity";
 	const rawReference = Object.hasOwn(changes ?? {}, directKey)
