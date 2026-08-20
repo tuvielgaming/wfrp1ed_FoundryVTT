@@ -491,11 +491,12 @@ function createLocationControl(item, actor, editable, refreshView) {
 				EXPANDED_CONTAINERS.add(expansionKey(actor, container));
 				refreshView();
 			},
-			onFreeText: async () => {
-				editing = false;
-				input.readOnly = true;
-				await commitFreeLocation(item, input.value);
-				refreshView();
+			onFreeText: () => {
+				editing = true;
+				input.readOnly = false;
+				input.value = "";
+				input.focus();
+				input.select();
 			},
 		});
 	});
@@ -548,7 +549,7 @@ function openLocationMenu(input, item, actor, handlers) {
 
 	const freeText = locationMenuButton(
 		"fas fa-pen",
-		localize("Free text / no container", "Własny tekst / bez pojemnika"),
+		localize("Enter location", "Wpisz lokalizację"),
 	);
 	freeText.classList.add("classic-inventory-location-menu__free");
 	freeText.addEventListener("click", (event) => {
