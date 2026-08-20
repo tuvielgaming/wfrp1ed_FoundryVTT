@@ -34,7 +34,7 @@
 
 			<label class="combat-item-sheet__field">
 				<span>{{ui.quantity}}</span>
-				<input type="number" min="0" step="1" name="system.quantity" value="{{system.quantity}}" {{#unless editable}}disabled{{/unless}}>
+				<input type="number" min="1" step="1" name="system.referenceQuantity" value="{{system.referenceQuantity}}" {{#unless editable}}disabled{{/unless}}>
 			</label>
 
 			<label class="combat-item-sheet__field">
@@ -43,17 +43,10 @@
 			</label>
 		</div>
 
-		<div class="combat-item-sheet__grid combat-item-sheet__grid--2">
-			<label class="combat-item-sheet__field">
-				<span>{{ui.storageLocation}}</span>
-				<input type="text" name="system.storageLocation" value="{{system.storageLocation}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}>
-			</label>
-
-			<label class="combat-item-sheet__field">
-				<span>{{ui.availability}}</span>
-				<input type="text" name="system.availability" value="{{system.availability}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}>
-			</label>
-		</div>
+		<label class="combat-item-sheet__field">
+			<span>{{ui.availability}}</span>
+			<input type="text" name="system.availability" value="{{system.availability}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}>
+		</label>
 	</section>
 
 	<section class="combat-item-sheet__panel">
