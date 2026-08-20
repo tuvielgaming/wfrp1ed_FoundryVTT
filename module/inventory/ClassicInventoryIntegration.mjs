@@ -47,10 +47,9 @@ function renderInventory(host, actor, editable, section) {
 	toolbar.append(createManagerButton(actor));
 
 	/*
-	 * The scan supplies the three black header cells, but the right two labels
-	 * are not readable in the localized artwork. Overlay only those labels and
-	 * keep the same grid as the item rows so the text remains aligned with the
-	 * printed vertical rules.
+	 * The scan supplies the left Ekwipunek/Majątek header cell. The two narrow
+	 * right cells are completed digitally so their localized labels remain
+	 * readable and visually continuous with the printed black heading strip.
 	 */
 	const paperHeader = document.createElement("div");
 	paperHeader.className = "classic-inventory__paper-header";
@@ -61,11 +60,11 @@ function renderInventory(host, actor, editable, section) {
 
 	const locationHeader = document.createElement("span");
 	locationHeader.className = "classic-inventory__paper-header-label";
-	locationHeader.textContent = localize("LOC", "MIEJ.");
+	locationHeader.textContent = localize("LOC", "LOK");
 
 	const encumbranceHeader = document.createElement("span");
 	encumbranceHeader.className = "classic-inventory__paper-header-label";
-	encumbranceHeader.textContent = localize("ENC", "OBC.");
+	encumbranceHeader.textContent = localize("ENC", "OBC");
 
 	paperHeader.append(nameHeader, locationHeader, encumbranceHeader);
 
