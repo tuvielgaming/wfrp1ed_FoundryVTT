@@ -180,7 +180,7 @@ const POLISH_CLASSIC_LAYOUT = {
 
 				wealth: {
 					x: 14,
-					y: 797,
+					y: 807,
 					width: 320,
 					height: 273,
 				},
