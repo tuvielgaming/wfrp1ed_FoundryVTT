@@ -71,7 +71,7 @@ export class LootPileService {
 		});
 	}
 
-	static async takeItem(pile, item, targetActor) {
+	static async takeItem(pile, item, targetActor, { containerId = "" } = {}) {
 		if (!this.isLootPile(pile) || item?.parent?.uuid !== pile.uuid) {
 			throw new Error("The selected Item does not belong to this Loot Pile.");
 		}
@@ -82,6 +82,7 @@ export class LootPileService {
 			pileUuid: pile.uuid,
 			itemId: item.id,
 			targetActorUuid: targetActor.uuid,
+			targetContainerId: text(containerId),
 		});
 	}
 
@@ -277,7 +278,11 @@ async function takeItemAsAuthority(data, requester) {
 	const pileUuid = pile.uuid;
 	const item = pile.items?.get?.(text(data.itemId));
 	if (!LootPileService.isPhysicalItem(item)) throw new Error("That Loot Item no longer exists.");
-	const [created] = await target.createEmbeddedDocuments("Item", [characterItemSource(item)]);
+	const targetContainer = targetContainerForTransfer(target, item, data.targetContainerId);
+	const [created] = await target.createEmbeddedDocuments("Item", [characterItemSource(item, {
+		targetActor: target,
+		targetContainer,
+	})]);
 	if (!created) throw new Error("The Loot Item could not be added to the target Actor.");
 	try {
 		await pile.deleteEmbeddedDocuments("Item", [item.id]);
@@ -326,7 +331,12 @@ async function restorePileAsAuthority(data, requester) {
 		));
 	}
 
-	const created = await sourceActor.createEmbeddedDocuments("Item", items.map(characterItemSource));
+	const created = await sourceActor.createEmbeddedDocuments("Item", items.map((item) =>
+		characterItemSource(item, {
+			targetActor: sourceActor,
+			restoreOriginLocation: true,
+		})
+	));
 	if (created.length !== items.length) {
 		if (created.length) await sourceActor.deleteEmbeddedDocuments("Item", created.map((item) => item.id)).catch(() => {});
 		throw new Error("Not every dropped Item could be restored to the original Actor.");
@@ -401,19 +411,26 @@ function pileItemSource(item, sourceActor = null) {
 		source.system.state.mode = INVENTORY_MODE.CARRIED;
 		source.system.state.hand = INVENTORY_HAND.NONE;
 	}
+	const originalInventoryLocation = inventoryLocationSnapshot(item);
+	clearInventoryLocation(source);
 	const origin = sourceActor instanceof foundry.documents.Actor ? sourceActor : item.parent;
 	source.flags ??= {};
 	source.flags[FLAG_SCOPE] ??= {};
 	source.flags[FLAG_SCOPE][ITEM_ORIGIN_FLAG_KEY] = {
-		version: 1,
+		version: 2,
 		sourceActorUuid: origin instanceof foundry.documents.Actor && !LootPileService.isLootPile(origin) ? origin.uuid : "",
 		sourceItemId: String(item.id ?? ""),
+		inventoryLocation: originalInventoryLocation,
 		movedAt: Date.now(),
 	};
 	return source;
 }
 
-function characterItemSource(item) {
+function characterItemSource(item, {
+	targetActor = null,
+	targetContainer = null,
+	restoreOriginLocation = false,
+} = {}) {
 	const source = item.toObject();
 	delete source._id;
 	delete source.folder;
@@ -422,8 +439,79 @@ function characterItemSource(item) {
 		source.system.state.mode = INVENTORY_MODE.CARRIED;
 		source.system.state.hand = INVENTORY_HAND.NONE;
 	}
+	clearInventoryLocation(source);
+	if (source.type === "equipment") {
+		if (targetContainer instanceof foundry.documents.Item) {
+			source.system.containerId = String(targetContainer.id ?? "");
+			source.system.storageLocation = String(targetContainer.name ?? "");
+		} else if (restoreOriginLocation) {
+			restoreInventoryLocation(source, item, targetActor);
+		}
+	}
 	if (source.flags?.[FLAG_SCOPE]) delete source.flags[FLAG_SCOPE][ITEM_ORIGIN_FLAG_KEY];
 	return source;
+}
+
+function inventoryLocationSnapshot(item) {
+	if (item?.type !== "equipment") return null;
+	return {
+		containerId: String(item.system?.containerId ?? ""),
+		storageLocation: String(item.system?.storageLocation ?? ""),
+	};
+}
+
+function clearInventoryLocation(source) {
+	if (source?.type !== "equipment" || !source.system) return;
+	source.system.containerId = "";
+	source.system.storageLocation = "";
+}
+
+function restoreInventoryLocation(source, item, targetActor) {
+	if (source?.type !== "equipment" || !source.system) return;
+	const origin = item?.flags?.[FLAG_SCOPE]?.[ITEM_ORIGIN_FLAG_KEY];
+	const location = origin?.inventoryLocation;
+	if (!location || typeof location !== "object") return;
+
+	const originalContainerId = text(location.containerId);
+	if (originalContainerId) {
+		const container = targetActor instanceof foundry.documents.Actor
+			? targetActor.items?.get?.(originalContainerId)
+			: null;
+		if (
+			container instanceof foundry.documents.Item &&
+			container.type === "equipment" &&
+			container.system?.isContainer === true
+		) {
+			source.system.containerId = originalContainerId;
+			source.system.storageLocation = String(container.name ?? "");
+		}
+		return;
+	}
+
+	source.system.storageLocation = String(location.storageLocation ?? "").trim();
+}
+
+function targetContainerForTransfer(target, item, containerId) {
+	const id = text(containerId);
+	if (!id) return null;
+	if (item?.type !== "equipment") {
+		throw new Error(localize(
+			"Only Equipment can currently be transferred directly into a container.",
+			"Obecnie tylko Ekwipunek można przenieść bezpośrednio do pojemnika.",
+		));
+	}
+	const container = target?.items?.get?.(id);
+	if (
+		!(container instanceof foundry.documents.Item) ||
+		container.type !== "equipment" ||
+		container.system?.isContainer !== true
+	) {
+		throw new Error(localize(
+			"The target container is no longer available.",
+			"Docelowy pojemnik nie jest już dostępny.",
+		));
+	}
+	return container;
 }
 
 async function createLootMessage(pile) {
