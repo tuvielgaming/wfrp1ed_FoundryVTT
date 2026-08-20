@@ -211,13 +211,16 @@ function itemPresentation(item) {
 	const allowedHands = CombatEquipmentState.allowedHands(item);
 	const showHand = !(allowedHands.length === 1 && allowedHands[0] === INVENTORY_HAND.NONE);
 	const hand = showHand ? CombatEquipmentState.preferredHand(item) : INVENTORY_HAND.NONE;
+	const displayedEncumbrance = item.type === "equipment"
+		? item.system?.totalEncumbrance ?? item.system?.encumbrance
+		: item.system?.encumbrance;
 
 	return Object.freeze({
 		id: item.id,
 		name: item.name,
 		type: localizedType(item.type),
 		quantity: nonNegativeInteger(item.system?.quantity),
-		encumbrance: nonNegativeNumber(item.system?.encumbrance),
+		encumbrance: formatNumber(nonNegativeNumber(displayedEncumbrance)),
 		storageLocation: String(item.system?.storageLocation ?? "") || "—",
 		used,
 		stateLabel: used
@@ -263,6 +266,13 @@ function safeApplicationId(value) {
 	return String(value ?? "actor")
 		.replace(/[^a-zA-Z0-9_-]+/g, "-")
 		.replace(/^-+|-+$/g, "") || "actor";
+}
+
+function formatNumber(value) {
+	const number = Number(value);
+	if (!Number.isFinite(number)) return "0";
+	if (Number.isInteger(number)) return String(number);
+	return String(Number(number.toFixed(2)));
 }
 
 function nonNegativeInteger(value) {
