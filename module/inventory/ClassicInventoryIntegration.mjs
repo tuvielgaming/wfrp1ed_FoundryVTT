@@ -1,20 +1,27 @@
-import { CombatEquipmentState } from "../combat/CombatEquipmentState.mjs";
 import { InventoryManagerWindow } from "./InventoryManagerWindow.mjs";
 
-const { DialogV2 } = foundry.applications.api;
+const INVENTORY_SECTION = Object.freeze({
+	EQUIPMENT: "equipment",
+	WEALTH: "wealth",
+});
 
 Hooks.on("renderApplicationV2", (application, element) => {
 	const actor = application?.document;
-	const host = element?.querySelector?.("[data-wfrp1ed-inventory]");
+	if (actor?.documentName !== "Actor") return;
 
-	if (
-		actor?.documentName !== "Actor" ||
-		!(host instanceof HTMLElement)
-	) {
-		return;
+	const hosts = element?.querySelectorAll?.("[data-wfrp1ed-inventory]") ?? [];
+	if (hosts.length === 0) return;
+
+	for (const host of hosts) {
+		if (!(host instanceof HTMLElement)) continue;
+
+		renderInventory(
+			host,
+			actor,
+			application.isEditable === true,
+			normalizeSection(host.dataset.inventorySection),
+		);
 	}
-
-	renderInventory(host, actor, application.isEditable === true);
 });
 
 for (const hookName of ["createItem", "updateItem", "deleteItem"]) {
@@ -26,66 +33,56 @@ for (const hookName of ["createItem", "updateItem", "deleteItem"]) {
 	});
 }
 
-function renderInventory(host, actor, editable) {
+function renderInventory(host, actor, editable, section) {
 	host.replaceChildren();
 
 	const toolbar = document.createElement("div");
 	toolbar.className = "classic-inventory__toolbar";
 
 	if (editable) {
-		toolbar.append(createEquipmentButton(actor));
+		toolbar.append(createEquipmentButton(actor, section));
 	}
 	toolbar.append(createManagerButton(actor));
 
-	const header = document.createElement("div");
-	header.className = "classic-inventory__header";
-	header.append(
-		textCell(localize("Item", "Przedmiot")),
-		textCell(localize("Qty", "Ilość")),
-		textCell(localize("Enc.", "Obc.")),
-		textCell(localize("State", "Stan")),
-	);
+	/*
+	 * The original printed sheet already supplies the Ekwipunek/Majątek title
+	 * and its Miejsce/Obciążenie column headings. Preserve the vertical space
+	 * formerly occupied by our generated header so the first digital row stays
+	 * aligned with the ruled paper area without drawing duplicate labels.
+	 */
+	const paperHeaderSpacer = document.createElement("div");
+	paperHeaderSpacer.className = "classic-inventory__paper-header-spacer";
+	paperHeaderSpacer.setAttribute("aria-hidden", "true");
 
 	const list = document.createElement("div");
 	list.className = "classic-inventory__list";
 
-	const items = [...(actor.items ?? [])].filter(
-		(item) => item?.type === "equipment",
-	);
-
-	for (const item of items) {
-		list.append(inventoryRow(item, editable));
+	for (const item of sectionItems(actor, section)) {
+		list.append(inventoryRow(item));
 	}
 
-	if (items.length === 0) {
-		const empty = document.createElement("div");
-		empty.className = "classic-inventory__empty";
-		empty.textContent = localize(
-			"No ordinary equipment. Weapons and armour remain in their combat tables.",
-			"Brak zwykłego ekwipunku. Broń i zbroja pozostają w swoich tabelach bojowych.",
-		);
-		list.append(empty);
-	}
-
-	host.append(toolbar, header, list);
+	host.append(toolbar, paperHeaderSpacer, list);
 }
 
-function createEquipmentButton(actor) {
+function createEquipmentButton(actor, section) {
+	const wealth = section === INVENTORY_SECTION.WEALTH;
 	const button = document.createElement("button");
 	button.type = "button";
 	button.className = "classic-inventory__create";
-	button.title = localize("Add Equipment.", "Dodaj ekwipunek.");
+	button.title = wealth
+		? localize("Add Wealth.", "Dodaj majątek.")
+		: localize("Add Equipment.", "Dodaj ekwipunek.");
 	button.setAttribute("aria-label", button.title);
 
 	const icon = document.createElement("i");
-	icon.className = "fas fa-bag-shopping";
+	icon.className = wealth ? "fas fa-coins" : "fas fa-bag-shopping";
 	icon.setAttribute("aria-hidden", "true");
 	button.append(icon);
 
 	button.addEventListener("click", (event) => {
 		event.preventDefault();
 		event.stopPropagation();
-		void createEquipment(actor);
+		void createEquipment(actor, section);
 	});
 
 	return button;
@@ -115,12 +112,9 @@ function createManagerButton(actor) {
 	return button;
 }
 
-function inventoryRow(item, editable) {
-	const used = CombatEquipmentState.isUsed(item);
+function inventoryRow(item) {
 	const row = document.createElement("div");
 	row.className = "classic-inventory__row";
-	row.classList.toggle("is-used", used);
-	row.classList.toggle("is-carried", !used);
 	row.dataset.itemId = String(item.id ?? "");
 	row.title = localize(
 		`Double-click to open ${item.name}.`,
@@ -135,87 +129,33 @@ function inventoryRow(item, editable) {
 
 	const name = document.createElement("span");
 	name.className = "classic-inventory__name";
+	name.textContent = String(item.name ?? "");
+	name.title = String(item.name ?? "");
 
-	const typeIcon = document.createElement("i");
-	typeIcon.className = "fas fa-bag-shopping";
-	typeIcon.title = localize("Equipment", "Ekwipunek");
-	const label = document.createElement("span");
-	label.className = "classic-inventory__name-label";
-	label.textContent = String(item.name ?? "");
-	label.title = String(item.name ?? "");
-	name.append(typeIcon, label);
-
-	const quantity = textCell(nonNegativeInteger(item.system?.quantity));
-	quantity.classList.add("classic-inventory__number");
+	const location = document.createElement("span");
+	location.className = "classic-inventory__location";
+	location.textContent = String(item.system?.storageLocation ?? "");
+	location.title = location.textContent;
 
 	const encumbrance = textCell(nonNegativeNumber(item.system?.encumbrance));
 	encumbrance.classList.add("classic-inventory__number");
 
-	const controls = document.createElement("span");
-	controls.className = "classic-inventory__controls";
-
-	const stateButton = document.createElement("button");
-	stateButton.type = "button";
-	stateButton.className = "classic-inventory__use-toggle";
-	stateButton.classList.toggle("is-used", used);
-	stateButton.setAttribute("aria-pressed", String(used));
-	stateButton.setAttribute(
-		"aria-label",
-		used
-			? localize("Used", "Używany")
-			: localize("Carried", "Przenoszony"),
-	);
-	stateButton.title = used
-		? localize(
-			"Used — click to mark as carried.",
-			"Używany — kliknij, aby oznaczyć jako przenoszony.",
-		)
-		: localize(
-			"Carried — click to mark as used/held.",
-			"Przenoszony — kliknij, aby oznaczyć jako używany/trzymany.",
-		);
-	stateButton.disabled = !editable;
-	stopRowActionPropagation(stateButton);
-	stateButton.addEventListener("click", (event) => {
-		event.preventDefault();
-		event.stopPropagation();
-		void toggleUsed(item, stateButton);
-	});
-	controls.append(stateButton);
-
-	if (editable) {
-		const deleteButton = document.createElement("button");
-		deleteButton.type = "button";
-		deleteButton.className = "classic-inventory__delete";
-		deleteButton.title = localize(
-			"Delete this Item from the character.",
-			"Usuń ten przedmiot z postaci.",
-		);
-		deleteButton.setAttribute("aria-label", deleteButton.title);
-
-		const icon = document.createElement("i");
-		icon.className = "fas fa-trash";
-		icon.setAttribute("aria-hidden", "true");
-		deleteButton.append(icon);
-
-		stopRowActionPropagation(deleteButton);
-		deleteButton.addEventListener("click", (event) => {
-			event.preventDefault();
-			event.stopPropagation();
-			void deleteItem(item);
-		});
-		controls.append(deleteButton);
-	}
-
-	row.append(name, quantity, encumbrance, controls);
+	row.append(name, location, encumbrance);
 	return row;
 }
 
-async function createEquipment(actor) {
+async function createEquipment(actor, section) {
+	const wealth = section === INVENTORY_SECTION.WEALTH;
+
 	try {
 		const created = await actor.createEmbeddedDocuments("Item", [{
-			name: localize("New Equipment", "Nowy przedmiot"),
+			name: wealth
+				? localize("New Wealth", "Nowy majątek")
+				: localize("New Equipment", "Nowy przedmiot"),
 			type: "equipment",
+			system: {
+				isWealth: wealth,
+			},
 		}]);
 		const item = created?.[0];
 		if (item) await item.sheet?.render?.({ force: true });
@@ -225,54 +165,24 @@ async function createEquipment(actor) {
 	}
 }
 
-async function toggleUsed(item, button) {
-	button.disabled = true;
-
-	try {
-		await CombatEquipmentState.toggleUsed(item);
-	} catch (error) {
-		console.error("WFRP1ED | Unable to change inventory state.", error);
-		ui.notifications.warn(error.message);
-		button.disabled = false;
-	}
+function sectionItems(actor, section) {
+	const wealth = section === INVENTORY_SECTION.WEALTH;
+	return [...(actor.items ?? [])].filter((item) =>
+		item?.type === "equipment" &&
+		Boolean(item.system?.isWealth) === wealth,
+	);
 }
 
-async function deleteItem(item) {
-	const confirmed = await DialogV2.confirm({
-		window: { title: localize("Delete Item", "Usuń przedmiot") },
-		content: localize(
-			`Delete '${item.name}' from this character?`,
-			`Usunąć „${item.name}” z tej postaci?`,
-		),
-		rejectClose: false,
-		modal: true,
-	});
-
-	if (!confirmed) return;
-
-	const actor = item.actor ?? item.parent;
-	if (actor?.documentName !== "Actor") {
-		throw new Error("Inventory Item is not owned by an Actor.");
-	}
-
-	await actor.deleteEmbeddedDocuments("Item", [item.id]);
-}
-
-function stopRowActionPropagation(element) {
-	for (const eventName of ["pointerdown", "dblclick"]) {
-		element.addEventListener(eventName, (event) => event.stopPropagation());
-	}
+function normalizeSection(value) {
+	return String(value ?? "").trim().toLowerCase() === INVENTORY_SECTION.WEALTH
+		? INVENTORY_SECTION.WEALTH
+		: INVENTORY_SECTION.EQUIPMENT;
 }
 
 function textCell(value) {
 	const span = document.createElement("span");
 	span.textContent = String(value ?? "");
 	return span;
-}
-
-function nonNegativeInteger(value) {
-	const number = Number(value);
-	return Number.isFinite(number) ? Math.max(0, Math.trunc(number)) : 0;
 }
 
 function nonNegativeNumber(value) {
