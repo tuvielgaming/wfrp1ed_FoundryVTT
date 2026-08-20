@@ -1,8 +1,8 @@
 import { LootPileService } from "../loot/LootPileService.mjs";
 
 const HELP_TEXT = Object.freeze({
-	en: "Quantity: left/right click changes by 1; Shift/Ctrl/Cmd changes by 10; double-click to type. Double-click LOC to enter a location or choose a container. Drag ordinary Equipment onto a container to store it there. Drag physical Items onto empty chat to create a Loot Pile, or onto an existing Loot card to add them to that pile. Use the arrow to expand containers. Hover a row to reveal Delete. Scroll the list when it is full.",
-	pl: "Ilość: lewy/prawy klik zmienia o 1; Shift/Ctrl/Cmd zmienia o 10; dwuklik pozwala wpisać wartość. Dwuklik LOK pozwala wpisać lokalizację lub wybrać pojemnik. Przeciągnij zwykły Ekwipunek na pojemnik, aby go w nim umieścić. Przeciągnij fizyczny przedmiot na pusty obszar czatu, aby utworzyć stos łupu, albo na istniejącą kartę łupu, aby dodać go do tego stosu. Strzałka rozwija pojemniki. Usuń pojawia się po najechaniu na wiersz. Po zapełnieniu listę można przewijać.",
+	en: "Quantity: left/right click changes by 1; Shift/Ctrl/Cmd changes by 10; double-click to type. Double-click LOC to type a location or choose a container. Drag Equipment owned by this character, or Equipment from Loot, directly onto a container to store it there. Drag physical Items onto empty chat to create a Loot Pile, or onto an existing Loot card to add them to that pile. Items taken from Loot return to the top level unless they are dropped directly onto a container. Use the arrow to expand containers. Hover a row to reveal Delete. Scroll the list when it is full.",
+	pl: "Ilość: lewy/prawy klik zmienia o 1; Shift/Ctrl/Cmd zmienia o 10; dwuklik pozwala wpisać wartość. Dwuklik LOK pozwala wpisać lokalizację lub wybrać pojemnik. Przeciągnij Ekwipunek należący do tej postaci albo Ekwipunek z Łupu bezpośrednio na pojemnik, aby go w nim umieścić. Przeciągnij fizyczny przedmiot na pusty obszar czatu, aby utworzyć stos łupu, albo na istniejącą kartę łupu, aby dodać go do tego stosu. Przedmioty podniesione z Łupu wracają na poziom główny, chyba że zostaną upuszczone bezpośrednio na pojemnik. Strzałka rozwija pojemniki. Usuń pojawia się po najechaniu na wiersz. Po zapełnieniu listę można przewijać.",
 });
 
 Hooks.on("renderApplicationV2", (application, element) => {
@@ -20,7 +20,6 @@ Hooks.on("renderApplicationV2", (application, element) => {
 	) return;
 
 	installInventoryHelp(root);
-	installLocationMenuRelabel(root);
 
 	if (application.isEditable !== true) return;
 	installItemDragSources(root, actor);
@@ -79,9 +78,9 @@ function installItemDragSources(root, actor) {
 }
 
 /**
- * Ordinary Equipment containers are direct drop targets. The payload remains
- * standard Foundry Item drag data so the very same drag gesture also works with
- * Loot Piles and other normal Foundry Item drop consumers.
+ * Equipment containers are direct drop targets. The payload remains standard
+ * Foundry Item drag data so the same drag gesture also works with Loot Piles
+ * and other normal Foundry Item drop consumers.
  */
 function installContainerDropTargets(root, actor, application) {
 	for (const row of root.querySelectorAll(".classic-inventory__row[data-item-id]")) {
@@ -138,27 +137,33 @@ async function placeDroppedEquipmentInContainer(event, actor, container, applica
 			"Obecnie w pojemnikach można umieszczać tylko zwykły Ekwipunek. Obsługa Broni i Pancerza w pojemnikach zostanie sprawdzona podczas audytu tych typów przedmiotów.",
 		));
 	}
-	if (item.parent !== actor) {
+
+	if (item.parent === actor) {
+		if (!canPlaceInContainer(item, container, actor)) {
+			throw new Error(localize(
+				"That drop would create an invalid or circular container relationship.",
+				"To przeniesienie utworzyłoby nieprawidłową lub zapętloną relację pojemników.",
+			));
+		}
+
+		if (String(item.system?.containerId ?? "") === String(container.id ?? "")) {
+			return;
+		}
+
+		await item.update({
+			"system.containerId": String(container.id ?? ""),
+			"system.storageLocation": String(container.name ?? ""),
+		});
+	} else if (LootPileService.isLootPile(item.parent)) {
+		await LootPileService.takeItem(item.parent, item, actor, {
+			containerId: String(container.id ?? ""),
+		});
+	} else {
 		throw new Error(localize(
-			"Drag an Equipment Item owned by this character onto the container.",
-			"Na pojemnik przeciągnij Ekwipunek należący do tej postaci.",
+			"Drag Equipment owned by this character or Equipment from a Loot Pile onto the container.",
+			"Na pojemnik przeciągnij Ekwipunek należący do tej postaci albo Ekwipunek ze stosu łupu.",
 		));
 	}
-	if (!canPlaceInContainer(item, container, actor)) {
-		throw new Error(localize(
-			"That drop would create an invalid or circular container relationship.",
-			"To przeniesienie utworzyłoby nieprawidłową lub zapętloną relację pojemników.",
-		));
-	}
-
-	if (String(item.system?.containerId ?? "") === String(container.id ?? "")) {
-		return;
-	}
-
-	await item.update({
-		"system.containerId": String(container.id ?? ""),
-		"system.storageLocation": String(container.name ?? ""),
-	});
 
 	await rerenderActorSheet(application);
 	autoExpandContainer(application, container.id);
@@ -268,28 +273,6 @@ function installInventoryHelp(root) {
 	}
 }
 
-/** ClassicInventoryIntegration owns the location menu itself. Relabel only the
- * free-text action after that menu is synchronously created by a LOC dblclick. */
-function installLocationMenuRelabel(root) {
-	const sheet = classicSheetRoot(root);
-	if (!sheet || sheet.dataset.wfrpLocationMenuRelabel === "true") return;
-	sheet.dataset.wfrpLocationMenuRelabel = "true";
-
-	sheet.addEventListener("dblclick", (event) => {
-		const input = event.target?.closest?.(".classic-inventory__location");
-		if (!input || !sheet.contains(input)) return;
-
-		queueMicrotask(() => {
-			for (const hostDocument of hostDocumentsFor(input)) {
-				const label = hostDocument.querySelector(
-					".classic-inventory-location-menu__free span",
-				);
-				if (label) label.textContent = localize("Enter location", "Wpisz lokalizację");
-			}
-		});
-	});
-}
-
 /** Empty chat is the creation drop target. Existing Loot cards already own
  * their own drop handlers and stop propagation, so they continue to add Items
  * to the selected existing pile instead of creating another one. */
@@ -394,13 +377,6 @@ function isInteractiveElement(element) {
 function classicSheetRoot(root) {
 	if (root?.matches?.(".wfrp1ed-classic-sheet")) return root;
 	return root?.querySelector?.(".wfrp1ed-classic-sheet") ?? null;
-}
-
-function hostDocumentsFor(element) {
-	const documents = new Set();
-	if (element?.ownerDocument) documents.add(element.ownerDocument);
-	if (typeof document !== "undefined") documents.add(document);
-	return documents;
 }
 
 function asElement(value) {
