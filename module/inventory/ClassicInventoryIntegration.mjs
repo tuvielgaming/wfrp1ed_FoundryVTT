@@ -1,5 +1,7 @@
 import { InventoryManagerWindow } from "./InventoryManagerWindow.mjs";
 
+const { DialogV2 } = foundry.applications.api;
+
 const INVENTORY_SECTION = Object.freeze({
 	EQUIPMENT: "equipment",
 	WEALTH: "wealth",
@@ -45,11 +47,29 @@ function renderInventory(host, actor, editable, section) {
 	toolbar.append(createManagerButton(actor));
 
 	/*
-	 * The original printed sheet already supplies the Ekwipunek/Majątek title
-	 * and its Miejsce/Obciążenie column headings. Preserve the vertical space
-	 * formerly occupied by our generated header so the first digital row stays
-	 * aligned with the ruled paper area without drawing duplicate labels.
+	 * The scan supplies the three black header cells, but the right two labels
+	 * are not readable in the localized artwork. Overlay only those labels and
+	 * keep the same grid as the item rows so the text remains aligned with the
+	 * printed vertical rules.
 	 */
+	const paperHeader = document.createElement("div");
+	paperHeader.className = "classic-inventory__paper-header";
+	paperHeader.setAttribute("aria-hidden", "true");
+
+	const nameHeader = document.createElement("span");
+	nameHeader.className = "classic-inventory__paper-header-name";
+
+	const locationHeader = document.createElement("span");
+	locationHeader.className = "classic-inventory__paper-header-label";
+	locationHeader.textContent = localize("LOC", "MIEJ.");
+
+	const encumbranceHeader = document.createElement("span");
+	encumbranceHeader.className = "classic-inventory__paper-header-label";
+	encumbranceHeader.textContent = localize("ENC", "OBC.");
+
+	paperHeader.append(nameHeader, locationHeader, encumbranceHeader);
+
+	/* Preserve the ruled-paper row start used by the original overlay. */
 	const paperHeaderSpacer = document.createElement("div");
 	paperHeaderSpacer.className = "classic-inventory__paper-header-spacer";
 	paperHeaderSpacer.setAttribute("aria-hidden", "true");
@@ -58,10 +78,10 @@ function renderInventory(host, actor, editable, section) {
 	list.className = "classic-inventory__list";
 
 	for (const item of sectionItems(actor, section)) {
-		list.append(inventoryRow(item));
+		list.append(inventoryRow(item, editable));
 	}
 
-	host.append(toolbar, paperHeaderSpacer, list);
+	host.append(toolbar, paperHeader, paperHeaderSpacer, list);
 }
 
 function createEquipmentButton(actor, section) {
@@ -112,7 +132,7 @@ function createManagerButton(actor) {
 	return button;
 }
 
-function inventoryRow(item) {
+function inventoryRow(item, editable) {
 	const row = document.createElement("div");
 	row.className = "classic-inventory__row";
 	row.dataset.itemId = String(item.id ?? "");
@@ -141,6 +161,37 @@ function inventoryRow(item) {
 	encumbrance.classList.add("classic-inventory__number");
 
 	row.append(name, location, encumbrance);
+
+	if (editable) {
+		const deleteButton = document.createElement("button");
+		deleteButton.type = "button";
+		deleteButton.className = "classic-inventory__delete";
+		deleteButton.title = localize(
+			"Delete this Item from the character.",
+			"Usuń ten przedmiot z postaci.",
+		);
+		deleteButton.setAttribute("aria-label", deleteButton.title);
+
+		const icon = document.createElement("i");
+		icon.className = "fas fa-trash";
+		icon.setAttribute("aria-hidden", "true");
+		deleteButton.append(icon);
+
+		for (const eventName of ["pointerdown", "dblclick"]) {
+			deleteButton.addEventListener(eventName, (event) => {
+				event.stopPropagation();
+			});
+		}
+
+		deleteButton.addEventListener("click", (event) => {
+			event.preventDefault();
+			event.stopPropagation();
+			void deleteItem(item);
+		});
+
+		row.append(deleteButton);
+	}
+
 	return row;
 }
 
@@ -163,6 +214,27 @@ async function createEquipment(actor, section) {
 		console.error("WFRP1ED | Unable to create inventory Item.", error);
 		ui.notifications.error(error.message);
 	}
+}
+
+async function deleteItem(item) {
+	const confirmed = await DialogV2.confirm({
+		window: { title: localize("Delete Item", "Usuń przedmiot") },
+		content: localize(
+			`Delete '${item.name}' from this character?`,
+			`Usunąć „${item.name}” z tej postaci?`,
+		),
+		rejectClose: false,
+		modal: true,
+	});
+
+	if (!confirmed) return;
+
+	const actor = item.actor ?? item.parent;
+	if (actor?.documentName !== "Actor") {
+		throw new Error("Inventory Item is not owned by an Actor.");
+	}
+
+	await actor.deleteEmbeddedDocuments("Item", [item.id]);
 }
 
 function sectionItems(actor, section) {
