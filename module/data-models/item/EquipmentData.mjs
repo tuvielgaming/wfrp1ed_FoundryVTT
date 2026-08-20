@@ -4,17 +4,8 @@ import {
 	migrateInventoryData,
 } from "./InventoryItemFields.mjs";
 
-const { StringField } = foundry.data.fields;
+const { BooleanField } = foundry.data.fields;
 const { TypeDataModel } = foundry.abstract;
-
-export const EQUIPMENT_SECTION = Object.freeze({
-	EQUIPMENT: "equipment",
-	WEALTH: "wealth",
-});
-
-const EQUIPMENT_SECTIONS = Object.freeze(
-	Object.values(EQUIPMENT_SECTION),
-);
 
 /**
  * Native Foundry v14 data model for ordinary physical equipment.
@@ -23,11 +14,10 @@ const EQUIPMENT_SECTIONS = Object.freeze(
  * rules which care about carried/held objects do not need to special-case
  * legacy template.json fields or localized Item names.
  *
- * `inventorySection` mirrors the two physical lists on the original WFRP 1e
- * character sheet: Equipment/Trappings and Wealth. It is deliberately owned by
- * ordinary Equipment rather than Actor money fields so coins, jewellery and
- * other valuables remain transferable physical Items with location and
- * encumbrance.
+ * `isWealth` mirrors the two physical lists on the original WFRP 1e character
+ * sheet. `false` means Equipment/Trappings; `true` means Wealth. A Boolean is
+ * deliberately used because the printed sheet defines exactly those two
+ * destinations and ordinary Equipment is the natural default.
  */
 export class EquipmentData extends TypeDataModel {
 	static defineSchema() {
@@ -39,12 +29,10 @@ export class EquipmentData extends TypeDataModel {
 				],
 				defaultMode: INVENTORY_MODE.CARRIED,
 			}),
-			inventorySection: new StringField({
+			isWealth: new BooleanField({
 				required: true,
 				nullable: false,
-				blank: false,
-				initial: EQUIPMENT_SECTION.EQUIPMENT,
-				choices: EQUIPMENT_SECTIONS,
+				initial: false,
 			}),
 		};
 	}
@@ -59,17 +47,13 @@ export class EquipmentData extends TypeDataModel {
 			legacyEquippedMode: INVENTORY_MODE.HELD,
 		});
 
-		migrated.inventorySection = normalizeEquipmentSection(
-			migrated.inventorySection,
-		);
+		/* Transitional migration from the short-lived inventorySection field.
+		 * Existing Wealth Items remain Wealth; all other ordinary Equipment keeps
+		 * the printed-sheet default of Equipment/Trappings. */
+		migrated.isWealth = migrated.isWealth === true ||
+			String(migrated.inventorySection ?? "").trim().toLowerCase() === "wealth";
+		delete migrated.inventorySection;
 
 		return super.migrateData(migrated, options);
 	}
-}
-
-export function normalizeEquipmentSection(value) {
-	const normalized = String(value ?? "").trim().toLowerCase();
-	return EQUIPMENT_SECTIONS.includes(normalized)
-		? normalized
-		: EQUIPMENT_SECTION.EQUIPMENT;
 }
