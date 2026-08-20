@@ -182,6 +182,58 @@
 	opacity: 0.75;
 }
 
+/******************************************************************/
+/* Ordinary Equipment sheet polish                               */
+/******************************************************************/
+
+.equipment-item-sheet .equipment-item-sheet__section-title {
+	padding: 0 0 5px;
+	border-bottom: 1px solid rgb(70 51 30 / 34%);
+	color: #24190e;
+	font-size: 18px;
+	font-weight: 700;
+	line-height: 1.1;
+	text-shadow: 0 1px 0 rgb(255 250 231 / 65%);
+}
+
+.equipment-item-sheet .equipment-item-sheet__currency-field {
+	align-content: start;
+}
+
+.equipment-item-sheet .equipment-item-sheet__currency-label {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	justify-self: start;
+	box-sizing: border-box;
+	width: 36px;
+	height: 22px;
+	padding: 1px 5px;
+	border: 1px solid rgb(58 43 27 / 48%);
+	border-radius: 4px;
+	font-family: Arial, Helvetica, sans-serif;
+	font-size: 11px;
+	font-weight: 800;
+	line-height: 1;
+	letter-spacing: 0.02em;
+	color: #1b160f;
+	box-shadow:
+		inset 0 1px 0 rgb(255 255 255 / 38%),
+		0 1px 1px rgb(55 39 22 / 12%);
+}
+
+.equipment-item-sheet .equipment-item-sheet__currency-label--gold {
+	background: #d9ba63;
+}
+
+.equipment-item-sheet .equipment-item-sheet__currency-label--silver {
+	background: #c9c6bd;
+}
+
+.equipment-item-sheet .equipment-item-sheet__currency-label--copper {
+	background: #bf8055;
+}
+
 @media (max-width: 620px) {
 	.combat-item-sheet .combat-item-sheet__grid--3,
 	.combat-item-sheet .combat-item-sheet__grid--4,
