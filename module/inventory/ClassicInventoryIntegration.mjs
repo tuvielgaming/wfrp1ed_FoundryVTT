@@ -153,14 +153,12 @@ function inventoryRow(item, editable) {
 	name.textContent = String(item.name ?? "");
 	name.title = String(item.name ?? "");
 	nameCell.append(name);
-
-	if (editable) {
-		nameCell.append(createDeleteButton(item));
-	}
-
 	nameCell.append(createQuantityControl(item, editable));
 
 	const location = createLocationControl(item, editable);
+
+	const encumbranceCell = document.createElement("span");
+	encumbranceCell.className = "classic-inventory__encumbrance-cell";
 
 	const encumbrance = textCell(
 		formatNumber(
@@ -174,8 +172,13 @@ function inventoryRow(item, editable) {
 		"Current stack Encumbrance.",
 		"Aktualne Obciążenie całej ilości.",
 	);
+	encumbranceCell.append(encumbrance);
 
-	row.append(nameCell, location, encumbrance);
+	if (editable) {
+		encumbranceCell.append(createDeleteButton(item));
+	}
+
+	row.append(nameCell, location, encumbranceCell);
 	return row;
 }
 
