@@ -196,6 +196,17 @@
 	text-shadow: 0 1px 0 rgb(255 250 231 / 65%);
 }
 
+.equipment-item-sheet .equipment-item-sheet__flags {
+	display: grid;
+	align-content: start;
+	gap: 1px;
+	min-width: 0;
+}
+
+.equipment-item-sheet .equipment-item-sheet__flags .combat-item-sheet__check {
+	min-height: 24px;
+}
+
 .equipment-item-sheet .equipment-item-sheet__currency-field {
 	align-content: start;
 }
