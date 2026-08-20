@@ -1,4 +1,7 @@
 import {
+	EQUIPMENT_SECTION,
+} from "../data-models/item/EquipmentData.mjs";
+import {
 	INVENTORY_HAND,
 	INVENTORY_MODE,
 } from "../data-models/item/InventoryItemFields.mjs";
@@ -45,6 +48,19 @@ export class EquipmentItemSheet extends HandlebarsApplicationMixin(
 		context.system = system;
 		context.editable = this.isEditable;
 		context.ui = equipmentUi();
+		context.sectionOptions = selectOptions(
+			[
+				[
+					EQUIPMENT_SECTION.EQUIPMENT,
+					localize("Equipment / Trappings", "Ekwipunek"),
+				],
+				[
+					EQUIPMENT_SECTION.WEALTH,
+					localize("Wealth", "Majątek"),
+				],
+			],
+			system?.inventorySection,
+		);
 		context.modeOptions = selectOptions(
 			[
 				[INVENTORY_MODE.CARRIED, localize("Carried", "Przenoszony")],
@@ -70,6 +86,7 @@ function equipmentUi() {
 	return Object.freeze({
 		name: localize("Name", "Nazwa"),
 		inventory: localize("Inventory", "Ekwipunek"),
+		section: localize("Character sheet section", "Sekcja karty postaci"),
 		mode: localize("Current state", "Aktualny stan"),
 		hand: localize("Preferred hand", "Preferowana dłoń"),
 		quantity: localize("Quantity", "Ilość"),
