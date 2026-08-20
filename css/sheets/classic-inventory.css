@@ -17,13 +17,13 @@
  * verified Ekwipunek alignment.
  */
 .wfrp1ed-classic-sheet .classic-inventory--equipment {
-	--classic-inventory-header-top: 28px;
+	--classic-inventory-header-top: 27px;
 	--classic-inventory-header-height: 26px;
 	--classic-inventory-header-font-size: 22px;
 }
 
 .wfrp1ed-classic-sheet .classic-inventory--wealth {
-	--classic-inventory-header-top: 49px;
+	--classic-inventory-header-top: 40px;
 	--classic-inventory-header-height: 26px;
 	--classic-inventory-header-font-size: 22px;
 }
