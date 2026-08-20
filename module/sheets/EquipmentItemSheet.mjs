@@ -1,6 +1,43 @@
 const { ItemSheetV2 } = foundry.applications.sheets;
 const { HandlebarsApplicationMixin } = foundry.applications.api;
 
+/*
+ * World/Compendium Equipment acts as an authored definition. Its visible
+ * `Ilość` field is the reference package quantity from the Core tables, so keep
+ * the hidden default current quantity synchronized with it. Once an Item is
+ * embedded in an Actor, current quantity belongs to that character and must no
+ * longer follow reference-quantity edits.
+ */
+Hooks.on("preUpdateItem", (item, changes) => {
+	if (item?.type !== "equipment") return;
+	if (item?.parent?.documentName === "Actor") return;
+
+	const directKey = "system.referenceQuantity";
+	const rawReference = Object.hasOwn(changes ?? {}, directKey)
+		? changes[directKey]
+		: foundry.utils.getProperty(changes, directKey);
+	if (rawReference === undefined) return;
+
+	const referenceQuantity = positiveInteger(rawReference, 1);
+
+	if (Object.hasOwn(changes, directKey)) {
+		changes[directKey] = referenceQuantity;
+		changes["system.quantity"] = referenceQuantity;
+		return;
+	}
+
+	foundry.utils.setProperty(
+		changes,
+		"system.referenceQuantity",
+		referenceQuantity,
+	);
+	foundry.utils.setProperty(
+		changes,
+		"system.quantity",
+		referenceQuantity,
+	);
+});
+
 /** Native Foundry v14 authoring sheet for ordinary WFRP 1e Equipment Items. */
 export class EquipmentItemSheet extends HandlebarsApplicationMixin(
 	ItemSheetV2,
@@ -52,7 +89,6 @@ function equipmentUi() {
 		wealth: localize("Wealth", "Majątek"),
 		quantity: localize("Quantity", "Ilość"),
 		encumbrance: localize("Encumbrance", "Obciążenie"),
-		storageLocation: localize("Location", "Miejsce"),
 		availability: localize("Availability", "Dostępność"),
 		price: localize("Price", "Cena"),
 		gc: localize("GC", "ZK"),
@@ -60,6 +96,12 @@ function equipmentUi() {
 		bp: "BP",
 		description: localize("Description", "Opis"),
 	});
+}
+
+function positiveInteger(value, fallback = 1) {
+	const number = Number(value);
+	if (!Number.isFinite(number)) return Math.max(1, Math.trunc(fallback));
+	return Math.max(1, Math.trunc(number));
 }
 
 function localize(english, polish) {
