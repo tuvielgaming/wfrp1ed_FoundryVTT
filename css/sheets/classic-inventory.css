@@ -26,7 +26,7 @@
 }
 
 .wfrp1ed-classic-sheet .classic-inventory--wealth {
-	--classic-inventory-header-top: 40px;
+	--classic-inventory-header-top: 30px;
 	--classic-inventory-header-height: 26px;
 	--classic-inventory-header-font-size: 22px;
 }
@@ -162,7 +162,7 @@
 
 .wfrp1ed-classic-sheet .classic-inventory__row {
 	display: grid;
-	grid-template-columns: minmax(0, 1fr) 74px 58px;
+	grid-template-columns: minmax(0, 1fr) 67px 54px;
 	align-items: center;
 	column-gap: 3px;
 	min-width: 0;
