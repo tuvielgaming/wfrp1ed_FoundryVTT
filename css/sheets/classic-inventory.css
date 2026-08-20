@@ -73,7 +73,8 @@
 }
 
 .wfrp1ed-classic-sheet .classic-inventory__create:focus-visible,
-.wfrp1ed-classic-sheet .classic-inventory__delete:focus-visible {
+.wfrp1ed-classic-sheet .classic-inventory__delete:focus-visible,
+.wfrp1ed-classic-sheet .classic-inventory__container-toggle:focus-visible {
 	outline: 1px solid var(--focus-color);
 	outline-offset: 1px;
 }
@@ -175,12 +176,46 @@
 	font-size: 11px;
 }
 
+.wfrp1ed-classic-sheet .classic-inventory__row--nested {
+	background: rgb(105 79 47 / 3%);
+}
+
 .wfrp1ed-classic-sheet .classic-inventory__name-cell {
 	position: relative;
 	display: flex;
 	align-items: center;
+	box-sizing: border-box;
 	min-width: 0;
 	height: 100%;
+	padding-left: calc(var(--classic-inventory-depth, 0) * 11px);
+}
+
+.wfrp1ed-classic-sheet .classic-inventory__container-toggle {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: 0 0 14px;
+	width: 14px;
+	height: 19px;
+	margin: 0 2px 0 0;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	box-shadow: none;
+	color: #3d3022;
+	font-size: 10px;
+	line-height: 1;
+	cursor: pointer;
+}
+
+.wfrp1ed-classic-sheet .classic-inventory__container-toggle:disabled {
+	opacity: 0.38;
+	cursor: default;
+}
+
+.wfrp1ed-classic-sheet .classic-inventory__container-toggle:not(:disabled):hover {
+	color: #17120d;
+	font-size: 12px;
 }
 
 .wfrp1ed-classic-sheet .classic-inventory__name {
@@ -238,8 +273,9 @@
 
 /*
  * Location belongs to the owned Item instance. It is displayed as ordinary
- * paper text and becomes an input only on double-click; no extra authoring
- * field is needed on the world Equipment definition sheet.
+ * paper text and becomes an input only on double-click. When a real container
+ * is selected, the displayed location is derived from that container's name;
+ * arbitrary free text remains supported as a non-mechanical fallback.
  */
 .wfrp1ed-classic-sheet .classic-inventory__location {
 	box-sizing: border-box;
@@ -313,4 +349,65 @@
 
 .wfrp1ed-classic-sheet .classic-inventory__delete:hover {
 	opacity: 1;
+}
+
+/******************************************************************/
+/* Inline LOK/LOC container chooser                               */
+/******************************************************************/
+
+.classic-inventory-location-menu {
+	position: fixed;
+	display: grid;
+	gap: 2px;
+	box-sizing: border-box;
+	max-height: 220px;
+	padding: 5px;
+	overflow-y: auto;
+	border: 1px solid rgb(59 43 27 / 58%);
+	border-radius: 4px;
+	background: #f3ead4;
+	box-shadow: 0 4px 12px rgb(22 16 10 / 32%);
+	z-index: 100000;
+	font-family:
+		"Book Antiqua",
+		"Times New Roman",
+		serif;
+}
+
+.classic-inventory-location-menu__option {
+	display: grid;
+	grid-template-columns: 18px minmax(0, 1fr);
+	align-items: center;
+	gap: 6px;
+	width: 100%;
+	min-height: 27px;
+	margin: 0;
+	padding: 3px 7px;
+	border: 1px solid transparent;
+	border-radius: 3px;
+	background: transparent;
+	box-shadow: none;
+	color: #1c1812;
+	font: inherit;
+	font-size: 12px;
+	text-align: left;
+	cursor: pointer;
+}
+
+.classic-inventory-location-menu__option span {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.classic-inventory-location-menu__option:hover,
+.classic-inventory-location-menu__option.is-selected {
+	border-color: rgb(70 51 30 / 28%);
+	background: rgb(184 158 112 / 22%);
+}
+
+.classic-inventory-location-menu__free {
+	margin-bottom: 3px;
+	border-bottom-color: rgb(70 51 30 / 24%);
 }
