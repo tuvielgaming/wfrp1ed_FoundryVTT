@@ -21,23 +21,15 @@
 	<section class="combat-item-sheet__panel">
 		<h3>{{ui.inventory}}</h3>
 
-		<div class="combat-item-sheet__grid combat-item-sheet__grid--4">
-			<label class="combat-item-sheet__field">
-				<span>{{ui.mode}}</span>
-				<select name="system.state.mode" {{#unless editable}}disabled{{/unless}}>
-					{{#each modeOptions as |option|}}
-						<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>
-					{{/each}}
-				</select>
-			</label>
-
-			<label class="combat-item-sheet__field">
-				<span>{{ui.hand}}</span>
-				<select name="system.state.hand" {{#unless editable}}disabled{{/unless}}>
-					{{#each handOptions as |option|}}
-						<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>
-					{{/each}}
-				</select>
+		<div class="combat-item-sheet__grid combat-item-sheet__grid--3">
+			<label class="combat-item-sheet__check">
+				<input
+					type="checkbox"
+					name="system.isWealth"
+					{{checked system.isWealth}}
+					{{#unless editable}}disabled{{/unless}}
+				>
+				<span>{{ui.wealth}}</span>
 			</label>
 
 			<label class="combat-item-sheet__field">
@@ -51,16 +43,7 @@
 			</label>
 		</div>
 
-		<div class="combat-item-sheet__grid combat-item-sheet__grid--3">
-			<label class="combat-item-sheet__field">
-				<span>{{ui.section}}</span>
-				<select name="system.inventorySection" {{#unless editable}}disabled{{/unless}}>
-					{{#each sectionOptions as |option|}}
-						<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>
-					{{/each}}
-				</select>
-			</label>
-
+		<div class="combat-item-sheet__grid combat-item-sheet__grid--2">
 			<label class="combat-item-sheet__field">
 				<span>{{ui.storageLocation}}</span>
 				<input type="text" name="system.storageLocation" value="{{system.storageLocation}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}>
