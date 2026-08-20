@@ -9,6 +9,7 @@ const INVENTORY_SECTION = Object.freeze({
 
 const QUANTITY_CLICK_DELAY_MS = 220;
 const EXPANDED_CONTAINERS = new Set();
+const CASCADE_DELETE_IDS = new Set();
 let closeActiveLocationMenu = null;
 
 Hooks.on("renderApplicationV2", (application, element) => {
@@ -39,14 +40,19 @@ Hooks.on("updateItem", (item, changes) => {
 		changedPath(changes, "system.isContainer") &&
 		item.system?.isContainer !== true
 	) {
-		void releaseContainerChildren(itemActor(item), item.id, item.name);
+		void releaseContainerChildren(itemActor(item), item.id);
 	}
 });
 Hooks.on("deleteItem", (item) => {
 	const actor = itemActor(item);
 	if (actor?.documentName !== "Actor") return;
-	if (item?.type === "equipment") {
-		void releaseContainerChildren(actor, item.id, item.name);
+
+	const id = String(item?.id ?? "");
+	if (
+		item?.type === "equipment" &&
+		!CASCADE_DELETE_IDS.has(id)
+	) {
+		void releaseContainerChildren(actor, id);
 	}
 	void InventoryManagerWindow.refresh(actor);
 });
@@ -106,6 +112,13 @@ function renderInventory(host, actor, editable, section) {
 	host.append(toolbar, paperHeader, list);
 }
 
+function rerenderInventory(host, actor, editable, section) {
+	const scrollTop = host.querySelector(".classic-inventory__list")?.scrollTop ?? 0;
+	renderInventory(host, actor, editable, section);
+	const nextList = host.querySelector(".classic-inventory__list");
+	if (nextList) nextList.scrollTop = scrollTop;
+}
+
 function appendInventoryNode(
 	list,
 	node,
@@ -117,16 +130,19 @@ function appendInventoryNode(
 ) {
 	const key = expansionKey(actor, node.item);
 	const expanded = EXPANDED_CONTAINERS.has(key);
+	const refreshView = () => rerenderInventory(
+		host,
+		actor,
+		editable,
+		section,
+	);
 	const toggle = () => {
-		const scrollTop = list.scrollTop;
 		if (EXPANDED_CONTAINERS.has(key)) {
 			EXPANDED_CONTAINERS.delete(key);
 		} else {
 			EXPANDED_CONTAINERS.add(key);
 		}
-		renderInventory(host, actor, editable, section);
-		const nextList = host.querySelector(".classic-inventory__list");
-		if (nextList) nextList.scrollTop = scrollTop;
+		refreshView();
 	};
 
 	list.append(inventoryRow(
@@ -137,6 +153,7 @@ function appendInventoryNode(
 		node.children.length,
 		expanded,
 		toggle,
+		refreshView,
 	));
 
 	if (!expanded) return;
@@ -209,6 +226,7 @@ function inventoryRow(
 	childCount,
 	expanded,
 	toggleContainer,
+	refreshView,
 ) {
 	const row = document.createElement("div");
 	row.className = "classic-inventory__row";
@@ -245,7 +263,12 @@ function inventoryRow(
 	nameCell.append(name);
 	nameCell.append(createQuantityControl(item, editable));
 
-	const location = createLocationControl(item, actor, editable);
+	const location = createLocationControl(
+		item,
+		actor,
+		editable,
+		refreshView,
+	);
 
 	const encumbranceCell = document.createElement("span");
 	encumbranceCell.className = "classic-inventory__encumbrance-cell";
@@ -430,7 +453,7 @@ function createQuantityControl(item, editable) {
 	return input;
 }
 
-function createLocationControl(item, actor, editable) {
+function createLocationControl(item, actor, editable, refreshView) {
 	const input = document.createElement("input");
 	input.type = "text";
 	input.className = "classic-inventory__location";
@@ -465,14 +488,14 @@ function createLocationControl(item, actor, editable) {
 				editing = false;
 				input.readOnly = true;
 				await assignContainer(item, container);
-				input.value = String(container.name ?? "");
-				input.blur();
+				EXPANDED_CONTAINERS.add(expansionKey(actor, container));
+				refreshView();
 			},
 			onFreeText: async () => {
 				editing = false;
 				input.readOnly = true;
 				await commitFreeLocation(item, input.value);
-				input.blur();
+				refreshView();
 			},
 		});
 	});
@@ -484,10 +507,11 @@ function createLocationControl(item, actor, editable) {
 		if (event.key === "Enter") {
 			event.preventDefault();
 			closeLocationMenu();
-			void commitLocationEdit(item, actor, input).then(() => {
+			void commitLocationEdit(item, actor, input).then((changed) => {
 				editing = false;
 				input.readOnly = true;
-				input.blur();
+				if (changed) refreshView();
+				else input.blur();
 			});
 			return;
 		}
@@ -507,7 +531,9 @@ function createLocationControl(item, actor, editable) {
 		closeLocationMenu();
 		editing = false;
 		input.readOnly = true;
-		void commitLocationEdit(item, actor, input);
+		void commitLocationEdit(item, actor, input).then((changed) => {
+			if (changed) refreshView();
+		});
 	});
 
 	return input;
@@ -647,8 +673,9 @@ async function commitLocationEdit(item, actor, input) {
 		"Double-click to edit location or choose a container.",
 		"Kliknij dwukrotnie, aby edytować miejsce lub wybrać pojemnik.",
 	);
-	if (next === current) return;
+	if (next === current) return false;
 	await commitFreeLocation(item, next);
+	return true;
 }
 
 async function commitFreeLocation(item, value) {
@@ -672,7 +699,7 @@ async function assignContainer(item, container) {
 	}
 
 	await item.update({
-		"system.containerId": container.id,
+		"system.containerId": String(container.id ?? ""),
 		"system.storageLocation": String(container.name ?? ""),
 	});
 }
@@ -728,7 +755,7 @@ function canUseContainer(item, candidate, byId) {
 function buildInventoryTree(actor) {
 	const byId = equipmentMap(actor);
 	const nodes = new Map(
-		[...byId.values()].map((item) => [item.id, {
+		[...byId.values()].map((item) => [String(item.id ?? ""), {
 			item,
 			children: [],
 		}]),
@@ -737,7 +764,7 @@ function buildInventoryTree(actor) {
 
 	for (const node of nodes.values()) {
 		const parentId = resolveParentId(node.item, byId);
-		const parentNode = parentId ? nodes.get(parentId) : null;
+		const parentNode = parentId ? nodes.get(String(parentId)) : null;
 		if (parentNode) {
 			parentNode.children.push(node);
 		} else {
@@ -764,21 +791,43 @@ function equipmentMap(actor) {
 	);
 }
 
-async function releaseContainerChildren(actor, containerId, fallbackName = "") {
-	if (actor?.documentName !== "Actor") return;
+function directContainerChildren(actor, containerId) {
 	const id = String(containerId ?? "");
-	if (!id) return;
+	if (!id) return [];
+	return [...(actor?.items ?? [])].filter((item) =>
+		item?.type === "equipment" &&
+		String(item.system?.containerId ?? "") === id,
+	);
+}
 
-	const updates = [...(actor.items ?? [])]
-		.filter((item) =>
-			item?.type === "equipment" &&
-			String(item.system?.containerId ?? "") === id,
-		)
-		.map((item) => ({
-			_id: item.id,
-			"system.containerId": "",
-			"system.storageLocation": String(fallbackName ?? ""),
-		}));
+function collectContainerSubtreeIds(actor, rootId) {
+	const root = String(rootId ?? "");
+	if (!root) return [];
+
+	const result = [];
+	const visited = new Set();
+	const queue = [root];
+
+	while (queue.length > 0) {
+		const id = queue.shift();
+		if (!id || visited.has(id)) continue;
+		visited.add(id);
+		result.push(id);
+		for (const child of directContainerChildren(actor, id)) {
+			queue.push(String(child.id ?? ""));
+		}
+	}
+
+	return result;
+}
+
+async function releaseContainerChildren(actor, containerId) {
+	if (actor?.documentName !== "Actor") return;
+	const updates = directContainerChildren(actor, containerId).map((item) => ({
+		_id: item.id,
+		"system.containerId": "",
+		"system.storageLocation": "",
+	}));
 
 	if (updates.length === 0) return;
 	await actor.updateEmbeddedDocuments("Item", updates);
@@ -810,27 +859,78 @@ async function createEquipment(actor, section) {
 }
 
 async function deleteItem(item) {
-	const confirmed = await DialogV2.confirm({
-		window: { title: localize("Delete Item", "Usuń przedmiot") },
-		content: localize(
-			`Delete '${item.name}' from this character?`,
-			`Usunąć „${item.name}” z tej postaci?`,
-		),
-		rejectClose: false,
-		modal: true,
-	});
-
-	if (!confirmed) return;
-
 	const actor = itemActor(item);
 	if (actor?.documentName !== "Actor") {
 		throw new Error("Inventory Item is not owned by an Actor.");
 	}
 
-	if (item.type === "equipment" && item.system?.isContainer === true) {
-		await releaseContainerChildren(actor, item.id, item.name);
+	const children = item.type === "equipment" && item.system?.isContainer === true
+		? directContainerChildren(actor, item.id)
+		: [];
+
+	if (children.length === 0) {
+		const confirmed = await DialogV2.confirm({
+			window: { title: localize("Delete Item", "Usuń przedmiot") },
+			content: localize(
+				`Delete '${item.name}' from this character?`,
+				`Usunąć „${item.name}” z tej postaci?`,
+			),
+			rejectClose: false,
+			modal: true,
+		});
+		if (!confirmed) return;
+		await actor.deleteEmbeddedDocuments("Item", [item.id]);
+		return;
 	}
-	await actor.deleteEmbeddedDocuments("Item", [item.id]);
+
+	const subtreeIds = collectContainerSubtreeIds(actor, item.id);
+	const descendantCount = Math.max(0, subtreeIds.length - 1);
+	const choice = await DialogV2.wait({
+		window: {
+			title: localize("Delete Container", "Usuń pojemnik"),
+		},
+		content: localize(
+			`'${item.name}' contains ${descendantCount} item(s). Delete only the container and return its contents to the top level, or delete the container together with all nested contents?`,
+			`„${item.name}” zawiera ${descendantCount} przedmiot(ów). Usunąć tylko pojemnik i przenieść jego zawartość na poziom główny, czy usunąć pojemnik razem z całą zagnieżdżoną zawartością?`,
+		),
+		buttons: [
+			{
+				action: "container-only",
+				icon: "fas fa-box-open",
+				label: localize("Delete container only", "Usuń tylko pojemnik"),
+				default: true,
+			},
+			{
+				action: "with-contents",
+				icon: "fas fa-trash",
+				label: localize("Delete with contents", "Usuń z zawartością"),
+			},
+			{
+				action: "cancel",
+				icon: "fas fa-xmark",
+				label: localize("Cancel", "Anuluj"),
+			},
+		],
+		rejectClose: false,
+		modal: true,
+	});
+
+	if (!choice || choice === "cancel") return;
+
+	if (choice === "container-only") {
+		await releaseContainerChildren(actor, item.id);
+		await actor.deleteEmbeddedDocuments("Item", [item.id]);
+		return;
+	}
+
+	if (choice === "with-contents") {
+		for (const id of subtreeIds) CASCADE_DELETE_IDS.add(String(id));
+		try {
+			await actor.deleteEmbeddedDocuments("Item", subtreeIds);
+		} finally {
+			for (const id of subtreeIds) CASCADE_DELETE_IDS.delete(String(id));
+		}
+	}
 }
 
 function expansionKey(actor, item) {
