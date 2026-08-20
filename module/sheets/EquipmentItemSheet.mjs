@@ -56,8 +56,8 @@ function equipmentUi() {
 		availability: localize("Availability", "Dostępność"),
 		price: localize("Price", "Cena"),
 		gc: localize("GC", "ZK"),
-		ss: localize("s", "s"),
-		bp: localize("d", "p"),
+		ss: "SS",
+		bp: "BP",
 		description: localize("Description", "Opis"),
 	});
 }
