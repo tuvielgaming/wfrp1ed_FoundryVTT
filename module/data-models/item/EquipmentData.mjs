@@ -13,6 +13,7 @@ import {
 const {
 	BooleanField,
 	NumberField,
+	StringField,
 } = foundry.data.fields;
 const { TypeDataModel } = foundry.abstract;
 
@@ -39,6 +40,13 @@ const EQUIPMENT_MODES = Object.freeze([
  *   Encumbrance apply (for example 5 arrows or 10 firearm balls).
  * - `quantity` is the current amount represented by this owned Item.
  *
+ * Containers use two separate facts:
+ *
+ * - `isContainer` says an Equipment definition can contain other Equipment.
+ * - `containerId` is an owned-instance relationship to another Equipment Item
+ *   embedded in the same Actor. World/Compendium definitions normally keep it
+ *   blank. UI/services must validate the referenced parent and prevent cycles.
+ *
  * The Core tables can therefore remain unchanged while an owned stack changes
  * during play. `totalEncumbrance` is derived and is never persisted.
  */
@@ -50,11 +58,9 @@ export class EquipmentData extends TypeDataModel {
 				defaultMode: INVENTORY_MODE.CARRIED,
 			}),
 			referenceQuantity: positiveIntegerField(1),
-			isWealth: new BooleanField({
-				required: true,
-				nullable: false,
-				initial: false,
-			}),
+			isWealth: booleanField(false),
+			isContainer: booleanField(false),
+			containerId: textField(),
 		};
 	}
 
@@ -99,6 +105,13 @@ export class EquipmentData extends TypeDataModel {
 					.toLowerCase() === "wealth";
 		}
 		delete migrated.inventorySection;
+
+		if (Object.hasOwn(sourceObject, "isContainer")) {
+			migrated.isContainer = toBoolean(sourceObject.isContainer);
+		}
+		if (Object.hasOwn(sourceObject, "containerId")) {
+			migrated.containerId = unwrapText(sourceObject.containerId);
+		}
 
 		return super.migrateData(migrated, options);
 	}
@@ -249,7 +262,26 @@ function shouldSeedLegacyReferenceQuantity(source) {
 		"state",
 		"isWealth",
 		"inventorySection",
+		"isContainer",
 	].some((key) => Object.hasOwn(source, key));
+}
+
+function booleanField(initial = false) {
+	return new BooleanField({
+		required: true,
+		nullable: false,
+		initial,
+	});
+}
+
+function textField(initial = "") {
+	return new StringField({
+		required: true,
+		nullable: false,
+		blank: true,
+		initial,
+		trim: true,
+	});
 }
 
 function positiveIntegerField(initial = 1) {
