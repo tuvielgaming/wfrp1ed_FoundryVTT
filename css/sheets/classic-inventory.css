@@ -11,6 +11,23 @@
 	font-variant-numeric: tabular-nums;
 }
 
+/*
+ * The two printed header strips are not vertically identical in the scan.
+ * Keep their tuning independent so adjusting Majątek can never disturb the
+ * verified Ekwipunek alignment.
+ */
+.wfrp1ed-classic-sheet .classic-inventory--equipment {
+	--classic-inventory-header-top: 28px;
+	--classic-inventory-header-height: 26px;
+	--classic-inventory-header-font-size: 22px;
+}
+
+.wfrp1ed-classic-sheet .classic-inventory--wealth {
+	--classic-inventory-header-top: 49px;
+	--classic-inventory-header-height: 26px;
+	--classic-inventory-header-font-size: 22px;
+}
+
 .wfrp1ed-classic-sheet .classic-inventory__toolbar {
 	position: absolute;
 	top: 38px;
@@ -63,14 +80,14 @@
  */
 .wfrp1ed-classic-sheet .classic-inventory__paper-header {
 	position: absolute;
-	top: 28px;
+	top: var(--classic-inventory-header-top);
 	left: 10px;
 	right: 10px;
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) 74px 58px;
 	align-items: center;
 	column-gap: 3px;
-	height: 26px;
+	height: var(--classic-inventory-header-height);
 	pointer-events: none;
 	z-index: 2;
 }
@@ -81,7 +98,7 @@
 	justify-content: center;
 	box-sizing: border-box;
 	width: 100%;
-	height: 26px;
+	height: var(--classic-inventory-header-height);
 	min-width: 0;
 	padding: 1px 3px 0;
 	background: #050403;
@@ -90,7 +107,7 @@
 		"Book Antiqua",
 		"Times New Roman",
 		serif;
-	font-size: 22px;
+	font-size: var(--classic-inventory-header-font-size);
 	font-weight: 900;
 	line-height: 1;
 	letter-spacing: 0.01em;
@@ -101,11 +118,6 @@
 		-1px 0 0 #000;
 }
 
-/* Preserve the ruled-paper row start used by the original overlay. */
-.wfrp1ed-classic-sheet .classic-inventory__paper-header-spacer {
-	/* height: 20px; */
-}
-
 .wfrp1ed-classic-sheet .classic-inventory__list {
 	display: grid;
 	grid-auto-rows: 27px;
@@ -114,7 +126,6 @@
 }
 
 .wfrp1ed-classic-sheet .classic-inventory__row {
-	position: relative;
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) 74px 58px;
 	align-items: center;
@@ -126,6 +137,14 @@
 	font-size: 11px;
 }
 
+.wfrp1ed-classic-sheet .classic-inventory__name-cell {
+	position: relative;
+	display: flex;
+	align-items: center;
+	min-width: 0;
+	height: 100%;
+}
+
 .wfrp1ed-classic-sheet .classic-inventory__name,
 .wfrp1ed-classic-sheet .classic-inventory__location {
 	min-width: 0;
@@ -135,6 +154,8 @@
 }
 
 .wfrp1ed-classic-sheet .classic-inventory__name {
+	flex: 1 1 auto;
+	padding-right: 20px;
 	font-weight: 700;
 }
 
@@ -144,9 +165,8 @@
 }
 
 /*
- * Delete stays out of the printed column model. It appears only on row hover
- * and temporarily overlays the far-right edge instead of consuming permanent
- * Encumbrance space.
+ * Delete belongs to the Item-name column. It appears at that column's right
+ * edge on hover, immediately before LOK/LOC, and therefore never covers OBC/ENC.
  */
 .wfrp1ed-classic-sheet .classic-inventory__delete {
 	position: absolute;
