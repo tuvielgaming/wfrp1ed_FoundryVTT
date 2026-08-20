@@ -22,15 +22,27 @@
 		<h3 class="equipment-item-sheet__section-title">{{ui.inventory}}</h3>
 
 		<div class="combat-item-sheet__grid combat-item-sheet__grid--3">
-			<label class="combat-item-sheet__check">
-				<input
-					type="checkbox"
-					name="system.isWealth"
-					{{checked system.isWealth}}
-					{{#unless editable}}disabled{{/unless}}
-				>
-				<span>{{ui.wealth}}</span>
-			</label>
+			<div class="equipment-item-sheet__flags">
+				<label class="combat-item-sheet__check">
+					<input
+						type="checkbox"
+						name="system.isWealth"
+						{{checked system.isWealth}}
+						{{#unless editable}}disabled{{/unless}}
+					>
+					<span>{{ui.wealth}}</span>
+				</label>
+
+				<label class="combat-item-sheet__check">
+					<input
+						type="checkbox"
+						name="system.isContainer"
+						{{checked system.isContainer}}
+						{{#unless editable}}disabled{{/unless}}
+					>
+					<span>{{ui.container}}</span>
+				</label>
+			</div>
 
 			<label class="combat-item-sheet__field">
 				<span>{{ui.quantity}}</span>
