@@ -31,6 +31,20 @@ export const STANDARD_TEST_PROCEDURES = deepFreeze({
 		],
 	},
 
+	fall: {
+		id: "fall",
+		label: "Fall",
+		labelKey: "WFRP1ED.StandardTest.Fall",
+		polishFallback: "Upadek",
+		effectTargets: [],
+		tags: [
+			"standard",
+			"procedure",
+			"movement",
+			"requires-fall-height",
+		],
+	},
+
 	leap: {
 		id: "leap",
 		label: "Leap",
@@ -117,7 +131,6 @@ export const STANDARD_TEST_PROCEDURES = deepFreeze({
 			"procedure",
 			"movement",
 			"requires-climb-type",
-			"requires-climb-danger",
 			"requires-climb-sheer-access",
 		],
 	},
