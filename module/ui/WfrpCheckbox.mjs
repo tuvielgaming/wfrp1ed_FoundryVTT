@@ -34,25 +34,45 @@ export class WfrpCheckbox {
 			throw new Error("WfrpCheckbox requires a non-empty input name.");
 		}
 
-		const root = document.createElement("label");
-		root.classList.add("wfrp1ed-checkbox");
-
 		const input = document.createElement("input");
 		input.type = "checkbox";
 		input.name = normalizedName;
 		input.checked = checked === true;
 		input.disabled = disabled === true;
 
-		if (title) {
-			root.title = String(title);
-			input.title = String(title);
+		if (title) input.title = String(title);
+		if (ariaLabel) input.setAttribute("aria-label", String(ariaLabel));
+
+		return {
+			root: this.wrap(input, { title }),
+			input,
+		};
+	}
+
+	/**
+	 * Put an existing native checkbox into the canonical visual wrapper without
+	 * replacing the input node. This preserves FormData semantics and every
+	 * event listener already attached to the input.
+	 *
+	 * @param {HTMLInputElement} input
+	 * @param {Object} options
+	 * @param {string} [options.title=""]
+	 * @returns {HTMLLabelElement}
+	 */
+	static wrap(input, { title = "" } = {}) {
+		if (!(input instanceof HTMLInputElement) || input.type !== "checkbox") {
+			throw new Error("WfrpCheckbox.wrap requires a checkbox input.");
 		}
 
-		if (ariaLabel) {
-			input.setAttribute("aria-label", String(ariaLabel));
-		}
+		const existing = input.closest(".wfrp1ed-checkbox");
+		if (existing instanceof HTMLLabelElement) return existing;
 
+		const root = document.createElement("label");
+		root.classList.add("wfrp1ed-checkbox");
+		if (title) root.title = String(title);
+
+		input.before(root);
 		root.append(input);
-		return { root, input };
+		return root;
 	}
 }
