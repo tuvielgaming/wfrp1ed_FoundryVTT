@@ -385,7 +385,7 @@ export const STANDARD_TEST_SKILL_RULES = deepFreeze({
 
 	swim: {
 		effects: [
-			fixedModifier("risk", 20, {
+			fixedModifier("risk", -20, {
 				condition: "swimming",
 			}),
 		],
