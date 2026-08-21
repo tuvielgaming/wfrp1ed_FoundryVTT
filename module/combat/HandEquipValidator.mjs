@@ -55,6 +55,10 @@ export class HandEquipValidator {
 				: Object.freeze([INVENTORY_HAND.NONE]);
 		}
 
+		if (item.type === "equipment" && item.system?.isClothing === true) {
+			return Object.freeze([INVENTORY_HAND.NONE]);
+		}
+
 		return Object.freeze([
 			INVENTORY_HAND.MAIN,
 			INVENTORY_HAND.OFF,
