@@ -181,10 +181,10 @@ export const IMPLEMENTED_CORE_SKILL_RULE_IDS = Object.freeze(new Set([
 	"fireEating", "followTrail", "gamble", "haggle", "immunityToDisease",
 	"immunityToPoison", "jester", "juggle", "linguistics", "luck", "mimic",
 	"mining", "musicianship", "palmistry", "pickLock", "pickPocket",
-	"publicSpeaking", "ride", "seduction", "shadowing", "silentMoveRural",
-	"silentMoveUrban", "sing", "smithing", "stoneworking", "storyTelling",
-	"strongman", "superNumerate", "swim", "tailor", "torture", "trickRiding",
-	"wit",
+	"publicSpeaking", "ride", "scaleSheerSurface", "seduction", "shadowing",
+	"silentMoveRural", "silentMoveUrban", "sing", "smithing", "stoneworking",
+	"storyTelling", "strongman", "superNumerate", "swim", "tailor", "torture",
+	"trickRiding", "wit",
 ]));
 
 export function coreSkillDefinitions(language = "en") {
