@@ -12,7 +12,9 @@ Hooks.once("ready", () => {
 		(event) => {
 			const target = event.target;
 			if (!(target instanceof Element)) return;
-			if (!target.closest(".classic-inventory__delete")) return;
+			if (!target.closest(
+				".classic-inventory__delete, .combat-sheet-delete-item",
+			)) return;
 
 			pendingInventoryDialogPointer = {
 				left: event.clientX,
