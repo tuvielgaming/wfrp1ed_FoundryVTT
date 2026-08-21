@@ -13,10 +13,13 @@ const RISK_TEST_ID = "risk";
  *   5-6 => K3 3
  *
  * The authoritative K3 value remains the one already stored by
- * RiskConsequenceIntegration. This module constructs one evaluated d6 Roll,
- * rewrites its visible face to the matching pair, and passes that proper Roll
- * object to Dice So Nice via showForRoll(). It never changes the mechanical
+ * RiskConsequenceIntegration. This module never changes the mechanical
  * consequence or creates an extra ChatMessage.
+ *
+ * Sequencing is deliberate: the Risk Test ChatMessage owns the percentile roll,
+ * so its Dice So Nice animation must finish before the consequence d6 is shown.
+ * This prevents the damage die from overlapping or even finishing before the
+ * Risk Test animation.
  */
 Hooks.on("preUpdateChatMessage", (message, changes) => {
 	if (!isPrimaryActiveGm()) return;
@@ -47,6 +50,8 @@ async function animateStoredRiskD3(message, testState, die) {
 	const blind = message?.blind === true;
 
 	try {
+		await waitForRiskTestAnimation(dice3d, message);
+
 		const visualRoll = await new Roll("1d6").evaluate({
 			allowInteractive: false,
 		});
@@ -82,6 +87,54 @@ async function animateStoredRiskD3(message, testState, die) {
 			error,
 		);
 	}
+}
+
+async function waitForRiskTestAnimation(dice3d, message) {
+	const messageId = String(message?.id ?? "").trim();
+	if (!messageId) return;
+
+	/*
+	 * Dice So Nice v6 exposes an explicit per-message animation barrier. It also
+	 * resolves correctly if called after that message's animation has already
+	 * completed, so there is no race between ChatMessage creation and this hook.
+	 */
+	if (typeof dice3d.waitFor3DAnimationByMessageID === "function") {
+		await dice3d.waitFor3DAnimationByMessageID(messageId);
+		return;
+	}
+
+	/*
+	 * Compatibility path for older Dice So Nice versions. The consequence flag
+	 * is created while the percentile animation is still pending/running, so
+	 * listen for completion of this exact message before starting the d6.
+	 */
+	await new Promise((resolve) => {
+		let hookId = null;
+		let timeoutId = null;
+		const finish = () => {
+			if (hookId !== null) Hooks.off("diceSoNiceRollComplete", hookId);
+			if (timeoutId !== null) clearTimeout(timeoutId);
+			resolve();
+		};
+
+		hookId = Hooks.on("diceSoNiceRollComplete", (...ids) => {
+			if (containsMessageId(ids, messageId)) finish();
+		});
+
+		/* Safety only: never let optional 3D presentation block Risk forever. */
+		timeoutId = setTimeout(finish, 10000);
+	});
+}
+
+function containsMessageId(values, messageId) {
+	for (const value of values ?? []) {
+		if (Array.isArray(value)) {
+			if (containsMessageId(value, messageId)) return true;
+			continue;
+		}
+		if (String(value ?? "") === messageId) return true;
+	}
+	return false;
 }
 
 function changedRiskState(changes) {
