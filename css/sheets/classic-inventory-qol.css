@@ -1,0 +1,98 @@
+/******************************************************************/
+/* Classic inventory toolbar discoverability                      */
+/******************************************************************/
+
+/*
+ * Page-two Equipment starts at logical x=14. The toolbar occupies x=0..12,
+ * leaving a 1px gap before the printed panel border. Its vertical position is
+ * supplied by ClassicInventoryToolbarPlacement from the actual Equipment
+ * overlay plus the verified localized header offset.
+ */
+.wfrp1ed-classic-sheet .classic-inventory__toolbar--page {
+	position: absolute;
+	right: auto;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2px;
+	box-sizing: border-box;
+	width: 13px;
+	height: auto;
+	margin: 0;
+	padding: 0;
+	z-index: 8;
+}
+
+.wfrp1ed-classic-sheet
+	.classic-inventory__toolbar--page
+	.classic-inventory__create {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+	width: 13px;
+	height: 20px;
+	min-width: 13px;
+	margin: 0;
+	padding: 0;
+	border: 1px solid rgb(55 39 23 / 48%);
+	border-left: 0;
+	border-radius: 0 3px 3px 0;
+	background: #efe4cc;
+	box-shadow: none;
+	color: #241a10;
+	font-size: 9px;
+	line-height: 1;
+	opacity: 1;
+	cursor: pointer;
+}
+
+.wfrp1ed-classic-sheet
+	.classic-inventory__toolbar--page
+	.classic-inventory__create:hover,
+.wfrp1ed-classic-sheet
+	.classic-inventory__toolbar--page
+	.classic-inventory__create:focus-visible {
+	background: #fff6df;
+	color: #120d08;
+	opacity: 1;
+}
+
+.wfrp1ed-classic-sheet
+	.classic-inventory__toolbar--page
+	.classic-inventory__help {
+	cursor: help;
+}
+
+/******************************************************************/
+/* Consistent, clearly visible hover-only trash controls           */
+/******************************************************************/
+
+/*
+ * Both inventory and combat tables reveal Delete only on row hover. Once
+ * revealed the button is deliberately fully opaque, so it cannot disappear
+ * against the scanned paper background.
+ */
+.wfrp1ed-classic-sheet .classic-inventory__delete,
+.wfrp1ed-classic-sheet .combat-sheet-delete-item {
+	background: #efe4cc;
+	color: #741f16;
+	font-size: 10px;
+	opacity: 0;
+	pointer-events: none;
+}
+
+.wfrp1ed-classic-sheet .classic-inventory__row:hover .classic-inventory__delete,
+.wfrp1ed-classic-sheet .classic-inventory__delete:focus-visible,
+.wfrp1ed-classic-sheet .melee-row:hover .combat-sheet-delete-item,
+.wfrp1ed-classic-sheet .ranged-row:hover .combat-sheet-delete-item,
+.wfrp1ed-classic-sheet .armour-row:hover .combat-sheet-delete-item,
+.wfrp1ed-classic-sheet .combat-sheet-delete-item:focus-visible {
+	opacity: 1;
+	pointer-events: auto;
+}
+
+.wfrp1ed-classic-sheet .classic-inventory__delete i,
+.wfrp1ed-classic-sheet .combat-sheet-delete-item i {
+	opacity: 1;
+}
