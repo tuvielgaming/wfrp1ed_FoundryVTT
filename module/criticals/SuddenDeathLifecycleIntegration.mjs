@@ -28,7 +28,9 @@ const KILLED_OUTCOME = "killed";
  * tool and therefore leaves the already-applied Wounds unchanged.
  */
 Hooks.on("renderChatMessageHTML", (message, html) => {
-	decorateSuddenDeathFate(message, html);
+	/* FatalCriticalIntegration registers during init. Defer one frame so it stays
+	 * the primary presentation owner; this decorator fills only a missing Fate UI. */
+	requestAnimationFrame(() => decorateSuddenDeathFate(message, html));
 });
 
 Hooks.on("getChatMessageContextOptions", (_application, menuItems) => {
