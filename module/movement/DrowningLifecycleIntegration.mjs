@@ -37,22 +37,14 @@ const ACTION = Object.freeze({
 const syncQueues = new Map();
 
 /*
- * WFRP 1e Core, Polish edition, Pływanie (printed p.74):
- * - a swimmer who fails the required Risk Test starts drowning after a number
- *   of rounds equal to Toughness;
- * - after that, the swimmer loses 1 Wound per round;
- * - when Wounds reach 0, the character dies.
+ * Polish Core, Pływanie (printed p.74):
+ * failed hazardous Swimming Risk -> wait Toughness rounds -> lose 1 Wound each
+ * subsequent round -> death when Wounds reach 0.
  *
- * This integration intentionally does NOT advance from Foundry Combat rounds.
- * The table explicitly starts and advances the tracker from the Swimming card.
- * That preserves the Core procedure while avoiding computer-game automation.
- *
- * Each drowning Wound is a separate ordinary DamageChat transaction. It ignores
- * Armour and Toughness, has no Critical-table routing, and remains explicitly
- * Apply/Invalidate damage. The Swimming tracker therefore never mutates Wounds
- * directly and never overwrites another damage transaction.
+ * The table advances this lifecycle manually. Foundry Combat rounds never move
+ * it automatically. Each 1-Wound loss is its own ordinary DamageChat packet so
+ * application and rollback stay explicit and auditable.
  */
-
 Hooks.on("createChatMessage", (message) => {
 	queueRelevantSynchronization(message);
 });
@@ -61,9 +53,9 @@ Hooks.on("updateChatMessage", (message) => {
 	queueRelevantSynchronization(message);
 });
 
-Hooks.on("preUpdateChatMessage", (message, changes) => {
-	return guardAcceptedDrowningRiskOutcome(message, changes);
-});
+Hooks.on("preUpdateChatMessage", (message, changes) =>
+	guardAcceptedDrowningRiskOutcome(message, changes),
+);
 
 Hooks.on("renderChatMessageHTML", (message, html) => {
 	decorateSwimmingDrowning(message, html);
@@ -79,25 +71,29 @@ Hooks.on("updateActor", (actor) => {
 });
 
 Hooks.once("ready", () => {
-	if (!isLifecycleAuthority()) return;
 	for (const message of game.messages ?? []) {
-		if (swimmingState(message)?.hazardous === true) {
+		if (
+			swimmingState(message)?.hazardous === true &&
+			isSyncAuthority(message)
+		) {
 			queueSwimmingSynchronization(message);
 		}
 	}
 });
 
 function queueRelevantSynchronization(message) {
-	if (!isLifecycleAuthority() || !message?.id) return;
+	if (!message?.id) return;
 
 	if (swimmingState(message)?.hazardous === true) {
-		queueSwimmingSynchronization(message);
+		if (isSyncAuthority(message)) queueSwimmingSynchronization(message);
 		return;
 	}
 
 	if (!riskTestState(message)) return;
 	for (const swimmingMessage of linkedSwimmingMessages(message.id)) {
-		queueSwimmingSynchronization(swimmingMessage);
+		if (isSyncAuthority(swimmingMessage)) {
+			queueSwimmingSynchronization(swimmingMessage);
+		}
 	}
 }
 
@@ -120,7 +116,6 @@ function queueSwimmingSynchronization(message) {
 		.finally(() => {
 			if (syncQueues.get(id) === next) syncQueues.delete(id);
 		});
-
 	syncQueues.set(id, next);
 }
 
@@ -140,25 +135,16 @@ async function synchronizeSwimmingMessage(message) {
 
 	if (failure) {
 		if (current && current.phase !== PHASE.CANCELLED) return;
-
-		const state = createPendingDrowningState(message, movement, riskMessage);
 		await message.setFlag(
 			FLAG_SCOPE,
 			DROWNING_STATE_FLAG_KEY,
-			state,
+			createPendingDrowningState(message, movement, riskMessage),
 		);
 		return;
 	}
 
 	if (!current) return;
-
-	if (drowningStateLocksRisk(current)) {
-		/* preUpdateChatMessage should prevent this path; never auto-rewind here. */
-		return;
-	}
-
-	if (hasAppliedDrowningDamage(current)) {
-		/* Same safety boundary: applied Wounds must be explicitly invalidated. */
+	if (drowningStateLocksRisk(current) || hasAppliedDrowningDamage(current)) {
 		return;
 	}
 
@@ -181,14 +167,13 @@ async function synchronizeSwimmingMessage(message) {
 }
 
 function createPendingDrowningState(message, movement, riskMessage) {
-	const toughness = nonNegativeInteger(movement.toughness ?? 0);
 	return {
 		version: DROWNING_STATE_VERSION,
 		actorUuid: String(movement.actorUuid ?? ""),
 		swimmingMessageId: String(message.id ?? ""),
 		riskMessageId: String(riskMessage?.id ?? movement.riskMessageId ?? ""),
 		phase: PHASE.PENDING,
-		graceRounds: toughness,
+		graceRounds: nonNegativeInteger(movement.toughness ?? 0),
 		roundsElapsed: 0,
 		damageRounds: [],
 		createdAt: Date.now(),
@@ -211,7 +196,6 @@ function decorateSwimmingDrowning(message, html) {
 	if (!(card instanceof HTMLElement)) return;
 
 	card.querySelector?.("[data-wfrp-drowning-tracker]")?.remove();
-
 	const actor = actorFromUuidSync(state.actorUuid);
 	const block = document.createElement("section");
 	block.classList.add("wfrp1e-drowning-tracker");
@@ -223,10 +207,8 @@ function decorateSwimmingDrowning(message, html) {
 
 	const header = document.createElement("div");
 	header.classList.add("wfrp1e-drowning-tracker__header");
-
 	const title = document.createElement("strong");
 	title.textContent = localize("Drowning", "Tonięcie");
-
 	const phase = document.createElement("span");
 	phase.classList.add("wfrp1e-drowning-tracker__phase");
 	phase.textContent = phaseLabel(state, actor);
@@ -239,7 +221,6 @@ function decorateSwimmingDrowning(message, html) {
 	const note = document.createElement("div");
 	note.classList.add("wfrp1e-drowning-tracker__note");
 	note.textContent = trackerNote(state, actor);
-
 	block.append(header, progress, note);
 
 	const actions = buildTrackerActions(message, state, actor);
@@ -269,8 +250,7 @@ function buildTrackerActions(message, state, actor) {
 
 	if (!isActiveDrowningPhase(state.phase)) return null;
 
-	const fatal = drowningReachedFatalWounds(state, actor);
-	if (!fatal) {
+	if (!drowningReachedFatalWounds(state, actor)) {
 		actions.append(actionButton(
 			ACTION.ADVANCE,
 			localize("Next round", "Następna runda"),
@@ -299,7 +279,9 @@ function actionButton(action, label, iconClass, message) {
 	const button = document.createElement("button");
 	button.type = "button";
 	button.dataset.wfrpDrowningAction = action;
-	button.innerHTML = `<i class="${iconClass}"></i> ${label}`;
+	const icon = document.createElement("i");
+	icon.className = iconClass;
+	button.append(icon, document.createTextNode(` ${label}`));
 	button.addEventListener("click", (event) => {
 		event.preventDefault();
 		button.disabled = true;
@@ -313,9 +295,7 @@ function actionButton(action, label, iconClass, message) {
 					),
 				);
 			})
-			.finally(() => {
-				button.disabled = false;
-			});
+			.finally(() => { button.disabled = false; });
 	});
 	return button;
 }
@@ -328,7 +308,6 @@ async function handleTrackerAction(message, action) {
 			"Ten wynik Pływania nie ma już stanu tonięcia.",
 		));
 	}
-
 	const actor = await actorForState(current);
 	if (!(actor instanceof foundry.documents.Actor)) {
 		throw new Error(localize(
@@ -344,22 +323,16 @@ async function handleTrackerAction(message, action) {
 	}
 
 	switch (action) {
-		case ACTION.START:
-			return startDrowning(message, current);
-		case ACTION.ADVANCE:
-			return advanceDrowning(message, current, actor);
-		case ACTION.REWIND:
-			return rewindDrowning(message, current, actor);
-		case ACTION.END:
-			return endDrowning(message, current);
-		default:
-			throw new Error(`Unsupported drowning action '${String(action)}'.`);
+		case ACTION.START: return startDrowning(message, current);
+		case ACTION.ADVANCE: return advanceDrowning(message, current, actor);
+		case ACTION.REWIND: return rewindDrowning(message, current, actor);
+		case ACTION.END: return endDrowning(message, current);
+		default: throw new Error(`Unsupported drowning action '${String(action)}'.`);
 	}
 }
 
 async function startDrowning(message, state) {
 	if (state.phase !== PHASE.PENDING) return message;
-
 	const riskMessage = game.messages?.get?.(String(state.riskMessageId ?? ""));
 	const testState = riskTestState(riskMessage);
 	if (!testState || testSucceeded(testState)) {
@@ -370,7 +343,7 @@ async function startDrowning(message, state) {
 	}
 
 	const updated = foundry.utils.deepClone(state);
-	updated.phase = PHASE.COUNTDOWN;
+	updated.phase = updated.graceRounds === 0 ? PHASE.DROWNING : PHASE.COUNTDOWN;
 	updated.startedAt = Date.now();
 	updated.updatedAt = Date.now();
 	await message.setFlag(FLAG_SCOPE, DROWNING_STATE_FLAG_KEY, updated);
@@ -433,21 +406,20 @@ async function rewindDrowning(message, state, actor) {
 		.find((entry) => Number(entry?.round) === round) ?? null;
 
 	if (damageEntry) {
-		const transaction = DamageApplication.transactionFor(
-			actor,
-			damageEntry.packetId,
-		);
+		const transaction = DamageApplication.transactionFor(actor, damageEntry.packetId);
 		if (transaction?.state === "applied") {
 			throw new Error(localize(
 				"Damage for this drowning round is already applied. First use “Invalidate Damage” on that child damage message, then undo the round.",
 				"Obrażenia z tej rundy tonięcia są już zastosowane. Najpierw użyj „Unieważnij obrażenia” na powiązanej wiadomości obrażeń, a potem cofnij rundę.",
 			));
 		}
-
-		await cancelDrowningDamageMessage(damageEntry, localize(
-			"Cancelled because the drowning round was undone.",
-			"Anulowano, ponieważ cofnięto rundę tonięcia.",
-		));
+		await cancelDrowningDamageMessage(
+			damageEntry,
+			localize(
+				"Cancelled because the drowning round was undone.",
+				"Anulowano, ponieważ cofnięto rundę tonięcia.",
+			),
+		);
 		updated.damageRounds = (updated.damageRounds ?? []).filter(
 			(entry) => String(entry?.packetId ?? "") !== String(damageEntry.packetId),
 		);
@@ -491,11 +463,7 @@ async function publishDrowningDamage(actor, swimmingMessage, round) {
 		createdAt: Date.now(),
 	});
 	const resolution = DamageResolver.resolve(packet);
-	const child = await DamageChat.publish({
-		packet,
-		resolution,
-		speakerActor: actor,
-	});
+	const child = await DamageChat.publish({ packet, resolution, speakerActor: actor });
 	await child.setFlag(FLAG_SCOPE, DROWNING_DAMAGE_FLAG_KEY, {
 		version: DROWNING_DAMAGE_VERSION,
 		actorUuid: actor.uuid,
@@ -510,8 +478,8 @@ async function publishDrowningDamage(actor, swimmingMessage, round) {
 }
 
 async function cancelPendingDrowningDamage(state) {
+	const actor = actorFromUuidSync(state.actorUuid);
 	for (const entry of state.damageRounds ?? []) {
-		const actor = actorFromUuidSync(state.actorUuid);
 		const transaction = actor
 			? DamageApplication.transactionFor(actor, entry.packetId)
 			: null;
@@ -531,15 +499,6 @@ async function cancelDrowningDamageMessage(entry, reason) {
 	if (!(child instanceof foundry.documents.ChatMessage)) return;
 
 	const current = child.getFlag?.(FLAG_SCOPE, DROWNING_DAMAGE_FLAG_KEY) ?? {};
-	await child.update({
-		[`flags.-=${FLAG_SCOPE}`]: undefined,
-	});
-
-	/*
-	 * Foundry's whole-scope deletion syntax would also remove unrelated system
-	 * flags. Restore the dedicated cancellation metadata and explicitly clear only
-	 * damageState below instead of depending on scope deletion.
-	 */
 	if (child.getFlag?.(FLAG_SCOPE, DAMAGE_STATE_FLAG_KEY)) {
 		await child.unsetFlag(FLAG_SCOPE, DAMAGE_STATE_FLAG_KEY);
 	}
@@ -564,7 +523,6 @@ function decorateDrowningDamage(message, html) {
 	if (!(card instanceof HTMLElement)) return;
 
 	card.querySelector?.("[data-wfrp-drowning-damage-note]")?.remove();
-
 	const note = document.createElement("section");
 	note.classList.add("wfrp1e-drowning-damage-note");
 	note.dataset.wfrpDrowningDamageNote = "";
@@ -592,14 +550,12 @@ function decorateDrowningDamage(message, html) {
 				"Utrata przez tonięcie: 1 Punkt Żywotności. Zbroja i Wytrzymałość nie zmniejszają tej straty.",
 			);
 	}
-
 	card.append(note);
 }
 
 function guardAcceptedDrowningRiskOutcome(message, changes) {
 	const current = riskTestState(message);
 	if (!current) return true;
-
 	const candidate = changedTestState(changes);
 	if (!candidate || String(candidate.testId ?? "") !== RISK_TEST_ID) return true;
 	if (!testSucceeded(candidate)) return true;
@@ -614,15 +570,12 @@ function guardAcceptedDrowningRiskOutcome(message, changes) {
 		"Drowning from this failed Swimming Risk Test has already been accepted or has applied Wound loss. End the active drowning tracker and invalidate any applied drowning damage before changing the Risk result to success.",
 		"Tonięcie wynikające z tego nieudanego Testu Ryzyka Pływania zostało już zaakceptowane albo zastosowano już utratę Żywotności. Zakończ aktywne tonięcie i unieważnij zastosowane obrażenia od tonięcia, zanim zmienisz wynik Ryzyka na sukces.",
 	));
-	setTimeout(() => {
-		void ui.chat?.render?.({ force: true });
-	}, 0);
+	setTimeout(() => { void ui.chat?.render?.({ force: true }); }, 0);
 	return false;
 }
 
 function drowningLocksRiskOutcome(state) {
-	if (drowningStateLocksRisk(state)) return true;
-	return hasAppliedDrowningDamage(state);
+	return drowningStateLocksRisk(state) || hasAppliedDrowningDamage(state);
 }
 
 function drowningStateLocksRisk(state) {
@@ -649,20 +602,13 @@ function phaseLabel(state, actor) {
 	if (drowningReachedFatalWounds(state, actor)) {
 		return localize("DEAD (0 Wounds)", "ŚMIERĆ (0 Żw)");
 	}
-
 	switch (state.phase) {
-		case PHASE.PENDING:
-			return localize("Pending", "Oczekuje");
-		case PHASE.COUNTDOWN:
-			return localize("Holding breath", "Wstrzymuje oddech");
-		case PHASE.DROWNING:
-			return localize("Drowning", "Tonie");
-		case PHASE.ENDED:
-			return localize("Ended", "Zakończono");
-		case PHASE.CANCELLED:
-			return localize("Cancelled", "Anulowano");
-		default:
-			return String(state.phase ?? "");
+		case PHASE.PENDING: return localize("Pending", "Oczekuje");
+		case PHASE.COUNTDOWN: return localize("Holding breath", "Wstrzymuje oddech");
+		case PHASE.DROWNING: return localize("Drowning", "Tonie");
+		case PHASE.ENDED: return localize("Ended", "Zakończono");
+		case PHASE.CANCELLED: return localize("Cancelled", "Anulowano");
+		default: return String(state.phase ?? "");
 	}
 }
 
@@ -673,7 +619,6 @@ function progressLabel(state) {
 			`Odliczanie z zasad: ${state.graceRounds} rund (Wytrzymałość).`,
 		);
 	}
-
 	const elapsed = nonNegativeInteger(state.roundsElapsed);
 	const grace = nonNegativeInteger(state.graceRounds);
 	if (elapsed <= grace) {
@@ -682,7 +627,6 @@ function progressLabel(state) {
 			`Minęło rund: ${elapsed} / ${grace}.`,
 		);
 	}
-
 	return localize(
 		`Rounds elapsed: ${elapsed}. Drowning Wound rounds: ${elapsed - grace}.`,
 		`Minęło rund: ${elapsed}. Rund z utratą Żywotności: ${elapsed - grace}.`,
@@ -696,7 +640,6 @@ function trackerNote(state, actor) {
 			"Zasada Pływania mówi, że postać umiera, gdy Żywotność spadnie do 0. Oznaczenie pokonany/martwy pozostaje decyzją przy stole.",
 		);
 	}
-
 	switch (state.phase) {
 		case PHASE.PENDING:
 			return localize(
@@ -723,8 +666,7 @@ function trackerNote(state, actor) {
 				"The drowning lifecycle was cancelled because the linked Risk outcome no longer supports it.",
 				"Cykl tonięcia anulowano, ponieważ wynik powiązanego Testu Ryzyka już go nie uzasadnia.",
 			);
-		default:
-			return "";
+		default: return "";
 	}
 }
 
@@ -740,12 +682,10 @@ function canManageTracker(message, actor) {
 
 function swimmingState(message) {
 	const state = message?.getFlag?.(FLAG_SCOPE, MOVEMENT_STATE_FLAG_KEY);
-	return state &&
-		typeof state === "object" &&
-		!Array.isArray(state) &&
+	return state && typeof state === "object" && !Array.isArray(state) &&
 		String(state.kind ?? "") === "swimming"
-			? state
-			: null;
+		? state
+		: null;
 }
 
 function drowningState(message) {
@@ -757,23 +697,17 @@ function drowningState(message) {
 
 function riskTestState(message) {
 	const state = message?.getFlag?.(FLAG_SCOPE, TEST_STATE_FLAG_KEY);
-	return state &&
-		typeof state === "object" &&
-		!Array.isArray(state) &&
+	return state && typeof state === "object" && !Array.isArray(state) &&
 		String(state.testId ?? "") === RISK_TEST_ID
-			? state
-			: null;
+		? state
+		: null;
 }
 
 function changedTestState(changes) {
 	const direct = changes?.flags?.[FLAG_SCOPE]?.[TEST_STATE_FLAG_KEY];
-	if (direct && typeof direct === "object" && !Array.isArray(direct)) {
-		return direct;
-	}
+	if (direct && typeof direct === "object" && !Array.isArray(direct)) return direct;
 	const flat = changes?.[`flags.${FLAG_SCOPE}.${TEST_STATE_FLAG_KEY}`];
-	return flat && typeof flat === "object" && !Array.isArray(flat)
-		? flat
-		: null;
+	return flat && typeof flat === "object" && !Array.isArray(flat) ? flat : null;
 }
 
 function testSucceeded(state) {
@@ -791,10 +725,9 @@ function linkedSwimmingMessages(riskMessageId) {
 
 function hasDrowningTrackerForActor(actor) {
 	const uuid = String(actor?.uuid ?? "");
-	if (!uuid) return false;
-	return [...(game.messages ?? [])].some((message) =>
+	return Boolean(uuid && [...(game.messages ?? [])].some((message) =>
 		String(drowningState(message)?.actorUuid ?? "") === uuid,
-	);
+	));
 }
 
 function isActiveDrowningPhase(phase) {
@@ -825,10 +758,15 @@ function actorFromUuidSync(uuid) {
 	return null;
 }
 
-function isLifecycleAuthority() {
+function isSyncAuthority(message) {
 	const primary = primaryActiveGm();
-	if (primary) return Boolean(game.user?.isGM && String(primary.id) === String(game.user.id));
-	return Boolean(game.user);
+	if (primary) {
+		return Boolean(game.user?.isGM && String(primary.id) === String(game.user.id));
+	}
+	const authorId = String(
+		message?.author?.id ?? message?.user?.id ?? message?.user ?? "",
+	);
+	return Boolean(game.user?.id && authorId && String(game.user.id) === authorId);
 }
 
 function primaryActiveGm() {
