@@ -6,14 +6,17 @@ const RISK_TEST_ID = "risk";
 /*
  * Visual-only bridge between the persisted Risk consequence and Dice So Nice.
  *
- * The authoritative D3 result is rolled and stored by RiskConsequenceIntegration.
- * This module never rolls a second mechanical result. It reacts only when the
- * consequence state is created for the first time and asks Dice So Nice to show
- * that already-resolved value.
+ * Dice So Nice does not provide a standard d3 mesh through its normal Roll API.
+ * Therefore WFRP K3 is visualised on a physical d6:
+ *   1-2 => K3 1
+ *   3-4 => K3 2
+ *   5-6 => K3 3
  *
- * Re-activating a previously stored consequence, reloading Foundry, or merely
- * editing the Risk card must not replay the animation because no new D3 was
- * rolled in those cases.
+ * The authoritative K3 value remains the one already stored by
+ * RiskConsequenceIntegration. This module constructs one evaluated d6 Roll,
+ * rewrites its visible face to the matching pair, and passes that proper Roll
+ * object to Dice So Nice via showForRoll(). It never changes the mechanical
+ * consequence or creates an extra ChatMessage.
  */
 Hooks.on("preUpdateChatMessage", (message, changes) => {
 	if (!isPrimaryActiveGm()) return;
@@ -35,7 +38,7 @@ Hooks.on("preUpdateChatMessage", (message, changes) => {
 
 async function animateStoredRiskD3(message, testState, die) {
 	const dice3d = game.dice3d;
-	if (!dice3d || typeof dice3d.show !== "function") return;
+	if (!dice3d || typeof dice3d.showForRoll !== "function") return;
 
 	const user = animationUser(message, testState);
 	const whisper = Array.isArray(message?.whisper)
@@ -44,40 +47,29 @@ async function animateStoredRiskD3(message, testState, die) {
 	const blind = message?.blind === true;
 
 	try {
-		/*
-		 * Modern Dice So Nice installations may expose a d3 model/preset. Try the
-		 * literal WFRP die first so installations which support it get a true d3.
-		 */
-		const displayed = await dice3d.show(
-			{
-				formula: "1d3",
-				results: [die],
-			},
-			user,
-			true,
-			whisper,
-			blind,
+		const visualRoll = await new Roll("1d6").evaluate({
+			allowInteractive: false,
+		});
+		const term = visualRoll.dice?.[0] ?? visualRoll.terms?.find?.(
+			(candidate) => Number(candidate?.faces) === 6,
 		);
-		if (displayed !== false) return;
-	} catch (error) {
-		console.debug(
-			"WFRP1ED | Dice So Nice has no usable d3 preset; falling back to d6 representation.",
-			error,
-		);
-	}
+		const result = term?.results?.[0];
+		if (!result) {
+			throw new Error("Unable to locate the evaluated d6 result.");
+		}
 
-	try {
 		/*
-		 * A physical d3 is conventionally represented on a d6 as 1-2 => 1,
-		 * 3-4 => 2, 5-6 => 3. Use the lower face of the matching pair. This is
-		 * presentation only; `die` remains the already-resolved authoritative D3.
+		 * Use the lower face of the matching d6 pair. The animation is only a
+		 * physical representation of the already-resolved K3 consequence.
 		 */
 		const d6Face = (die * 2) - 1;
-		await dice3d.show(
-			{
-				formula: "1d6",
-				results: [d6Face],
-			},
+		result.result = d6Face;
+		if (Object.prototype.hasOwnProperty.call(visualRoll, "_total")) {
+			visualRoll._total = d6Face;
+		}
+
+		await dice3d.showForRoll(
+			visualRoll,
 			user,
 			true,
 			whisper,
@@ -85,7 +77,7 @@ async function animateStoredRiskD3(message, testState, die) {
 		);
 	} catch (error) {
 		/* Dice animation is optional presentation and must never break Risk. */
-		console.debug(
+		console.error(
 			"WFRP1ED | Unable to display Risk consequence dice animation.",
 			error,
 		);
