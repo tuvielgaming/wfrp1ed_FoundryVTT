@@ -3,10 +3,11 @@
  * implemented system mechanics.
  *
  * This file historically began with Standard Test skills only, which is why
- * its filename is retained for compatibility. `luck` and `dodgeBlow` are now
- * also included because dedicated rule subsystems need stable Skill identities.
+ * its filename is retained for compatibility. Dedicated rule subsystems may
+ * also add stable Skill identities here even when the Skill is not itself a
+ * generic Standard Test modifier.
  * StandardTestSkillResolver still consumes only rulesIds which have entries in
- * standard-test-skill-rules.mjs, so adding these identities does not make them
+ * standard-test-skill-rules.mjs, so adding such identities does not make them
  * generic Standard Test modifiers.
  *
  * Mechanics authority:
@@ -62,6 +63,7 @@ export const STANDARD_TEST_SKILL_IDENTITIES = deepFreeze({
 	pickPocket: identity("Pick Pocket"),
 	publicSpeaking: identity("Public Speaking"),
 	ride: identity("Ride"),
+	scaleSheerSurface: localizedIdentity("Scale Sheer Surface", "Wspinaczka"),
 	seduction: identity("Seduction"),
 	shadowing: identity("Shadowing"),
 	silentMoveRural: identity("Silent Move Rural"),

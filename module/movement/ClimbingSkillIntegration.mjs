@@ -18,6 +18,11 @@ const SHEER_ACCESS_AUDIT_VERSION = 1;
  * - the Actor owns the canonical `scaleSheerSurface` Skill; or
  * - suitable climbing equipment is explicitly confirmed in the dialog.
  *
+ * Core compendium Skills also carry their language-neutral canonical rules id
+ * in `flags.wfrp1ed.coreCatalog.canonicalRulesId`. Older compiled compendium
+ * copies can therefore still be recognized safely while their `system.rulesId`
+ * is blank; localized Item names are never used as a mechanical fallback.
+ *
  * Skill ownership is snapshotted into the climbing ChatMessage so later Skill
  * purchases/removals cannot rewrite what justified an already-rolled climb.
  * This module deliberately loads after ClimbingConsequenceIntegration and wraps
@@ -227,9 +232,25 @@ function hasOwnedSkill(actor, rulesId) {
 	const id = String(rulesId ?? "").trim();
 	if (!id) return false;
 	return [...(actor?.items ?? [])].some((item) =>
-		item?.type === "skill" &&
-		String(item.system?.rulesId ?? "").trim() === id,
+		item?.type === "skill" && skillRulesId(item) === id,
 	);
+}
+
+function skillRulesId(item) {
+	const explicit = String(item?.system?.rulesId ?? "").trim();
+	if (explicit) return explicit;
+
+	/*
+	 * Core compendium documents have always retained their canonical, language-
+	 * neutral identity in package flags even when a not-yet-implemented mechanic
+	 * deliberately left system.rulesId blank. This is a safe compatibility path
+	 * for already-copied Core Skills; custom skills without that provenance stay
+	 * unlinked instead of being guessed from their display name.
+	 */
+	const catalog = item?.getFlag?.(FLAG_SCOPE, "coreCatalog") ??
+		item?.flags?.[FLAG_SCOPE]?.coreCatalog;
+	if (String(catalog?.kind ?? "") !== "skill") return "";
+	return String(catalog?.canonicalRulesId ?? "").trim();
 }
 
 function setFieldVisible(body, field, visible) {
