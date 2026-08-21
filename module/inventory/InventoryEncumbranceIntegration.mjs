@@ -60,7 +60,20 @@ function refreshClassicRows(host, actor) {
 }
 
 function refreshClassicTotal(host, actor, section) {
-	let footer = host.querySelector(".classic-inventory__total-value");
+	/*
+	 * The printed Equipment total line extends below the Equipment section's
+	 * logical rectangle. Keep the number on the section overlay rather than
+	 * inside the scrolling inventory host so it can be positioned independently
+	 * without changing list height, padding, or header geometry.
+	 */
+	const overlay = host.closest?.(".sheet-overlay");
+	if (!(overlay instanceof HTMLElement)) return;
+
+	/* Remove a pre-fix total if a live sheet survives a hot reload. */
+	const stale = host.querySelector(":scope > .classic-inventory__total-value");
+	if (stale instanceof HTMLElement) stale.remove();
+
+	let footer = overlay.querySelector(":scope > .classic-inventory__total-value");
 	if (!(footer instanceof HTMLElement)) {
 		footer = document.createElement("span");
 		footer.className = "classic-inventory__total-value";
@@ -68,8 +81,9 @@ function refreshClassicTotal(host, actor, section) {
 			"aria-label",
 			localize("Total Encumbrance", "Łączne Obciążenie"),
 		);
-		host.append(footer);
+		overlay.append(footer);
 	}
+	footer.dataset.inventorySection = section;
 
 	const total = InventoryEncumbrance.equipmentSectionTotal(actor, section);
 	setText(footer, formatNumber(total));
