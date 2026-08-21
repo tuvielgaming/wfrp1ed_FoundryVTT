@@ -1,4 +1,4 @@
-<article class="wfrp1e-test-card {{#if success}}is-success{{else}}is-failure{{/if}}">
+<article class="wfrp1e-test-card {{#unless neutral}}{{#if success}}is-success{{else}}is-failure{{/if}}{{/unless}}">
   <header class="wfrp1e-test-card__header">
     <h2>{{procedureName}}</h2>
     <span class="wfrp1e-test-card__status">{{statusLabel}}</span>
