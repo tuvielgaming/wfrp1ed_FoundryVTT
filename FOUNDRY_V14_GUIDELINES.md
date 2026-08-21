@@ -1,8 +1,8 @@
 # FOUNDRY_V14_GUIDELINES.md
 
-Version: 1.0
+Version: 1.1
 Status: ACTIVE
-Last Updated: 2026-07-25
+Last Updated: 2026-08-21
 
 ===============================================================================
 PURPOSE
@@ -306,6 +306,54 @@ Original paper sheet proportions
 No responsive redesign
 
 ===============================================================================
+SYSTEM UI CHECKBOXES — HARD CONVENTION
+===============================================================================
+
+This is a global WFRP1ED UI rule, not a per-feature styling preference.
+
+ALL system-owned checkbox controls must use the agreed WFRP parchment checkbox
+presentation in every current and future UI surface, including:
+
+Actor sheets
+
+Item sheets
+
+ApplicationV2 windows
+
+DialogV2 popups
+
+configuration forms
+
+management windows
+
+future custom applications
+
+Never intentionally expose the native Foundry/browser checkbox appearance.
+In particular, the Foundry Accent Color black/orange checkbox must never be the
+visible checkbox for a WFRP1ED-owned control.
+
+Programmatically-created checkboxes should use:
+
+module/ui/WfrpCheckbox.mjs
+
+Handlebars markup may use the same canonical contract directly:
+
+.wfrp1ed-checkbox
+
+The visual contract is defined in:
+
+css/forms/checkbox.css
+
+SystemCheckboxIntegration.mjs is a defensive runtime safety net which
+normalizes an accidentally raw checkbox in a WFRP1ED-owned ApplicationV2
+window. It does not replace the coding requirement above: new code should use
+the canonical checkbox contract at creation time.
+
+When reviewing UI changes, a raw `input[type="checkbox"]` without the canonical
+WFRP checkbox wrapper is a defect and should be fixed before the feature is
+considered complete.
+
+===============================================================================
 LEGACY CODE
 ===============================================================================
 
@@ -372,6 +420,8 @@ For every feature ask:
 □ Are templates rendering only?
 
 □ Is CSS responsible for appearance?
+
+□ Does every system-owned checkbox use the canonical WFRP checkbox contract?
 
 If any answer is NO,
 
