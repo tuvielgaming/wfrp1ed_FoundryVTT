@@ -3,14 +3,15 @@
  *
  * Mechanics authority:
  * - English Core Rulebook, Time and Motion, printed pp. 73-75:
- *   Moving/Running and Jumping/Falling/Leaping/Climbing.
- * - Polish Core Rulebook, Ruchy, printed pp. 73-75:
- *   Poruszanie się/Bieg and Zeskok/Upadek/Skok/Wspinaczka.
+ *   Moving/Running, Obstacles, Difficult Ground, Swimming, and
+ *   Jumping/Falling/Leaping/Climbing.
+ * - Polish Core Rulebook, Czas i ruch, printed pp. 73-75:
+ *   Poruszanie się/Bieg, Przeszkody, Trudny teren, Pływanie, and
+ *   Zeskok/Upadek/Skok/Wspinaczka.
  *
  * These definitions are intentionally separate from TestManager/Test because
- * those classes model d100 target tests. Jumping and Leaping use d6 movement
- * procedures, while continued Running combines a derived movement rate with an
- * optional Risk Test underground.
+ * those classes model d100 target tests. Movement procedures derive distances
+ * and may launch an ordinary Risk Test when the Core procedure requires one.
  */
 
 export const STANDARD_TEST_PROCEDURES = deepFreeze({
@@ -59,6 +60,65 @@ export const STANDARD_TEST_PROCEDURES = deepFreeze({
 			"movement",
 			"requires-running-round",
 			"requires-underground",
+		],
+	},
+
+	obstacle: {
+		id: "obstacle",
+		label: "Obstacle",
+		labelKey: "WFRP1ED.StandardTest.Obstacle",
+		polishFallback: "Przeszkoda",
+		effectTargets: [],
+		tags: [
+			"standard",
+			"procedure",
+			"movement",
+			"requires-movement-pace",
+		],
+	},
+
+	difficultGround: {
+		id: "difficultGround",
+		label: "Difficult Ground",
+		labelKey: "WFRP1ED.StandardTest.DifficultGround",
+		polishFallback: "Trudny teren",
+		effectTargets: [],
+		tags: [
+			"standard",
+			"procedure",
+			"movement",
+			"requires-movement-pace",
+		],
+	},
+
+	swimming: {
+		id: "swimming",
+		label: "Swimming",
+		labelKey: "WFRP1ED.StandardTest.Swimming",
+		polishFallback: "Pływanie",
+		effectTargets: [],
+		tags: [
+			"standard",
+			"procedure",
+			"movement",
+			"requires-swimming-hazard",
+			"requires-swimming-encumbrance-modifier",
+		],
+	},
+
+	climbing: {
+		id: "climbing",
+		label: "Climbing",
+		labelKey: "WFRP1ED.StandardTest.Climbing",
+		polishFallback: "Wspinaczka",
+		effectTargets: [],
+		tags: [
+			"standard",
+			"procedure",
+			"movement",
+			"requires-climb-type",
+			"requires-climb-danger",
+			"requires-climb-sheer-access",
 		],
 	},
 });
