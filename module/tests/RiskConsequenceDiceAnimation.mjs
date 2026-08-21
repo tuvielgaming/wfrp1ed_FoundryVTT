@@ -48,7 +48,7 @@ async function animateStoredRiskD3(message, testState, die) {
 		 * Modern Dice So Nice installations may expose a d3 model/preset. Try the
 		 * literal WFRP die first so installations which support it get a true d3.
 		 */
-		await dice3d.show(
+		const displayed = await dice3d.show(
 			{
 				formula: "1d3",
 				results: [die],
@@ -58,7 +58,7 @@ async function animateStoredRiskD3(message, testState, die) {
 			whisper,
 			blind,
 		);
-		return;
+		if (displayed !== false) return;
 	} catch (error) {
 		console.debug(
 			"WFRP1ED | Dice So Nice has no usable d3 preset; falling back to d6 representation.",
