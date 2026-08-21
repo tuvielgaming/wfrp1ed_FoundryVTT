@@ -1,4 +1,58 @@
 const scrollPositions = new WeakMap();
+const restoredWindowPositions = new WeakSet();
+const dialogPointerPositions = new WeakMap();
+const INVENTORY_DIALOG_POINTER_MAX_AGE_MS = 2000;
+const INVENTORY_DIALOG_POINTER_OFFSET = 14;
+let pendingInventoryDialogPointer = null;
+
+Hooks.once("ready", () => {
+	document.addEventListener(
+		"pointerdown",
+		(event) => {
+			const target = event.target;
+			if (!(target instanceof Element)) return;
+			if (!target.closest(".classic-inventory__delete")) return;
+
+			pendingInventoryDialogPointer = {
+				left: event.clientX,
+				top: event.clientY,
+				at: Date.now(),
+			};
+		},
+		true,
+	);
+});
+
+/**
+ * Restore the last closed Classic Character Sheet position before its first
+ * render. The preference is browser-local per Foundry world and user; it never
+ * touches Actor data or synchronizes to other clients.
+ *
+ * Inventory delete confirmations are also positioned near the pointer that
+ * triggered them. The pointer request expires quickly so unrelated DialogV2
+ * windows keep Foundry's normal centering behaviour.
+ */
+Hooks.on("preRenderApplicationV2", (application) => {
+	if (
+		isClassicActorSheet(application) &&
+		!restoredWindowPositions.has(application)
+	) {
+		restoredWindowPositions.add(application);
+		const remembered = readClassicWindowPosition();
+		if (remembered) application.setPosition(remembered);
+	}
+
+	const pointer = freshInventoryDialogPointer();
+	if (!pointer || !isDialogV2(application)) return;
+
+	pendingInventoryDialogPointer = null;
+	const requested = {
+		left: pointer.left + INVENTORY_DIALOG_POINTER_OFFSET,
+		top: pointer.top + INVENTORY_DIALOG_POINTER_OFFSET,
+	};
+	dialogPointerPositions.set(application, requested);
+	application.setPosition(requested);
+});
 
 /**
  * ApplicationV2 replaces the Classic sheet's inner HTML during document
@@ -10,10 +64,18 @@ const scrollPositions = new WeakMap();
  * last scroll position from the live scroller itself and restore that remembered
  * value whenever a new sheet body is rendered.
  *
- * The position belongs to the Application instance only and is never persisted
- * to Actor data.
+ * The scroll position belongs to the Application instance only and is never
+ * persisted to Actor data.
  */
 Hooks.on("renderApplicationV2", (application, element) => {
+	const dialogPosition = dialogPointerPositions.get(application);
+	if (dialogPosition) {
+		/* Re-apply after the dialog has its real dimensions so Foundry can clamp
+		 * it against the viewport accurately near screen edges. */
+		dialogPointerPositions.delete(application);
+		application.setPosition(dialogPosition);
+	}
+
 	if (!isClassicActorSheet(application)) return;
 
 	const remembered = scrollPositions.get(application);
@@ -42,9 +104,10 @@ Hooks.on("renderApplicationV2", (application, element) => {
 });
 
 Hooks.on("closeApplicationV2", (application) => {
-	if (isClassicActorSheet(application)) {
-		scrollPositions.delete(application);
-	}
+	if (!isClassicActorSheet(application)) return;
+
+	writeClassicWindowPosition(application.position);
+	scrollPositions.delete(application);
 });
 
 function attachTracker(application, scroller) {
@@ -91,6 +154,59 @@ function findScroller(root) {
 function restore(scroller, position) {
 	scroller.scrollTop = position.top;
 	scroller.scrollLeft = position.left;
+}
+
+function freshInventoryDialogPointer() {
+	const pointer = pendingInventoryDialogPointer;
+	if (!pointer) return null;
+
+	if (Date.now() - pointer.at > INVENTORY_DIALOG_POINTER_MAX_AGE_MS) {
+		pendingInventoryDialogPointer = null;
+		return null;
+	}
+
+	return pointer;
+}
+
+function readClassicWindowPosition() {
+	try {
+		const raw = localStorage.getItem(classicWindowPositionKey());
+		if (!raw) return null;
+		const parsed = JSON.parse(raw);
+		const left = Number(parsed?.left);
+		const top = Number(parsed?.top);
+		if (!Number.isFinite(left) || !Number.isFinite(top)) return null;
+		return { left, top };
+	} catch (_error) {
+		return null;
+	}
+}
+
+function writeClassicWindowPosition(position) {
+	const left = Number(position?.left);
+	const top = Number(position?.top);
+	if (!Number.isFinite(left) || !Number.isFinite(top)) return;
+
+	try {
+		localStorage.setItem(
+			classicWindowPositionKey(),
+			JSON.stringify({ left, top }),
+		);
+	} catch (_error) {
+		/* Browser storage may be unavailable in hardened/private clients. Window
+		 * persistence is QoL only, so failure must never affect the sheet. */
+	}
+}
+
+function classicWindowPositionKey() {
+	const worldId = String(game.world?.id ?? "world");
+	const userId = String(game.user?.id ?? "user");
+	return `wfrp1ed.classicActorSheet.position.${worldId}.${userId}`;
+}
+
+function isDialogV2(application) {
+	const DialogV2 = foundry.applications.api.DialogV2;
+	return application instanceof DialogV2;
 }
 
 function isClassicActorSheet(application) {
