@@ -2,10 +2,19 @@
 /* Classic inventory Encumbrance totals                           */
 /******************************************************************/
 
+/*
+ * The Polish Equipment overlay ends just above part of the printed
+ * ŁĄCZNIE footer. The numeric total is therefore attached to the overlay and
+ * allowed to extend into that small scan gap without changing inventory list
+ * height or any verified header/row geometry.
+ */
+.wfrp1ed-classic-sheet .sheet-overlay--equipment {
+	overflow: visible;
+}
+
 .wfrp1ed-classic-sheet .classic-inventory__total-value {
 	position: absolute;
 	right: 12px;
-	bottom: 13px;
 	display: flex;
 	align-items: center;
 	justify-content: center;
@@ -18,7 +27,17 @@
 	font-variant-numeric: tabular-nums;
 	line-height: 1;
 	text-align: center;
+	pointer-events: none;
 	z-index: 2;
+}
+
+/* Screenshot-calibrated independently against each printed ŁĄCZNIE strip. */
+.wfrp1ed-classic-sheet .sheet-overlay--equipment > .classic-inventory__total-value {
+	bottom: -11px;
+}
+
+.wfrp1ed-classic-sheet .sheet-overlay--wealth > .classic-inventory__total-value {
+	bottom: 8px;
 }
 
 /******************************************************************/
