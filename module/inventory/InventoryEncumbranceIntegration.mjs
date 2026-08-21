@@ -46,7 +46,7 @@ function refreshClassicRows(host, actor) {
 
 		const effective = InventoryEncumbrance.itemLoad(item, actor);
 		const stack = InventoryEncumbrance.itemStack(item);
-		cell.textContent = formatNumber(effective);
+		setText(cell, formatNumber(effective));
 		cell.title = effective === stack
 			? localize(
 				"Current Encumbrance contributed by this Item.",
@@ -72,7 +72,7 @@ function refreshClassicTotal(host, actor, section) {
 	}
 
 	const total = InventoryEncumbrance.equipmentSectionTotal(actor, section);
-	footer.textContent = formatNumber(total);
+	setText(footer, formatNumber(total));
 	footer.title = section === "wealth"
 		? localize(
 			"Total effective Encumbrance currently shown in Wealth.",
@@ -93,7 +93,7 @@ function refreshDisplayedMovement(root, actor) {
 	const state = InventoryEncumbrance.evaluate(actor);
 	const value = cell.querySelector(".characteristic-current-profile");
 	if (value instanceof HTMLElement) {
-		value.textContent = String(state.effectiveMovement);
+		setText(value, String(state.effectiveMovement));
 	}
 
 	cell.classList.toggle("is-reduced", state.movementPenalty > 0);
@@ -147,15 +147,18 @@ function refreshInventoryManager(root, actor) {
 	}
 
 	summary.classList.toggle("is-overloaded", state.overloaded);
-	summary.textContent = state.movementPenalty > 0
-		? localize(
-			`Encumbrance: ${formatNumber(state.load)} / ${formatNumber(state.capacity)} · Movement: ${state.effectiveMovement} (${state.baseMovement} − ${state.movementPenalty})`,
-			`Obciążenie: ${formatNumber(state.load)} / ${formatNumber(state.capacity)} · Ruch: ${state.effectiveMovement} (${state.baseMovement} − ${state.movementPenalty})`,
-		)
-		: localize(
-			`Encumbrance: ${formatNumber(state.load)} / ${formatNumber(state.capacity)} · Movement: ${state.effectiveMovement}`,
-			`Obciążenie: ${formatNumber(state.load)} / ${formatNumber(state.capacity)} · Ruch: ${state.effectiveMovement}`,
-		);
+	setText(
+		summary,
+		state.movementPenalty > 0
+			? localize(
+				`Encumbrance: ${formatNumber(state.load)} / ${formatNumber(state.capacity)} · Movement: ${state.effectiveMovement} (${state.baseMovement} − ${state.movementPenalty})`,
+				`Obciążenie: ${formatNumber(state.load)} / ${formatNumber(state.capacity)} · Ruch: ${state.effectiveMovement} (${state.baseMovement} − ${state.movementPenalty})`,
+			)
+			: localize(
+				`Encumbrance: ${formatNumber(state.load)} / ${formatNumber(state.capacity)} · Movement: ${state.effectiveMovement}`,
+				`Obciążenie: ${formatNumber(state.load)} / ${formatNumber(state.capacity)} · Ruch: ${state.effectiveMovement}`,
+			),
+	);
 	summary.title = state.overloaded
 		? localize(
 			`Over capacity by ${formatNumber(state.excess)}. Every started 50 Encumbrance above capacity reduces Movement by 1.`,
@@ -171,10 +174,16 @@ function refreshInventoryManager(root, actor) {
 		if (!(item instanceof foundry.documents.Item)) continue;
 		const encumbranceCell = row.children?.[3];
 		if (!(encumbranceCell instanceof HTMLElement)) continue;
-		encumbranceCell.textContent = formatNumber(
-			InventoryEncumbrance.itemLoad(item, actor),
+		setText(
+			encumbranceCell,
+			formatNumber(InventoryEncumbrance.itemLoad(item, actor)),
 		);
 	}
+}
+
+function setText(element, value) {
+	const text = String(value ?? "");
+	if (element.textContent !== text) element.textContent = text;
 }
 
 function normalizeSection(value) {
