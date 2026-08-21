@@ -1,3 +1,5 @@
+import { WfrpCheckbox } from "./WfrpCheckbox.mjs";
+
 /*
  * Runtime safety net for the global WFRP1ED checkbox UI convention.
  *
@@ -31,17 +33,10 @@ function normalizeCheckboxes(root) {
 		if (!(input instanceof HTMLInputElement)) continue;
 		if (input.closest(CANONICAL_CHECKBOX_SELECTOR)) continue;
 
-		const wrapper = document.createElement("label");
-		wrapper.classList.add("wfrp1ed-checkbox");
+		const wrapper = WfrpCheckbox.wrap(input, {
+			title: input.title,
+		});
 		wrapper.dataset.wfrpCheckboxNormalized = "";
-
-		/*
-		 * Preserve the native input exactly where it was in the form. FormData,
-		 * name/value semantics, checked state and existing event listeners remain
-		 * attached to the same input node.
-		 */
-		input.before(wrapper);
-		wrapper.append(input);
 	}
 }
 
