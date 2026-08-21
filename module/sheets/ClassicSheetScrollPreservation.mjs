@@ -1,5 +1,6 @@
 const scrollPositions = new WeakMap();
 const restoredWindowPositions = new WeakSet();
+const pendingClassicWindowPositions = new WeakMap();
 const dialogPointerPositions = new WeakMap();
 const INVENTORY_DIALOG_POINTER_MAX_AGE_MS = 2000;
 const INVENTORY_DIALOG_POINTER_OFFSET = 14;
@@ -24,13 +25,13 @@ Hooks.once("ready", () => {
 });
 
 /**
- * Restore the last closed Classic Character Sheet position before its first
- * render. The preference is browser-local per Foundry world and user; it never
- * touches Actor data or synchronizes to other clients.
+ * Record requested window positions during pre-render, but do not call
+ * ApplicationV2#setPosition yet. Foundry v14 has not necessarily created the
+ * application element at this stage; calling setPosition here can reach its
+ * internal DOM-positioning code with an undefined element.
  *
- * Inventory delete confirmations are also positioned near the pointer that
- * triggered them. The pointer request expires quickly so unrelated DialogV2
- * windows keep Foundry's normal centering behaviour.
+ * The actual position is applied from renderApplicationV2 (or its next animation
+ * frame), after the window element exists.
  */
 Hooks.on("preRenderApplicationV2", (application) => {
 	if (
@@ -39,19 +40,19 @@ Hooks.on("preRenderApplicationV2", (application) => {
 	) {
 		restoredWindowPositions.add(application);
 		const remembered = readClassicWindowPosition();
-		if (remembered) application.setPosition(remembered);
+		if (remembered) {
+			pendingClassicWindowPositions.set(application, remembered);
+		}
 	}
 
 	const pointer = freshInventoryDialogPointer();
 	if (!pointer || !isDialogV2(application)) return;
 
 	pendingInventoryDialogPointer = null;
-	const requested = {
+	dialogPointerPositions.set(application, {
 		left: pointer.left + INVENTORY_DIALOG_POINTER_OFFSET,
 		top: pointer.top + INVENTORY_DIALOG_POINTER_OFFSET,
-	};
-	dialogPointerPositions.set(application, requested);
-	application.setPosition(requested);
+	});
 });
 
 /**
@@ -70,13 +71,19 @@ Hooks.on("preRenderApplicationV2", (application) => {
 Hooks.on("renderApplicationV2", (application, element) => {
 	const dialogPosition = dialogPointerPositions.get(application);
 	if (dialogPosition) {
-		/* Re-apply after the dialog has its real dimensions so Foundry can clamp
-		 * it against the viewport accurately near screen edges. */
+		/* The window now has a real element and dimensions, so Foundry can safely
+		 * apply and clamp the requested cursor-near position. */
 		dialogPointerPositions.delete(application);
-		application.setPosition(dialogPosition);
+		applyPositionWhenReady(application, dialogPosition);
 	}
 
 	if (!isClassicActorSheet(application)) return;
+
+	const windowPosition = pendingClassicWindowPositions.get(application);
+	if (windowPosition) {
+		pendingClassicWindowPositions.delete(application);
+		applyPositionWhenReady(application, windowPosition);
+	}
 
 	const remembered = scrollPositions.get(application);
 	const pendingScroller = findScroller(element);
@@ -108,7 +115,24 @@ Hooks.on("closeApplicationV2", (application) => {
 
 	writeClassicWindowPosition(application.position);
 	scrollPositions.delete(application);
+	pendingClassicWindowPositions.delete(application);
 });
+
+function applyPositionWhenReady(application, position) {
+	const apply = () => {
+		const element = application?.element;
+		if (!(element instanceof HTMLElement)) return false;
+		application.setPosition(position);
+		return true;
+	};
+
+	if (apply()) return;
+
+	requestAnimationFrame(() => {
+		if (!application?.rendered) return;
+		apply();
+	});
+}
 
 function attachTracker(application, scroller) {
 	if (scroller.dataset.wfrpScrollTracker === "true") return;
