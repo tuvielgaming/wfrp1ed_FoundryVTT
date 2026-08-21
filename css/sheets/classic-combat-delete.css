@@ -1,0 +1,60 @@
+/******************************************************************/
+/* Classic Weapon / Armour delete control                         */
+/******************************************************************/
+
+/*
+ * The delete button is moved out of the Item-name controls and into the last
+ * printed data cell by CombatDeleteButtonPlacement.mjs. State/hand controls
+ * therefore need less reserved space in the name column.
+ */
+.wfrp1ed-classic-sheet .melee-cell--name,
+.wfrp1ed-classic-sheet .ranged-cell--name,
+.wfrp1ed-classic-sheet .armour-cell--name {
+	padding-right: 42px;
+}
+
+.wfrp1ed-classic-sheet .combat-sheet-delete-cell {
+	position: relative;
+}
+
+/* Match the verified Ekwipunek/Majątek trash presentation. */
+.wfrp1ed-classic-sheet .combat-sheet-delete-item {
+	position: absolute;
+	top: 50%;
+	right: 0;
+	transform: translateY(-50%);
+	width: 17px;
+	min-width: 17px;
+	height: 17px;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	border-radius: 3px;
+	background: rgb(239 230 208 / 94%);
+	box-shadow: none;
+	color: #5b1f18;
+	font-size: 9px;
+	line-height: 1;
+	opacity: 0;
+	pointer-events: none;
+	cursor: pointer;
+	transition: opacity 0.12s ease;
+	z-index: 2;
+}
+
+.wfrp1ed-classic-sheet .melee-row:hover .combat-sheet-delete-item,
+.wfrp1ed-classic-sheet .ranged-row:hover .combat-sheet-delete-item,
+.wfrp1ed-classic-sheet .armour-row:hover .combat-sheet-delete-item,
+.wfrp1ed-classic-sheet .combat-sheet-delete-item:focus-visible {
+	opacity: 0.9;
+	pointer-events: auto;
+}
+
+.wfrp1ed-classic-sheet .combat-sheet-delete-item:hover {
+	opacity: 1;
+}
+
+.wfrp1ed-classic-sheet .combat-sheet-delete-item:focus-visible {
+	outline: 1px solid var(--focus-color);
+	outline-offset: 1px;
+}
