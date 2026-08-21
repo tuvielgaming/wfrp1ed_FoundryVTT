@@ -52,7 +52,7 @@ export class SuddenDeathResolver {
 
 			return {
 				id: String(result.id ?? ""),
-				text: String(result.text ?? "").trim(),
+				text: tableResultPresentation(result),
 				outcome,
 			};
 		});
@@ -79,6 +79,18 @@ export class SuddenDeathResolver {
 			resolvedAt: Date.now(),
 		});
 	}
+}
+
+/**
+ * Foundry v14 deprecated TableResult#text. Structured Core outcomes never rely
+ * on presentation text, but custom/override tables still need a readable
+ * fallback. Prefer the current name API and then description without touching
+ * the deprecated compatibility getter.
+ */
+function tableResultPresentation(result) {
+	const name = String(result?.name ?? "").trim();
+	if (name) return name;
+	return String(result?.description ?? "").trim();
 }
 
 function positiveInteger(value, label) {
