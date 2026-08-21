@@ -1,0 +1,25 @@
+.wfrp1e-drowning-risk-lock {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin: 6px 8px;
+	padding: 5px 8px;
+	border: 1px solid rgb(71 49 29 / 45%);
+	background: rgb(235 229 211 / 76%);
+	font-size: 11px;
+	font-style: italic;
+	line-height: 1.2;
+}
+
+.wfrp1e-drowning-risk-lock i {
+	flex: 0 0 auto;
+}
+
+.wfrp1e-test-card.is-drowning-result-locked [data-wfrp-test-roll-value],
+.wfrp1e-test-card.is-drowning-result-locked [data-wfrp-test-general-modifier] {
+	cursor: default;
+}
+
+.wfrp1e-test-card.is-drowning-result-locked [data-wfrp-test-modifier-toggle] {
+	cursor: not-allowed;
+}
