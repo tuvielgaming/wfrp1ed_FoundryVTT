@@ -1,0 +1,37 @@
+.wfrp1e-risk-consequence {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 3px 10px;
+	align-items: center;
+	margin: 6px 8px;
+	padding: 6px 8px;
+	border: 1px solid rgb(71 49 29 / 45%);
+	background: rgb(246 239 221 / 72%);
+	font-size: 12px;
+}
+
+.wfrp1e-risk-consequence__heading {
+	min-width: 0;
+	font-weight: 700;
+}
+
+.wfrp1e-risk-consequence__value {
+	font-weight: 700;
+	text-align: right;
+	white-space: nowrap;
+}
+
+.wfrp1e-risk-consequence__status {
+	grid-column: 1 / -1;
+	font-size: 11px;
+	font-style: italic;
+	line-height: 1.2;
+}
+
+.wfrp1e-risk-consequence.is-applied {
+	background: rgb(235 229 211 / 76%);
+}
+
+.wfrp1e-risk-consequence.is-reverted {
+	opacity: 0.7;
+}
