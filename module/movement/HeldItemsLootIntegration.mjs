@@ -4,9 +4,16 @@ import { HeldItemsCheck } from "./HeldItemsCheck.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
 const FLAG_KEY = "heldItemsCheck";
+const SOCKET_CHANNEL = "system.wfrp1ed";
+const REQUEST_TYPE = "held-items-drop-apply-request";
+const RESPONSE_TYPE = "held-items-drop-apply-response";
+const SOCKET_TIMEOUT_MS = 10000;
+const pendingRequests = new Map();
+
 const CONSEQUENCE_KIND = "drop-held-items";
 const CONSEQUENCE_STATE = Object.freeze({
 	PENDING: "pending",
+	APPLYING: "applying",
 	APPLIED: "applied",
 	NO_ITEMS: "no-items",
 });
@@ -28,11 +35,11 @@ const CONSEQUENCE_STATE = Object.freeze({
  * edit the d100 first, then apply the Item move only if the final result still
  * says DROP.
  *
- * Once a physical move has happened the roll is finalized. Rewriting the d100
- * afterward without returning the Items would split the rules state from the
- * world state, so manual edits and Luck are locked for APPLIED drops. A failed
- * check with no held physical Items remains adjustable because no external world
- * mutation occurred.
+ * Applying the world mutation is GM-authoritative and has an explicit APPLYING
+ * phase. Manual edits and Luck are locked during that phase and after an APPLIED
+ * physical move, preventing the chat snapshot from diverging from world state.
+ * A failed check with no held physical Items remains adjustable because no
+ * external mutation occurred.
  */
 installHeldItemsLootIntegration();
 
@@ -40,20 +47,47 @@ function installHeldItemsLootIntegration() {
 	if (HeldItemsCheck.__wfrpLootIntegrationInstalled === true) return;
 
 	const originalLuckOptions = HeldItemsCheck.luckOptions;
+	const originalRollEditLockReason = HeldItemsCheck._rollEditLockReason;
 
 	HeldItemsCheck.luckOptions = function heldItemsLuckAfterPhysicalConsequence(message) {
 		const state = this.stateFor(message);
+		const consequenceState = String(state?.consequence?.state ?? "");
 		if (
 			state?.consequence?.kind === CONSEQUENCE_KIND &&
-			state?.consequence?.state === CONSEQUENCE_STATE.APPLIED
+			[
+				CONSEQUENCE_STATE.APPLYING,
+				CONSEQUENCE_STATE.APPLIED,
+			].includes(consequenceState)
 		) {
 			return [];
 		}
 		return originalLuckOptions.call(this, message);
 	};
 
+	HeldItemsCheck._rollEditLockReason = function heldItemsWorldStateRollLock(state) {
+		if (
+			state?.consequence?.kind === CONSEQUENCE_KIND &&
+			state?.consequence?.state === CONSEQUENCE_STATE.APPLYING
+		) {
+			return localize(
+				"The physical held-item drop is being resolved. Wait for that world-state transaction to finish before changing the d100 result.",
+				"Trwa rozstrzyganie fizycznego upuszczenia trzymanych przedmiotów. Poczekaj na zakończenie tej zmiany stanu świata przed zmianą wyniku K100.",
+			);
+		}
+		return originalRollEditLockReason.call(this, state);
+	};
+
 	Hooks.on("renderChatMessageHTML", (message, html) => {
 		decorateDropConsequence(message, html);
+	});
+
+	Hooks.once("ready", () => {
+		if (game.socket) {
+			game.socket.on(
+				SOCKET_CHANNEL,
+				(payload) => void handleSocketPayload(payload),
+			);
+		}
 	});
 
 	Object.defineProperty(
@@ -83,26 +117,29 @@ function decorateDropConsequence(message, html) {
 	block.dataset.wfrpHeldItemsDropAction = "";
 
 	const consequenceState = String(state.consequence?.state ?? "");
+	if (consequenceState === CONSEQUENCE_STATE.APPLYING) {
+		block.append(statusElement(localize(
+			"Resolving the held-item drop…",
+			"Trwa rozstrzyganie upuszczenia trzymanych przedmiotów…",
+		)));
+		card.append(block);
+		return;
+	}
+
 	if (consequenceState === CONSEQUENCE_STATE.APPLIED) {
-		const status = document.createElement("div");
-		status.className = "wfrp1e-movement-consequence__status";
-		status.textContent = localize(
-			"Held items have been moved to a Loot Pile. This d100 is now read-only until that world-state consequence can be reversed.",
-			"Trzymane przedmioty przeniesiono do Stosu Łupów. Ten wynik K100 jest teraz tylko do odczytu, dopóki nie będzie można cofnąć tej zmiany stanu świata.",
-		);
-		block.append(status);
+		block.append(statusElement(localize(
+			"Held items have been moved to a Loot Pile. This d100 is now read-only until that world-state consequence is reversed.",
+			"Trzymane przedmioty przeniesiono do Stosu Łupów. Ten wynik K100 jest teraz tylko do odczytu, dopóki ta zmiana stanu świata nie zostanie cofnięta.",
+		)));
 		card.append(block);
 		return;
 	}
 
 	if (consequenceState === CONSEQUENCE_STATE.NO_ITEMS) {
-		const status = document.createElement("div");
-		status.className = "wfrp1e-movement-consequence__status";
-		status.textContent = localize(
+		block.append(statusElement(localize(
 			"The result says DROP, but the Actor had no physical held Items to move when the consequence was resolved.",
 			"Wynik oznacza UPUSZCZA, ale podczas rozstrzygania konsekwencji Aktor nie miał żadnych fizycznych trzymanych przedmiotów do przeniesienia.",
-		);
-		block.append(status);
+		)));
 		card.append(block);
 		return;
 	}
@@ -122,7 +159,7 @@ function decorateDropConsequence(message, html) {
 		"Użyj dopiero po zaakceptowaniu wyniku K100. Jeśli użyto fizycznych kości, najpierw wpisz ich wynik powyżej.",
 	);
 
-	if (!canManage(actor)) {
+	if (!canRequestApply(actor)) {
 		button.disabled = true;
 		button.title = localize(
 			"Only the GM or an OWNER of this Actor can resolve the Item drop.",
@@ -132,7 +169,7 @@ function decorateDropConsequence(message, html) {
 		button.addEventListener("click", (event) => {
 			event.preventDefault();
 			button.disabled = true;
-			void applyPendingDrop(message)
+			void requestApplyPendingDrop(message)
 				.catch((error) => {
 					console.error(
 						"WFRP1ED | Held-items physical drop failed.",
@@ -155,7 +192,108 @@ function decorateDropConsequence(message, html) {
 	card.append(block);
 }
 
-async function applyPendingDrop(message) {
+async function requestApplyPendingDrop(message) {
+	const state = HeldItemsCheck.stateFor(message);
+	const actor = actorFromStateSync(state);
+	if (!canRequestApply(actor)) {
+		throw new Error(localize(
+			"Only the GM or an OWNER of this Actor can resolve the Item drop.",
+			"Tylko MG albo Właściciel tego Aktora może rozstrzygnąć upuszczenie przedmiotów.",
+		));
+	}
+
+	const authority = primaryActiveGM();
+	if (!authority || authority.id === game.user?.id) {
+		return applyPendingDropAsAuthority(
+			String(message?.id ?? ""),
+			String(game.user?.id ?? ""),
+		);
+	}
+	if (!game.socket) {
+		throw new Error(localize(
+			"The Foundry system socket is unavailable for the held-item drop.",
+			"Systemowy kanał Foundry jest niedostępny dla upuszczania przedmiotów.",
+		));
+	}
+
+	const requestId = foundry.utils.randomID();
+	return new Promise((resolve, reject) => {
+		const timeoutId = setTimeout(() => {
+			pendingRequests.delete(requestId);
+			reject(new Error(localize(
+				"The GM did not resolve the held-item drop in time.",
+				"MG nie rozstrzygnął upuszczenia przedmiotów w wymaganym czasie.",
+			)));
+		}, SOCKET_TIMEOUT_MS);
+
+		pendingRequests.set(requestId, { resolve, reject, timeoutId });
+		game.socket.emit(SOCKET_CHANNEL, {
+			type: REQUEST_TYPE,
+			requestId,
+			requesterUserId: String(game.user?.id ?? ""),
+			messageId: String(message?.id ?? ""),
+		});
+	});
+}
+
+async function handleSocketPayload(payload) {
+	if (!payload || typeof payload !== "object") return;
+
+	if (payload.type === RESPONSE_TYPE) {
+		if (
+			String(payload.requesterUserId ?? "") !==
+			String(game.user?.id ?? "")
+		) return;
+
+		const requestId = String(payload.requestId ?? "");
+		const pending = pendingRequests.get(requestId);
+		if (!pending) return;
+		pendingRequests.delete(requestId);
+		clearTimeout(pending.timeoutId);
+
+		if (payload.ok) pending.resolve(payload.result ?? null);
+		else pending.reject(new Error(
+			String(payload.error ?? "") || "Held-item drop failed.",
+		));
+		return;
+	}
+
+	if (payload.type !== REQUEST_TYPE || !isPrimaryActiveGM()) return;
+
+	const response = {
+		type: RESPONSE_TYPE,
+		requestId: String(payload.requestId ?? ""),
+		requesterUserId: String(payload.requesterUserId ?? ""),
+		ok: false,
+		result: null,
+		error: "",
+	};
+
+	try {
+		response.result = await applyPendingDropAsAuthority(
+			String(payload.messageId ?? ""),
+			String(payload.requesterUserId ?? ""),
+		);
+		response.ok = true;
+	} catch (error) {
+		console.error("WFRP1ED | Held-item drop authority failed.", error);
+		response.error = error?.message ?? "Held-item drop failed.";
+	}
+
+	game.socket.emit(SOCKET_CHANNEL, response);
+}
+
+async function applyPendingDropAsAuthority(messageId, requesterUserId) {
+	const message = game.messages?.get(String(messageId ?? ""));
+	if (!(message instanceof foundry.documents.ChatMessage)) {
+		throw new Error("Held-items ChatMessage is unavailable.");
+	}
+
+	const requester = game.users?.get(String(requesterUserId ?? "")) ?? game.user;
+	if (!requester) {
+		throw new Error("Held-item drop requester is unavailable.");
+	}
+
 	const state = HeldItemsCheck.stateFor(message);
 	if (!state) {
 		throw new Error("Held-items state is unavailable.");
@@ -183,60 +321,113 @@ async function applyPendingDrop(message) {
 			"Aktor dla tego wyniku utrzymania przedmiotów jest niedostępny.",
 		));
 	}
-	if (!canManage(actor)) {
+	if (!canUserManageActor(actor, requester)) {
 		throw new Error(localize(
 			"Only the GM or an OWNER of this Actor can resolve the Item drop.",
 			"Tylko MG albo Właściciel tego Aktora może rozstrzygnąć upuszczenie przedmiotów.",
 		));
 	}
 
-	const heldItems = [...(actor.items ?? [])].filter((item) =>
-		LootPileService.isPhysicalItem(item) &&
-		String(item.system?.state?.mode ?? "") === INVENTORY_MODE.HELD,
-	);
-
-	let lootResult = null;
-	if (heldItems.length > 0) {
-		lootResult = await LootPileService.createFromActorItems({
-			sourceActor: actor,
-			items: heldItems,
-			reason: "held-items-check",
-			sourceLabel: actor.name,
-		});
-	}
-
-	const updated = foundry.utils.deepClone(
-		HeldItemsCheck.stateFor(message),
-	);
-	if (!updated || String(updated.outcome ?? "") !== "drop") {
-		throw new Error(localize(
-			"The d100 result changed while the drop was being resolved. No result state was finalized.",
-			"Wynik K100 zmienił się podczas rozstrzygania upuszczenia. Stan wyniku nie został zatwierdzony.",
-		));
-	}
-
-	updated.consequence = {
+	const applying = foundry.utils.deepClone(state);
+	applying.consequence = {
+		...(applying.consequence ?? {}),
 		kind: CONSEQUENCE_KIND,
-		state: lootResult?.pileUuid
-			? CONSEQUENCE_STATE.APPLIED
-			: CONSEQUENCE_STATE.NO_ITEMS,
-		pileUuid: String(lootResult?.pileUuid ?? ""),
-		moved: Number(lootResult?.moved ?? 0),
-		appliedAt: lootResult?.pileUuid ? Date.now() : null,
+		state: CONSEQUENCE_STATE.APPLYING,
+		requestedBy: String(requester.id ?? ""),
+		startedAt: Date.now(),
 	};
-	updated.updatedBy = String(game.user?.id ?? "");
-	updated.updatedAt = Date.now();
-
+	applying.updatedBy = String(game.user?.id ?? "");
+	applying.updatedAt = Date.now();
 	await message.update({
-		[`flags.${FLAG_SCOPE}.${FLAG_KEY}`]: updated,
+		[`flags.${FLAG_SCOPE}.${FLAG_KEY}`]: applying,
 	});
-	return message;
+
+	try {
+		const heldItems = [...(actor.items ?? [])].filter((item) =>
+			LootPileService.isPhysicalItem(item) &&
+			String(item.system?.state?.mode ?? "") === INVENTORY_MODE.HELD,
+		);
+
+		let lootResult = null;
+		if (heldItems.length > 0) {
+			lootResult = await LootPileService.createFromActorItems({
+				sourceActor: actor,
+				items: heldItems,
+				reason: "held-items-check",
+				sourceLabel: actor.name,
+			});
+		}
+
+		const current = HeldItemsCheck.stateFor(message);
+		if (
+			!current ||
+			String(current.outcome ?? "") !== "drop" ||
+			current?.consequence?.state !== CONSEQUENCE_STATE.APPLYING
+		) {
+			throw new Error(localize(
+				"The held-items result changed while the world-state drop was being resolved.",
+				"Wynik utrzymania przedmiotów zmienił się podczas rozstrzygania upuszczenia w stanie świata.",
+			));
+		}
+
+		const updated = foundry.utils.deepClone(current);
+		updated.consequence = {
+			kind: CONSEQUENCE_KIND,
+			state: lootResult?.pileUuid
+				? CONSEQUENCE_STATE.APPLIED
+				: CONSEQUENCE_STATE.NO_ITEMS,
+			pileUuid: String(lootResult?.pileUuid ?? ""),
+			moved: Number(lootResult?.moved ?? 0),
+			requestedBy: String(requester.id ?? ""),
+			appliedAt: lootResult?.pileUuid ? Date.now() : null,
+			resolvedAt: Date.now(),
+		};
+		updated.updatedBy = String(game.user?.id ?? "");
+		updated.updatedAt = Date.now();
+
+		await message.update({
+			[`flags.${FLAG_SCOPE}.${FLAG_KEY}`]: updated,
+		});
+
+		return {
+			messageId: String(message.id ?? ""),
+			state: updated.consequence.state,
+			pileUuid: updated.consequence.pileUuid,
+			moved: updated.consequence.moved,
+		};
+	} catch (error) {
+		const current = HeldItemsCheck.stateFor(message);
+		if (current?.consequence?.state === CONSEQUENCE_STATE.APPLYING) {
+			const restored = foundry.utils.deepClone(current);
+			restored.consequence = {
+				kind: CONSEQUENCE_KIND,
+				state: CONSEQUENCE_STATE.PENDING,
+			};
+			restored.updatedBy = String(game.user?.id ?? "");
+			restored.updatedAt = Date.now();
+			await message.update({
+				[`flags.${FLAG_SCOPE}.${FLAG_KEY}`]: restored,
+			}).catch(() => {});
+		}
+		throw error;
+	}
 }
 
-function canManage(actor) {
-	if (!game.user || !(actor instanceof foundry.documents.Actor)) return false;
-	return game.user.isGM || actor.testUserPermission?.(
-		game.user,
+function statusElement(text) {
+	const status = document.createElement("div");
+	status.className = "wfrp1e-movement-consequence__status";
+	status.textContent = text;
+	return status;
+}
+
+function canRequestApply(actor) {
+	return canUserManageActor(actor, game.user);
+}
+
+function canUserManageActor(actor, user) {
+	if (!user || !(actor instanceof foundry.documents.Actor)) return false;
+	return user.isGM || actor.testUserPermission?.(
+		user,
 		CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER,
 	) === true;
 }
@@ -261,6 +452,18 @@ function actorFromStateSync(state) {
 	} catch (_error) {
 		return null;
 	}
+}
+
+function primaryActiveGM() {
+	return [...(game.users ?? [])]
+		.filter((user) => user?.active && user?.isGM)
+		.sort((first, second) =>
+			String(first.id).localeCompare(String(second.id)),
+		)[0] ?? null;
+}
+
+function isPrimaryActiveGM() {
+	return primaryActiveGM()?.id === game.user?.id;
 }
 
 function asElement(value) {
