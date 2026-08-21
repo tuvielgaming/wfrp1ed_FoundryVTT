@@ -18,10 +18,7 @@ const CELL_DEFINITIONS = Object.freeze([
 
 Hooks.on("renderApplicationV2", (application, element) => {
 	const actor = application?.document;
-	if (
-		!(actor instanceof foundry.documents.Actor) ||
-		actor.type !== "character"
-	) return;
+	if (!isCharacterActor(actor)) return;
 
 	const root = asElement(element);
 	if (!classicSheetRoot(root)) return;
@@ -34,6 +31,40 @@ Hooks.on("renderApplicationV2", (application, element) => {
 	});
 });
 
+/*
+ * Quantity/location/container edits can rebuild only the inventory host instead
+ * of producing a complete Actor-sheet render. Refresh every already-rendered
+ * movement overlay after the underlying Actor or physical Items change so the
+ * table always tracks effective Movement immediately.
+ */
+Hooks.on("createItem", (item) => scheduleOwnedActorRefresh(item));
+Hooks.on("updateItem", (item) => scheduleOwnedActorRefresh(item));
+Hooks.on("deleteItem", (item) => scheduleOwnedActorRefresh(item));
+Hooks.on("updateActor", (actor) => {
+	if (isCharacterActor(actor)) scheduleRenderedRefresh(actor);
+});
+
+function scheduleOwnedActorRefresh(item) {
+	const actor = item?.actor ?? item?.parent;
+	if (isCharacterActor(actor)) scheduleRenderedRefresh(actor);
+}
+
+function scheduleRenderedRefresh(actor) {
+	requestAnimationFrame(() => refreshRenderedActorMovement(actor));
+}
+
+function refreshRenderedActorMovement(actor) {
+	const actorUuid = String(actor?.uuid ?? "");
+	if (!actorUuid) return;
+
+	for (const overlay of document.querySelectorAll(".classic-movement[data-actor-uuid]")) {
+		if (!(overlay instanceof HTMLElement)) continue;
+		if (String(overlay.dataset.actorUuid ?? "") !== actorUuid) continue;
+		const sheet = overlay.closest(".wfrp1ed-classic-sheet");
+		if (sheet instanceof HTMLElement) renderMovement(sheet, actor);
+	}
+}
+
 function renderMovement(sheet, actor) {
 	const page = sheet.querySelector(
 		`.classic-sheet-page[data-page="${MOVEMENT_PAGE}"]`,
@@ -41,6 +72,7 @@ function renderMovement(sheet, actor) {
 	if (!(page instanceof HTMLElement)) return;
 
 	const overlay = ensureMovementOverlay(page);
+	overlay.dataset.actorUuid = String(actor.uuid ?? "");
 	const state = MovementRates.forActor(actor);
 
 	for (const definition of CELL_DEFINITIONS) {
@@ -53,7 +85,8 @@ function renderMovement(sheet, actor) {
 		}
 
 		const value = state.rates[definition.rate]?.[definition.unit];
-		cell.textContent = formatValue(value, definition.unit);
+		const text = formatValue(value, definition.unit);
+		if (cell.textContent !== text) cell.textContent = text;
 		cell.title = movementCellTitle(state, definition.rate, definition.unit, value);
 	}
 
@@ -128,8 +161,8 @@ function rateLabelFor(rate) {
 
 function unitLabelFor(unit) {
 	switch (unit) {
-		case "round": return localize("m/10 s", "m/10 s");
-		case "minute": return localize("m/min", "m/min");
+		case "round": return "m/10 s";
+		case "minute": return "m/min";
 		default: return "km/h";
 	}
 }
@@ -148,6 +181,10 @@ function formatGeneral(value) {
 	if (!Number.isFinite(number)) return "0";
 	if (Number.isInteger(number)) return String(number);
 	return String(Number(number.toFixed(2)));
+}
+
+function isCharacterActor(actor) {
+	return actor instanceof foundry.documents.Actor && actor.type === "character";
 }
 
 function classicSheetRoot(root) {
