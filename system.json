@@ -85,6 +85,7 @@
 		"module/chat/TestResultIdentityChat.mjs",
 		"module/tests/TestResultModifierToggle.mjs",
 		"module/tests/RiskConsequenceIntegration.mjs",
+		"module/tests/RiskConsequenceManualRollIntegration.mjs",
 		"module/tests/RiskConsequenceDiceAnimation.mjs",
 		"module/movement/DrowningLifecycleIntegration.mjs",
 		"module/movement/DrowningRiskEditLockIntegration.mjs",
