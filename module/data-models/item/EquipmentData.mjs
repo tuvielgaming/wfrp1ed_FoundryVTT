@@ -20,19 +20,25 @@ const { TypeDataModel } = foundry.abstract;
 const EQUIPMENT_MODES = Object.freeze([
 	INVENTORY_MODE.CARRIED,
 	INVENTORY_MODE.HELD,
+	INVENTORY_MODE.WORN,
 ]);
 
 /**
  * Native Foundry v14 data model for ordinary WFRP 1e Equipment Items.
  *
  * Equipment shares the same inventory state contract as Weapon and Armour so
- * rules which care about carried/held objects do not need to special-case
+ * rules which care about carried/held/worn objects do not need to special-case
  * legacy template.json fields or localized Item names.
  *
  * `isWealth` mirrors the two physical lists on the original WFRP 1e character
  * sheet. `false` means Equipment/Trappings; `true` means Wealth. A Boolean is
  * deliberately used because the printed sheet defines exactly those two
  * destinations and ordinary Equipment is the natural default.
+ *
+ * `isClothing` is an authored rules fact used by Core Encumbrance: clothing
+ * worn on the character contributes no personal Encumbrance, while the same
+ * clothing carried in a bag/container does. `worn` remains available in the
+ * state schema so this distinction is explicit rather than inferred from names.
  *
  * Quantity has two distinct meanings for stackable Core equipment:
  *
@@ -60,6 +66,7 @@ export class EquipmentData extends TypeDataModel {
 			referenceQuantity: positiveIntegerField(1),
 			isWealth: booleanField(false),
 			isContainer: booleanField(false),
+			isClothing: booleanField(false),
 			containerId: textField(),
 		};
 	}
@@ -108,6 +115,9 @@ export class EquipmentData extends TypeDataModel {
 
 		if (Object.hasOwn(sourceObject, "isContainer")) {
 			migrated.isContainer = toBoolean(sourceObject.isContainer);
+		}
+		if (Object.hasOwn(sourceObject, "isClothing")) {
+			migrated.isClothing = toBoolean(sourceObject.isClothing);
 		}
 		if (Object.hasOwn(sourceObject, "containerId")) {
 			migrated.containerId = unwrapText(sourceObject.containerId);
@@ -214,7 +224,7 @@ function migrateSparseState(migrated, source) {
 			toBoolean(unwrapValue(source.worn)) ||
 			toBoolean(unwrapValue(source.equipped))
 		) {
-			requestedMode = INVENTORY_MODE.HELD;
+			requestedMode = INVENTORY_MODE.WORN;
 		}
 	}
 
@@ -263,6 +273,7 @@ function shouldSeedLegacyReferenceQuantity(source) {
 		"isWealth",
 		"inventorySection",
 		"isContainer",
+		"isClothing",
 	].some((key) => Object.hasOwn(source, key));
 }
 
