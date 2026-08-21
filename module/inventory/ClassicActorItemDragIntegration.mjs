@@ -3,8 +3,8 @@ import { LootPileService } from "../loot/LootPileService.mjs";
 const OWNED_ITEM_DRAG_TYPE = "application/x-wfrp1ed-owned-item";
 
 const HELP_TEXT = Object.freeze({
-	en: "Quantity: left/right click changes by 1; Shift/Ctrl/Cmd changes by 10; double-click to type. Double-click LOC to type a location or choose a container. Drag Equipment owned by this character, or Equipment from Loot, directly onto a container to store it there. Drag an Item out of a container and drop it anywhere else on this character sheet to return it to the top level. Drag physical Items onto empty chat to create a Loot Pile, or onto an existing Loot card to add them to that pile. Items taken from Loot return to the top level unless they are dropped directly onto a container. Use the arrow to expand containers. Hover a row to reveal Delete. Scroll the list when it is full.",
-	pl: "Ilość: lewy/prawy klik zmienia o 1; Shift/Ctrl/Cmd zmienia o 10; dwuklik pozwala wpisać wartość. Dwuklik LOK pozwala wpisać lokalizację lub wybrać pojemnik. Przeciągnij Ekwipunek należący do tej postaci albo Ekwipunek z Łupu bezpośrednio na pojemnik, aby go w nim umieścić. Przeciągnij przedmiot z pojemnika i upuść go w dowolnym innym miejscu tej karty postaci, aby przenieść go na poziom główny. Przeciągnij fizyczny przedmiot na pusty obszar czatu, aby utworzyć stos łupu, albo na istniejącą kartę łupu, aby dodać go do tego stosu. Przedmioty podniesione z Łupu wracają na poziom główny, chyba że zostaną upuszczone bezpośrednio na pojemnik. Strzałka rozwija pojemniki. Usuń pojawia się po najechaniu na wiersz. Po zapełnieniu listę można przewijać.",
+	en: "Quantity: left/right click changes by 1; Shift/Ctrl/Cmd changes by 10; double-click to type. Double-click LOC to type a location or choose a container. Drag Equipment owned by this character, Equipment from Loot, or Equipment from the Item sidebar/Compendium directly onto a container to store it there. Drag an Item out of a container and drop it anywhere else on this character sheet to return it to the top level. Drag physical Items onto empty chat to create a Loot Pile, or onto an existing Loot card to add them to that pile. Items taken from Loot return to the top level unless they are dropped directly onto a container. Use the arrow to expand containers. Hover a row to reveal Delete. Scroll the list when it is full.",
+	pl: "Ilość: lewy/prawy klik zmienia o 1; Shift/Ctrl/Cmd zmienia o 10; dwuklik pozwala wpisać wartość. Dwuklik LOK pozwala wpisać lokalizację lub wybrać pojemnik. Przeciągnij bezpośrednio na pojemnik Ekwipunek należący do tej postaci, Ekwipunek z Łupu albo Ekwipunek z panelu Przedmiotów/Kompendium, aby go w nim umieścić. Przeciągnij przedmiot z pojemnika i upuść go w dowolnym innym miejscu tej karty postaci, aby przenieść go na poziom główny. Przeciągnij fizyczny przedmiot na pusty obszar czatu, aby utworzyć stos łupu, albo na istniejącą kartę łupu, aby dodać go do tego stosu. Przedmioty podniesione z Łupu wracają na poziom główny, chyba że zostaną upuszczone bezpośrednio na pojemnik. Strzałka rozwija pojemniki. Usuń pojawia się po najechaniu na wiersz. Po zapełnieniu listę można przewijać.",
 });
 
 Hooks.on("renderApplicationV2", (application, element) => {
@@ -242,15 +242,42 @@ async function placeDroppedEquipmentInContainer(event, actor, container, applica
 		await LootPileService.takeItem(item.parent, item, actor, {
 			containerId: String(container.id ?? ""),
 		});
+	} else if (isSidebarOrCompendiumItem(item)) {
+		await createSidebarEquipmentInContainer(item, actor, container);
 	} else {
 		throw new Error(localize(
-			"Drag Equipment owned by this character or Equipment from a Loot Pile onto the container.",
-			"Na pojemnik przeciągnij Ekwipunek należący do tej postaci albo Ekwipunek ze stosu łupu.",
+			"Drag Equipment owned by this character, Equipment from a Loot Pile, or Equipment from the Item sidebar/Compendium onto the container.",
+			"Na pojemnik przeciągnij Ekwipunek należący do tej postaci, Ekwipunek ze stosu łupu albo Ekwipunek z panelu Przedmiotów/Kompendium.",
 		));
 	}
 
 	await rerenderActorSheet(application);
 	autoExpandContainer(application, container.id);
+}
+
+function isSidebarOrCompendiumItem(item) {
+	if (!(item instanceof foundry.documents.Item)) return false;
+	if (item.pack) return true;
+	return !(item.parent instanceof foundry.documents.Actor);
+}
+
+async function createSidebarEquipmentInContainer(item, actor, container) {
+	const source = item.toObject();
+	delete source._id;
+	delete source.folder;
+	delete source.ownership;
+	source.system ??= {};
+	source.system.containerId = String(container.id ?? "");
+	source.system.storageLocation = String(container.name ?? "");
+
+	const [created] = await actor.createEmbeddedDocuments("Item", [source]);
+	if (!(created instanceof foundry.documents.Item)) {
+		throw new Error(localize(
+			"The Equipment Item could not be added to this character.",
+			"Nie udało się dodać Ekwipunku do tej postaci.",
+		));
+	}
+	return created;
 }
 
 function canPlaceInContainer(item, container, actor) {
