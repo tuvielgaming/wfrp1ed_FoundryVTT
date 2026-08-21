@@ -1,6 +1,7 @@
 import { INVENTORY_MODE } from "../data-models/item/InventoryItemFields.mjs";
 
 const PHYSICAL_ITEM_TYPES = new Set(["equipment", "weapon", "armour"]);
+const COMBAT_GEAR_TYPES = new Set(["weapon", "armour"]);
 const EQUIPMENT_SECTION = Object.freeze({
 	EQUIPMENT: "equipment",
 	WEALTH: "wealth",
@@ -14,6 +15,12 @@ const EQUIPMENT_SECTION = Object.freeze({
  * - every started 50 Encumbrance above capacity reduces Movement by 1;
  * - clothing worn on the character does not count toward personal Encumbrance;
  *   clothing carried in a bag/container does count.
+ *
+ * Classic-sheet total semantics:
+ * - Ekwipunek/Equipment total = ordinary non-Wealth Equipment plus all Weapons
+ *   and Armour, because those combat Items have no separate printed total;
+ * - Majątek/Wealth total = ordinary Wealth Equipment;
+ * - personal carried load = Equipment total + Wealth total.
  *
  * Free-text storageLocation is deliberately descriptive only. Mechanical load
  * changes must come from explicit inventory state/relationships, never from a
@@ -56,10 +63,12 @@ export class InventoryEncumbrance {
 	}
 
 	/**
-	 * Sum ordinary Equipment exactly as it is physically grouped on the Classic
-	 * sheet. Nested Items inherit the section of their top-level container, so a
-	 * Wealth Item placed inside an Equipment backpack contributes to Ekwipunek
-	 * until it is removed from that container.
+	 * Return one of the two totals printed on Classic page two.
+	 *
+	 * Nested ordinary Equipment inherits the section of its top-level container,
+	 * so a Wealth Item inside an Equipment backpack contributes to Ekwipunek
+	 * until removed. Weapon and Armour Items always contribute to Ekwipunek,
+	 * because their printed combat tables have no independent total field.
 	 */
 	static equipmentSectionTotal(actor, section = EQUIPMENT_SECTION.EQUIPMENT) {
 		assertActor(actor);
@@ -73,16 +82,27 @@ export class InventoryEncumbrance {
 			total += this.itemLoad(item, actor);
 		}
 
+		if (!wealth) {
+			for (const item of actor.items ?? []) {
+				if (!COMBAT_GEAR_TYPES.has(item?.type)) continue;
+				total += this.itemLoad(item, actor);
+			}
+		}
+
 		return total;
 	}
 
 	static evaluate(actor) {
 		assertActor(actor);
-		let load = 0;
-		for (const item of actor.items ?? []) {
-			if (!isPhysicalItem(item)) continue;
-			load += this.itemLoad(item, actor);
-		}
+		const equipment = this.equipmentSectionTotal(
+			actor,
+			EQUIPMENT_SECTION.EQUIPMENT,
+		);
+		const wealth = this.equipmentSectionTotal(
+			actor,
+			EQUIPMENT_SECTION.WEALTH,
+		);
+		const load = equipment + wealth;
 
 		const strength = characteristicValue(actor, "s");
 		const baseMovement = characteristicValue(actor, "m");
@@ -101,8 +121,8 @@ export class InventoryEncumbrance {
 			movementPenalty,
 			baseMovement,
 			effectiveMovement,
-			equipment: this.equipmentSectionTotal(actor, EQUIPMENT_SECTION.EQUIPMENT),
-			wealth: this.equipmentSectionTotal(actor, EQUIPMENT_SECTION.WEALTH),
+			equipment,
+			wealth,
 		});
 	}
 }
