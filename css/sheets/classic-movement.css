@@ -1,0 +1,75 @@
+/******************************************************************/
+/* Classic page-2 Movement / Tempo ruchu                          */
+/******************************************************************/
+
+/*
+ * Geometry is calibrated against the Polish HD page-2 scan. The major overlay
+ * rectangle still comes from ClassicLayout; these coordinates are only the
+ * nine writable cells inside that printed movement rectangle.
+ */
+.wfrp1ed-classic-sheet .classic-movement {
+	pointer-events: none;
+	font-family: "Book Antiqua", "Times New Roman", serif;
+	font-variant-numeric: tabular-nums;
+	color: #17120d;
+}
+
+.wfrp1ed-classic-sheet .classic-movement__value {
+	position: absolute;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+	width: 73px;
+	height: 46px;
+	margin: 0;
+	padding: 0;
+	font-size: 15px;
+	font-weight: 700;
+	line-height: 1;
+	text-align: center;
+	pointer-events: auto;
+}
+
+/* Column centres follow the printed vertical rules at x≈252, 324 and 397. */
+.wfrp1ed-classic-sheet .classic-movement__value--cautious-round,
+.wfrp1ed-classic-sheet .classic-movement__value--standard-round,
+.wfrp1ed-classic-sheet .classic-movement__value--running-round {
+	left: 178px;
+}
+
+.wfrp1ed-classic-sheet .classic-movement__value--cautious-minute,
+.wfrp1ed-classic-sheet .classic-movement__value--standard-minute,
+.wfrp1ed-classic-sheet .classic-movement__value--running-minute {
+	left: 252px;
+}
+
+.wfrp1ed-classic-sheet .classic-movement__value--cautious-kmh,
+.wfrp1ed-classic-sheet .classic-movement__value--standard-kmh,
+.wfrp1ed-classic-sheet .classic-movement__value--running-kmh {
+	left: 325px;
+	width: 72px;
+}
+
+/* Row centres are tuned independently to the irregular printed black labels. */
+.wfrp1ed-classic-sheet .classic-movement__value--cautious-round,
+.wfrp1ed-classic-sheet .classic-movement__value--cautious-minute,
+.wfrp1ed-classic-sheet .classic-movement__value--cautious-kmh {
+	top: 91px;
+}
+
+.wfrp1ed-classic-sheet .classic-movement__value--standard-round,
+.wfrp1ed-classic-sheet .classic-movement__value--standard-minute,
+.wfrp1ed-classic-sheet .classic-movement__value--standard-kmh {
+	top: 144px;
+}
+
+.wfrp1ed-classic-sheet .classic-movement__value--running-round,
+.wfrp1ed-classic-sheet .classic-movement__value--running-minute,
+.wfrp1ed-classic-sheet .classic-movement__value--running-kmh {
+	top: 200px;
+}
+
+.wfrp1ed-classic-sheet .classic-movement.is-overloaded .classic-movement__value {
+	font-weight: 900;
+}
