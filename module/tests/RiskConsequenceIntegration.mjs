@@ -171,14 +171,31 @@ function queueRiskSynchronization(message) {
 }
 
 async function synchronizeRiskMessage(message) {
-	const testState = riskTestState(message);
+	let testState = riskTestState(message);
 	if (!testState) return;
 
-	const actor = await actorForTestState(testState);
+	const actor = await actorForRiskMessage(message, testState);
 	if (!(actor instanceof foundry.documents.Actor)) {
-		throw new Error(
-			`Risk consequence Actor '${String(testState.actorUuid ?? "")}' is unavailable.`,
+		/*
+		 * Historical chat may outlive its Actor/token. Such an orphaned card is
+		 * immutable history; it must not turn every Foundry reload into a visible
+		 * synchronization error.
+		 */
+		return;
+	}
+
+	if (!String(testState.actorUuid ?? "").trim()) {
+		const updatedTestState = foundry.utils.deepClone(testState);
+		updatedTestState.version = Math.max(3, Number(updatedTestState.version) || 0);
+		updatedTestState.actorUuid = actor.uuid;
+		updatedTestState.updatedBy = String(game.user?.id ?? "");
+		updatedTestState.updatedAt = Date.now();
+		await message.setFlag(
+			FLAG_SCOPE,
+			TEST_STATE_FLAG_KEY,
+			updatedTestState,
 		);
+		testState = updatedTestState;
 	}
 
 	const failure = !testSucceeded(testState);
@@ -452,15 +469,36 @@ function riskDamageIsApplied(message) {
 	)?.state === "applied";
 }
 
-async function actorForTestState(state) {
-	const uuid = String(state?.actorUuid ?? "").trim();
-	if (!uuid) return null;
-	try {
-		const actor = await foundry.utils.fromUuid(uuid);
-		return actor instanceof foundry.documents.Actor ? actor : null;
-	} catch (_error) {
-		return null;
+async function actorForRiskMessage(message, state) {
+	const storedUuid = String(state?.actorUuid ?? "").trim();
+	if (storedUuid) {
+		try {
+			const storedActor = await foundry.utils.fromUuid(storedUuid);
+			if (storedActor instanceof foundry.documents.Actor) return storedActor;
+		} catch (_error) {
+			/* Continue through speaker-based legacy recovery. */
+		}
 	}
+
+	if (message?.actor instanceof foundry.documents.Actor) {
+		return message.actor;
+	}
+
+	const speakerActorId = String(message?.speaker?.actor ?? "").trim();
+	if (speakerActorId) {
+		const worldActor = game.actors?.get?.(speakerActorId);
+		if (worldActor instanceof foundry.documents.Actor) return worldActor;
+	}
+
+	const sceneId = String(message?.speaker?.scene ?? "").trim();
+	const tokenId = String(message?.speaker?.token ?? "").trim();
+	if (sceneId && tokenId) {
+		const scene = game.scenes?.get?.(sceneId);
+		const token = scene?.tokens?.get?.(tokenId);
+		if (token?.actor instanceof foundry.documents.Actor) return token.actor;
+	}
+
+	return null;
 }
 
 function actorFromUuidSync(uuid) {
