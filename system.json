@@ -73,6 +73,7 @@
 		"module/fate/FateSheetIntegration.mjs",
 		"module/movement/HeldItemsCheck.mjs",
 		"module/movement/ClassicMovementIntegration.mjs",
+		"module/movement/MovementProcedureIntegration.mjs",
 		"module/luck/LuckIntegration.mjs",
 		"module/chat/ChatClientLocalization.mjs",
 		"module/chat/TestResultIdentityChat.mjs",
