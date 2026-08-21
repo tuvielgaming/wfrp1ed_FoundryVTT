@@ -224,7 +224,9 @@ function migrateSparseState(migrated, source) {
 			toBoolean(unwrapValue(source.worn)) ||
 			toBoolean(unwrapValue(source.equipped))
 		) {
-			requestedMode = INVENTORY_MODE.WORN;
+			requestedMode = toBoolean(unwrapValue(source.isClothing))
+				? INVENTORY_MODE.WORN
+				: INVENTORY_MODE.HELD;
 		}
 	}
 
