@@ -47,6 +47,16 @@
     font-size: 1.25rem;
 }
 
+.wfrp1e-held-items-card__roll .wfrp1e-test-card__modifier-input {
+    width: 4rem;
+    height: 1.75rem;
+    margin: -0.2rem 0;
+    padding: 0.1rem 0.3rem;
+    font-size: 1.25rem;
+    line-height: 1;
+    text-align: right;
+}
+
 .wfrp1e-held-items-card__outcome {
     margin-top: 0.5rem;
     text-align: center;
