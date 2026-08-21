@@ -1,4 +1,8 @@
-import { INVENTORY_MODE } from "../data-models/item/InventoryItemFields.mjs";
+import {
+	INVENTORY_HAND,
+	INVENTORY_MODE,
+} from "../data-models/item/InventoryItemFields.mjs";
+import { WfrpRuleSettings } from "../settings/WfrpRuleSettings.mjs";
 import { WfrpCheckbox } from "../ui/WfrpCheckbox.mjs";
 import { MOVEMENT_RATE, MovementRates } from "./MovementRates.mjs";
 import { MovementStandardTest } from "../tests/MovementStandardTest.mjs";
@@ -10,7 +14,10 @@ import {
 
 const FLAG_SCOPE = "wfrp1ed";
 const MOVEMENT_STATE_FLAG_KEY = "movementResultState";
-const MOVEMENT_STATE_VERSION = 5;
+const MOVEMENT_STATE_VERSION = 6;
+
+const SWIMMING_HAZARD_MODIFIER = -20;
+const SWIMMING_ARMOUR_MODIFIER_PER_POINT = -10;
 
 const PACE = Object.freeze({
 	CAUTIOUS: "cautious",
@@ -35,6 +42,14 @@ const CLIMB_TYPE = Object.freeze({
  *   Climbing and Ropes and Ladders.
  * - Polish Core Rulebook, printed pp.74-75:
  *   Przeszkody, Trudny teren, Pływanie, Wspinaczka, Sznury i drabiny.
+ *
+ * IMPORTANT EDITION DECISION — Swimming:
+ * English Core printed p.74 gives hazardous Swimming Risk +20%; the Polish
+ * Core printed p.74 gives -20%. For the Polish-first Classic MVP the explicit
+ * project decision of 2026-08-21 is to use the Polish -20% value. Armour then
+ * applies a further -10% per Armour Point worn, exactly as both editions state.
+ * Keep this discrepancy visible; do not silently change the sign from one
+ * edition while auditing the other.
  *
  * This integration extends the existing movement procedure launcher rather than
  * creating a parallel test system. Any required Risk Test therefore continues
@@ -353,8 +368,12 @@ async function executeSwimming(executor, actor, options) {
 		options?.otherEncumbranceModifier ?? 0,
 		"otherEncumbranceModifier",
 	);
+	const hazardModifier = hazardous ? SWIMMING_HAZARD_MODIFIER : 0;
+	const armourModifier = hazardous
+		? armourPoints * SWIMMING_ARMOUR_MODIFIER_PER_POINT
+		: 0;
 	const riskModifier = hazardous
-		? 20 - (armourPoints * 10) + otherModifier
+		? hazardModifier + armourModifier + otherModifier
 		: null;
 	const toughness = nonNegativeInteger(
 		actor.getCharacteristicValue?.("t") ??
@@ -366,6 +385,8 @@ async function executeSwimming(executor, actor, options) {
 		distance,
 		hazardous,
 		armourPoints,
+		hazardModifier,
+		armourModifier,
 		otherModifier,
 		riskRequired: hazardous,
 		riskModifier,
@@ -391,6 +412,22 @@ async function executeClimbing(executor, actor, options) {
 		));
 	}
 
+	const handValidationEnabled =
+		WfrpRuleSettings.validatesClimbingHandAvailability();
+	const requiredFreeHands = requiredClimbingFreeHands(climbType);
+	const freeHands = countFreeHands(actor);
+
+	if (
+		handValidationEnabled &&
+		requiredFreeHands > 0 &&
+		freeHands < requiredFreeHands
+	) {
+		throw new Error(localize(
+			`This climb requires ${requiredFreeHands} free hand(s), but only ${freeHands} are available. Disable automatic climbing hand validation in World Settings to leave this rule to table adjudication.`,
+			`Ta wspinaczka wymaga ${requiredFreeHands} wolnych rąk, a dostępnych jest tylko ${freeHands}. Wyłącz automatyczne sprawdzanie wolnych rąk w Ustawieniach Świata, aby pozostawić tę zasadę rozstrzygnięciu przy stole.`,
+		));
+	}
+
 	/*
 	 * The Core describes non-sheer climbing and ropes/non-fixed ladders as half
 	 * move / half normal movement rate. The Standard rate is the system's normal
@@ -403,6 +440,9 @@ async function executeClimbing(executor, actor, options) {
 		climbType,
 		dangerous,
 		sheerAccessConfirmed,
+		handValidationEnabled,
+		requiredFreeHands,
+		freeHands,
 		normalDistance,
 		distance,
 		riskRequired: dangerous,
@@ -524,9 +564,20 @@ function difficultGroundPresentation(state) {
 }
 
 function swimmingPresentation(state) {
-	const riskDescription = state.hazardous
+	const unavailable = localize("not required", "niewymagany");
+	const hazardModifier = state.hazardous
+		? signed(state.hazardModifier)
+		: unavailable;
+	const armourModifier = state.hazardous
+		? signed(state.armourModifier)
+		: unavailable;
+	const otherModifier = state.hazardous
+		? signed(state.otherModifier)
+		: unavailable;
+	const totalModifier = state.hazardous
 		? signed(state.riskModifier)
-		: localize("not required", "niewymagany");
+		: unavailable;
+
 	return commonPresentation(state, {
 		procedure: STANDARD_TEST_PROCEDURES.swimming,
 		status: state.hazardous
@@ -540,24 +591,22 @@ function swimmingPresentation(state) {
 		rows: [
 			row(localize("Cautious rate", "Tempo Ostrożne"), distanceText(state.cautiousDistance)),
 			row(localize("Swimming rate", "Tempo pływania"), distanceText(state.distance)),
+			row(localize("Hazardous conditions", "Niebezpieczne warunki"), hazardModifier),
 			row(localize("Worn Armour Points", "Noszone Punkty Zbroi"), String(state.armourPoints)),
-			row(localize("Hazard Risk modifier", "Modyfikator Ryzyka"), riskDescription),
+			row(localize("Armour modifier", "Modyfikator za zbroję"), armourModifier),
+			row(localize("Other encumbrance (GM)", "Inne obciążenie (MG)"), otherModifier),
+			row(localize("Total Risk modifier", "Łączny modyfikator Ryzyka"), totalModifier),
 		],
 		note: state.hazardous
 			? localize(
-				`Hazardous Swimming rolls Risk at +20, -10 per worn Armour Point, plus the GM modifier. If it fails, after ${state.toughness} round(s) (Toughness) the character begins drowning and then loses 1 Wound per round.`,
-				`Niebezpieczne Pływanie wykonuje Test Ryzyka z +20, -10 za każdy noszony Punkt Zbroi oraz modyfikatorem MG. Po porażce, po ${state.toughness} rundach (Wytrzymałość), bohater zaczyna tonąć i następnie traci 1 Punkt Żywotności na rundę.`,
+				`For the Polish-first rules selection, hazardous Swimming rolls Risk at -20, then -10 per worn Armour Point, plus the GM modifier. If it fails, after ${state.toughness} round(s) (Toughness) the character begins drowning and then loses 1 Wound per round.`,
+				`W polskiej wersji zasad niebezpieczne Pływanie wykonuje Test Ryzyka z -20, następnie -10 za każdy noszony Punkt Pancerza oraz modyfikatorem MG. Po porażce, po ${state.toughness} rundach (Wytrzymałość), bohater zaczyna tonąć i następnie traci 1 Punkt Żywotności na rundę.`,
 			)
 			: localize(
 				"Normal Swimming requires no test under the Core rules.",
 				"Zwykłe Pływanie nie wymaga testu zgodnie z Księgą Główną.",
 			),
-		secondaryNote: state.hazardous && state.otherModifier !== 0
-			? localize(
-				`GM other-encumbrance modifier: ${signed(state.otherModifier)}.`,
-				`Modyfikator MG za inne obciążenie: ${signed(state.otherModifier)}.`,
-			)
-			: "",
+		secondaryNote: "",
 	});
 }
 
@@ -573,6 +622,12 @@ function climbingPresentation(state) {
 		notes.push(localize(
 			"A separate Risk Test is rolled. Failure means the character falls; resolve the actual fall height separately.",
 			"Wykonywany jest osobny Test Ryzyka. Porażka oznacza upadek; rzeczywistą wysokość upadku należy rozstrzygnąć osobno.",
+		));
+	}
+	if (state.handValidationEnabled && state.requiredFreeHands > 0) {
+		notes.push(localize(
+			`Automatic hand validation: ${state.freeHands} free of ${state.requiredFreeHands} required.`,
+			`Automatyczna kontrola rąk: ${state.freeHands} wolnych, wymagane ${state.requiredFreeHands}.`,
 		));
 	}
 
@@ -663,6 +718,36 @@ function climbHandsNote(type) {
 				"Wspinaczka zajmuje całą rundę; bohater nie może w tym czasie robić niczego innego.",
 			);
 	}
+}
+
+function requiredClimbingFreeHands(type) {
+	if (type === CLIMB_TYPE.ROPE) return 2;
+	if (type === CLIMB_TYPE.FIXED_LADDER) return 1;
+	return 0;
+}
+
+function countFreeHands(actor) {
+	const occupied = new Set();
+	for (const item of actor?.items ?? []) {
+		if (!["weapon", "armour", "equipment"].includes(item?.type)) continue;
+		if (String(item.system?.state?.mode ?? "") !== INVENTORY_MODE.HELD) continue;
+
+		switch (String(item.system?.state?.hand ?? "")) {
+			case INVENTORY_HAND.MAIN:
+				occupied.add(INVENTORY_HAND.MAIN);
+				break;
+			case INVENTORY_HAND.OFF:
+				occupied.add(INVENTORY_HAND.OFF);
+				break;
+			case INVENTORY_HAND.BOTH:
+				occupied.add(INVENTORY_HAND.MAIN);
+				occupied.add(INVENTORY_HAND.OFF);
+				break;
+			default:
+				break;
+		}
+	}
+	return Math.max(0, 2 - occupied.size);
 }
 
 function paceDistance(movementState, pace) {
