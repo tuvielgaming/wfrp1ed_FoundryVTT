@@ -1,0 +1,41 @@
+/******************************************************************/
+/* Classic inventory Encumbrance totals                           */
+/******************************************************************/
+
+.wfrp1ed-classic-sheet .classic-inventory__total-value {
+	position: absolute;
+	right: 12px;
+	bottom: 13px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+	width: 54px;
+	height: 20px;
+	color: #17120d;
+	font-size: 11px;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+	line-height: 1;
+	text-align: center;
+	z-index: 2;
+}
+
+/******************************************************************/
+/* Full Inventory Manager Encumbrance summary                     */
+/******************************************************************/
+
+.inventory-manager__summary {
+	padding: 5px 8px;
+	border: 1px solid rgb(55 39 23 / 26%);
+	border-radius: 4px;
+	background: rgb(246 237 213 / 72%);
+	font-variant-numeric: tabular-nums;
+	font-weight: 700;
+}
+
+.inventory-manager__summary.is-overloaded {
+	border-color: rgb(117 36 25 / 48%);
+	background: rgb(197 123 93 / 18%);
+	color: #651f18;
+}
