@@ -28,6 +28,10 @@ export class CombatEquipmentState {
 	static usedMode(item) {
 		assertSupportedItem(item);
 
+		if (item.type === "equipment" && item.system?.isClothing === true) {
+			return INVENTORY_MODE.WORN;
+		}
+
 		if (item.type === "weapon" || item.type === "equipment") {
 			return INVENTORY_MODE.HELD;
 		}
@@ -65,6 +69,8 @@ export class CombatEquipmentState {
 					throw new Error(handConflictMessage(validation));
 				}
 			}
+		} else if (used === true && mode === INVENTORY_MODE.WORN) {
+			hand = INVENTORY_HAND.NONE;
 		}
 
 		if (
