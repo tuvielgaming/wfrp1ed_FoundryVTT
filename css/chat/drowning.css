@@ -1,0 +1,69 @@
+.wfrp1e-drowning-tracker {
+	margin: 0.45rem 0;
+	padding: 0.45rem 0.5rem;
+	border: 1px solid rgb(80 59 38 / 45%);
+	background: rgb(247 238 214 / 48%);
+	font-family: inherit;
+}
+
+.wfrp1e-drowning-tracker__header {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 0.5rem;
+	margin-bottom: 0.2rem;
+	text-transform: uppercase;
+}
+
+.wfrp1e-drowning-tracker__phase {
+	font-size: 0.78em;
+	font-variant: small-caps;
+	white-space: nowrap;
+}
+
+.wfrp1e-drowning-tracker__progress {
+	font-weight: 700;
+	margin-bottom: 0.2rem;
+}
+
+.wfrp1e-drowning-tracker__note,
+.wfrp1e-drowning-damage-note {
+	font-size: 0.88em;
+	line-height: 1.25;
+}
+
+.wfrp1e-drowning-tracker__actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.25rem;
+	margin-top: 0.4rem;
+}
+
+.wfrp1e-drowning-tracker__actions button {
+	flex: 1 1 auto;
+	min-width: 0;
+	padding: 0.28rem 0.4rem;
+	font: inherit;
+}
+
+.wfrp1e-drowning-tracker.is-active {
+	border-width: 2px;
+}
+
+.wfrp1e-drowning-tracker.is-ended,
+.wfrp1e-drowning-tracker.is-cancelled,
+.wfrp1e-drowning-damage-note.is-cancelled {
+	opacity: 0.72;
+}
+
+.wfrp1e-drowning-tracker.is-fatal,
+.wfrp1e-drowning-damage-note.is-fatal {
+	border-color: currentColor;
+	font-weight: 700;
+}
+
+.wfrp1e-drowning-damage-note {
+	margin-top: 0.4rem;
+	padding-top: 0.35rem;
+	border-top: 1px solid rgb(80 59 38 / 35%);
+}
