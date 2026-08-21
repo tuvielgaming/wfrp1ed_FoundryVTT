@@ -2,14 +2,15 @@
  * WFRP 1e Standard Test launcher procedures which are not d100 Tests.
  *
  * Mechanics authority:
- * - English Core Rulebook, Time and Motion, printed p. 75:
- *   Jumping, Falling, Leaping, Climbing.
- * - Polish Core Rulebook, Ruchy, printed p. 75:
- *   Zeskok, Upadek, Skok, Wspinaczka.
+ * - English Core Rulebook, Time and Motion, printed pp. 73-75:
+ *   Moving/Running and Jumping/Falling/Leaping/Climbing.
+ * - Polish Core Rulebook, Ruchy, printed pp. 73-75:
+ *   Poruszanie się/Bieg and Zeskok/Upadek/Skok/Wspinaczka.
  *
  * These definitions are intentionally separate from TestManager/Test because
  * those classes model d100 target tests. Jumping and Leaping use d6 movement
- * procedures and must not be forced through the percentile Test contract.
+ * procedures, while continued Running combines a derived movement rate with an
+ * optional Risk Test underground.
  */
 
 export const STANDARD_TEST_PROCEDURES = deepFreeze({
@@ -43,6 +44,21 @@ export const STANDARD_TEST_PROCEDURES = deepFreeze({
 			"movement",
 			"requires-leap-gap",
 			"requires-run-up",
+		],
+	},
+
+	running: {
+		id: "running",
+		label: "Running",
+		labelKey: "WFRP1ED.StandardTest.Running",
+		polishFallback: "Bieg",
+		effectTargets: [],
+		tags: [
+			"standard",
+			"procedure",
+			"movement",
+			"requires-running-round",
+			"requires-underground",
 		],
 	},
 });
