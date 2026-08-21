@@ -42,6 +42,16 @@
 					>
 					<span>{{ui.container}}</span>
 				</label>
+
+				<label class="combat-item-sheet__check">
+					<input
+						type="checkbox"
+						name="system.isClothing"
+						{{checked system.isClothing}}
+						{{#unless editable}}disabled{{/unless}}
+					>
+					<span>{{ui.clothing}}</span>
+				</label>
 			</div>
 
 			<label class="combat-item-sheet__field">
