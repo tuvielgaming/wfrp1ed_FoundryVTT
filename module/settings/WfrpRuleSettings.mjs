@@ -9,6 +9,8 @@ const GM_DAMAGE_AUTOMATION_SETTING_KEY = "autoRollDamageForGmActors";
 const OWNED_DAMAGE_AUTOMATION_SETTING_KEY = "autoRollDamageForOwnedActors";
 const ADVANCED_CAREER_COMPLETION_SETTING_KEY =
 	"requireCareerCompletionForAdvancedTransfer";
+const CLIMBING_HAND_VALIDATION_SETTING_KEY =
+	"validateClimbingHandAvailability";
 
 /**
  * Native Foundry settings for explicit WFRP 1e rule interpretations and local
@@ -100,6 +102,23 @@ export class WfrpRuleSettings {
 				default: false,
 			},
 		);
+
+		game.settings.register(
+			game.system.id,
+			CLIMBING_HAND_VALIDATION_SETTING_KEY,
+			{
+				name: game.i18n.localize(
+					"WFRP1ED.Settings.ClimbingHandValidation.Name",
+				),
+				hint: game.i18n.localize(
+					"WFRP1ED.Settings.ClimbingHandValidation.Hint",
+				),
+				scope: "world",
+				config: true,
+				type: Boolean,
+				default: false,
+			},
+		);
 	}
 
 	static shieldParryRule() {
@@ -133,6 +152,13 @@ export class WfrpRuleSettings {
 	static requiresCareerCompletionForAdvancedTransfer() {
 		return this.#booleanSetting(
 			ADVANCED_CAREER_COMPLETION_SETTING_KEY,
+			false,
+		);
+	}
+
+	static validatesClimbingHandAvailability() {
+		return this.#booleanSetting(
+			CLIMBING_HAND_VALIDATION_SETTING_KEY,
 			false,
 		);
 	}
