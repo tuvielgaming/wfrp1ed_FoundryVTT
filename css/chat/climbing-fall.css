@@ -1,0 +1,59 @@
+.wfrp1e-climbing-lifecycle,
+.wfrp1e-climbing-risk-lock {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin: 6px 8px;
+	padding: 6px 8px;
+	border: 1px solid rgb(71 49 29 / 45%);
+	background: rgb(246 239 221 / 72%);
+	font-size: 11px;
+	line-height: 1.25;
+}
+
+.wfrp1e-climbing-lifecycle.is-fall-pending {
+	border-color: rgb(113 32 24 / 55%);
+	background: rgb(244 225 207 / 78%);
+}
+
+.wfrp1e-climbing-lifecycle.is-fall-resolved,
+.wfrp1e-climbing-risk-lock {
+	background: rgb(235 229 211 / 80%);
+}
+
+.wfrp1e-climbing-lifecycle.is-complete {
+	opacity: 0.82;
+}
+
+.wfrp1e-climbing-lifecycle button {
+	align-self: stretch;
+	min-height: 28px;
+	margin: 0;
+	padding: 4px 8px;
+	font: inherit;
+}
+
+.wfrp1e-climbing-risk-lock {
+	flex-direction: row;
+	align-items: center;
+	font-style: italic;
+}
+
+.wfrp1e-climbing-risk-lock i {
+	flex: 0 0 auto;
+}
+
+.wfrp1e-test-card.is-climbing-result-locked [data-wfrp-test-roll-value],
+.wfrp1e-test-card.is-climbing-result-locked [data-wfrp-test-general-modifier] {
+	cursor: default;
+}
+
+.wfrp1e-test-card.is-climbing-result-locked [data-wfrp-test-modifier-toggle] {
+	cursor: not-allowed;
+}
+
+.wfrp1ed-climbing-fall-dialog p {
+	margin: 8px 0 0;
+	font-size: 12px;
+	line-height: 1.3;
+}
