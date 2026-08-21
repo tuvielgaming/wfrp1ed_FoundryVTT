@@ -1,8 +1,10 @@
 import { LootPileService } from "../loot/LootPileService.mjs";
 
+const OWNED_ITEM_DRAG_TYPE = "application/x-wfrp1ed-owned-item";
+
 const HELP_TEXT = Object.freeze({
-	en: "Quantity: left/right click changes by 1; Shift/Ctrl/Cmd changes by 10; double-click to type. Double-click LOC to type a location or choose a container. Drag Equipment owned by this character, or Equipment from Loot, directly onto a container to store it there. Drag physical Items onto empty chat to create a Loot Pile, or onto an existing Loot card to add them to that pile. Items taken from Loot return to the top level unless they are dropped directly onto a container. Use the arrow to expand containers. Hover a row to reveal Delete. Scroll the list when it is full.",
-	pl: "Ilość: lewy/prawy klik zmienia o 1; Shift/Ctrl/Cmd zmienia o 10; dwuklik pozwala wpisać wartość. Dwuklik LOK pozwala wpisać lokalizację lub wybrać pojemnik. Przeciągnij Ekwipunek należący do tej postaci albo Ekwipunek z Łupu bezpośrednio na pojemnik, aby go w nim umieścić. Przeciągnij fizyczny przedmiot na pusty obszar czatu, aby utworzyć stos łupu, albo na istniejącą kartę łupu, aby dodać go do tego stosu. Przedmioty podniesione z Łupu wracają na poziom główny, chyba że zostaną upuszczone bezpośrednio na pojemnik. Strzałka rozwija pojemniki. Usuń pojawia się po najechaniu na wiersz. Po zapełnieniu listę można przewijać.",
+	en: "Quantity: left/right click changes by 1; Shift/Ctrl/Cmd changes by 10; double-click to type. Double-click LOC to type a location or choose a container. Drag Equipment owned by this character, or Equipment from Loot, directly onto a container to store it there. Drag an Item out of a container and drop it anywhere else on this character sheet to return it to the top level. Drag physical Items onto empty chat to create a Loot Pile, or onto an existing Loot card to add them to that pile. Items taken from Loot return to the top level unless they are dropped directly onto a container. Use the arrow to expand containers. Hover a row to reveal Delete. Scroll the list when it is full.",
+	pl: "Ilość: lewy/prawy klik zmienia o 1; Shift/Ctrl/Cmd zmienia o 10; dwuklik pozwala wpisać wartość. Dwuklik LOK pozwala wpisać lokalizację lub wybrać pojemnik. Przeciągnij Ekwipunek należący do tej postaci albo Ekwipunek z Łupu bezpośrednio na pojemnik, aby go w nim umieścić. Przeciągnij przedmiot z pojemnika i upuść go w dowolnym innym miejscu tej karty postaci, aby przenieść go na poziom główny. Przeciągnij fizyczny przedmiot na pusty obszar czatu, aby utworzyć stos łupu, albo na istniejącą kartę łupu, aby dodać go do tego stosu. Przedmioty podniesione z Łupu wracają na poziom główny, chyba że zostaną upuszczone bezpośrednio na pojemnik. Strzałka rozwija pojemniki. Usuń pojawia się po najechaniu na wiersz. Po zapełnieniu listę można przewijać.",
 });
 
 Hooks.on("renderApplicationV2", (application, element) => {
@@ -24,6 +26,7 @@ Hooks.on("renderApplicationV2", (application, element) => {
 	if (application.isEditable !== true) return;
 	installItemDragSources(root, actor);
 	installContainerDropTargets(root, actor, application);
+	installSheetTopLevelDropTarget(root, actor, application);
 	installInventoryMutationObserver(root, actor, application);
 });
 
@@ -70,8 +73,14 @@ function installItemDragSources(root, actor) {
 			}
 			const data = current.toDragData();
 			const serialized = JSON.stringify(data);
+			const ownedMarker = JSON.stringify({
+				actorUuid: String(actor.uuid ?? ""),
+				itemUuid: String(current.uuid ?? ""),
+				itemType: String(current.type ?? ""),
+			});
 			event.dataTransfer?.setData("text/plain", serialized);
 			event.dataTransfer?.setData("application/json", serialized);
+			event.dataTransfer?.setData(OWNED_ITEM_DRAG_TYPE, ownedMarker);
 			if (event.dataTransfer) event.dataTransfer.effectAllowed = "copyMove";
 		});
 	}
@@ -120,6 +129,81 @@ function installContainerDropTargets(root, actor, application) {
 			).catch(reportInventoryDropError);
 		});
 	}
+}
+
+/**
+ * The rest of the Classic sheet acts as the inverse of a container target.
+ * A same-character Equipment drag that does not land on a container returns
+ * that Item to the root inventory level. World/sidebar and Loot drags keep the
+ * normal Foundry/loot drop paths because they do not carry this same-Actor marker.
+ */
+function installSheetTopLevelDropTarget(root, actor, application) {
+	const sheet = classicSheetRoot(root);
+	if (!sheet || sheet.dataset.wfrpTopLevelDropTarget === "true") return;
+	sheet.dataset.wfrpTopLevelDropTarget = "true";
+
+	sheet.addEventListener("dragover", (event) => {
+		if (event.target?.closest?.(".classic-inventory__row[data-wfrp-container-drop-target='true']")) {
+			return;
+		}
+		const marker = ownedItemDragMarker(event.dataTransfer);
+		if (!isSameActorEquipmentMarker(marker, actor)) return;
+		event.preventDefault();
+		if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+	}, true);
+
+	sheet.addEventListener("drop", (event) => {
+		if (event.target?.closest?.(".classic-inventory__row[data-wfrp-container-drop-target='true']")) {
+			return;
+		}
+		const marker = ownedItemDragMarker(event.dataTransfer);
+		if (!isSameActorEquipmentMarker(marker, actor)) return;
+
+		event.preventDefault();
+		event.stopImmediatePropagation();
+		void moveOwnedEquipmentToTopLevel(marker, actor, application)
+			.catch(reportInventoryDropError);
+	}, true);
+}
+
+async function moveOwnedEquipmentToTopLevel(marker, actor, application) {
+	const uuid = String(marker?.itemUuid ?? "").trim();
+	if (!uuid) return;
+	const item = await foundry.utils.fromUuid(uuid);
+	if (
+		!(item instanceof foundry.documents.Item) ||
+		item.type !== "equipment" ||
+		item.parent !== actor
+	) return;
+
+	const containerId = String(item.system?.containerId ?? "").trim();
+	if (!containerId) return;
+
+	await item.update({
+		"system.containerId": "",
+		"system.storageLocation": "",
+	});
+	await rerenderActorSheet(application);
+}
+
+function ownedItemDragMarker(dataTransfer) {
+	if (!dataTransfer) return null;
+	try {
+		const raw = dataTransfer.getData(OWNED_ITEM_DRAG_TYPE);
+		if (!raw) return null;
+		const parsed = JSON.parse(raw);
+		return parsed && typeof parsed === "object" ? parsed : null;
+	} catch (_error) {
+		return null;
+	}
+}
+
+function isSameActorEquipmentMarker(marker, actor) {
+	return Boolean(
+		marker &&
+		String(marker.actorUuid ?? "") === String(actor?.uuid ?? "") &&
+		String(marker.itemType ?? "") === "equipment"
+	);
 }
 
 async function placeDroppedEquipmentInContainer(event, actor, container, application) {
@@ -390,10 +474,10 @@ function localizedHelpText() {
 }
 
 function reportInventoryDropError(error) {
-	console.error("WFRP1ED | Container drop failed.", error);
+	console.error("WFRP1ED | Container/inventory drop failed.", error);
 	ui.notifications.warn(error?.message ?? localize(
-		"Unable to place that Item in the container.",
-		"Nie udało się umieścić przedmiotu w pojemniku.",
+		"Unable to move that Item in the inventory.",
+		"Nie udało się przenieść tego przedmiotu w ekwipunku.",
 	));
 }
 
