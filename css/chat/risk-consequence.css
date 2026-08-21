@@ -21,6 +21,23 @@
 	white-space: nowrap;
 }
 
+.wfrp1e-risk-consequence__die-editor {
+	display: inline-flex;
+	gap: 4px;
+	align-items: center;
+	justify-content: flex-end;
+}
+
+.wfrp1e-risk-consequence__die-editor .wfrp1e-test-card__modifier-input {
+	width: 2.6rem;
+	height: 1.6rem;
+	margin: -0.15rem 0;
+	padding: 0.05rem 0.25rem;
+	font-size: 1rem;
+	line-height: 1;
+	text-align: center;
+}
+
 .wfrp1e-risk-consequence__status {
 	grid-column: 1 / -1;
 	font-size: 11px;
