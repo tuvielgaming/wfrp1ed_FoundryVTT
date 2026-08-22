@@ -106,6 +106,7 @@
 		"module/chat/PendingInteractionReminder.mjs",
 		"module/criticals/DetailedCriticalAdjudication.mjs",
 		"module/chat/CombatLifecyclePolish.mjs",
+		"module/combat/CombatDamagePresentationPolicy.mjs",
 		"module/criticals/CriticalResultLifecycleGuard.mjs",
 		"module/chat/CompactResolvedChatCards.mjs",
 		"module/chat/ChatDisclosureStatePreservation.mjs",
