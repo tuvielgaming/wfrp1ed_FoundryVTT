@@ -46,24 +46,23 @@ const WEAPON_MODIFIER_KEYS = Object.freeze([
  * Native Foundry v14 data model for a WFRP 1e Weapon Item.
  *
  * The Core combat procedure uses a held weapon as one input to an attack. The
- * weapon stores stable equipment state and authored rule facts; the combat
- * subsystem remains responsible for attack economy, tests, damage, parry and
- * ranged Load/Aim/Fire state.
+ * weapon stores stable equipment state and authored rule facts; combat remains
+ * responsible for attack economy, tests, damage, parry and ranged timing.
  *
- * `optionalModifiers` mirrors the optional Weapon Modifiers table. Merely
- * storing these values never enables that optional rule.
+ * `optionalModifiers` mirrors the optional melee Weapon Modifiers table. The
+ * values stay on the common Weapon data model so an Item can be re-authored,
+ * but ranged presentation and ranged attack resolution must not consume them.
  *
- * Ranged timing deliberately stores the mechanical parts of the Core
- * Load/Fire-Times column rather than one ambiguous `reload` number:
- * - loadRounds: full rounds which must be spent loading before a firing round;
- * - recoveryRounds: full rounds after firing before the weapon can fire again;
- * - shotsPerFireRound: how many shots one legal firing round permits;
- * - magazineCapacity / magazineReloadRounds: repeating-weapon magazine facts.
+ * Ranged cadence uses one canonical Reload value. It is the number of complete
+ * preparation rounds which must pass before another firing round is available:
+ * - Reload 0: the weapon may fire every round;
+ * - Reload 1: one preparation round between firing rounds (e.g. Crossbow);
+ * - Reload 2: two preparation rounds between firing rounds (e.g. Pistol/Lasso
+ *   according to the relevant Core timing entry).
  *
- * A normal one-round bow/throwing weapon therefore has loadRounds=0 and fires
- * in its current round. A Crossbow has loadRounds=1; a Pistol has
- * loadRounds=2. The old scalar `reload` field is migration input only and is no
- * longer part of the authoritative schema.
+ * `shotsPerFireRound` and magazine fields are separate because repeating
+ * weapons can fire more than once in their legal firing round and may require a
+ * distinct magazine-refill procedure.
  */
 export class WeaponData extends TypeDataModel {
 	static defineSchema() {
@@ -89,7 +88,7 @@ export class WeaponData extends TypeDataModel {
 
 			handedness: textField(WEAPON_HANDEDNESS.ONE),
 
-			/** Main-rule parry eligibility/bonus, independent of optional modifiers. */
+			/** Main-rule parry eligibility/bonus for melee use. */
 			parry: new SchemaField({
 				suitable: new BooleanField({
 					required: true,
@@ -99,7 +98,7 @@ export class WeaponData extends TypeDataModel {
 				bonus: integerField(),
 			}),
 
-			/** Optional Core Weapon Modifiers; combat policy decides whether to use them. */
+			/** Optional Core melee Weapon Modifiers. */
 			optionalModifiers: new SchemaField({
 				initiative: integerField(),
 				toHit: integerField(),
@@ -115,8 +114,7 @@ export class WeaponData extends TypeDataModel {
 			}),
 			effectiveStrength: nonNegativeIntegerField(),
 			firingCycle: new SchemaField({
-				loadRounds: nonNegativeIntegerField(),
-				recoveryRounds: nonNegativeIntegerField(),
+				reloadRounds: nonNegativeIntegerField(),
 				shotsPerFireRound: positiveIntegerField(1),
 				magazineCapacity: nonNegativeIntegerField(),
 				magazineReloadRounds: nonNegativeIntegerField(),
@@ -125,13 +123,11 @@ export class WeaponData extends TypeDataModel {
 	}
 
 	/**
-	 * Temporary read-only compatibility alias for the printed Classic table.
-	 * It is deliberately derived, not persisted. Existing presentation code can
-	 * keep reading `system.reload` while the ranged table is migrated to the
-	 * explicit firing-cycle vocabulary.
+	 * Read-only compatibility alias for the printed Classic `Ład.`/Reload column.
+	 * The authoritative persisted value lives in firingCycle.reloadRounds.
 	 */
 	get reload() {
-		return toNonNegativeInteger(this.firingCycle?.loadRounds);
+		return toNonNegativeInteger(this.firingCycle?.reloadRounds);
 	}
 
 	static migrateData(source, options = {}) {
@@ -220,19 +216,13 @@ export class WeaponData extends TypeDataModel {
 		);
 
 		/*
-		 * The pre-ranged-lifecycle schema exposed one `reload` number but never
-		 * used it mechanically. Preserve its literal meaning as "rounds spent
-		 * loading before fire" when migrating an Item which does not yet have the
-		 * explicit firing-cycle structure. No attempt is made to guess a weapon
-		 * class from its name.
+		 * Accept every temporary/legacy timing shape which has existed in this
+		 * project. `reloadRounds` is authoritative. The short-lived split model is
+		 * collapsed without summing values: loadRounds has priority, then
+		 * recoveryRounds, then the original scalar reload field.
 		 */
 		migrated.firingCycle = {
-			loadRounds: Object.hasOwn(firingCycle, "loadRounds")
-				? toNonNegativeInteger(unwrapValue(firingCycle.loadRounds))
-				: toNonNegativeInteger(unwrapValue(sourceObject.reload)),
-			recoveryRounds: toNonNegativeInteger(
-				unwrapValue(firingCycle.recoveryRounds),
-			),
+			reloadRounds: migratedReloadRounds(sourceObject, firingCycle),
 			shotsPerFireRound: positiveIntegerValue(
 				unwrapValue(firingCycle.shotsPerFireRound),
 				1,
@@ -247,6 +237,19 @@ export class WeaponData extends TypeDataModel {
 
 		return super.migrateData(migrated, options);
 	}
+}
+
+function migratedReloadRounds(sourceObject, firingCycle) {
+	if (Object.hasOwn(firingCycle, "reloadRounds")) {
+		return toNonNegativeInteger(unwrapValue(firingCycle.reloadRounds));
+	}
+	if (Object.hasOwn(firingCycle, "loadRounds")) {
+		return toNonNegativeInteger(unwrapValue(firingCycle.loadRounds));
+	}
+	if (Object.hasOwn(firingCycle, "recoveryRounds")) {
+		return toNonNegativeInteger(unwrapValue(firingCycle.recoveryRounds));
+	}
+	return toNonNegativeInteger(unwrapValue(sourceObject.reload));
 }
 
 function textField(initial = "") {
@@ -344,8 +347,7 @@ export function weaponRangedCycleSnapshot(weapon) {
 	const source = weapon.system?.firingCycle ?? {};
 	const magazineCapacity = toNonNegativeInteger(source.magazineCapacity);
 	return Object.freeze({
-		loadRounds: toNonNegativeInteger(source.loadRounds),
-		recoveryRounds: toNonNegativeInteger(source.recoveryRounds),
+		reloadRounds: toNonNegativeInteger(source.reloadRounds),
 		shotsPerFireRound: positiveIntegerValue(source.shotsPerFireRound, 1),
 		magazineCapacity,
 		magazineReloadRounds: magazineCapacity > 0
