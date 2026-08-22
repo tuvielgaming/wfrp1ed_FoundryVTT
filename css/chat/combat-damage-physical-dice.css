@@ -7,12 +7,17 @@
 }
 
 .wfrp1e-combat-damage-die-editor__label,
-.wfrp1e-combat-damage-die-editor__audit {
+.wfrp1e-combat-damage-die-editor__audit,
+.wfrp1e-combat-damage-die-editor__meta {
 	font-weight: 600;
 }
 
 .wfrp1e-combat-damage-die-editor__audit {
 	opacity: 0.7;
+}
+
+.wfrp1e-combat-damage-die-editor__meta {
+	opacity: 0.8;
 }
 
 .wfrp1e-combat-damage-die-editor__input {
