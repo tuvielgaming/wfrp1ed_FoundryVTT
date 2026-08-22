@@ -6,7 +6,6 @@ import {
 
 const FLAG_SCOPE = "wfrp1ed";
 const CRITICAL_RESULT_FLAG_KEY = "criticalResult";
-const CORE_PROVIDER_PREFIX = "wfrp1ed.core.detailed.";
 
 /*
  * The Core Rulebook's detailed Critical Effect tables were written to be read
@@ -21,8 +20,17 @@ const CORE_PROVIDER_PREFIX = "wfrp1ed.core.detailed.";
  */
 installCriticalWoundCreationExpansion();
 
-Hooks.on("renderChatMessageHTML", (message, html) => {
-	decorateDetailedCriticalDescription(message, html);
+/*
+ * CriticalBootstrap registers DetailedCriticalIntegration from its init hook.
+ * Register this renderer from a later init hook so it always runs AFTER the
+ * canonical detailed-critical renderer, which rewrites the effect text on every
+ * ChatMessage render. Registering at module evaluation time would run too early
+ * and the canonical renderer would overwrite our expanded text again.
+ */
+Hooks.once("init", () => {
+	Hooks.on("renderChatMessageHTML", (message, html) => {
+		decorateDetailedCriticalDescription(message, html);
+	});
 });
 
 Hooks.once("ready", () => {
