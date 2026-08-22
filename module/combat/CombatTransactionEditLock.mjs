@@ -16,34 +16,27 @@ const PREVIOUS_TITLE = "wfrpTransactionPreviousTitle";
 let chatRefreshQueued = false;
 
 /**
- * Closed combat transactions are immutable until Damage is explicitly reverted.
+ * Closed combat transactions are mechanically immutable until Damage is
+ * explicitly reverted.
  *
- * Apply Damage is the closing boundary for positive damage. Once the target
- * Actor records that application, Attack/Defence/Additional-Damage Test inputs
- * become visibly read-only on every client. Damage invalidation reopens the
- * transaction and restores the exact interactive state those controls had before
- * the transaction was closed.
- *
- * The authority guard remains as a fallback for a stale DOM/socket request, but
- * normal users should never be able to type into a closed Test input at all.
+ * Presentation metadata is not mechanical adjudication. In particular, the GM
+ * may still change only `testResultState.resultVisibility` after damage has been
+ * applied, using the same share/restrict context action available before the
+ * transaction closed. Roll, target, modifiers and all other test state remain
+ * protected by this guard.
  */
 Hooks.once("init", () => {
 	installRollCommitGuard();
 
 	Hooks.on("renderChatMessageHTML", (message, html) => {
 		applyRenderedLockState(message, html);
-
-		/*
-		 * Several Test presentation hooks decorate the same card. Re-check once
-		 * after the current render stack has finished so no later decorator can
-		 * accidentally turn a closed roll input editable again.
-		 */
 		queueMicrotask(() => applyRenderedLockState(message, html));
 	});
 
 	Hooks.on("preUpdateChatMessage", (message, changes) => {
 		if (!testStateChanged(changes)) return;
 		if (!isCombatTestAdjudicationLocked(message)) return;
+		if (isVisibilityOnlyTestStateUpdate(message, changes)) return;
 		return false;
 	});
 
@@ -77,10 +70,7 @@ function installRollCommitGuard() {
 		requestingUser,
 	) {
 		if (isCombatTestAdjudicationLocked(message)) {
-			/*
-			 * This should only be reachable from a stale DOM/socket request. Preserve
-			 * the authoritative roll, repaint the cards, and do not surface an error.
-			 */
+			/* Stale DOM/socket request: preserve the authoritative roll silently. */
 			lockVisibleCombatFamily(combatAttackSourceForTest(message));
 			requestChatRefresh();
 			return closedRollSnapshot(message);
@@ -108,6 +98,70 @@ function closedRollSnapshot(message) {
 	});
 }
 
+/**
+ * Allow exactly the existing GM visibility toggle on a closed Test card.
+ * TestResultChat writes a complete snapshot even when only visibility changes,
+ * so compare the incoming snapshot with the stored one after removing the three
+ * presentation/audit fields which that operation is allowed to update.
+ */
+function isVisibilityOnlyTestStateUpdate(message, changes) {
+	if (!game.user?.isGM) return false;
+
+	const current = message?.getFlag?.(FLAG_SCOPE, TEST_FLAG_KEY);
+	const incoming = changedTestState(changes, current);
+	if (!plainObject(current) || !plainObject(incoming)) return false;
+	if (String(incoming.resultVisibility ?? "") === String(current.resultVisibility ?? "")) {
+		return false;
+	}
+
+	return stableState(mechanicalTestState(current)) ===
+		stableState(mechanicalTestState(incoming));
+}
+
+function changedTestState(changes, current) {
+	const path = `flags.${FLAG_SCOPE}.${TEST_FLAG_KEY}`;
+	const nested = foundry.utils.getProperty?.(changes, path);
+	if (plainObject(nested)) return nested;
+	if (plainObject(changes?.flags?.[FLAG_SCOPE]?.[TEST_FLAG_KEY])) {
+		return changes.flags[FLAG_SCOPE][TEST_FLAG_KEY];
+	}
+	if (plainObject(changes?.[path])) return changes[path];
+
+	/* Also accept Foundry's flattened leaf-update form if the visibility helper is
+	 * ever simplified to update only individual paths in the future. */
+	const visibilityPath = `${path}.resultVisibility`;
+	if (Object.hasOwn(changes ?? {}, visibilityPath) && plainObject(current)) {
+		const copy = foundry.utils.deepClone(current);
+		copy.resultVisibility = changes[visibilityPath];
+		const byPath = `${path}.updatedBy`;
+		const atPath = `${path}.updatedAt`;
+		if (Object.hasOwn(changes, byPath)) copy.updatedBy = changes[byPath];
+		if (Object.hasOwn(changes, atPath)) copy.updatedAt = changes[atPath];
+		return copy;
+	}
+	return null;
+}
+
+function mechanicalTestState(state) {
+	const copy = foundry.utils.deepClone(state ?? {});
+	delete copy.resultVisibility;
+	delete copy.updatedBy;
+	delete copy.updatedAt;
+	return copy;
+}
+
+function stableState(value) {
+	try {
+		return JSON.stringify(value ?? null);
+	} catch (_error) {
+		return "";
+	}
+}
+
+function plainObject(value) {
+	return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
 function applyRenderedLockState(message, html) {
 	if (!isCombatTestAdjudicationLocked(message)) return;
 	lockRenderedCombatTest(html);
@@ -132,8 +186,9 @@ function forEachVisibleCombatTest(sourceMessage, callback) {
 	for (const message of game.messages ?? []) {
 		if (!message?.getFlag?.(FLAG_SCOPE, TEST_FLAG_KEY)) continue;
 		if (combatAttackSourceForTest(message)?.id !== sourceId) continue;
-		const entry = visibleMessageElement(message.id);
-		if (entry) callback(entry, message);
+		for (const entry of visibleMessageElements(message.id)) {
+			callback(entry, message);
+		}
 	}
 }
 
@@ -230,13 +285,13 @@ function datasetAttribute(datasetKey) {
 	return datasetKey.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
 }
 
-function visibleMessageElement(messageId) {
+function visibleMessageElements(messageId) {
 	const id = String(messageId ?? "");
-	if (!id) return null;
+	if (!id) return [];
 	const escaped = globalThis.CSS?.escape
 		? CSS.escape(id)
 		: id.replaceAll('"', '\\"');
-	return document.querySelector(`[data-message-id="${escaped}"]`);
+	return [...document.querySelectorAll(`[data-message-id="${escaped}"]`)];
 }
 
 function testStateChanged(changes) {
@@ -247,7 +302,8 @@ function flagChanged(changes, key) {
 	if (!changes || typeof changes !== "object") return false;
 	const path = `flags.${FLAG_SCOPE}.${key}`;
 	return Object.hasOwn(changes, path) ||
-		foundry.utils.getProperty?.(changes, path) !== undefined;
+		foundry.utils.getProperty?.(changes, path) !== undefined ||
+		Object.keys(changes).some((entry) => String(entry).startsWith(`${path}.`));
 }
 
 function requestChatRefresh() {
