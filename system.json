@@ -59,6 +59,7 @@
 		"module/criticals/CriticalHitLocationNormalization.mjs",
 		"module/criticals/CriticalConsequenceEngine.mjs",
 		"module/criticals/CriticalConsequencePersistence.mjs",
+		"module/criticals/CriticalConsequenceManualRollIntegration.mjs",
 		"module/rules/FractionalCharacteristicPolicy.mjs",
 		"module/combat/EffectiveAttacksIntegration.mjs",
 		"module/combat/CombatTransactionRollback.mjs",
