@@ -47,11 +47,23 @@ const WEAPON_MODIFIER_KEYS = Object.freeze([
  *
  * The Core combat procedure uses a held weapon as one input to an attack. The
  * weapon stores stable equipment state and authored rule facts; the combat
- * subsystem remains responsible for attack economy, WS tests, damage, parry,
- * and optional-rules policy.
+ * subsystem remains responsible for attack economy, tests, damage, parry and
+ * ranged Load/Aim/Fire state.
  *
  * `optionalModifiers` mirrors the optional Weapon Modifiers table. Merely
  * storing these values never enables that optional rule.
+ *
+ * Ranged timing deliberately stores the mechanical parts of the Core
+ * Load/Fire-Times column rather than one ambiguous `reload` number:
+ * - loadRounds: full rounds which must be spent loading before a firing round;
+ * - recoveryRounds: full rounds after firing before the weapon can fire again;
+ * - shotsPerFireRound: how many shots one legal firing round permits;
+ * - magazineCapacity / magazineReloadRounds: repeating-weapon magazine facts.
+ *
+ * A normal one-round bow/throwing weapon therefore has loadRounds=0 and fires
+ * in its current round. A Crossbow has loadRounds=1; a Pistol has
+ * loadRounds=2. The old scalar `reload` field is migration input only and is no
+ * longer part of the authoritative schema.
  */
 export class WeaponData extends TypeDataModel {
 	static defineSchema() {
@@ -102,7 +114,13 @@ export class WeaponData extends TypeDataModel {
 				max: nonNegativeIntegerField(),
 			}),
 			effectiveStrength: nonNegativeIntegerField(),
-			reload: nonNegativeIntegerField(),
+			firingCycle: new SchemaField({
+				loadRounds: nonNegativeIntegerField(),
+				recoveryRounds: nonNegativeIntegerField(),
+				shotsPerFireRound: positiveIntegerField(1),
+				magazineCapacity: nonNegativeIntegerField(),
+				magazineReloadRounds: nonNegativeIntegerField(),
+			}),
 		};
 	}
 
@@ -120,6 +138,7 @@ export class WeaponData extends TypeDataModel {
 		const oldParry = objectValue(sourceObject.parry);
 		const optional = objectValue(sourceObject.optionalModifiers);
 		const range = objectValue(sourceObject.range);
+		const firingCycle = objectValue(sourceObject.firingCycle);
 		const kind = normalizeAllowed(
 			sourceObject.kind,
 			Object.values(WEAPON_KIND),
@@ -189,9 +208,32 @@ export class WeaponData extends TypeDataModel {
 						: 0,
 			),
 		);
-		migrated.reload = toNonNegativeInteger(
-			unwrapValue(sourceObject.reload),
-		);
+
+		/*
+		 * The pre-ranged-lifecycle schema exposed one `reload` number but never
+		 * used it mechanically. Preserve its literal meaning as "rounds spent
+		 * loading before fire" when migrating an Item which does not yet have the
+		 * explicit firing-cycle structure. No attempt is made to guess a weapon
+		 * class from its name.
+		 */
+		migrated.firingCycle = {
+			loadRounds: Object.hasOwn(firingCycle, "loadRounds")
+				? toNonNegativeInteger(unwrapValue(firingCycle.loadRounds))
+				: toNonNegativeInteger(unwrapValue(sourceObject.reload)),
+			recoveryRounds: toNonNegativeInteger(
+				unwrapValue(firingCycle.recoveryRounds),
+			),
+			shotsPerFireRound: positiveIntegerValue(
+				unwrapValue(firingCycle.shotsPerFireRound),
+				1,
+			),
+			magazineCapacity: toNonNegativeInteger(
+				unwrapValue(firingCycle.magazineCapacity),
+			),
+			magazineReloadRounds: toNonNegativeInteger(
+				unwrapValue(firingCycle.magazineReloadRounds),
+			),
+		};
 
 		return super.migrateData(migrated, options);
 	}
@@ -224,6 +266,23 @@ function nonNegativeIntegerField(initial = 0) {
 		initial,
 		min: 0,
 	});
+}
+
+function positiveIntegerField(initial = 1) {
+	return new NumberField({
+		required: true,
+		nullable: false,
+		integer: true,
+		initial,
+		min: 1,
+	});
+}
+
+function positiveIntegerValue(value, fallback = 1) {
+	const number = Number(value);
+	return Number.isFinite(number) && Number.isInteger(number) && number > 0
+		? number
+		: fallback;
 }
 
 function legacyModifier(container, key, legacyValue) {
@@ -268,4 +327,19 @@ export function weaponOptionalModifierSnapshot(weapon) {
 			WEAPON_MODIFIER_KEYS.map((key) => [key, toInteger(source[key])]),
 		),
 	);
+}
+
+export function weaponRangedCycleSnapshot(weapon) {
+	if (weapon?.type !== "weapon") return null;
+	const source = weapon.system?.firingCycle ?? {};
+	const magazineCapacity = toNonNegativeInteger(source.magazineCapacity);
+	return Object.freeze({
+		loadRounds: toNonNegativeInteger(source.loadRounds),
+		recoveryRounds: toNonNegativeInteger(source.recoveryRounds),
+		shotsPerFireRound: positiveIntegerValue(source.shotsPerFireRound, 1),
+		magazineCapacity,
+		magazineReloadRounds: magazineCapacity > 0
+			? toNonNegativeInteger(source.magazineReloadRounds)
+			: 0,
+	});
 }
