@@ -176,31 +176,31 @@ function addDamageVisibilityContextOptions(menuItems) {
 
 	menuItems.push(
 		{
-			name: localize(
+			label: localize(
 				"Damage details: share with players",
 				"Szczegóły obrażeń: udostępnij graczom",
 			),
 			icon: '<i class="fa-solid fa-eye"></i>',
-			condition: (target) => {
+			visible: (target) => {
 				const message = messageFromContextTarget(target);
 				return isDedicatedDamageMessage(message) && !damageDetailsArePublic(message);
 			},
-			callback: (target) => {
+			onClick: (_event, target) => {
 				const message = messageFromContextTarget(target);
 				if (message) void setDamageDetailsPublic(message, true);
 			},
 		},
 		{
-			name: localize(
+			label: localize(
 				"Damage details: restrict to GM & Actor owner",
 				"Szczegóły obrażeń: tylko MG i właściciel Aktora",
 			),
 			icon: '<i class="fa-solid fa-eye-slash"></i>',
-			condition: (target) => {
+			visible: (target) => {
 				const message = messageFromContextTarget(target);
 				return isDedicatedDamageMessage(message) && damageDetailsArePublic(message);
 			},
-			callback: (target) => {
+			onClick: (_event, target) => {
 				const message = messageFromContextTarget(target);
 				if (message) void setDamageDetailsPublic(message, false);
 			},
