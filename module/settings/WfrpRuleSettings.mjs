@@ -6,7 +6,6 @@ export const SHIELD_PARRY_RULE = Object.freeze({
 const SHIELD_PARRY_SETTING_KEY = "shieldParryRule";
 const WEAPON_MODIFIERS_SETTING_KEY = "optionalWeaponModifiers";
 const GM_DAMAGE_AUTOMATION_SETTING_KEY = "autoRollDamageForGmActors";
-const OWNED_DAMAGE_AUTOMATION_SETTING_KEY = "autoRollDamageForOwnedActors";
 const ADVANCED_CAREER_COMPLETION_SETTING_KEY =
 	"requireCareerCompletionForAdvancedTransfer";
 const CLIMBING_HAND_VALIDATION_SETTING_KEY =
@@ -16,9 +15,9 @@ const CLIMBING_HAND_VALIDATION_SETTING_KEY =
  * Native Foundry settings for explicit WFRP 1e rule interpretations and local
  * combat-roll preferences.
  *
- * Rules which change the shared world contract use world scope. Automatic rolls
- * for player-owned Actors are a client preference so every player may decide
- * whether their own damage/parry dice wait for a click or roll immediately.
+ * Automatic damage/parry dice are intentionally limited to GM-controlled Actors
+ * which have no player OWNER. Player-owned Actors always keep these rolls as an
+ * explicit player/GM action so physical dice can be entered before adjudication.
  *
  * Damage automation may be suspended transiently while an already-resolved Test
  * is being adjudicated. This is runtime-only state: it prevents an automatic
@@ -71,19 +70,6 @@ export class WfrpRuleSettings {
 			config: true,
 			type: Boolean,
 			default: true,
-		});
-
-		game.settings.register(game.system.id, OWNED_DAMAGE_AUTOMATION_SETTING_KEY, {
-			name: game.i18n.localize(
-				"WFRP1ED.Settings.AutoDamageOwned.Name",
-			),
-			hint: game.i18n.localize(
-				"WFRP1ED.Settings.AutoDamageOwned.Hint",
-			),
-			scope: "client",
-			config: true,
-			type: Boolean,
-			default: false,
 		});
 
 		game.settings.register(
@@ -144,9 +130,13 @@ export class WfrpRuleSettings {
 			this.#booleanSetting(GM_DAMAGE_AUTOMATION_SETTING_KEY, true);
 	}
 
+	/**
+	 * Compatibility method for older combat integrations. Player-owned Actors no
+	 * longer have an automatic damage/parry-roll preference; their rolls are
+	 * always explicit.
+	 */
 	static autoRollDamageForOwnedActors() {
-		return !this.damageAutomationSuspended() &&
-			this.#booleanSetting(OWNED_DAMAGE_AUTOMATION_SETTING_KEY, false);
+		return false;
 	}
 
 	static requiresCareerCompletionForAdvancedTransfer() {
