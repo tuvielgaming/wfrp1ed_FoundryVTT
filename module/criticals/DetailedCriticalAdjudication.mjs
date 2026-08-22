@@ -13,13 +13,29 @@ const CRITICAL_RESULT_FLAG_KEY = "criticalResult";
 const FATAL_APPLICATIONS_FLAG_KEY = "fatalCriticalApplications";
 const FATE_INTERVENTIONS_FLAG_KEY = "fateInterventions";
 const ROLL_SELECTOR = "[data-wfrp-detailed-critical-roll-input]";
+const SOCKET_CHANNEL = "system.wfrp1ed";
+const REQUEST_TYPE = "detailed-critical-roll-edit-request";
+const RESPONSE_TYPE = "detailed-critical-roll-edit-response";
+const SOCKET_TIMEOUT_MS = 10000;
 const activeEdits = new Set();
+const pendingRequests = new Map();
 
 /*
- * CriticalBootstrap is loaded before this module and registers the canonical
- * detailed-result render hook from its init callback. Register our editor from a
- * later init callback so the canonical renderer writes title/meta/effect first;
- * this adjudication layer then replaces only the d100 presentation with an input.
+ * Physical-dice support for the detailed Critical Hit d100.
+ *
+ * CriticalBootstrap/DetailedCriticalIntegration own the initial random Roll and
+ * publish it as a normal roll-bearing ChatMessage. This layer changes only the
+ * adjudicated table total:
+ * - the GM or the same player who was allowed to resolve the source damage's
+ *   detailed Critical may enter a physical d100 result;
+ * - player edits are committed by the primary active GM because the authoritative
+ *   criticalResolution belongs to the target Actor's damage transaction;
+ * - the original Foundry Roll remains untouched for audit;
+ * - dependent table text/outcome are recalculated from the fixed entered value;
+ * - once the result has materialized a persistent Critical Wound, an applied
+ *   fatal consequence, or Fate expenditure, the d100 locks. Those are world-state
+ *   transaction boundaries and must be invalidated/reverted through their own
+ *   lifecycle before another critical result can be chosen safely.
  */
 Hooks.once("init", () => {
 	Hooks.on("renderChatMessageHTML", (message, html) => {
@@ -36,13 +52,25 @@ Hooks.once("init", () => {
 	});
 });
 
-/**
- * Post-resolution GM adjudication for the detailed Critical Hit d100.
- *
- * The original random event is never rerolled. Editing the visible d100 replaces
- * only the stored table-resolution snapshot, then synchronizes an already-
- * materialized Critical Wound to the newly selected Core/custom result.
- */
+/* Actor-side fatal/Fate transactions and persistent Critical Wound creation can
+ * change the edit lock without rewriting the result ChatMessage. Refresh visible
+ * editors at those boundaries so the UI follows the authoritative state. */
+Hooks.on("updateActor", (actor) => {
+	if (!(actor instanceof foundry.documents.Actor)) return;
+	requestAnimationFrame(() => refreshActorDetailedEditors(actor));
+});
+
+for (const hookName of ["createItem", "deleteItem"]) {
+	Hooks.on(hookName, (item) => {
+		if (item?.type !== "criticalWound") return;
+		const actor = item.parent;
+		if (!(actor instanceof foundry.documents.Actor)) return;
+		requestAnimationFrame(() => refreshActorDetailedEditors(actor));
+	});
+}
+
+Hooks.once("ready", () => registerSocket());
+
 function installCriticalRollEditor(message, state, card) {
 	const host = card.querySelector("[data-wfrp-detailed-roll]");
 	if (!(host instanceof HTMLElement)) return;
@@ -69,23 +97,25 @@ function installCriticalRollEditor(message, state, card) {
 		host.append(label, input);
 	}
 
+	const context = detailedCriticalContext(message, state);
 	input.value = String(state.resolution?.roll?.total ?? "");
-	input.readOnly = !game.user?.isGM;
-	input.classList.toggle("is-editable", game.user?.isGM === true);
-	input.classList.toggle("is-readonly", game.user?.isGM !== true);
-	input.title = game.user?.isGM
+	const lockReason = editLockReason(context);
+	const editable = Boolean(context && !lockReason && canEdit(context, game.user));
+	input.readOnly = !editable;
+	input.tabIndex = editable ? 0 : -1;
+	input.classList.toggle("is-editable", editable);
+	input.classList.toggle("is-readonly", !editable);
+	input.title = editable
 		? localize(
-			"GM: enter a d100 result from 1 to 100. The critical result and any linked Critical Wound will be recalculated without rerolling.",
-			"MG: wprowadź wynik K100 od 1 do 100. Trafienie krytyczne i powiązana Rana Krytyczna zostaną przeliczone bez ponownego rzutu.",
+			"Enter a physical d100 result from 1 to 100. The detailed critical table result will be recalculated without rerolling.",
+			"Wprowadź wynik fizycznego K100 od 1 do 100. Wynik szczegółowej tabeli trafień krytycznych zostanie przeliczony bez ponownego rzutu.",
 		)
-		: localize(
-			"Only the GM may adjudicate an already-resolved critical d100.",
-			"Tylko MG może zmienić już rozstrzygnięty rzut krytyczny K100.",
+		: lockReason || localize(
+			"Only the GM or the player who caused the source damage may replace this detailed critical d100 result.",
+			"Tylko MG albo gracz, który spowodował źródłowe obrażenia, może zmienić ten wynik K100 szczegółowego trafienia krytycznego.",
 		);
 
-	if (!game.user?.isGM || input.dataset.wfrpCriticalEditorBound === "true") {
-		return;
-	}
+	if (!editable || input.dataset.wfrpCriticalEditorBound === "true") return;
 	input.dataset.wfrpCriticalEditorBound = "true";
 
 	input.addEventListener("keydown", (event) => {
@@ -100,12 +130,19 @@ function installCriticalRollEditor(message, state, card) {
 }
 
 async function adjudicateCriticalRoll(message, input) {
-	const messageId = String(message?.id ?? "");
-	if (!messageId || activeEdits.has(messageId)) return;
-
 	try {
-		if (!game.user?.isGM) {
-			throw new Error("Only a GM may adjudicate a detailed critical result.");
+		const context = detailedCriticalContext(message);
+		if (!context) {
+			throw new Error(localize(
+				"This ChatMessage has no active detailed critical result.",
+				"Ta wiadomość nie zawiera aktywnego szczegółowego trafienia krytycznego.",
+			));
+		}
+		if (!canEdit(context, game.user)) {
+			throw new Error(editLockReason(context) || localize(
+				"You may not change this detailed critical d100 result.",
+				"Nie możesz zmienić tego wyniku K100 szczegółowego trafienia krytycznego.",
+			));
 		}
 
 		const raw = String(input?.value ?? "").trim();
@@ -122,70 +159,101 @@ async function adjudicateCriticalRoll(message, input) {
 			));
 		}
 
-		const state = detailedResultState(message);
-		const sourceMessage = game.messages?.get(String(state?.sourceMessageId ?? ""));
-		const damageState = sourceMessage?.getFlag?.(
-			FLAG_SCOPE,
-			DAMAGE_STATE_FLAG_KEY,
-		);
-		const actor = actorFromDamageState(damageState);
-		if (!(actor instanceof foundry.documents.Actor)) {
-			throw new Error("The critical target Actor is no longer available.");
-		}
+		if (Number(context.result.resolution?.roll?.total) === requested) return;
 
-		const packetId = String(state?.packetId ?? damageState?.packet?.id ?? "").trim();
-		const transaction = DamageApplication.transactionFor(actor, packetId);
-		if (
-			transaction?.state !== "applied" ||
-			!transaction.criticalResolution
-		) {
-			throw new Error(
-				"Critical adjudication requires the still-applied damage transaction which produced this result.",
-			);
-		}
-
-		assertFatalResultNotApplied(actor, packetId);
-
-		if (Number(state.resolution?.roll?.total) === requested) return;
-
-		activeEdits.add(messageId);
 		input.disabled = true;
+		if (game.user?.isGM) {
+			await commitDetailedCriticalRoll(message, requested, game.user);
+			return;
+		}
 
-		const resolution = await DetailedCriticalResolver.resolve(
-			Number(transaction.criticalValue),
-			String(damageState?.packet?.hitLocation ?? ""),
+		await requestOwnerEdit(message, requested);
+	} catch (error) {
+		console.error(
+			"WFRP1ED | Unable to adjudicate detailed critical d100.",
+			error,
+		);
+		const current = detailedResultState(message);
+		if (input) input.value = String(current?.resolution?.roll?.total ?? "");
+		ui.notifications.error(error?.message ?? localize(
+			"Unable to change the detailed critical result.",
+			"Nie udało się zmienić wyniku szczegółowego trafienia krytycznego.",
+		));
+	} finally {
+		if (input?.isConnected) input.disabled = false;
+	}
+}
+
+async function commitDetailedCriticalRoll(message, value, requestingUser) {
+	if (!game.user?.isGM) {
+		throw new Error("Detailed critical roll edits require GM authority.");
+	}
+
+	const messageId = String(message?.id ?? "");
+	if (!messageId) throw new Error("The detailed critical result message is unavailable.");
+	if (activeEdits.has(messageId)) {
+		throw new Error("This detailed critical result is already being edited.");
+	}
+
+	const context = detailedCriticalContext(message);
+	if (!context) {
+		throw new Error("This ChatMessage has no detailed critical result.");
+	}
+	if (!canEdit(context, requestingUser)) {
+		throw new Error(editLockReason(context) ||
+			"The requesting user may not change this detailed critical result.");
+	}
+
+	const requested = Number(value);
+	if (!Number.isInteger(requested) || requested < 1 || requested > 100) {
+		throw new Error("Detailed critical d100 must be a whole value from 1 to 100.");
+	}
+	if (Number(context.result.resolution?.roll?.total) === requested) {
+		return Object.freeze({
+			messageId,
+			roll: requested,
+			unchanged: true,
+		});
+	}
+
+	activeEdits.add(messageId);
+	try {
+		const generated = await DetailedCriticalResolver.resolve(
+			Number(context.transaction.criticalValue),
+			String(context.damage?.packet?.hitLocation ?? ""),
 			{
-				/* A fixed adjudicated total is not another random Roll. */
+				/* Fixed adjudicated value: this is not another random Roll. */
 				roll: {
 					formula: "1d100",
 					total: requested,
 				},
 			},
 		);
+		const resolution = foundry.utils.deepClone(generated);
+		/* The primary GM performs the authoritative write for a player request, but
+		 * audit fields identify the user who actually entered the physical die. */
+		resolution.resolvedBy = String(requestingUser?.id ?? game.user?.id ?? "");
+		resolution.resolvedAt = Date.now();
 
 		await DamageApplication.replaceCriticalResolution({
-			actor,
-			packetId,
+			actor: context.actor,
+			packetId: context.packetId,
 			criticalResolution: resolution,
 			user: game.user,
 		});
 
-		await synchronizeLinkedCriticalWound(
-			message,
-			actor,
-			state,
-			resolution,
-		);
-
-		const updatedState = foundry.utils.deepClone(state);
+		const updatedState = foundry.utils.deepClone(context.result);
+		const originalRoll = normalizedOriginalRoll(context.result);
 		updatedState.version = Math.max(3, Number(updatedState.version) || 0);
-		updatedState.originalRoll = Number(
-			state.originalRoll ?? state.resolution?.roll?.total ?? requested,
-		);
-		updatedState.rollEdited = requested !== updatedState.originalRoll;
-		updatedState.rollEditedBy = String(game.user?.id ?? "");
-		updatedState.rollEditedAt = Date.now();
+		updatedState.originalRoll = originalRoll;
+		updatedState.rollEdited = requested !== originalRoll;
+		updatedState.rollEditedBy = updatedState.rollEdited
+			? String(requestingUser?.id ?? "")
+			: "";
+		updatedState.rollEditedAt = updatedState.rollEdited ? Date.now() : null;
 		updatedState.resolution = foundry.utils.deepClone(resolution);
+		updatedState.updatedBy = String(requestingUser?.id ?? game.user?.id ?? "");
+		updatedState.updatedAt = Date.now();
 
 		await message.setFlag(
 			FLAG_SCOPE,
@@ -194,96 +262,245 @@ async function adjudicateCriticalRoll(message, input) {
 		);
 
 		void ui.chat?.render?.({ force: true });
-	} catch (error) {
-		console.error(
-			"WFRP1ED | Unable to adjudicate detailed critical d100.",
-			error,
-		);
-		const current = detailedResultState(message);
-		if (input) {
-			input.value = String(current?.resolution?.roll?.total ?? "");
-			input.disabled = false;
-		}
-		ui.notifications.error(error?.message ?? localize(
-			"Unable to change the detailed critical result.",
-			"Nie udało się zmienić wyniku szczegółowego trafienia krytycznego.",
-		));
+		return Object.freeze({
+			messageId,
+			roll: requested,
+			originalRoll,
+			rollEdited: updatedState.rollEdited,
+			outcome: String(resolution?.outcome ?? ""),
+		});
 	} finally {
 		activeEdits.delete(messageId);
 	}
 }
 
-async function synchronizeLinkedCriticalWound(
-	message,
-	actor,
-	resultState,
-	resolution,
-) {
-	const existing = CriticalWoundApplication.existingForResolution(
-		actor,
-		{ resultMessageId: message.id },
-	);
+function detailedCriticalContext(message, knownState = detailedResultState(message)) {
+	const result = knownState;
+	if (!result) return null;
 
-	if (resolution?.outcome === DETAILED_CRITICAL_OUTCOME.KILLED) {
-		if (existing) await existing.delete();
+	const sourceMessage = game.messages?.get(String(result.sourceMessageId ?? ""));
+	const damage = sourceMessage?.getFlag?.(FLAG_SCOPE, DAMAGE_STATE_FLAG_KEY);
+	const actor = actorFromDamageState(damage);
+	if (!(actor instanceof foundry.documents.Actor)) return null;
+
+	const packetId = String(result.packetId ?? damage?.packet?.id ?? "").trim();
+	if (!packetId) return null;
+
+	return {
+		message,
+		result,
+		sourceMessage,
+		damage,
+		actor,
+		packetId,
+		transaction: DamageApplication.transactionFor(actor, packetId),
+		wound: CriticalWoundApplication.existingForResolution(
+			actor,
+			{ resultMessageId: message.id },
+		),
+		fatalApplication: applicationMap(actor, FATAL_APPLICATIONS_FLAG_KEY)[packetId] ?? null,
+		fateIntervention: applicationMap(actor, FATE_INTERVENTIONS_FLAG_KEY)[packetId] ?? null,
+	};
+}
+
+function canEdit(context, user) {
+	if (!context || !user || editLockReason(context)) return false;
+	if (user.isGM) return true;
+
+	const sourceUser = sourceUserId(context.sourceMessage, context.damage);
+	return Boolean(sourceUser && sourceUser === String(user.id ?? ""));
+}
+
+function editLockReason(context) {
+	if (!context) return "";
+	if (
+		context.transaction?.state !== "applied" ||
+		!context.transaction?.criticalResolution
+	) {
+		return localize(
+			"The source damage transaction no longer has an active detailed critical resolution.",
+			"Źródłowa transakcja obrażeń nie ma już aktywnego rozstrzygnięcia szczegółowego trafienia krytycznego.",
+		);
+	}
+	if (context.fateIntervention) {
+		return localize(
+			"A Fate Point has already been spent for this critical result. Its d100 is now immutable history.",
+			"Dla tego trafienia krytycznego wydano już Punkt Przeznaczenia. Jego K100 jest teraz niezmienną historią.",
+		);
+	}
+	if (context.fatalApplication?.state === "applied") {
+		return localize(
+			"This fatal critical has already been applied. Invalidate/revert that fatal consequence before changing its d100.",
+			"To śmiertelne trafienie krytyczne zostało już zastosowane. Unieważnij/cofnij tę śmiertelną konsekwencję przed zmianą jej K100.",
+		);
+	}
+	if (context.wound) {
+		return localize(
+			"This detailed result has already been applied as a persistent Critical Wound. Invalidate that critical first so its world-state consequences can be reverted safely.",
+			"Ten szczegółowy wynik został już zastosowany jako trwała Rana Krytyczna. Najpierw unieważnij trafienie krytyczne, aby bezpiecznie cofnąć jego konsekwencje w świecie.",
+		);
+	}
+	return "";
+}
+
+function normalizedOriginalRoll(result) {
+	const value = Number(result?.originalRoll ?? result?.resolution?.roll?.total);
+	if (!Number.isInteger(value) || value < 1 || value > 100) {
+		throw new Error(`Invalid original detailed critical d100 value: ${String(value)}.`);
+	}
+	return value;
+}
+
+function sourceUserId(message, state) {
+	return String(
+		state?.createdBy ??
+		message?.user?.id ??
+		message?.author?.id ??
+		"",
+	).trim();
+}
+
+async function requestOwnerEdit(message, roll) {
+	const context = detailedCriticalContext(message);
+	if (!canEdit(context, game.user)) {
+		throw new Error(editLockReason(context) ||
+			"You may not change this detailed critical result.");
+	}
+
+	const gm = primaryActiveGm();
+	if (!gm) {
+		throw new Error(localize(
+			"A GM must be connected to save a player's physical detailed-critical d100 result.",
+			"MG musi być połączony, aby zapisać fizyczny wynik K100 szczegółowego trafienia krytycznego wprowadzony przez gracza.",
+		));
+	}
+
+	const requestId = foundry.utils.randomID();
+	return new Promise((resolve, reject) => {
+		const timeout = setTimeout(() => {
+			pendingRequests.delete(requestId);
+			reject(new Error("Detailed critical roll edit request timed out."));
+		}, SOCKET_TIMEOUT_MS);
+
+		pendingRequests.set(requestId, { resolve, reject, timeout });
+		game.socket.emit(SOCKET_CHANNEL, {
+			type: REQUEST_TYPE,
+			requestId,
+			requesterUserId: String(game.user?.id ?? ""),
+			resultMessageId: String(message?.id ?? ""),
+			roll: Number(roll),
+		});
+	});
+}
+
+function registerSocket() {
+	if (!game.socket) return;
+	game.socket.on(SOCKET_CHANNEL, (payload) => {
+		void handleSocketPayload(payload);
+	});
+}
+
+async function handleSocketPayload(payload) {
+	if (!payload || typeof payload !== "object") return;
+
+	if (payload.type === RESPONSE_TYPE) {
+		if (String(payload.requesterUserId ?? "") !== String(game.user?.id ?? "")) {
+			return;
+		}
+		const pending = pendingRequests.get(String(payload.requestId ?? ""));
+		if (!pending) return;
+		pendingRequests.delete(String(payload.requestId ?? ""));
+		clearTimeout(pending.timeout);
+		if (payload.ok) pending.resolve(payload.result ?? null);
+		else pending.reject(new Error(String(payload.error ?? "Unable to edit detailed critical d100.")));
 		return;
 	}
 
-	if (!existing) return;
+	if (payload.type !== REQUEST_TYPE || !isPrimaryActiveGm()) return;
 
-	await existing.update({
-		name: woundName(resolution),
-		"system.description": effectTextForClient(resolution),
-		"system.criticalValue": Number(resolution.criticalValue),
-		"system.hitLocation": String(resolution.hitLocation ?? ""),
-		"system.resolution.damagePacketId": String(resultState.packetId ?? ""),
-		"system.resolution.sourceMessageId": String(resultState.sourceMessageId ?? ""),
-		"system.resolution.resultMessageId": String(message.id ?? ""),
-		"system.resolution.tableRole": String(resolution.effect?.role ?? ""),
-		"system.resolution.tableVariant": "default",
-		"system.resolution.providerId": String(resolution.effect?.providerId ?? ""),
-		"system.resolution.tableUuid": String(resolution.effect?.tableUuid ?? ""),
-		"system.resolution.tableResultId": String(resolution.effect?.resultId ?? ""),
-		"system.resolution.roll": Number(resolution.roll?.total ?? 0),
-		"system.resolution.resolvedByUserId": String(resolution.resolvedBy ?? ""),
-		"system.resolution.resolvedAt": Number(resolution.resolvedAt ?? 0),
-	});
+	const response = {
+		type: RESPONSE_TYPE,
+		requestId: String(payload.requestId ?? ""),
+		requesterUserId: String(payload.requesterUserId ?? ""),
+		ok: false,
+		result: null,
+		error: null,
+	};
 
-	void existing.sheet?.render?.({ force: true });
+	try {
+		const requester = game.users?.get(response.requesterUserId);
+		if (!requester?.active) {
+			throw new Error("The requesting user is no longer active.");
+		}
+		const message = game.messages?.get(String(payload.resultMessageId ?? ""));
+		if (!message) throw new Error("The detailed critical result message is no longer available.");
+
+		const context = detailedCriticalContext(message);
+		if (!canEdit(context, requester)) {
+			throw new Error(editLockReason(context) ||
+				"The requesting user may not change this detailed critical result.");
+		}
+
+		response.result = await commitDetailedCriticalRoll(
+			message,
+			Number(payload.roll),
+			requester,
+		);
+		response.ok = true;
+	} catch (error) {
+		console.error("WFRP1ED | GM rejected detailed critical roll edit request.", error);
+		response.error = error?.message ?? "Unable to edit detailed critical d100.";
+	}
+
+	game.socket.emit(SOCKET_CHANNEL, response);
 }
 
-function assertFatalResultNotApplied(actor, packetId) {
-	const fatalApplications = actor.getFlag?.(
-		FLAG_SCOPE,
-		FATAL_APPLICATIONS_FLAG_KEY,
-	);
-	const fatal = fatalApplications &&
-		typeof fatalApplications === "object" &&
-		!Array.isArray(fatalApplications)
-			? fatalApplications[packetId]
-			: null;
-	if (fatal?.state === "applied") {
-		throw new Error(localize(
-			"This fatal critical has already been applied. Revert/invalidate that outcome before adjudicating its d100.",
-			"To śmiertelne trafienie krytyczne zostało już zastosowane. Cofnij/unieważnij ten wynik przed zmianą jego K100.",
-		));
-	}
+function refreshActorDetailedEditors(actor) {
+	for (const message of game.messages ?? []) {
+		const context = detailedCriticalContext(message);
+		if (context?.actor?.uuid !== actor.uuid) continue;
 
-	const interventions = actor.getFlag?.(
-		FLAG_SCOPE,
-		FATE_INTERVENTIONS_FLAG_KEY,
-	);
-	if (
-		interventions &&
-		typeof interventions === "object" &&
-		!Array.isArray(interventions) &&
-		interventions[packetId]
-	) {
-		throw new Error(localize(
-			"A Fate Point has already been spent for this critical result; its d100 can no longer be edited directly.",
-			"Dla tego trafienia krytycznego wydano już Punkt Przeznaczenia; jego K100 nie może już być bezpośrednio edytowane.",
-		));
+		for (const hostDocument of renderedHostDocuments()) {
+			const entry = hostDocument.querySelector?.(
+				`[data-message-id="${cssEscape(String(message.id ?? ""))}"]`,
+			);
+			if (!entry) continue;
+			const card = entry.matches?.("[data-wfrp-detailed-critical-card]")
+				? entry
+				: entry.querySelector?.("[data-wfrp-detailed-critical-card]");
+			if (card) installCriticalRollEditor(message, context.result, card);
+		}
 	}
+}
+
+function renderedHostDocuments() {
+	const documents = new Set([document]);
+	const instances = foundry.applications?.instances;
+	if (instances?.values) {
+		for (const application of instances.values()) {
+			const hostDocument = application?.element?.ownerDocument;
+			if (hostDocument?.querySelector) documents.add(hostDocument);
+		}
+	}
+	return documents;
+}
+
+function primaryActiveGm() {
+	return [...(game.users ?? [])]
+		.filter((user) => user?.active && user?.isGM)
+		.sort((left, right) => String(left.id).localeCompare(String(right.id)))[0] ?? null;
+}
+
+function isPrimaryActiveGm() {
+	const gm = primaryActiveGm();
+	return Boolean(game.user?.isGM && gm && String(gm.id) === String(game.user.id));
+}
+
+function applicationMap(actor, key) {
+	const existing = actor?.getFlag?.(FLAG_SCOPE, key);
+	return existing && typeof existing === "object" && !Array.isArray(existing)
+		? foundry.utils.deepClone(existing)
+		: {};
 }
 
 function detailedResultState(message) {
@@ -299,10 +516,12 @@ function detailedResultState(message) {
 
 function actorFromDamageState(state) {
 	try {
-		const actor = foundry.utils.fromUuidSync(
+		const document = foundry.utils.fromUuidSync(
 			String(state?.packet?.targetActorUuid ?? ""),
 		);
-		return actor instanceof foundry.documents.Actor ? actor : null;
+		if (document instanceof foundry.documents.Actor) return document;
+		if (document?.actor instanceof foundry.documents.Actor) return document.actor;
+		return null;
 	} catch (_error) {
 		return null;
 	}
@@ -345,6 +564,13 @@ function asElement(html) {
 	if (html instanceof HTMLElement) return html;
 	if (html?.[0] instanceof HTMLElement) return html[0];
 	return null;
+}
+
+function cssEscape(value) {
+	const text = String(value ?? "");
+	return globalThis.CSS?.escape
+		? CSS.escape(text)
+		: text.replace(/["\\]/g, "\\$&");
 }
 
 function localize(english, polish) {
