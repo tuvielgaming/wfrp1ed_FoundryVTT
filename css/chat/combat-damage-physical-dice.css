@@ -34,3 +34,17 @@
 	cursor: default;
 	opacity: 0.8;
 }
+
+.wfrp1e-additional-damage-dice-editor {
+	display: inline-flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 0.3rem;
+}
+
+.wfrp1e-additional-damage-dice-editor__test,
+.wfrp1e-additional-damage-dice-editor__plus {
+	font-weight: 600;
+	white-space: nowrap;
+}
