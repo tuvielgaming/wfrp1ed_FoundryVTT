@@ -1,4 +1,7 @@
-import { DamageApplication } from "../damage/DamageApplication.mjs";
+import {
+	canEditCombatParryReduction,
+	requestCombatParryReductionUpdate,
+} from "./CombatDamagePhysicalDiceIntegration.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
 const ATTACK_FLAG_KEY = "combatAttackResult";
@@ -6,23 +9,16 @@ const DAMAGE_FLAG_KEY = "damageState";
 const COMBAT_DAMAGE_FLAG_KEY = "combatDamageRoll";
 const DAMAGE_RESULT_VIEW_FLAG_KEY = "combatDamageResultView";
 
-const SOCKET_CHANNEL = "system.wfrp1ed";
 /*
- * This request is intentionally the same one owned by
- * CombatDamagePhysicalDiceIntegration. That module remains the single
- * authoritative parry-adjudication path; this file is only a view adapter for
- * the dedicated Damage card.
+ * View adapter for the dedicated Damage card.
+ *
+ * All permission, GM-authority, socket and damage-recalculation logic lives in
+ * CombatDamagePhysicalDiceIntegration. This module only renders the same parry
+ * d6 editor in the dedicated card and delegates the edit to that canonical path.
  */
-const SOCKET_REQUEST_TYPE = "combat-parry-physical-die-request";
-const SOCKET_RESPONSE_TYPE = "combat-parry-physical-die-response";
-const SOCKET_TIMEOUT_MS = 10000;
-const pendingRequests = new Map();
-
 Hooks.on("renderChatMessageHTML", (message, html) => {
 	requestAnimationFrame(() => decorateDedicatedParryDie(message, html));
 });
-
-Hooks.once("ready", () => registerSocketResponse());
 
 function decorateDedicatedParryDie(viewMessage, html) {
 	const view = viewMessage?.getFlag?.(FLAG_SCOPE, DAMAGE_RESULT_VIEW_FLAG_KEY);
@@ -59,7 +55,7 @@ function decorateDedicatedParryDie(viewMessage, html) {
 	const generated = isD6(rollState.parry.reductionOriginal)
 		? Number(rollState.parry.reductionOriginal)
 		: current;
-	const editable = canEditParry(sourceMessage, game.user);
+	const editable = canEditCombatParryReduction(sourceMessage, game.user);
 	const absorbed = nonNegativeInteger(
 		damageState?.resolution?.breakdown?.parry?.absorbed,
 	);
@@ -140,8 +136,7 @@ async function commitParry(sourceMessage, input, previousValue) {
 
 	input.readOnly = true;
 	try {
-		await requestAuthoritativeParryEdit(sourceMessage, value);
-		if (input.isConnected) input.value = String(value);
+		await requestCombatParryReductionUpdate(sourceMessage, value);
 	} catch (error) {
 		if (input.isConnected) input.value = String(previousValue);
 		console.error("WFRP1ED | Unable to adjudicate dedicated Damage-card parry d6.", error);
@@ -153,124 +148,15 @@ async function commitParry(sourceMessage, input, previousValue) {
 		);
 	} finally {
 		if (input.isConnected) {
-			input.readOnly = !canEditParry(sourceMessage, game.user);
+			input.readOnly = !canEditCombatParryReduction(sourceMessage, game.user);
 			input.setAttribute("aria-readonly", input.readOnly ? "true" : "false");
 		}
 	}
 }
 
-function requestAuthoritativeParryEdit(sourceMessage, value) {
-	if (!canEditParry(sourceMessage, game.user)) {
-		return Promise.reject(new Error(localize(
-			"You are not allowed to edit this parry reduction roll.",
-			"Nie masz uprawnień do edycji tego rzutu redukcji parowania.",
-		)));
-	}
-	if (!game.socket) {
-		return Promise.reject(new Error(localize(
-			"The system socket is unavailable.",
-			"Gniazdo systemu jest niedostępne.",
-		)));
-	}
-	const gm = primaryActiveGM();
-	if (!gm) {
-		return Promise.reject(new Error(localize(
-			"An active GM is required to edit the parry reduction.",
-			"Do edycji redukcji parowania wymagany jest aktywny MG.",
-		)));
-	}
-
-	const requestId = foundry.utils.randomID();
-	return new Promise((resolve, reject) => {
-		const timeout = setTimeout(() => {
-			pendingRequests.delete(requestId);
-			reject(new Error(localize(
-				"The GM did not resolve the parry edit in time.",
-				"MG nie rozstrzygnął edycji parowania w wymaganym czasie.",
-			)));
-		}, SOCKET_TIMEOUT_MS);
-		pendingRequests.set(requestId, { resolve, reject, timeout });
-		game.socket.emit(SOCKET_CHANNEL, {
-			type: SOCKET_REQUEST_TYPE,
-			requestId,
-			requestUserId: String(game.user?.id ?? ""),
-			messageId: String(sourceMessage?.id ?? ""),
-			value,
-		});
-	});
-}
-
-function registerSocketResponse() {
-	if (!game.socket) return;
-	game.socket.on(SOCKET_CHANNEL, (payload) => {
-		if (payload?.type !== SOCKET_RESPONSE_TYPE) return;
-		if (String(payload.requestUserId ?? "") !== String(game.user?.id ?? "")) return;
-		const requestId = String(payload.requestId ?? "");
-		const pending = pendingRequests.get(requestId);
-		if (!pending) return;
-		pendingRequests.delete(requestId);
-		clearTimeout(pending.timeout);
-		if (!payload.ok) {
-			pending.reject(new Error(String(payload.error ?? "Unable to edit the parry reduction.")));
-			return;
-		}
-		pending.resolve(payload.result ?? null);
-	});
-}
-
-function canEditParry(sourceMessage, user) {
-	if (!sourceMessage?.id || !user) return false;
-	const attack = sourceMessage.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY);
-	const rollState = sourceMessage.getFlag?.(FLAG_SCOPE, COMBAT_DAMAGE_FLAG_KEY);
-	const damageState = sourceMessage.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG_KEY);
-	if (
-		attack?.family !== "melee" ||
-		rollState?.status !== "resolved" ||
-		rollState?.parry?.succeeded !== true ||
-		!isD6(rollState?.parry?.reduction) ||
-		!damageState?.packet?.id ||
-		damageTransactionFor(damageState)
-	) return false;
-	if (user.isGM) return true;
-	const defender = actorFromUuidSync(attack?.target?.uuid);
-	return hasOwnerPermission(defender, user);
-}
-
-function damageTransactionFor(damageState) {
-	if (!damageState?.packet?.id) return null;
-	const actor = actorFromUuidSync(damageState.packet.targetActorUuid);
-	return actor ? DamageApplication.transactionFor(actor, damageState.packet.id) : null;
-}
-
 function findRow(card, expectedLabel) {
 	return [...(card.querySelectorAll?.(".wfrp1e-damage-card__row") ?? [])]
 		.find((row) => String(row.querySelector?.(":scope > span")?.textContent ?? "").trim() === expectedLabel) ?? null;
-}
-
-function actorFromUuidSync(uuid) {
-	try {
-		const document = foundry.utils.fromUuidSync(String(uuid ?? "").trim());
-		if (document instanceof foundry.documents.Actor) return document;
-		if (document?.actor instanceof foundry.documents.Actor) return document.actor;
-	} catch (_error) {
-		return null;
-	}
-	return null;
-}
-
-function hasOwnerPermission(actor, user) {
-	if (!(actor instanceof foundry.documents.Actor) || !user) return false;
-	if (user.isGM) return true;
-	return actor.testUserPermission?.(
-		user,
-		CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER,
-	) === true;
-}
-
-function primaryActiveGM() {
-	return [...(game.users ?? [])]
-		.filter((user) => user.active && user.isGM)
-		.sort((first, second) => String(first.id).localeCompare(String(second.id)))[0] ?? null;
 }
 
 function isD6(value) {
