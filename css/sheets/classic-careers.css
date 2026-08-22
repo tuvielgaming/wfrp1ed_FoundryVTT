@@ -181,28 +181,59 @@
 
 .career-choice-dialog {
 	display: grid;
-	gap: 7px;
+	gap: 8px;
 	min-width: 360px;
 }
 
 .career-choice-dialog__option {
 	display: grid;
-	grid-template-columns: auto minmax(0, 1fr);
+	grid-template-columns: 20px minmax(0, 1fr);
 	align-items: start;
-	gap: 8px;
-	padding: 7px 9px;
-	border: 1px solid rgb(72 59 40 / 28%);
-	border-radius: 3px;
-	background: rgb(255 255 255 / 18%);
+	gap: 9px;
+	padding: 8px 10px;
+	border: 1px solid rgb(224 205 174 / 42%);
+	border-radius: 4px;
+	background: rgb(255 255 255 / 10%);
+	cursor: pointer;
+	transition: background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
 }
 
-.career-choice-dialog__option input {
-	margin-top: 2px;
+.career-choice-dialog__option:hover {
+	border-color: rgb(235 214 177 / 70%);
+	background: rgb(255 255 255 / 16%);
+}
+
+.career-choice-dialog__option:has(input:checked) {
+	border-color: rgb(229 190 119 / 88%);
+	background: rgb(177 125 55 / 28%);
+	box-shadow: inset 0 0 0 1px rgb(255 232 184 / 16%);
+}
+
+/* Foundry's dark theme makes native unchecked controls almost disappear in
+ * this dialog. Force only these Career-choice controls to use the browser's
+ * high-contrast light control palette while preserving native semantics. */
+.career-choice-dialog__option input[type="checkbox"],
+.career-choice-dialog__option input[type="radio"] {
+	appearance: auto !important;
+	-webkit-appearance: auto !important;
+	width: 17px !important;
+	height: 17px !important;
+	min-width: 17px !important;
+	margin: 1px 0 0 !important;
+	opacity: 1 !important;
+	color-scheme: light;
+	accent-color: #7b2f25;
+	cursor: pointer;
+}
+
+.career-choice-dialog__option:has(input:focus-visible) {
+	outline: 2px solid rgb(241 215 166 / 90%);
+	outline-offset: 1px;
 }
 
 .career-choice-dialog__option small {
 	display: block;
 	margin-top: 3px;
 	white-space: pre-line;
-	opacity: 0.78;
+	opacity: 0.82;
 }
