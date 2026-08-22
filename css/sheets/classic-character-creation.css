@@ -157,15 +157,23 @@
 	color: rgb(139 239 151);
 }
 
-/* A small header icon is easy to miss once the sheet is scrolled. Keep the
- * whole Foundry window visibly in creation state by tracing the frame in gold.
- * :has() binds presentation directly to the authoritative active frame button,
- * so there is no second UI-state flag or render-time bookkeeping. */
-.classic-actor-sheet:has(.wfrp1ed-character-creation-toggle.is-active) {
+/* The Actor flag is mirrored onto the Application root as an explicit
+ * presentation class. Do not depend on :has(frame-button) here: Foundry can
+ * keep frame controls alive while rerendering only application content. */
+.application.classic-actor-sheet.wfrp1ed-character-creation-mode,
+.classic-actor-sheet.wfrp1ed-character-creation-mode {
+	outline: 3px solid rgb(218 174 85 / 96%) !important;
+	outline-offset: -3px;
 	border-color: rgb(218 174 85 / 96%) !important;
-	outline: 2px solid rgb(218 174 85 / 88%);
-	outline-offset: -2px;
 	box-shadow:
-		0 0 0 1px rgb(255 226 157 / 30%),
-		0 0 18px rgb(218 174 85 / 35%) !important;
+		inset 0 0 0 2px rgb(255 226 157 / 22%),
+		0 0 0 1px rgb(255 226 157 / 38%),
+		0 0 22px rgb(218 174 85 / 46%) !important;
+}
+
+/* Keep the top frame itself unmistakably in creation state as well, so the
+ * mode is visible even against a very bright sheet page. */
+.classic-actor-sheet.wfrp1ed-character-creation-mode > .window-header,
+.classic-actor-sheet.wfrp1ed-character-creation-mode .window-header:first-child {
+	box-shadow: inset 0 -2px 0 rgb(218 174 85 / 88%);
 }
