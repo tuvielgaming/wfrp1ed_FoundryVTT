@@ -157,23 +157,32 @@
 	color: rgb(139 239 151);
 }
 
-/* The Actor flag is mirrored onto the Application root as an explicit
- * presentation class. Do not depend on :has(frame-button) here: Foundry can
- * keep frame controls alive while rerendering only application content. */
-.application.classic-actor-sheet.wfrp1ed-character-creation-mode,
-.classic-actor-sheet.wfrp1ed-character-creation-mode {
-	outline: 3px solid rgb(218 174 85 / 96%) !important;
-	outline-offset: -3px;
-	border-color: rgb(218 174 85 / 96%) !important;
+/*
+ * Character Creation Mode is most useful when it remains obvious while the
+ * user scrolls deep into the sheet. Colour only Foundry's content surface
+ * behind the parchment pages: the existing transparent spacing around the
+ * pages becomes gold, while the printed character-sheet pages themselves keep
+ * their ordinary white artwork/backgrounds. Do not add padding here; Classic
+ * sheet page spacing already owns the layout, so this is presentation only.
+ */
+.application.classic-actor-sheet.wfrp1ed-character-creation-mode > section.window-content,
+.classic-actor-sheet.wfrp1ed-character-creation-mode > section.window-content {
+	background:
+		linear-gradient(
+			180deg,
+			rgb(227 190 55 / 98%) 0%,
+			rgb(211 169 45 / 98%) 52%,
+			rgb(224 185 52 / 98%) 100%
+		) !important;
 	box-shadow:
-		inset 0 0 0 2px rgb(255 226 157 / 22%),
-		0 0 0 1px rgb(255 226 157 / 38%),
-		0 0 22px rgb(218 174 85 / 46%) !important;
+		inset 0 0 0 1px rgb(255 237 171 / 30%),
+		inset 0 0 24px rgb(111 73 12 / 12%);
 }
 
-/* Keep the top frame itself unmistakably in creation state as well, so the
- * mode is visible even against a very bright sheet page. */
-.classic-actor-sheet.wfrp1ed-character-creation-mode > .window-header,
-.classic-actor-sheet.wfrp1ed-character-creation-mode .window-header:first-child {
-	box-shadow: inset 0 -2px 0 rgb(218 174 85 / 88%);
+/* Keep only a restrained outer cue; the gold content margins are now the
+ * primary creation-mode indicator rather than colouring the application frame. */
+.application.classic-actor-sheet.wfrp1ed-character-creation-mode,
+.classic-actor-sheet.wfrp1ed-character-creation-mode {
+	border-color: rgb(187 145 38 / 72%) !important;
+	box-shadow: 0 0 14px rgb(211 169 45 / 20%) !important;
 }
