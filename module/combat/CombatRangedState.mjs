@@ -299,12 +299,21 @@ export class CombatRangedState {
 		if (!availability.available) throw new Error(availability.reason);
 
 		const before = availability.runtime;
+		const automatic = this.automaticCountdownEnabled();
 		const workBefore = before.reloadRemaining > 0
 			? before.reloadRemaining
 			: before.reloadRounds;
-		const remaining = Math.max(0, workBefore - 1);
+		/*
+		 * Manual mode spends the Reload action immediately: one click is one full
+		 * preparation round. Automatic mode performs its single decrement only at
+		 * end of turn, so the action merely commits the turn and initializes any
+		 * missing counter. This avoids decrementing twice in automatic mode.
+		 */
+		const remaining = automatic
+			? workBefore
+			: Math.max(0, workBefore - 1);
 		await weapon.setFlag(FLAG_SCOPE, ITEM_FLAG_KEY, {
-			readyToFire: remaining === 0,
+			readyToFire: automatic ? false : remaining === 0,
 			reloadRemaining: remaining,
 			magazineRemaining: before.magazineRemaining,
 			updatedBy: String(game.user?.id ?? ""),
