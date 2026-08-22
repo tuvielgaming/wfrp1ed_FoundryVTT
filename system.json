@@ -70,6 +70,7 @@
 		"module/criticals/DetailedFatalCriticalPresentation.mjs",
 		"module/criticals/CriticalTransactionRollback.mjs",
 		"module/criticals/FatalStatusTransactionIntegration.mjs",
+		"module/criticals/FatalSceneTokenStatusIntegration.mjs",
 		"module/criticals/SuddenDeathLifecycleIntegration.mjs",
 		"module/combat/CombatAttackDefenceUpdateGuard.mjs",
 		"module/health/HealthCategoryIntegration.mjs",
