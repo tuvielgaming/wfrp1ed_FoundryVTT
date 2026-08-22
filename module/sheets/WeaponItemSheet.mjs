@@ -123,7 +123,16 @@ function weaponUi() {
 		longRange: localize("Long range", "Daleki zasięg"),
 		maximumRange: localize("Extreme range", "Maksymalny zasięg"),
 		effectiveStrength: localize("Effective Strength", "Siła efektywna"),
-		reload: localize("Reload", "Ładowanie"),
+		firingCycle: localize("Load / Fire cycle", "Cykl ładowania / strzału"),
+		firingCycleHint: localize(
+			"Core timing is stored as explicit mechanical parts. Use 0 loading rounds for weapons whose Draw/Load, Aim and Fire/Throw all fit in one round (for example bows and ordinary thrown weapons). Crossbow uses 1; Pistol uses 2. Recovery is normally 0. Magazine fields are used only by repeating weapons.",
+			"Czas z tabeli zasad podstawowych jest zapisany jako osobne elementy mechaniczne. Wpisz 0 rund ładowania dla broni, której wyjęcie/załadowanie, celowanie i strzał/rzut mieszczą się w jednej rundzie (np. łuki i zwykła broń rzucana). Kusza używa 1, pistolet 2. Przerwa po strzale zwykle wynosi 0. Pola magazynka służą tylko broni powtarzalnej.",
+		),
+		loadRounds: localize("Loading rounds before fire", "Rundy ładowania przed strzałem"),
+		recoveryRounds: localize("Recovery rounds after fire", "Przerwa po strzale (rundy)"),
+		shotsPerFireRound: localize("Shots per firing round", "Strzały w rundzie ostrzału"),
+		magazineCapacity: localize("Magazine capacity", "Pojemność magazynka"),
+		magazineReloadRounds: localize("Rounds to refill magazine", "Rundy napełniania magazynka"),
 		optionalModifiers: localize("Optional Weapon Modifiers", "Opcjonalne modyfikatory broni"),
 		optionalHint: localize(
 			"Stored from the optional Core Weapon Modifiers table. These values are not applied unless the combat rules explicitly enable that optional rule.",
