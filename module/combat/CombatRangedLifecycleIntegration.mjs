@@ -13,6 +13,7 @@ Hooks.once("init", () => install());
 
 Hooks.on("renderApplicationV2", (application, element) => {
 	decorateRangedWeaponItem(application, element);
+	decorateClassicRangedRows(application, element);
 	decorateOpeningAttackDialog(application, element);
 });
 
@@ -186,6 +187,54 @@ function decorateRangedWeaponItem(application, root) {
 			"Runtime state becomes authoritative when the Weapon belongs to an Actor.",
 			"Stan runtime staje się autorytatywny, gdy broń należy do Aktora.",
 		);
+	}
+}
+
+function decorateClassicRangedRows(application, root) {
+	const actor = application?.document;
+	if (
+		actor?.documentName !== "Actor" ||
+		!root?.querySelector?.(".wfrp1ed-classic-sheet")
+	) return;
+
+	for (const row of root.querySelectorAll(".ranged-table-body .ranged-row[data-item-id]")) {
+		const weapon = actor.items?.get?.(String(row.dataset.itemId ?? ""));
+		if (
+			weapon?.type !== "weapon" ||
+			weapon.system?.kind !== WEAPON_KIND.RANGED ||
+			!CombatAttackLauncher.canLaunch(weapon)
+		) continue;
+
+		row.classList.add("rollable", "combat-sheet-attack-rollable");
+		row.tabIndex = 0;
+		row.title = localize(
+			`Left-click to use ${weapon.name}. Shift-click to open.`,
+			`Lewy przycisk: użyj ${weapon.name}. Shift+klik: otwórz.`,
+		);
+		if (row.dataset.wfrpRangedLifecycleBound === "true") continue;
+		row.dataset.wfrpRangedLifecycleBound = "true";
+
+		row.addEventListener("click", (event) => {
+			if (event.shiftKey) return;
+			event.preventDefault();
+			event.stopPropagation();
+			void launchRanged(actor, weapon);
+		});
+		row.addEventListener("keydown", (event) => {
+			if (event.shiftKey || (event.key !== "Enter" && event.key !== " ")) return;
+			event.preventDefault();
+			event.stopPropagation();
+			void launchRanged(actor, weapon);
+		});
+	}
+}
+
+async function launchRanged(actor, weapon) {
+	try {
+		await CombatAttackLauncher.launch(actor, weapon);
+	} catch (error) {
+		console.error("WFRP1ED | Unable to launch ranged weapon workflow.", error);
+		ui.notifications.error(error?.message ?? String(error));
 	}
 }
 
