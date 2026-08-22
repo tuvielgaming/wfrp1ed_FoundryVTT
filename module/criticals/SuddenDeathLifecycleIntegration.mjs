@@ -3,6 +3,9 @@ import {
 	spendFatePointForFatalCritical,
 	synchronizeFatalStatus,
 } from "./FatalCriticalIntegration.mjs";
+import {
+	reconcileFatalStatusAfterBoundary,
+} from "./FatalSceneTokenStatusIntegration.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
 const DAMAGE_STATE_FLAG_KEY = "damageState";
@@ -211,24 +214,35 @@ async function invalidateSuddenDeath(message) {
 	const update = {
 		[`flags.${FLAG_SCOPE}.${DAMAGE_APPLICATIONS_FLAG_KEY}`]: applications,
 	};
+	let revertedFatalApplication = null;
 
 	if (context.fatalApplication?.state === "applied") {
 		const fatalApplications = applicationMap(
 			context.actor,
 			FATAL_APPLICATIONS_FLAG_KEY,
 		);
-		fatalApplications[context.packetId] = {
+		revertedFatalApplication = {
 			...foundry.utils.deepClone(context.fatalApplication),
 			state: "reverted",
 			revertedAt: Date.now(),
 			revertedBy: String(game.user?.id ?? ""),
 		};
+		fatalApplications[context.packetId] = revertedFatalApplication;
 		update[`flags.${FLAG_SCOPE}.${FATAL_APPLICATIONS_FLAG_KEY}`] = fatalApplications;
 	}
 
 	await context.actor.update(update);
-	if (context.fatalApplication?.state === "applied") {
+	if (revertedFatalApplication) {
+		/* FatalCriticalIntegration owns the world Actor's derived status. The
+		 * transaction reconciler then restores the exact Scene Token and Combatant
+		 * snapshots synchronously at this rollback boundary. Do not depend solely
+		 * on delayed updateActor hooks for a destructive correction action. */
 		await synchronizeFatalStatus(context.actor);
+		const persisted = applicationMap(
+			context.actor,
+			FATAL_APPLICATIONS_FLAG_KEY,
+		)[context.packetId] ?? revertedFatalApplication;
+		await reconcileFatalStatusAfterBoundary(context.actor, persisted);
 	}
 
 	if (message.canUserModify?.(game.user, "delete") === true) {
