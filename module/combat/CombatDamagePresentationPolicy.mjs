@@ -12,6 +12,8 @@ const DAMAGE_APPLICATIONS_FLAG_KEY = "damageApplications";
  * Mechanics stay in CombatDamageIntegration / CombatDamagePhysicalDiceIntegration.
  * This layer only decides what is visible and where:
  * - the dedicated Damage card is the single damage presentation once it exists;
+ * - after a Damage transaction is reverted, the Attack card exposes only the
+ *   canonical reroll action again while the reverted Damage card stays history;
  * - attack and dedicated Damage cards use the same compact Parry d6 wording;
  * - Parry remains outside the folded diagnostic section so its physical-die
  *   control is immediately discoverable;
@@ -58,15 +60,33 @@ function applyPresentation(message, root) {
 /*
  * Once a dedicated Damage ChatMessage exists, the Attack card must not retain a
  * second complete Damage section. Besides being duplicate state, that old audit
- * bypassed the dedicated card's per-message audience policy. Pending parry UI is
- * unaffected because there is no dedicated Damage card at that stage.
+ * bypassed the dedicated card's per-message audience policy.
+ *
+ * A reverted Damage transaction is the one exception: CombatDamageIntegration
+ * intentionally rebuilds the source Attack damage workflow with its canonical
+ * "Roll damage again" button. Keep that action discoverable, but remove the
+ * duplicated reverted damage breakdown because the dedicated Damage card already
+ * remains as the immutable history of the reverted generation.
  */
 function removeEmbeddedDamageDuplicate(message, root) {
 	if (!message?.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY)) return;
 	if (!dedicatedDamageViewForSource(message.id)) return;
 
 	const wrapper = root.querySelector?.("[data-wfrp-combat-damage]");
-	wrapper?.remove();
+	if (!(wrapper instanceof HTMLElement)) return;
+
+	const damageState = message.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG_KEY);
+	const actor = actorFromUuidSync(damageState?.packet?.targetActorUuid);
+	const transaction = damageTransactionForActor(
+		actor,
+		damageState?.packet?.id,
+	);
+	if (transaction?.state === "reverted") {
+		wrapper.querySelector?.(".combat-damage-context__resolved")?.remove();
+		return;
+	}
+
+	wrapper.remove();
 }
 
 function normalizeAttackParryLabel(message, root) {
@@ -388,6 +408,17 @@ function findRow(card, expectedLabel) {
 
 function rowLabel(row) {
 	return String(row?.querySelector?.(":scope > span")?.textContent ?? "").trim();
+}
+
+function damageTransactionForActor(actor, packetId) {
+	if (!(actor instanceof foundry.documents.Actor)) return null;
+	const id = String(packetId ?? "").trim();
+	if (!id) return null;
+	const applications = actor.getFlag?.(FLAG_SCOPE, DAMAGE_APPLICATIONS_FLAG_KEY);
+	if (!applications || typeof applications !== "object" || Array.isArray(applications)) {
+		return null;
+	}
+	return applications[id] ?? null;
 }
 
 function actorFromUuidSync(uuid) {
