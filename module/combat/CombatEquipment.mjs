@@ -6,6 +6,7 @@ import {
 	INVENTORY_MODE,
 } from "../data-models/item/InventoryItemFields.mjs";
 import {
+	WEAPON_KIND,
 	weaponOptionalModifierSnapshot,
 } from "../data-models/item/WeaponData.mjs";
 import {
@@ -134,8 +135,14 @@ export class CombatEquipment {
 	/**
 	 * Return currently available held parrying Items.
 	 *
-	 * Main-rule parry bonuses are always included. Optional Weapon Modifiers are
-	 * included only when the caller explicitly enables that optional rule.
+	 * Core parrying is a melee-weapon procedure. A Weapon Item authored in its
+	 * ranged/thrown mode is therefore never offered as a parry choice even if an
+	 * old persisted parry.suitable value remains on that Item. A dual-purpose
+	 * weapon can be represented in melee mode when it is actually being used to
+	 * parry.
+	 *
+	 * Main-rule parry bonuses are always included. Optional melee Weapon
+	 * Modifiers are included only when the caller explicitly enables that rule.
 	 *
 	 * `attackCostMode` is part of the Core parry contract: ordinary suitable
 	 * weapons lose the defender's next Attack, while a shield parry loses all
@@ -148,6 +155,7 @@ export class CombatEquipment {
 
 		for (const item of this.heldItems(actor)) {
 			if (item.type === "weapon") {
+				if (item.system?.kind !== WEAPON_KIND.MELEE) continue;
 				if (item.system?.parry?.suitable !== true) continue;
 
 				const optional = weaponOptionalModifierSnapshot(item);
