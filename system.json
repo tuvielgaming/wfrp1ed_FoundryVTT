@@ -72,6 +72,7 @@
 		"module/criticals/FatalStatusTransactionIntegration.mjs",
 		"module/criticals/FatalSceneTokenStatusIntegration.mjs",
 		"module/criticals/SuddenDeathLifecycleIntegration.mjs",
+		"module/criticals/FatalDefeatedStateConsistency.mjs",
 		"module/combat/CombatAttackDefenceUpdateGuard.mjs",
 		"module/health/HealthCategoryIntegration.mjs",
 		"module/fate/FateSheetIntegration.mjs",
