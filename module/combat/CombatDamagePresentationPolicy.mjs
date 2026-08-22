@@ -4,6 +4,7 @@ const DAMAGE_FLAG_KEY = "damageState";
 const COMBAT_DAMAGE_FLAG_KEY = "combatDamageRoll";
 const DAMAGE_RESULT_VIEW_FLAG_KEY = "combatDamageResultView";
 const DAMAGE_DETAILS_PUBLIC_FLAG_KEY = "combatDamageDetailsPublic";
+const DAMAGE_APPLICATIONS_FLAG_KEY = "damageApplications";
 
 /*
  * Final combat-damage presentation policy.
@@ -17,7 +18,9 @@ const DAMAGE_DETAILS_PUBLIC_FLAG_KEY = "combatDamageDetailsPublic";
  *   diagnostics;
  * - the GM may temporarily publish the complete breakdown of one specific
  *   dedicated Damage card through its ChatMessage context menu, then restrict
- *   that same card again. No world-wide visibility switch is used.
+ *   that same card again. No world-wide visibility switch is used;
+ * - the same per-message visibility entitlement survives the transition from
+ *   actionable damage to the compact historical/applied card.
  */
 Hooks.once("init", () => {
 	Hooks.on("renderChatMessageHTML", (message, html) => {
@@ -41,6 +44,18 @@ Hooks.once("init", () => {
 	Hooks.on("updateChatMessage", (message, changes) => {
 		if (!damageVisibilityChanged(changes)) return;
 		requestAnimationFrame(() => refreshVisiblePresentation(message));
+	});
+
+	/*
+	 * Applying/reverting damage is Actor-authoritative. CompactResolvedChatCards
+	 * may transform the already-rendered Damage card directly in response to that
+	 * Actor update, without a renderChatMessageHTML pass first. Re-apply the same
+	 * per-message audience policy after that transformation so settling a damage
+	 * transaction can never expose rows which were restricted while pending.
+	 */
+	Hooks.on("updateActor", (actor, changes) => {
+		if (!damageApplicationsChanged(changes)) return;
+		scheduleVisibleDamageRefresh(actor);
 	});
 });
 
@@ -96,13 +111,23 @@ function presentDedicatedDamage(message, root) {
 
 function applyDetailAudiencePolicy(message, card, attack) {
 	const details = card.querySelector?.("details[data-wfrp-damage-folded-details]");
-	if (!(details instanceof HTMLDetailsElement)) return;
-	const body = details.querySelector?.(".wfrp1e-damage-card__details-body");
-	if (!(body instanceof HTMLElement)) return;
+	const body = details?.querySelector?.(".wfrp1e-damage-card__details-body");
 
-	const rows = [...body.querySelectorAll(":scope > .wfrp1e-damage-card__row")];
+	/*
+	 * Normally CombatLifecyclePolish keeps diagnostics inside the inner folded
+	 * details element. A settled card may be rewritten in-place by the compact
+	 * history layer between render passes, so fall back to label-selected rows
+	 * anywhere inside the card. This makes the audience rule independent of the
+	 * current DOM wrapper while still touching only diagnostic values.
+	 */
+	const rows = body instanceof HTMLElement
+		? [...body.querySelectorAll(":scope > .wfrp1e-damage-card__row")]
+		: [...card.querySelectorAll(".wfrp1e-damage-card__row")].filter((row) =>
+			isProtectedDetailLabel(rowLabel(row)),
+		);
+
 	for (const row of rows) row.hidden = false;
-	details.hidden = false;
+	if (details instanceof HTMLDetailsElement) details.hidden = false;
 
 	/* GM always sees the complete audit. A per-card public toggle gives every
 	 * player exactly the same full breakdown without changing any other card. */
@@ -129,9 +154,11 @@ function applyDetailAudiencePolicy(message, card, attack) {
 		}
 	}
 
-	const visibleRows = rows.some((row) => !row.hidden);
-	details.hidden = !visibleRows;
-	if (!visibleRows) details.open = false;
+	if (details instanceof HTMLDetailsElement) {
+		const visibleRows = rows.some((row) => !row.hidden);
+		details.hidden = !visibleRows;
+		if (!visibleRows) details.open = false;
+	}
 }
 
 function addDamageVisibilityContextOptions(menuItems) {
@@ -236,6 +263,46 @@ function damageVisibilityChanged(changes) {
 	);
 }
 
+function damageApplicationsChanged(changes) {
+	if (!changes || typeof changes !== "object") return false;
+	const scoped = changes?.flags?.[FLAG_SCOPE];
+	if (
+		scoped &&
+		typeof scoped === "object" &&
+		(
+			Object.hasOwn(scoped, DAMAGE_APPLICATIONS_FLAG_KEY) ||
+			Object.hasOwn(scoped, `-=${DAMAGE_APPLICATIONS_FLAG_KEY}`)
+		)
+	) return true;
+
+	const path = `flags.${FLAG_SCOPE}.${DAMAGE_APPLICATIONS_FLAG_KEY}`;
+	return Object.hasOwn(changes, path) ||
+		foundry.utils.getProperty?.(changes, path) !== undefined ||
+		Object.keys(changes).some((key) => String(key).includes(DAMAGE_APPLICATIONS_FLAG_KEY));
+}
+
+function scheduleVisibleDamageRefresh(actor) {
+	requestAnimationFrame(() => {
+		refreshVisibleDamageCardsForActor(actor);
+		/* CompactResolvedChatCards may run from the same Actor update frame. */
+		setTimeout(() => refreshVisibleDamageCardsForActor(actor), 0);
+	});
+}
+
+function refreshVisibleDamageCardsForActor(actor) {
+	if (!(actor instanceof foundry.documents.Actor)) return;
+	for (const message of game.messages ?? []) {
+		const view = message?.getFlag?.(FLAG_SCOPE, DAMAGE_RESULT_VIEW_FLAG_KEY);
+		if (!view?.sourceAttackMessageId) continue;
+		if (String(view.targetActorUuid ?? "") !== String(actor.uuid ?? "")) continue;
+
+		const entry = document.querySelector(
+			`[data-message-id="${cssEscape(message.id)}"]`,
+		);
+		if (entry) applyPresentation(message, entry);
+	}
+}
+
 function refreshVisiblePresentation(message) {
 	if (!message?.id) return;
 	const entry = document.querySelector(
@@ -283,6 +350,12 @@ const FINAL_DAMAGE_LABELS = new Set([
 	"Final damage",
 	"Końcowe obrażenia",
 ]);
+
+function isProtectedDetailLabel(label) {
+	return ATTACKER_DETAIL_LABELS.has(label) ||
+		DEFENDER_DETAIL_LABELS.has(label) ||
+		FINAL_DAMAGE_LABELS.has(label);
+}
 
 function findRow(card, expectedLabel) {
 	return [...(card.querySelectorAll?.(".wfrp1e-damage-card__row") ?? [])]
