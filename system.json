@@ -103,7 +103,6 @@
 		"module/combat/CombatTransactionEditLock.mjs",
 		"module/chat/PendingInteractionReminder.mjs",
 		"module/criticals/DetailedCriticalAdjudication.mjs",
-		"module/criticals/DetailedCriticalReferenceExpansion.mjs",
 		"module/chat/CombatLifecyclePolish.mjs",
 		"module/criticals/CriticalResultLifecycleGuard.mjs",
 		"module/chat/CompactResolvedChatCards.mjs",
