@@ -70,6 +70,7 @@
 		"module/combat/DedicatedDamageRollbackBridge.mjs",
 		"module/combat/UnappliedDamageInvalidation.mjs",
 		"module/combat/CombatLifecyclePresentation.mjs",
+		"module/combat/CombatBaseDamageAdditionalTrigger.mjs",
 		"module/combat/CombatDamageParryViewPhysicalDice.mjs",
 		"module/combat/DamageApplicationPresentationRefresh.mjs",
 		"module/criticals/DetailedFatalCriticalPresentation.mjs",
