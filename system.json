@@ -30,6 +30,7 @@
 		"module/careers/CareerCompletionIntegration.mjs",
 		"module/experience/ExperienceSheetIntegration.mjs",
 		"module/tests/TestResultAudienceVisibility.mjs",
+		"module/tests/TestResultVisibilityMetadataIntegration.mjs",
 		"module/combat/CombatEquipmentBootstrap.mjs",
 		"module/combat/CombatAttackBootstrap.mjs",
 		"module/combat/CombatSheetIntegration.mjs",
