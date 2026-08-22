@@ -1,0 +1,109 @@
+/*
+ * Character Creation UI
+ * ---------------------
+ * Career acquisition dialogs run in Foundry's dark application chrome rather
+ * than on the parchment Actor sheet. Draw our own high-contrast selection mark
+ * so unchecked choices remain obvious regardless of browser/Foundry theme.
+ */
+.career-choice-dialog__option {
+	grid-template-columns: 20px minmax(0, 1fr);
+}
+
+.career-choice-dialog__option input[type="checkbox"],
+.career-choice-dialog__option input[type="radio"] {
+	position: absolute !important;
+	width: 1px !important;
+	height: 1px !important;
+	min-width: 1px !important;
+	margin: 0 !important;
+	padding: 0 !important;
+	opacity: 0 !important;
+	appearance: none !important;
+	-webkit-appearance: none !important;
+	pointer-events: none;
+}
+
+.career-choice-dialog__option::before {
+	content: "";
+	display: inline-grid;
+	place-items: center;
+	grid-column: 1;
+	grid-row: 1;
+	width: 17px;
+	height: 17px;
+	margin-top: 1px;
+	border: 2px solid rgb(245 218 164 / 96%);
+	border-radius: 2px;
+	background: rgb(20 17 14 / 92%);
+	box-shadow:
+		0 0 0 1px rgb(0 0 0 / 65%),
+		inset 0 0 0 1px rgb(255 255 255 / 7%);
+	color: rgb(103 226 118);
+	font-family: Arial, Helvetica, sans-serif;
+	font-size: 15px;
+	font-weight: 900;
+	line-height: 1;
+}
+
+.career-choice-dialog__option:has(input[type="radio"])::before {
+	border-radius: 50%;
+}
+
+.career-choice-dialog__option:has(input[type="checkbox"]:checked)::before {
+	content: "✓";
+	border-color: rgb(129 232 139 / 98%);
+	background: rgb(18 48 25 / 96%);
+	color: rgb(103 226 118);
+	text-shadow: 0 0 4px rgb(86 220 103 / 46%);
+}
+
+.career-choice-dialog__option:has(input[type="radio"]:checked)::before {
+	border-color: rgb(129 232 139 / 98%);
+	background:
+		radial-gradient(
+			circle at center,
+			rgb(103 226 118) 0 4px,
+			rgb(18 48 25 / 96%) 5px 100%
+		);
+	box-shadow:
+		0 0 0 1px rgb(0 0 0 / 65%),
+		0 0 5px rgb(86 220 103 / 28%);
+}
+
+.career-choice-dialog__option:has(input:focus-visible)::before {
+	outline: 2px solid rgb(250 230 190 / 96%);
+	outline-offset: 2px;
+}
+
+/*
+ * GM-only Character Creation Mode is a direct Foundry v14 frame button rather
+ * than another entry hidden inside the three-dots header menu. The scroll icon
+ * stays subdued when inactive and becomes visibly green while the Actor is in
+ * Character Creation Mode.
+ */
+.classic-actor-sheet .wfrp1ed-character-creation-toggle {
+	border-radius: 4px;
+	color: rgb(220 205 177 / 82%);
+	transition:
+		background-color 120ms ease,
+		color 120ms ease,
+		text-shadow 120ms ease;
+}
+
+.classic-actor-sheet .wfrp1ed-character-creation-toggle:hover,
+.classic-actor-sheet .wfrp1ed-character-creation-toggle:focus-visible {
+	background: rgb(255 255 255 / 8%);
+	color: rgb(242 224 190);
+}
+
+.classic-actor-sheet .wfrp1ed-character-creation-toggle.is-active {
+	background: rgb(39 105 52 / 34%);
+	color: rgb(111 224 128);
+	text-shadow: 0 0 5px rgb(82 211 101 / 42%);
+}
+
+.classic-actor-sheet .wfrp1ed-character-creation-toggle.is-active:hover,
+.classic-actor-sheet .wfrp1ed-character-creation-toggle.is-active:focus-visible {
+	background: rgb(39 105 52 / 48%);
+	color: rgb(139 239 151);
+}
