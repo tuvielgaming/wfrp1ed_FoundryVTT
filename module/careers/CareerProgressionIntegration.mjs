@@ -1,11 +1,68 @@
 import { CareerProgression, careerClassLabel } from "./CareerProgression.mjs";
 import { DisplayBuilder } from "../display/DisplayBuilder.mjs";
+import { ActorOwnerEditPermission } from "../sheets/ActorOwnerEditPermission.mjs";
 import { ClassicActorSheet } from "../sheets/ClassicActorSheet.mjs";
 
+const FLAG_SCOPE = "wfrp1ed";
+const LEGACY_INITIAL_CAREER_LOCK_FLAG_KEY = "initialCareerLocked";
+
+installRefundAwareInitialCareerPolicy();
 installCareerDropProgression();
 installCareerSkillOffers();
 installCareerDisplayLabels();
 installCareerSheetInteractions();
+
+/**
+ * Initial-Career replacement follows the current XP ledger, not historical
+ * evidence that XP was once spent. A full refund therefore reopens the initial
+ * Career choice. The old persistent lock flag remains migration/audit baggage
+ * for existing worlds but is deliberately non-authoritative.
+ *
+ * A future explicit Character Creation Mode can replace this ledger heuristic
+ * without requiring CareerProgression callers to know about old flags.
+ */
+function installRefundAwareInitialCareerPolicy() {
+	if (CareerProgression.__wfrpRefundAwareInitialCareerPolicyInstalled === true) {
+		return;
+	}
+
+	CareerProgression.initialCareerLocked = function refundAwareInitialCareerLocked(actor) {
+		return nonNegativeInteger(actor?.system?.experience?.spent) > 0;
+	};
+
+	Object.defineProperty(
+		CareerProgression,
+		"__wfrpRefundAwareInitialCareerPolicyInstalled",
+		{ value: true, configurable: false, enumerable: false },
+	);
+
+	/*
+	 * CareerSheetIntegration from the earlier migration stage may still stamp
+	 * the legacy lock flag while an XP refund is being written. Clear that stale
+	 * flag in the same Actor update once the authoritative spent amount reaches
+	 * zero. The advancement transaction flag is left untouched because it still
+	 * belongs to the advancement undo/audit lifecycle.
+	 */
+	Hooks.on("preUpdateActor", (actor, changes) => {
+		if (actor?.type !== "character" || !changes || typeof changes !== "object") {
+			return;
+		}
+
+		const currentSpent = nonNegativeInteger(actor.system?.experience?.spent);
+		const proposedSpent = nonNegativeInteger(changedValue(
+			changes,
+			"system.experience.spent",
+			currentSpent,
+		));
+		if (proposedSpent !== 0) return;
+
+		foundry.utils.setProperty(
+			changes,
+			`flags.${FLAG_SCOPE}.${LEGACY_INITIAL_CAREER_LOCK_FLAG_KEY}`,
+			false,
+		);
+	});
+}
 
 /**
  * Supersede the earlier character-creation-only Career drop wrapper.
@@ -25,6 +82,8 @@ function installCareerDropProgression() {
 			if (CareerProgression.initialCareerLocked(this.document)) {
 				return await CareerProgression.transferCareer(this, item);
 			}
+
+			assertInitialCareerEditingAllowed(this);
 			return await CareerProgression.assignInitialCareer(this, item);
 		} catch (error) {
 			console.error("WFRP1ED | Career drop progression failed.", error);
@@ -41,6 +100,24 @@ function installCareerDropProgression() {
 		"__wfrpCareerProgressionDropInstalled",
 		{ value: true, configurable: false, enumerable: false },
 	);
+}
+
+/**
+ * Character-creation Career assignment is a managed sheet edit, not ordinary
+ * progression. Foundry's `sheet.isEditable` only says that the user owns the
+ * Actor; the WFRP sheet-wide owner-edit switch is the actual player gate.
+ */
+function assertInitialCareerEditingAllowed(sheet) {
+	const actor = sheet?.document;
+	if (
+		sheet?.isEditable !== true ||
+		!ActorOwnerEditPermission.canEdit(actor, game.user)
+	) {
+		throw new Error(localize(
+			"Initial Career assignment is locked. The GM must enable managed sheet editing for this character first.",
+			"Przypisanie Profesji początkowej jest zablokowane. MG musi najpierw włączyć edycję zarządzanych pól karty tej postaci.",
+		));
+	}
 }
 
 /** Append derived, unowned active-Career Skills to the printed Skill list. */
@@ -294,6 +371,17 @@ function wireCurrentCareer(sheet, element) {
 		event.preventDefault();
 		void career.sheet.render({ force: true });
 	});
+}
+
+function changedValue(changes, path, fallback) {
+	if (Object.hasOwn(changes ?? {}, path)) return changes[path];
+	const nested = foundry.utils.getProperty(changes ?? {}, path);
+	return nested === undefined ? fallback : nested;
+}
+
+function nonNegativeInteger(value) {
+	const numeric = Number(value);
+	return Number.isFinite(numeric) ? Math.max(0, Math.trunc(numeric)) : 0;
 }
 
 function localize(english, polish) {
