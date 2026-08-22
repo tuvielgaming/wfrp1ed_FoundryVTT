@@ -43,6 +43,30 @@ Hooks.on("deleteChatMessage", (message) => {
 	queueReconcile(actor, "critical-message-delete");
 });
 
+/* Repair stale defeated state left by earlier development builds. This does not
+ * invent a state: only Actors/Token Actors with an existing fatal transaction
+ * map are considered, and their desired state is recomputed from that history. */
+Hooks.once("ready", () => {
+	if (!isStatusAuthority(null)) return;
+
+	const actors = new Map();
+	const add = (actor) => {
+		if (!(actor instanceof foundry.documents.Actor)) return;
+		if (Object.keys(objectFlag(actor, FATAL_APPLICATIONS_FLAG_KEY)).length === 0) return;
+		const key = String(actor.uuid ?? actor.id ?? "");
+		if (key) actors.set(key, actor);
+	};
+
+	for (const actor of game.actors ?? []) add(actor);
+	for (const scene of game.scenes ?? []) {
+		for (const token of scene?.tokens ?? []) add(token?.actor);
+	}
+
+	for (const actor of actors.values()) {
+		queueReconcile(actor, "ready-repair");
+	}
+});
+
 function queueReconcile(actor, reason) {
 	const key = String(actor.uuid ?? actor.id ?? "");
 	if (!key) return;
