@@ -131,6 +131,31 @@
 	opacity: 0.82;
 }
 
+.wfrp1e-critical-result__roll-editor {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.3rem;
+}
+
+.wfrp1e-critical-result__roll-label {
+	font-weight: 700;
+}
+
+.wfrp1e-critical-result__roll-input {
+	width: 3.4rem;
+	height: 1.65rem;
+	padding: 0.05rem 0.25rem;
+	font-size: 0.95rem;
+	font-weight: 700;
+	line-height: 1;
+	text-align: center;
+}
+
+.wfrp1e-critical-result__roll-input.is-editable:not(:disabled) {
+	cursor: text;
+}
+
 .wfrp1e-critical-result__action {
 	width: 100%;
 	margin-top: 0.4rem;
