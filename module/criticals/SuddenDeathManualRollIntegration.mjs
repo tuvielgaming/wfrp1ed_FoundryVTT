@@ -36,6 +36,15 @@ Hooks.on("renderChatMessageHTML", (message, html) => {
 	installSuddenDeathRollEditor(message, html);
 });
 
+/* Fatal application and Fate are Actor-side transactions. They do not need to
+ * rewrite the result ChatMessage, so refresh the already-rendered editor when
+ * those Actor flags change. The commit path still re-checks the lock even if a
+ * stale DOM somehow survives. */
+Hooks.on("updateActor", (actor) => {
+	if (!(actor instanceof foundry.documents.Actor)) return;
+	requestAnimationFrame(() => refreshActorSuddenDeathEditors(actor));
+});
+
 Hooks.once("ready", () => {
 	registerSocket();
 });
@@ -80,8 +89,8 @@ function installSuddenDeathRollEditor(message, html) {
 		input.tabIndex = -1;
 		input.classList.add("is-readonly");
 		input.title = lockReason || localize(
-			"Only the GM or the player who resolved this critical may replace its d100 result.",
-			"Tylko MG albo gracz, który rozstrzygnął to trafienie krytyczne, może zmienić jego wynik K100.",
+			"Only the GM or the player who caused the source damage may replace this d100 result.",
+			"Tylko MG albo gracz, który spowodował źródłowe obrażenia, może zmienić ten wynik K100.",
 		);
 		return;
 	}
@@ -171,7 +180,7 @@ async function commitSuddenDeathRoll(message, value, requestingUser) {
 		throw new Error("Sudden Death d100 must be a whole value from 1 to 100.");
 	}
 
-	const resolution = await SuddenDeathResolver.resolve(
+	const generated = await SuddenDeathResolver.resolve(
 		Number(context.transaction.criticalValue),
 		{
 			/* Fixed adjudicated value: this is not another random roll. */
@@ -181,6 +190,11 @@ async function commitSuddenDeathRoll(message, value, requestingUser) {
 			},
 		},
 	);
+	const resolution = foundry.utils.deepClone(generated);
+	/* The primary GM performs the authoritative write for an owner request, but
+	 * the audit should identify the user who actually entered the physical die. */
+	resolution.resolvedBy = String(requestingUser?.id ?? game.user?.id ?? "");
+	resolution.resolvedAt = Date.now();
 
 	await DamageApplication.replaceCriticalResolution({
 		actor: context.actor,
@@ -408,6 +422,31 @@ function handleResponse(payload) {
 	pending.resolve(Object.freeze({ ...(payload.result ?? {}) }));
 }
 
+function refreshActorSuddenDeathEditors(actor) {
+	for (const message of game.messages ?? []) {
+		const context = suddenDeathContext(message);
+		if (context?.actor?.uuid !== actor.uuid) continue;
+		for (const hostDocument of renderedHostDocuments()) {
+			const entry = hostDocument.querySelector?.(
+				`[data-message-id="${cssEscape(String(message.id ?? ""))}"]`,
+			);
+			if (entry) installSuddenDeathRollEditor(message, entry);
+		}
+	}
+}
+
+function renderedHostDocuments() {
+	const documents = new Set([document]);
+	const instances = foundry.applications?.instances;
+	if (instances?.values) {
+		for (const application of instances.values()) {
+			const hostDocument = application?.element?.ownerDocument;
+			if (hostDocument?.querySelector) documents.add(hostDocument);
+		}
+	}
+	return documents;
+}
+
 function primaryActiveGM() {
 	return [...(game.users ?? [])]
 		.filter((user) => user.active && user.isGM)
@@ -428,6 +467,13 @@ function actorFromUuidSync(uuid) {
 		return null;
 	}
 	return null;
+}
+
+function cssEscape(value) {
+	const text = String(value ?? "");
+	return globalThis.CSS?.escape
+		? CSS.escape(text)
+		: text.replace(/["\\]/g, "\\$&");
 }
 
 function asElement(value) {
