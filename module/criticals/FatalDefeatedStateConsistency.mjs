@@ -2,53 +2,57 @@ const FLAG_SCOPE = "wfrp1ed";
 const DAMAGE_APPLICATIONS_FLAG_KEY = "damageApplications";
 const FATAL_APPLICATIONS_FLAG_KEY = "fatalCriticalApplications";
 const FATE_INTERVENTIONS_FLAG_KEY = "fateInterventions";
-const CRITICAL_RESULT_FLAG_KEY = "criticalResult";
-const DAMAGE_STATE_FLAG_KEY = "damageState";
 const KILLED_OUTCOME = "killed";
-const FINAL_RECONCILE_DELAY_MS = 700;
+const FINAL_RECONCILE_DELAY_MS = 250;
 
 const pending = new Map();
 
 /*
  * Final defeated-state consistency pass for fatal Critical transactions.
  *
- * Foundry v14 stores Token status effects as ActiveEffects on the represented
- * Actor/Token Actor. Combatant.defeated is a separate combat-tracker state.
- * This module reconciles both and explicitly redraws rendered Token effects after
- * the document state has been corrected.
+ * IMPORTANT LIFECYCLE BOUNDARY
+ * ----------------------------
+ * Resolving a Sudden Death table result is NOT the same operation as applying
+ * that fatal result. A damageApplications update may therefore say that the
+ * resolved outcome is `killed` while the Actor must still remain alive until an
+ * authorized user presses Apply Fatal Critical.
  *
- * The rollback baseline is the Actor state from before this subsystem's first
- * managed fatal application. This is deliberate: after one broken/stale fatal
- * left Defeated behind, a later fatal would otherwise snapshot that stale state
- * as `defeatedBefore: true` and every subsequent rollback would keep restoring
- * the bug forever. The first managed fatal snapshot is the unpoisoned baseline
- * for the managed fatal-history chain.
+ * Only these Actor-side transactions own Foundry's Defeated state:
+ * - fatalCriticalApplications: explicit Apply/Revert Fatal Critical;
+ * - fateInterventions: explicit Fate transaction which averts applied death.
+ *
+ * damageApplications is consulted to validate whether an already-applied fatal
+ * application is still active, but a damageApplications update never triggers a
+ * defeated-state write by itself.
+ *
+ * Foundry v14 represents visible defeated state through status ActiveEffects on
+ * Actor/Token Actors and, independently, Combatant.defeated. This module repairs
+ * both and explicitly refreshes rendered Token effects after document changes.
  */
 Hooks.on("updateActor", (actor, changes) => {
 	if (!(actor instanceof foundry.documents.Actor)) return;
 	if (!isStatusAuthority(actor)) return;
-	if (!fatalStateTouched(changes)) return;
-	queueReconcile(actor, "actor-update");
+	if (!fatalBoundaryTouched(changes)) return;
+	queueReconcile(actor, "fatal-boundary");
 });
 
-Hooks.on("deleteChatMessage", (message) => {
-	const result = message?.getFlag?.(FLAG_SCOPE, CRITICAL_RESULT_FLAG_KEY);
-	if (!isRecord(result) || !result.packetId) return;
-	const actor = actorForCriticalResult(result);
-	if (!(actor instanceof foundry.documents.Actor)) return;
-	if (!isStatusAuthority(actor)) return;
-	queueReconcile(actor, "critical-message-delete");
-});
-
-/* Repair stale defeated state left by earlier development builds. Only Actors
- * with fatal transaction history are considered. */
+/*
+ * Startup enforcement is deliberately limited to currently ACTIVE fatal
+ * applications. Historical reverted results must never change an Actor's state
+ * merely because the World loaded.
+ */
 Hooks.once("ready", () => {
 	if (!isStatusAuthority(null)) return;
 
 	const actors = new Map();
 	const add = (actor) => {
 		if (!(actor instanceof foundry.documents.Actor)) return;
-		if (Object.keys(objectFlag(actor, FATAL_APPLICATIONS_FLAG_KEY)).length === 0) return;
+		const damageMap = objectFlag(actor, DAMAGE_APPLICATIONS_FLAG_KEY);
+		const fatalMap = objectFlag(actor, FATAL_APPLICATIONS_FLAG_KEY);
+		const fateMap = objectFlag(actor, FATE_INTERVENTIONS_FLAG_KEY);
+		if (activeFatalApplications(damageMap, fatalMap, fateMap).length === 0) {
+			return;
+		}
 		const key = String(actor.uuid ?? actor.id ?? "");
 		if (key) actors.set(key, actor);
 	};
@@ -59,7 +63,7 @@ Hooks.once("ready", () => {
 	}
 
 	for (const actor of actors.values()) {
-		queueReconcile(actor, "ready-repair");
+		queueReconcile(actor, "ready-active-fatal");
 	}
 });
 
@@ -102,25 +106,27 @@ async function reconcileDefeatedState(actor, reason) {
 		return;
 	}
 
-	const baselineApplication = earliestManagedFatalApplication(fatalMap);
-	if (!baselineApplication) return;
+	/*
+	 * We only reach this branch after an explicit fatal/fate Actor transaction.
+	 * Restore the exact most recently released fatal application's pre-application
+	 * state. Merely resolving a table never reaches this code.
+	 */
+	const release = latestReleasedFatalApplication(fatalMap, fateMap);
+	if (!release) return;
 
-	const desired = baselineDefeated(baselineApplication);
+	const desired = baselineDefeated(release);
 	await setDefeatedEverywhere(actor, desired);
 
-	/* One second pass closes races with the older fatal lifecycle hooks. It does
-	 * not change the desired state; it merely reasserts the already-derived
-	 * authoritative document state after those hooks have settled. */
-	if (!desired) {
-		await delay(75);
-		await setDefeatedEverywhere(actor, false);
-	}
+	/* Close a possible render/update race with older fatal adapters without
+	 * changing the transaction-derived desired state. */
+	await delay(75);
+	await setDefeatedEverywhere(actor, desired);
 
 	console.info("WFRP1ED | Fatal defeated-state reconciliation", {
 		reason,
 		actor: actor.uuid,
 		desired,
-		baselinePacketId: String(baselineApplication.packetId ?? ""),
+		releasePacketId: String(release.packetId ?? ""),
 		actorStatuses: [...(actor.statuses ?? [])],
 	});
 }
@@ -143,19 +149,38 @@ function activeFatalApplications(damageMap, fatalMap, fateMap) {
 		});
 }
 
-function earliestManagedFatalApplication(fatalMap) {
-	return Object.entries(fatalMap)
-		.map(([packetId, application]) => isRecord(application)
-			? {
+function latestReleasedFatalApplication(fatalMap, fateMap) {
+	const candidates = [];
+
+	for (const [packetId, application] of Object.entries(fatalMap)) {
+		if (!isRecord(application)) continue;
+		if (application.state !== "reverted") continue;
+		candidates.push({
+			application: {
 				...foundry.utils.deepClone(application),
 				packetId: String(application.packetId ?? packetId),
-			}
-			: null)
-		.filter(Boolean)
-		.sort((left, right) =>
-			(Number(left.appliedAt ?? 0) - Number(right.appliedAt ?? 0)) ||
-			String(left.packetId ?? "").localeCompare(String(right.packetId ?? "")),
-		)[0] ?? null;
+			},
+			at: Number(application.revertedAt ?? application.appliedAt ?? 0),
+		});
+	}
+
+	for (const intervention of Object.values(fateMap)) {
+		if (!isRecord(intervention)) continue;
+		const packetId = String(intervention.packetId ?? "");
+		const application = fatalMap[packetId];
+		if (!isRecord(application)) continue;
+		candidates.push({
+			application: {
+				...foundry.utils.deepClone(application),
+				packetId,
+			},
+			at: Number(intervention.spentAt ?? application.appliedAt ?? 0),
+		});
+	}
+
+	return candidates
+		.sort((left, right) => right.at - left.at)[0]
+		?.application ?? null;
 }
 
 async function setDefeatedEverywhere(actor, desired) {
@@ -219,7 +244,6 @@ async function forceActorDefeatedStatus(actor, desired) {
 		return;
 	}
 
-	/* First use Foundry's supported status API. */
 	if (actor.statuses?.has?.(statusId)) {
 		await actor.toggleStatusEffect(statusId, {
 			active: false,
@@ -227,9 +251,6 @@ async function forceActorDefeatedStatus(actor, desired) {
 		});
 	}
 
-	/* Then delete any residual status ActiveEffect explicitly. Active Effects V2
-	 * exposes statuses in source data; inspect both prepared and source forms so a
-	 * stale prepared collection cannot hide the effect we need to remove. */
 	const residualIds = [...(actor.effects ?? [])]
 		.filter((effect) => effectCarriesStatus(effect, statusId))
 		.map((effect) => String(effect.id ?? ""))
@@ -253,7 +274,7 @@ function effectStatusIds(effect) {
 	try {
 		candidates.push(effect?.toObject?.(false)?.statuses);
 	} catch (_error) {
-		// Ignore malformed legacy effect serialization and inspect other sources.
+		// Ignore malformed legacy serialization and inspect the other sources.
 	}
 
 	const result = new Set();
@@ -282,8 +303,6 @@ async function refreshRenderedTokenEffects(representations) {
 		const tokenActorUuid = String(token?.actor?.uuid ?? "");
 		if (!uuids.has(tokenActorUuid)) continue;
 
-		/* drawEffects is a public Foundry v14 API. The render flag is also set so
-		 * any queued canvas refresh uses the same corrected Actor effect state. */
 		try {
 			token.renderFlags?.set?.({
 				redrawEffects: true,
@@ -293,7 +312,7 @@ async function refreshRenderedTokenEffects(representations) {
 			await token.drawEffects?.();
 		} catch (error) {
 			console.warn(
-				"WFRP1ED | Unable to refresh rendered Token effects after fatal rollback.",
+				"WFRP1ED | Unable to refresh rendered Token effects after fatal state change.",
 				error,
 			);
 		}
@@ -348,23 +367,6 @@ function matchingCombatants(combat, actor) {
 	return [...matches.values()];
 }
 
-function actorForCriticalResult(result) {
-	const sourceMessage = game.messages?.get(String(result?.sourceMessageId ?? ""));
-	const damage = sourceMessage?.getFlag?.(FLAG_SCOPE, DAMAGE_STATE_FLAG_KEY);
-	return actorFromUuidSync(damage?.packet?.targetActorUuid);
-}
-
-function actorFromUuidSync(uuid) {
-	try {
-		const document = foundry.utils.fromUuidSync(String(uuid ?? "").trim());
-		if (document instanceof foundry.documents.Actor) return document;
-		if (document?.actor instanceof foundry.documents.Actor) return document.actor;
-	} catch (_error) {
-		return null;
-	}
-	return null;
-}
-
 function baselineDefeated(application) {
 	if (application?.actorDefeatedBefore !== undefined) {
 		return application.actorDefeatedBefore === true;
@@ -372,9 +374,8 @@ function baselineDefeated(application) {
 	return application?.defeatedBefore === true;
 }
 
-function fatalStateTouched(changes) {
+function fatalBoundaryTouched(changes) {
 	return [
-		DAMAGE_APPLICATIONS_FLAG_KEY,
 		FATAL_APPLICATIONS_FLAG_KEY,
 		FATE_INTERVENTIONS_FLAG_KEY,
 	].some((key) => touchesFlag(changes, key));
