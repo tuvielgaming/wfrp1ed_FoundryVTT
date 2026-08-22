@@ -71,6 +71,7 @@
 		"module/combat/UnappliedDamageInvalidation.mjs",
 		"module/combat/CombatLifecyclePresentation.mjs",
 		"module/combat/CombatDamageParryViewPhysicalDice.mjs",
+		"module/combat/CombatAdditionalDamagePhysicalDice.mjs",
 		"module/combat/DamageApplicationPresentationRefresh.mjs",
 		"module/criticals/DetailedFatalCriticalPresentation.mjs",
 		"module/criticals/CriticalTransactionRollback.mjs",
