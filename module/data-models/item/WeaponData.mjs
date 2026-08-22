@@ -218,8 +218,10 @@ export class WeaponData extends TypeDataModel {
 		/*
 		 * Accept every temporary/legacy timing shape which has existed in this
 		 * project. `reloadRounds` is authoritative. The short-lived split model is
-		 * collapsed without summing values: loadRounds has priority, then
-		 * recoveryRounds, then the original scalar reload field.
+		 * collapsed without summing values. A non-zero load value wins; otherwise
+		 * a non-zero recovery value is preserved (important for e.g. a Lasso which
+		 * may have been authored during that short-lived model), then the original
+		 * scalar reload value is used as the last fallback.
 		 */
 		migrated.firingCycle = {
 			reloadRounds: migratedReloadRounds(sourceObject, firingCycle),
@@ -243,13 +245,20 @@ function migratedReloadRounds(sourceObject, firingCycle) {
 	if (Object.hasOwn(firingCycle, "reloadRounds")) {
 		return toNonNegativeInteger(unwrapValue(firingCycle.reloadRounds));
 	}
-	if (Object.hasOwn(firingCycle, "loadRounds")) {
-		return toNonNegativeInteger(unwrapValue(firingCycle.loadRounds));
-	}
-	if (Object.hasOwn(firingCycle, "recoveryRounds")) {
-		return toNonNegativeInteger(unwrapValue(firingCycle.recoveryRounds));
-	}
-	return toNonNegativeInteger(unwrapValue(sourceObject.reload));
+
+	const splitLoad = Object.hasOwn(firingCycle, "loadRounds")
+		? toNonNegativeInteger(unwrapValue(firingCycle.loadRounds))
+		: 0;
+	const splitRecovery = Object.hasOwn(firingCycle, "recoveryRounds")
+		? toNonNegativeInteger(unwrapValue(firingCycle.recoveryRounds))
+		: 0;
+
+	if (splitLoad > 0) return splitLoad;
+	if (splitRecovery > 0) return splitRecovery;
+
+	const legacyReload = toNonNegativeInteger(unwrapValue(sourceObject.reload));
+	if (legacyReload > 0) return legacyReload;
+	return 0;
 }
 
 function textField(initial = "") {
