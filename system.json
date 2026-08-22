@@ -63,6 +63,7 @@
 		"module/rules/FractionalCharacteristicPolicy.mjs",
 		"module/combat/EffectiveAttacksIntegration.mjs",
 		"module/combat/CombatTransactionRollback.mjs",
+		"module/criticals/CriticalBleedingManualRollIntegration.mjs",
 		"module/combat/CombatRollbackAutomationGuard.mjs",
 		"module/combat/DedicatedDamageRollbackBridge.mjs",
 		"module/combat/UnappliedDamageInvalidation.mjs",
