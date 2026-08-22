@@ -275,7 +275,7 @@ async function commitParryReductionDie(message, input, previousValue) {
 	}
 }
 
-async function requestCombatParryReductionUpdate(message, value) {
+export async function requestCombatParryReductionUpdate(message, value) {
 	const normalized = d6Strict(value, "Parry reduction d6");
 	if (!canEditCombatParryReduction(message, game.user)) {
 		throw new Error(localize(
@@ -289,7 +289,7 @@ async function requestCombatParryReductionUpdate(message, value) {
 	return requestGmParryOverride(message, normalized);
 }
 
-function canEditCombatParryReduction(message, user = game.user) {
+export function canEditCombatParryReduction(message, user = game.user) {
 	if (!message?.id || !user) return false;
 	const attack = message.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY);
 	const rollState = message.getFlag?.(FLAG_SCOPE, COMBAT_DAMAGE_FLAG_KEY);
