@@ -3,25 +3,24 @@ const DAMAGE_APPLICATIONS_FLAG_KEY = "damageApplications";
 const FATAL_APPLICATIONS_FLAG_KEY = "fatalCriticalApplications";
 const FATE_INTERVENTIONS_FLAG_KEY = "fateInterventions";
 const KILLED_OUTCOME = "killed";
-const TOKEN_SNAPSHOT_VERSION = 1;
+const TOKEN_SNAPSHOT_VERSION = 2;
 const FINALIZE_DELAY_MS = 350;
 
 const pendingFinalizers = new Map();
 
 /*
- * Complement FatalStatusTransactionIntegration with exact Scene-token state.
+ * Transaction-local defeated-state reconciliation for fatal Criticals.
  *
- * FatalStatusTransactionIntegration already snapshots the Actor and Combatants,
- * but a Token does not have to be in Combat. A fatal Sudden Death can therefore
- * put Foundry's Defeated status on a normal Scene token which the Combatant-only
- * snapshot cannot later find during invalidation. This integration owns only
- * that missing Scene-token boundary:
- * - before a new fatal application, snapshot every Scene token actually
- *   represented by the target Actor;
- * - after apply, keep those token Actors defeated;
- * - after fatal invalidation or Fate intervention, restore each exact token to
- *   its pre-fatal status instead of blindly clearing a status which may have
- *   existed before the critical.
+ * FatalStatusTransactionIntegration historically covered the world Actor and
+ * Combatants. Scene Tokens which are not represented by a Combatant can still
+ * carry the Defeated status, so this module snapshots exact Scene/Token state as
+ * well and provides one explicit reconciliation function for transaction
+ * boundaries such as Sudden Death invalidation.
+ *
+ * Important design rule: invalidation must not rely only on a later render or a
+ * delayed updateActor hook. The code which reverts the fatal transaction can call
+ * reconcileFatalStatusAfterBoundary() immediately with the exact application it
+ * just reverted. Hooks remain as a safety net for Fate and other callers.
  */
 Hooks.on("preUpdateActor", (actor, changes) => {
 	if (!(actor instanceof foundry.documents.Actor)) return;
@@ -75,9 +74,9 @@ function queueFinalization(actor, releaseApplication) {
 
 	const timer = setTimeout(() => {
 		pendingFinalizers.delete(key);
-		void finalizeSceneTokenState(actor, release).catch((error) => {
+		void reconcileFatalStatusAfterBoundary(actor, release).catch((error) => {
 			console.error(
-				"WFRP1ED | Unable to finalize fatal Scene-token status.",
+				"WFRP1ED | Unable to finalize fatal defeated status.",
 				error,
 			);
 		});
@@ -85,41 +84,97 @@ function queueFinalization(actor, releaseApplication) {
 	pendingFinalizers.set(key, timer);
 }
 
-async function finalizeSceneTokenState(actor, releaseApplication) {
+/**
+ * Reconcile every Foundry representation owned by the fatal subsystem after an
+ * apply/revert/Fate boundary.
+ *
+ * @param {Actor} actor Target Actor or synthetic Token Actor.
+ * @param {Object|null} releaseApplication The fatal application whose effect was
+ * removed. Passing it explicitly is preferred because it preserves the exact
+ * pre-fatal snapshot even when the Actor has older fatal history.
+ */
+export async function reconcileFatalStatusAfterBoundary(
+	actor,
+	releaseApplication = null,
+) {
 	if (!(actor instanceof foundry.documents.Actor)) return;
 	if (!isStatusAuthority(actor)) return;
 
 	const active = activeFatalApplications(actor);
 	if (active.length > 0) {
-		let hadExactSnapshot = false;
-		for (const application of active) {
-			const snapshots = validTokenSnapshots(application);
-			if (snapshots.length === 0) continue;
-			hadExactSnapshot = true;
-			await writeSnapshotTokenStatuses(snapshots, () => true);
-		}
-		if (!hadExactSnapshot) {
-			await writeRepresentedTokenStatuses(actor, true);
-		}
+		await imposeFatalState(actor, active);
 		return;
 	}
 
-	if (!isRecord(releaseApplication)) return;
-	const snapshots = validTokenSnapshots(releaseApplication);
-	if (snapshots.length > 0) {
-		await writeSnapshotTokenStatuses(
-			snapshots,
+	const release = isRecord(releaseApplication)
+		? releaseApplication
+		: latestRevertedFatal(actor);
+	if (!isRecord(release)) return;
+
+	await restoreFatalState(actor, release);
+}
+
+async function imposeFatalState(actor, applications) {
+	await setActorDefeatedStatus(actor, true);
+
+	let hadTokenSnapshot = false;
+	let hadCombatantSnapshot = false;
+
+	for (const application of applications) {
+		const tokenSnapshots = validTokenSnapshots(application);
+		if (tokenSnapshots.length > 0) {
+			hadTokenSnapshot = true;
+			await writeSnapshotTokenStatuses(tokenSnapshots, () => true);
+		}
+
+		const combatantSnapshots = validCombatantSnapshots(application);
+		if (combatantSnapshots.length > 0) {
+			hadCombatantSnapshot = true;
+			await writeSnapshotCombatantStates(combatantSnapshots, () => true);
+			await writeSnapshotCombatantTokenStatuses(combatantSnapshots, () => true);
+		}
+	}
+
+	if (!hadTokenSnapshot) {
+		await writeRepresentedTokenStatuses(actor, true);
+	}
+	if (!hadCombatantSnapshot) {
+		await writeMatchingCombatants(actor, true);
+	}
+}
+
+async function restoreFatalState(actor, application) {
+	const baseline = actorBaseline(application);
+	const tokenSnapshots = validTokenSnapshots(application);
+	const combatantSnapshots = validCombatantSnapshots(application);
+
+	/* Restore the exact embedded/synthetic representations first. */
+	if (combatantSnapshots.length > 0) {
+		await writeSnapshotCombatantStates(
+			combatantSnapshots,
 			(snapshot) => snapshot.defeatedBefore === true,
 		);
-		return;
+		await writeSnapshotCombatantTokenStatuses(
+			combatantSnapshots,
+			(snapshot) => snapshot.tokenActorDefeatedBefore === true,
+		);
+	} else {
+		await writeMatchingCombatants(actor, baseline);
 	}
 
-	/* Legacy fallback for applications created before token snapshots existed.
-	 * This path runs only at the transaction boundary that is changing now. */
-	await writeRepresentedTokenStatuses(
-		actor,
-		actorBaseline(releaseApplication),
-	);
+	if (tokenSnapshots.length > 0) {
+		await writeSnapshotTokenStatuses(
+			tokenSnapshots,
+			(snapshot) => snapshot.defeatedBefore === true,
+		);
+	} else {
+		/* Legacy/current safety fallback. If an older fatal application has no exact
+		 * Scene-token snapshot, repair every token presently represented by this
+		 * Actor at the same explicit rollback boundary. */
+		await writeRepresentedTokenStatuses(actor, baseline);
+	}
+
+	await setActorDefeatedStatus(actor, baseline);
 }
 
 function captureRepresentedTokenSnapshots(actor) {
@@ -143,16 +198,14 @@ function representedTokenDocuments(actor) {
 		tokens.set(`${sceneId}:${tokenId}`, token);
 	};
 
-	/* Synthetic Token Actors are local to one unlinked Token. Never affect other
-	 * unlinked copies which happen to use the same base Actor id. */
+	/* Synthetic Token Actors are local to one unlinked Token. */
 	if (actor?.token) {
 		add(actor.token);
 		return [...tokens.values()];
 	}
 
-	/* A world Actor represents its linked Tokens. Their status is shared through
-	 * the Actor, but recording the exact Scene/Token identity makes rollback
-	 * deterministic and also covers Foundry token-status synchronization. */
+	/* A world Actor represents linked Tokens only. Do not touch unrelated unlinked
+	 * copies which merely share the same base actorId. */
 	for (const scene of game.scenes ?? []) {
 		for (const token of scene?.tokens ?? []) {
 			if (token?.actorLink !== true) continue;
@@ -195,6 +248,102 @@ async function writeRepresentedTokenStatuses(actor, active) {
 	}
 }
 
+async function writeSnapshotCombatantStates(snapshots, desiredFor) {
+	const byCombat = new Map();
+
+	for (const snapshot of snapshots) {
+		const combat = game.combats?.get?.(String(snapshot?.combatId ?? ""));
+		const combatant = combat?.combatants?.get?.(
+			String(snapshot?.combatantId ?? ""),
+		);
+		if (!combat || !combatant) continue;
+
+		const desired = Boolean(desiredFor(snapshot));
+		if (combatant.defeated === desired) continue;
+
+		if (!byCombat.has(combat.id)) {
+			byCombat.set(combat.id, { combat, updates: [] });
+		}
+		byCombat.get(combat.id).updates.push({
+			_id: combatant.id,
+			defeated: desired,
+		});
+	}
+
+	for (const { combat, updates } of byCombat.values()) {
+		if (updates.length > 0) {
+			await combat.updateEmbeddedDocuments("Combatant", updates);
+		}
+	}
+}
+
+async function writeSnapshotCombatantTokenStatuses(snapshots, desiredFor) {
+	const visited = new Set();
+
+	for (const snapshot of snapshots) {
+		const tokenActor = actorFromUuidSync(snapshot?.tokenActorUuid);
+		if (!(tokenActor instanceof foundry.documents.Actor)) continue;
+
+		const key = String(tokenActor.uuid ?? tokenActor.id ?? "");
+		if (!key || visited.has(key)) continue;
+		visited.add(key);
+
+		await setActorDefeatedStatus(tokenActor, Boolean(desiredFor(snapshot)));
+	}
+}
+
+async function writeMatchingCombatants(actor, active) {
+	const desired = Boolean(active);
+	for (const combat of game.combats ?? []) {
+		const updates = matchingCombatants(combat, actor)
+			.filter((combatant) => combatant.defeated !== desired)
+			.map((combatant) => ({ _id: combatant.id, defeated: desired }));
+		if (updates.length > 0) {
+			await combat.updateEmbeddedDocuments("Combatant", updates);
+		}
+	}
+}
+
+function matchingCombatants(combat, actor) {
+	const matches = new Map();
+	const add = (combatant) => {
+		if (combatant?.id) matches.set(combatant.id, combatant);
+	};
+
+	const tokenId = String(actor?.token?.id ?? "");
+	if (tokenId && typeof combat?.getCombatantsByToken === "function") {
+		for (const combatant of combat.getCombatantsByToken(tokenId) ?? []) add(combatant);
+	}
+	if (!tokenId && typeof combat?.getCombatantsByActor === "function") {
+		for (const combatant of combat.getCombatantsByActor(actor) ?? []) add(combatant);
+	}
+	for (const combatant of combat?.combatants ?? []) {
+		if (combatantMatchesActor(combatant, actor)) add(combatant);
+	}
+	return [...matches.values()];
+}
+
+function combatantMatchesActor(combatant, actor) {
+	if (!combatant || !actor) return false;
+	if (combatant.actor === actor) return true;
+
+	const actorUuid = String(actor.uuid ?? "");
+	if (actorUuid && String(combatant.actor?.uuid ?? "") === actorUuid) return true;
+
+	const tokenId = String(actor.token?.id ?? "");
+	if (tokenId) {
+		return String(combatant.tokenId ?? combatant.token?.id ?? "") === tokenId;
+	}
+
+	const actorId = String(actor.id ?? "");
+	if (!actorId) return false;
+	return Boolean(
+		String(combatant.actor?.id ?? "") === actorId ||
+		String(combatant.actorId ?? "") === actorId ||
+		String(combatant.token?.actorId ?? "") === actorId
+	);
+}
+
 function tokenActorFromSnapshot(snapshot) {
 	const scene = game.scenes?.get?.(String(snapshot?.sceneId ?? ""));
 	const token = scene?.tokens?.get?.(String(snapshot?.tokenId ?? ""));
@@ -208,6 +357,15 @@ function validTokenSnapshots(application) {
 			(snapshot) =>
 				isRecord(snapshot) &&
 				(snapshot.tokenActorUuid || (snapshot.sceneId && snapshot.tokenId)),
+		)
+		: [];
+}
+
+function validCombatantSnapshots(application) {
+	return Array.isArray(application?.combatantSnapshots)
+		? application.combatantSnapshots.filter(
+			(snapshot) =>
+				isRecord(snapshot) && snapshot.combatId && snapshot.combatantId,
 		)
 		: [];
 }
