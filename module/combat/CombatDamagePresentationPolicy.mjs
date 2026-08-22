@@ -3,7 +3,7 @@ const ATTACK_FLAG_KEY = "combatAttackResult";
 const DAMAGE_FLAG_KEY = "damageState";
 const COMBAT_DAMAGE_FLAG_KEY = "combatDamageRoll";
 const DAMAGE_RESULT_VIEW_FLAG_KEY = "combatDamageResultView";
-const SHOW_OTHER_DETAILS_SETTING_KEY = "showDamageDetailsForOtherPlayers";
+const DAMAGE_DETAILS_PUBLIC_FLAG_KEY = "combatDamageDetailsPublic";
 
 /*
  * Final combat-damage presentation policy.
@@ -14,25 +14,12 @@ const SHOW_OTHER_DETAILS_SETTING_KEY = "showDamageDetailsForOtherPlayers";
  * - Parry remains outside the folded diagnostic section so its physical-die
  *   control is immediately discoverable;
  * - by default players do not see opponent-only Strength/Toughness/armour
- *   diagnostics. A world setting lets the GM expose the complete breakdown.
+ *   diagnostics;
+ * - the GM may temporarily publish the complete breakdown of one specific
+ *   dedicated Damage card through its ChatMessage context menu, then restrict
+ *   that same card again. No world-wide visibility switch is used.
  */
 Hooks.once("init", () => {
-	game.settings.register(game.system.id, SHOW_OTHER_DETAILS_SETTING_KEY, {
-		name: localize(
-			"Show full damage details to other players",
-			"Pokaż pełne szczegóły obrażeń innym graczom",
-		),
-		hint: localize(
-			"When disabled, players only see detailed damage values that belong to Actors they own. Opponent Strength, Toughness, armour and related breakdown values stay hidden. The GM always sees the full breakdown.",
-			"Gdy wyłączone, gracze widzą tylko szczegółowe wartości obrażeń należące do postaci, których są właścicielami. Siła, Wytrzymałość, pancerz przeciwnika i powiązane wartości pozostają ukryte. MG zawsze widzi pełne szczegóły.",
-		),
-		scope: "world",
-		config: true,
-		type: Boolean,
-		default: false,
-		onChange: () => void ui.chat?.render?.({ force: true }),
-	});
-
 	Hooks.on("renderChatMessageHTML", (message, html) => {
 		const root = asElement(html);
 		if (!root) return;
@@ -40,6 +27,20 @@ Hooks.once("init", () => {
 			applyPresentation(message, root);
 			setTimeout(() => applyPresentation(message, root), 0);
 		});
+	});
+
+	Hooks.on("getChatMessageContextOptions", (_application, menuItems) => {
+		addDamageVisibilityContextOptions(menuItems);
+	});
+
+	/*
+	 * Visibility is stored only as message metadata. Foundry propagates the
+	 * ChatMessage update to every connected client; repaint the already-rendered
+	 * card in place instead of forcing a full ChatLog rebuild.
+	 */
+	Hooks.on("updateChatMessage", (message, changes) => {
+		if (!damageVisibilityChanged(changes)) return;
+		requestAnimationFrame(() => refreshVisiblePresentation(message));
 	});
 });
 
@@ -90,10 +91,10 @@ function presentDedicatedDamage(message, root) {
 		card.insertBefore(parryRow, folded);
 	}
 
-	applyDetailAudiencePolicy(card, attack);
+	applyDetailAudiencePolicy(message, card, attack);
 }
 
-function applyDetailAudiencePolicy(card, attack) {
+function applyDetailAudiencePolicy(message, card, attack) {
 	const details = card.querySelector?.("details[data-wfrp-damage-folded-details]");
 	if (!(details instanceof HTMLDetailsElement)) return;
 	const body = details.querySelector?.(".wfrp1e-damage-card__details-body");
@@ -103,7 +104,9 @@ function applyDetailAudiencePolicy(card, attack) {
 	for (const row of rows) row.hidden = false;
 	details.hidden = false;
 
-	if (game.user?.isGM || showAllDetailsToPlayers()) return;
+	/* GM always sees the complete audit. A per-card public toggle gives every
+	 * player exactly the same full breakdown without changing any other card. */
+	if (game.user?.isGM || damageDetailsArePublic(message)) return;
 
 	const attacker = actorFromUuidSync(attack?.attacker?.uuid);
 	const defender = actorFromUuidSync(attack?.target?.uuid);
@@ -131,6 +134,133 @@ function applyDetailAudiencePolicy(card, attack) {
 	if (!visibleRows) details.open = false;
 }
 
+function addDamageVisibilityContextOptions(menuItems) {
+	if (!game.user?.isGM || !Array.isArray(menuItems)) return;
+
+	menuItems.push(
+		{
+			name: localize(
+				"Damage details: show to all players",
+				"Szczegóły obrażeń: pokaż wszystkim graczom",
+			),
+			icon: '<i class="fa-solid fa-eye"></i>',
+			condition: (target) => {
+				const message = messageFromContextTarget(target);
+				return isDedicatedDamageMessage(message) && !damageDetailsArePublic(message);
+			},
+			callback: (target) => {
+				const message = messageFromContextTarget(target);
+				if (message) void setDamageDetailsPublic(message, true);
+			},
+		},
+		{
+			name: localize(
+				"Damage details: hide from other players",
+				"Szczegóły obrażeń: ukryj przed innymi graczami",
+			),
+			icon: '<i class="fa-solid fa-eye-slash"></i>',
+			condition: (target) => {
+				const message = messageFromContextTarget(target);
+				return isDedicatedDamageMessage(message) && damageDetailsArePublic(message);
+			},
+			callback: (target) => {
+				const message = messageFromContextTarget(target);
+				if (message) void setDamageDetailsPublic(message, false);
+			},
+		},
+	);
+}
+
+async function setDamageDetailsPublic(message, makePublic) {
+	try {
+		if (!game.user?.isGM) {
+			throw new Error(localize(
+				"Only a GM can change Damage-card detail visibility.",
+				"Tylko MG może zmieniać widoczność szczegółów karty Obrażeń.",
+			));
+		}
+		if (!isDedicatedDamageMessage(message)) {
+			throw new Error(localize(
+				"This ChatMessage is not a dedicated Damage card.",
+				"Ta wiadomość nie jest dedykowaną kartą Obrażeń.",
+			));
+		}
+
+		const publicValue = makePublic === true;
+		if (damageDetailsArePublic(message) === publicValue) return;
+
+		await message.setFlag(
+			FLAG_SCOPE,
+			DAMAGE_DETAILS_PUBLIC_FLAG_KEY,
+			publicValue,
+		);
+	} catch (error) {
+		console.error("WFRP1ED | Unable to change Damage-card detail visibility.", error);
+		ui.notifications.error(
+			error?.message ?? localize(
+				"Unable to change Damage-card detail visibility.",
+				"Nie udało się zmienić widoczności szczegółów karty Obrażeń.",
+			),
+		);
+	}
+}
+
+function damageDetailsArePublic(message) {
+	return message?.getFlag?.(
+		FLAG_SCOPE,
+		DAMAGE_DETAILS_PUBLIC_FLAG_KEY,
+	) === true;
+}
+
+function isDedicatedDamageMessage(message) {
+	return Boolean(
+		message?.id &&
+		message.getFlag?.(FLAG_SCOPE, DAMAGE_RESULT_VIEW_FLAG_KEY)?.sourceAttackMessageId,
+	);
+}
+
+function damageVisibilityChanged(changes) {
+	if (!changes || typeof changes !== "object") return false;
+	const scoped = changes?.flags?.[FLAG_SCOPE];
+	if (
+		scoped &&
+		typeof scoped === "object" &&
+		(
+			Object.hasOwn(scoped, DAMAGE_DETAILS_PUBLIC_FLAG_KEY) ||
+			Object.hasOwn(scoped, `-=${DAMAGE_DETAILS_PUBLIC_FLAG_KEY}`)
+		)
+	) return true;
+
+	return Object.keys(changes).some((key) =>
+		String(key).includes(DAMAGE_DETAILS_PUBLIC_FLAG_KEY),
+	);
+}
+
+function refreshVisiblePresentation(message) {
+	if (!message?.id) return;
+	const entry = document.querySelector(
+		`[data-message-id="${cssEscape(message.id)}"]`,
+	);
+	if (entry) applyPresentation(message, entry);
+}
+
+function messageFromContextTarget(target) {
+	const element = target instanceof HTMLElement
+		? target
+		: target?.[0] instanceof HTMLElement
+			? target[0]
+			: null;
+	const entry = element?.closest?.("[data-message-id]") ?? element;
+	const messageId = String(
+		entry?.dataset?.messageId ??
+			target?.attr?.("data-message-id") ??
+			target?.data?.("message-id") ??
+			"",
+	).trim();
+
+	return messageId ? game.messages?.get(messageId) ?? null : null;
+}
+
 const ATTACKER_DETAIL_LABELS = new Set([
 	"Strength",
 	"Siła",
@@ -153,14 +283,6 @@ const FINAL_DAMAGE_LABELS = new Set([
 	"Final damage",
 	"Końcowe obrażenia",
 ]);
-
-function showAllDetailsToPlayers() {
-	try {
-		return game.settings.get(game.system.id, SHOW_OTHER_DETAILS_SETTING_KEY) === true;
-	} catch (_error) {
-		return false;
-	}
-}
 
 function findRow(card, expectedLabel) {
 	return [...(card.querySelectorAll?.(".wfrp1e-damage-card__row") ?? [])]
@@ -200,6 +322,11 @@ function asElement(value) {
 	if (value instanceof HTMLElement) return value;
 	if (value?.[0] instanceof HTMLElement) return value[0];
 	return null;
+}
+
+function cssEscape(value) {
+	const text = String(value ?? "");
+	return globalThis.CSS?.escape ? CSS.escape(text) : text.replace(/["\\]/g, "\\$&");
 }
 
 function localize(en, pl) {
