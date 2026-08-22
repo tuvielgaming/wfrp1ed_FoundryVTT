@@ -113,7 +113,7 @@
 	{{#if isRanged}}
 		<section class="combat-item-sheet__panel">
 			<h3>{{ui.rangedDetails}}</h3>
-			<div class="combat-item-sheet__grid combat-item-sheet__grid--5">
+			<div class="combat-item-sheet__grid combat-item-sheet__grid--4">
 				<label class="combat-item-sheet__field">
 					<span>{{ui.shortRange}}</span>
 					<input type="number" min="0" step="1" name="system.range.short" value="{{system.range.short}}" {{#unless editable}}disabled{{/unless}}>
@@ -130,9 +130,32 @@
 					<span>{{ui.effectiveStrength}}</span>
 					<input type="number" min="0" step="1" name="system.effectiveStrength" value="{{system.effectiveStrength}}" {{#unless editable}}disabled{{/unless}}>
 				</label>
+			</div>
+
+			<div class="combat-item-sheet__panel-heading">
+				<h3>{{ui.firingCycle}}</h3>
+				<p>{{ui.firingCycleHint}}</p>
+			</div>
+			<div class="combat-item-sheet__grid combat-item-sheet__grid--5">
 				<label class="combat-item-sheet__field">
-					<span>{{ui.reload}}</span>
-					<input type="number" min="0" step="1" name="system.reload" value="{{system.reload}}" {{#unless editable}}disabled{{/unless}}>
+					<span>{{ui.loadRounds}}</span>
+					<input type="number" min="0" step="1" name="system.firingCycle.loadRounds" value="{{system.firingCycle.loadRounds}}" {{#unless editable}}disabled{{/unless}}>
+				</label>
+				<label class="combat-item-sheet__field">
+					<span>{{ui.recoveryRounds}}</span>
+					<input type="number" min="0" step="1" name="system.firingCycle.recoveryRounds" value="{{system.firingCycle.recoveryRounds}}" {{#unless editable}}disabled{{/unless}}>
+				</label>
+				<label class="combat-item-sheet__field">
+					<span>{{ui.shotsPerFireRound}}</span>
+					<input type="number" min="1" step="1" name="system.firingCycle.shotsPerFireRound" value="{{system.firingCycle.shotsPerFireRound}}" {{#unless editable}}disabled{{/unless}}>
+				</label>
+				<label class="combat-item-sheet__field">
+					<span>{{ui.magazineCapacity}}</span>
+					<input type="number" min="0" step="1" name="system.firingCycle.magazineCapacity" value="{{system.firingCycle.magazineCapacity}}" {{#unless editable}}disabled{{/unless}}>
+				</label>
+				<label class="combat-item-sheet__field">
+					<span>{{ui.magazineReloadRounds}}</span>
+					<input type="number" min="0" step="1" name="system.firingCycle.magazineReloadRounds" value="{{system.firingCycle.magazineReloadRounds}}" {{#unless editable}}disabled{{/unless}}>
 				</label>
 			</div>
 		</section>
