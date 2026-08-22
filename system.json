@@ -101,6 +101,7 @@
 		"module/chat/CombatLifecyclePolish.mjs",
 		"module/criticals/CriticalResultLifecycleGuard.mjs",
 		"module/chat/CompactResolvedChatCards.mjs",
+		"module/chat/ChatDisclosureStatePreservation.mjs",
 		"module/chat/ChatBottomFollow.mjs"
 	],
 	"styles": [
