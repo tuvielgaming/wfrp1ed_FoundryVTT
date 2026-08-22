@@ -6,7 +6,7 @@ import {
 
 export const CORE_DETAILED_CHART_PROVIDER_ID =
 	"wfrp1ed.core.detailed.chart";
-export const CORE_DETAILED_CRITICAL_TABLE_VERSION = 1;
+export const CORE_DETAILED_CRITICAL_TABLE_VERSION = 2;
 
 export const DETAILED_CRITICAL_OUTCOME = Object.freeze({
 	KILLED: "killed",
@@ -86,7 +86,7 @@ const PRESENTATION = Object.freeze({
 		chartDescription:
 			"System-managed WFRP 1e Core fallback. Combat, printed p. 122. The d100 result selects a numbered Critical Effect for the appropriate hit location.",
 		effectDescription:
-			"System-managed WFRP 1e Core fallback. Combat, printed pp. 122-124. Results reproduce the Core Rulebook Critical Effects text verbatim.",
+			"System-managed WFRP 1e Core fallback. Combat, printed pp. 122-124. Results preserve the Core mechanics and expand internal printed cross-references so every result is self-contained.",
 		protectedWarning:
 			"This is a system-managed WFRP 1e Core detailed-critical table. Duplicate it and configure the copy as an override for house rules.",
 		effect: "Effect",
@@ -99,7 +99,7 @@ const PRESENTATION = Object.freeze({
 		chartDescription:
 			"Zarządzana przez system domyślna tabela WFRP 1e Core. Walka, str. 122. Rzut K100 wskazuje numer efektu krytycznego dla odpowiedniego obszaru trafienia.",
 		effectDescription:
-			"Zarządzana przez system domyślna tabela WFRP 1e Core. Walka, str. 122-124. Wyniki odtwarzają dosłowny tekst Efektów trafień krytycznych z polskiej Księgi Głównej.",
+			"Zarządzana przez system domyślna tabela WFRP 1e Core. Walka, str. 122-124. Wyniki zachowują mechanikę Księgi Głównej i mają statycznie rozwinięte wewnętrzne odwołania, aby każdy efekt był samodzielnym opisem.",
 		protectedWarning:
 			"To jest zarządzana przez system tabela szczegółowych trafień krytycznych WFRP 1e Core. Utwórz kopię i ustaw ją jako nadpisanie, aby użyć zasad własnych.",
 		effect: "Efekt",
@@ -115,11 +115,12 @@ const PRESENTATION = Object.freeze({
  * Polish: Walka — Trafienia krytyczne / Tabela trafień krytycznych /
  * Efekty trafień krytycznych, printed pp. 122-124 (PDF pages 127-129).
  *
- * IMPORTANT: effect descriptions below are transcription, not paraphrase.
+ * IMPORTANT: the descriptions below preserve the audited Core mechanics, but
+ * printed cross-references such as "see 3 above" are expanded statically so a
+ * single RollTable result or Critical Wound description is self-contained.
  * English mechanics remain authoritative when the Polish translation differs.
  * For example, English Leg #6 calls for a test on half Initiative, while the
- * Polish text says a normal Initiative test; the localized narrative remains
- * literal and any automation must follow the English rule.
+ * Polish text says a normal Initiative test; automation must follow English.
  */
 const DETAILED_CHART_BANDS = Object.freeze([
 	chartBand(1, 10, [1, 3, 5, 7, star(11), star(14)]),
@@ -177,20 +178,20 @@ const EFFECTS = deepFreeze({
 			"Rozlega się przyprawiający o mdłości zgrzyt, gdy twoja broń przecina kości ramienia wroga. Trafiony wypuszcza wszystko, co trzymał w tej ręce i nie będzie mógł nią władać do czasu otrzymania pomocy medycznej.",
 		),
 		effect(
-			"The target's arm is smashed, and an artery is severed. Anything held in the hand is dropped, and the arm is incapacitated until medical attention is received. Additionally, your opponent loses 1 Wound per round until medical attention is received. Roll any further criticals on the Sudden Death Critical Chart below.",
-			"Ręka przeciwnika jest zmiażdżona, a ostrze przecina kilka tętnic. Wszystkie trzymane w dłoni przedmioty zostają upuszczone. Ręka jest niewładna do chwili udzielenia pomocy medycznej. Dodatkowo co rundę do chwili jej otrzymania, twój przeciwnik traci 1 punkt Żywotności. Wszystkie następne rzuty krytyczne wykonuj według Tabeli nagłej śmierci.",
+			"The target's arm is smashed, and an artery is severed. Anything held in the hand is dropped, and the arm is incapacitated until medical attention is received. Additionally, your opponent loses 1 Wound per round until medical attention is received. Resolve any further Critical Hits using the Sudden Death Critical Chart.",
+			"Ręka przeciwnika jest zmiażdżona, a ostrze przecina kilka tętnic. Wszystkie trzymane w dłoni przedmioty zostają upuszczone. Ręka jest niewładna do chwili udzielenia pomocy medycznej. Dodatkowo co rundę do chwili jej otrzymania, twój przeciwnik traci 1 punkt Żywotności. Wszystkie dalsze trafienia krytyczne rozstrzygaj według Tabeli nagłej śmierci.",
 		),
 		effect(
-			"Your opponent stares with horror as blood pumps from the mangled stump of the wrist. Anything held in the hand is dropped (along with the hand itself), and your opponent falls unconscious to the ground, losing D4 Wounds per round until medical attention is received. Roll all criticals on the Sudden Death Critical Chart below.",
-			"Twój przeciwnik z przerażeniem patrzy na krew tryskającą z uciętego kikuta ręki. Wszystkie trzymane w dłoni przedmioty zostają upuszczone (wraz z samą dłonią), a wróg pada nieprzytomny na ziemię. Do chwili otrzymania pomocy medycznej będzie tracił co rundę K4 punkty Żywotności. Wszystkie następne rzuty krytyczne wykonuj wg. Tabeli nagłej śmierci.",
+			"Your opponent stares with horror as blood pumps from the mangled stump of the wrist. Anything held in the hand is dropped (along with the hand itself), and your opponent falls unconscious to the ground, losing D4 Wounds per round until medical attention is received. Resolve all further Critical Hits using the Sudden Death Critical Chart.",
+			"Twój przeciwnik z przerażeniem patrzy na krew tryskającą z uciętego kikuta ręki. Wszystkie trzymane w dłoni przedmioty zostają upuszczone (wraz z samą dłonią), a wróg pada nieprzytomny na ziemię. Do chwili otrzymania pomocy medycznej będzie tracił co rundę K4 punkty Żywotności. Wszystkie dalsze trafienia krytyczne rozstrzygaj według Tabeli nagłej śmierci.",
 		),
 		effect(
-			"Your blow tears off your opponent's arm at the elbow, splintering bone and mangling flesh. Your opponent collapses and may do nothing until medical attention is obtained. D4 Wounds are lost per round meanwhile. Roll all criticals on the Sudden Death Critical Chart below.",
-			"Twój cios, tnąc ciało i rozłupując kości, przecina rękę przeciwnika na wysokości łokcia. Ranny traci przytomność i nie może nic robić do czasu otrzymania pomocy medycznej. W tym czasie traci co rundę K4 punkty Żywotności. Wszystkie następne rzuty krytyczne wykonuj wg. Tabeli nagłej śmierci.",
+			"Your blow tears off your opponent's arm at the elbow, splintering bone and mangling flesh. Your opponent collapses and may do nothing until medical attention is obtained. D4 Wounds are lost per round meanwhile. Resolve all further Critical Hits using the Sudden Death Critical Chart.",
+			"Twój cios, tnąc ciało i rozłupując kości, przecina rękę przeciwnika na wysokości łokcia. Ranny traci przytomność i nie może nic robić do czasu otrzymania pomocy medycznej. W tym czasie traci co rundę K4 punkty Żywotności. Wszystkie dalsze trafienia krytyczne rozstrzygaj według Tabeli nagłej śmierci.",
 		),
 		effect(
-			"Your blow tears off your opponent's arm at the shoulder. Your opponent collapses and may do nothing until medical attention is obtained. D6 Wounds are lost per round meanwhile. Roll all criticals on the Sudden Death Critical Chart below.",
-			"Twój cios przecina bark przeciwnika, odrąbując ramię. Przeciwnik mdleje i nie może nic robić do chwili otrzymania pomocy medycznej. W tym czasie traci co rundę K6 pkt Żywotności. Wszystkie następne rzuty krytyczne wykonuj wg. Tabeli nagłej śmierci.",
+			"Your blow tears off your opponent's arm at the shoulder. Your opponent collapses and may do nothing until medical attention is obtained. D6 Wounds are lost per round meanwhile. Resolve all further Critical Hits using the Sudden Death Critical Chart.",
+			"Twój cios przecina bark przeciwnika, odrąbując ramię. Przeciwnik mdleje i nie może nic robić do chwili otrzymania pomocy medycznej. W tym czasie traci co rundę K6 pkt Żywotności. Wszystkie dalsze trafienia krytyczne rozstrzygaj według Tabeli nagłej śmierci.",
 		),
 		effect(
 			"Your blow destroys your opponent's shoulder joint almost totally - the arm hangs limply, a mass of tattered and pulpy flesh with protruding fragments of bone. By chance, one of the bone splinters has severed a major artery, and after a fraction of a second your opponent collapses, with blood pouring out from the ruins of his shoulder. Death from shock and blood loss is almost instantaneous.",
@@ -359,44 +360,44 @@ const EFFECTS = deepFreeze({
 			"Od twojego ciosu noga przeciwnika drętwieje, niemal nie może na niej stać. Jego Szybkość i Inicjatywa spada o połowę na następne K4 rundy.",
 		),
 		effect(
-			"Your blow strikes the target's ankle, dislocating it. Movement allowance and Initiative are halved until medical attention is received; your opponent must pass an Initiative test or be knocked down (see 3 above).",
-			"Twój cios trafia wroga w kostkę, przemieszczając ją. Do czasu otrzymania pomocy medycznej jego Szybkość i Inicjatywa są zmniejszone o połowę. Ponadto musi wykonać udany test Inicjatywy, albo upadnie na ziemię (patrz punkt 3 wyżej).",
+			"Your blow strikes the target's ankle, dislocating it. Movement allowance and Initiative are halved until medical attention is received. Your opponent must pass an Initiative test or be knocked down. If knocked down, any hand-held object is jarred loose unless a Dexterity test is passed; for the next D4 rounds until back upright the opponent may only parry, and only if still in possession of a weapon or shield.",
+			"Twój cios trafia wroga w kostkę, przemieszczając ją. Do czasu otrzymania pomocy medycznej jego Szybkość i Inicjatywa są zmniejszone o połowę. Ponadto musi wykonać udany test Inicjatywy, albo upadnie na ziemię. Jeżeli zostanie powalony, wypuszcza wszystkie trzymane w rękach przedmioty, chyba że wykona udany test Zręczności; przez następne K4 rundy, podczas podnoszenia się, może jedynie parować, i tylko jeśli nadal trzyma broń lub tarczę.",
 		),
 		effect(
-			"Your blow strikes your opponent's hip, dislocating the leg. Movement allowance and Initiative are halved until medical attention is received; your opponent must pass a test on half Initiative or be knocked down (see 3 above).",
-			"Twój cios trafia w biodro przeciwnika, przetrącając mu nogę. Do czasu otrzymania pomocy medycznej jego Szybkość i Inicjatywa są zmniejszone o połowę. Dodatkowo musi wykonać udany test Inicjatywy, albo upadnie na ziemię (patrz punkt 3 wyżej).",
+			"Your blow strikes your opponent's hip, dislocating the leg. Movement allowance and Initiative are halved until medical attention is received. Your opponent must pass a test on half Initiative or be knocked down. If knocked down, any hand-held object is jarred loose unless a Dexterity test is passed; for the next D4 rounds until back upright the opponent may only parry, and only if still in possession of a weapon or shield.",
+			"Twój cios trafia w biodro przeciwnika, przetrącając mu nogę. Do czasu otrzymania pomocy medycznej jego Szybkość i Inicjatywa są zmniejszone o połowę. Dodatkowo musi wykonać udany test Inicjatywy, albo upadnie na ziemię. Jeżeli zostanie powalony, wypuszcza wszystkie trzymane w rękach przedmioty, chyba że wykona udany test Zręczności; przez następne K4 rundy, podczas podnoszenia się, może jedynie parować, i tylko jeśli nadal trzyma broń lub tarczę.",
 		),
 		effect(
-			"Your blow strikes the target's shin, shattering the bones. Your opponent is knocked down (see 3 above), and movement allowance and Initiative are halved until medical attention is received.",
-			"Cios trafia w goleń wroga, miażdżąc kość. Twój przeciwnik pada na ziemię (patrz punkt 3 wyżej). Jego Szybkość i Inicjatywa są zmniejszone o połowę do czasu otrzymania pomocy medycznej.",
+			"Your blow strikes the target's shin, shattering the bones. Your opponent is knocked down, jarring any hand-held object loose unless a Dexterity test is passed. For the next D4 rounds until back upright the opponent may only parry, and only if still in possession of a weapon or shield. Movement allowance and Initiative are halved until medical attention is received.",
+			"Cios trafia w goleń wroga, miażdżąc kość. Twój przeciwnik pada na ziemię i wypuszcza wszystkie trzymane w rękach przedmioty, chyba że wykona udany test Zręczności. Przez następne K4 rundy, podczas podnoszenia się, może jedynie parować, i tylko jeśli nadal trzyma broń lub tarczę. Jego Szybkość i Inicjatywa są zmniejszone o połowę do czasu otrzymania pomocy medycznej.",
 		),
 		effect(
-			"Your blow opens a deep wound in the leg, cutting through muscle and sinew. Your opponent is knocked down (see 3 above), and loses 1 Wound per round from heavy bleeding. Roll all criticals on the Sudden Death Critical Chart below.",
-			"Twój cios zadaje głęboką ranę, tnąc mięśnie i ścięgna w nodze wroga. Przeciwnik pada na ziemię (patrz punkt 3 wyżej) i wskutek krwawienia traci co rundę 1 punkt Żywotności. Wszystkie rzuty krytyczne wykonuj wg. Tabeli nagłej śmierci.",
+			"Your blow opens a deep wound in the leg, cutting through muscle and sinew. Your opponent is knocked down, jarring any hand-held object loose unless a Dexterity test is passed. For the next D4 rounds until back upright the opponent may only parry, and only if still in possession of a weapon or shield. The target loses 1 Wound per round from heavy bleeding. Resolve all further Critical Hits using the Sudden Death Critical Chart.",
+			"Twój cios zadaje głęboką ranę, tnąc mięśnie i ścięgna w nodze wroga. Przeciwnik pada na ziemię i wypuszcza wszystkie trzymane w rękach przedmioty, chyba że wykona udany test Zręczności. Przez następne K4 rundy, podczas podnoszenia się, może jedynie parować, i tylko jeśli nadal trzyma broń lub tarczę. Wskutek krwawienia traci co rundę 1 punkt Żywotności. Wszystkie dalsze trafienia krytyczne rozstrzygaj według Tabeli nagłej śmierci.",
 		),
 		effect(
-			"The target's thigh is smashed, and an artery is severed. Your opponent falls to the ground (see 3 above), and may only rise when a successful Initiative test is made. Additionally, the target loses 1 Wound per round until medical attention is received. Roll all criticals on the Sudden Death Critical Chart below.",
-			"Twój cios miażdży udo wroga i przecina tętnicę. Przeciwnik pada na ziemię (patrz punkt 3 wyżej) i może wstać tylko wtedy, gdy wykona udany test Inicjatywy. Dodatkowo, do czasu otrzymania pomocy medycznej traci w każdej rundzie 1 punkt Żywotności.",
+			"The target's thigh is smashed, and an artery is severed. Your opponent falls to the ground, jarring any hand-held object loose unless a Dexterity test is passed. While down, the opponent may only parry, and only if still in possession of a weapon or shield; rising requires a successful Initiative test. Additionally, the target loses 1 Wound per round until medical attention is received. Resolve all further Critical Hits using the Sudden Death Critical Chart.",
+			"Twój cios miażdży udo wroga i przecina tętnicę. Przeciwnik pada na ziemię i wypuszcza wszystkie trzymane w rękach przedmioty, chyba że wykona udany test Zręczności. Leżąc może jedynie parować, i tylko jeśli nadal trzyma broń lub tarczę; może wstać dopiero po udanym teście Inicjatywy. Dodatkowo, do czasu otrzymania pomocy medycznej traci w każdej rundzie 1 punkt Żywotności. Wszystkie dalsze trafienia krytyczne rozstrzygaj według Tabeli nagłej śmierci.",
 		),
 		effect(
-			"There is a sickening crunch as your weapon smashes the bones of the target's hip and thigh. Your opponent is swept to the floor (see 3 above), dropping anything hand-held, and loses D4 Wounds per round until medical attention is received. Roll all criticals on the Sudden Death Critical Chart below. Your opponent may only stand and walk if supported by at least one other character.",
-			"Rozlega się przyprawiający o mdłości zgrzyt, kiedy twoja broń przecina kości uda i biodra przeciwnika. Wróg zostaje powalony na ziemię (patrz punkt 3 wyżej) i upuszcza trzymane w rękach przedmioty. W każdej rundzie, do czasu otrzymania pomocy medycznej, traci również K4 punkty Żywotności. Wszystkie rzuty krytyczne wykonuj wg. Tabeli nagłej śmierci. Twój przeciwnik może stać i chodzić tylko wtedy, gdy pomaga mu przynajmniej jedna osoba.",
+			"There is a sickening crunch as your weapon smashes the bones of the target's hip and thigh. Your opponent is swept to the floor and drops anything hand-held. For the next D4 rounds until back upright the opponent may only parry, and only if in possession of a weapon or shield. The target loses D4 Wounds per round until medical attention is received. Resolve all further Critical Hits using the Sudden Death Critical Chart. Your opponent may only stand and walk if supported by at least one other character.",
+			"Rozlega się przyprawiający o mdłości zgrzyt, kiedy twoja broń przecina kości uda i biodra przeciwnika. Wróg zostaje powalony na ziemię i upuszcza wszystkie trzymane w rękach przedmioty. Przez następne K4 rundy, podczas podnoszenia się, może jedynie parować, i tylko jeśli ma broń lub tarczę. W każdej rundzie, do czasu otrzymania pomocy medycznej, traci również K4 punkty Żywotności. Wszystkie dalsze trafienia krytyczne rozstrzygaj według Tabeli nagłej śmierci. Twój przeciwnik może stać i chodzić tylko wtedy, gdy pomaga mu przynajmniej jedna osoba.",
 		),
 		effect(
-			"Your opponent stares with horror as blood pumps from the mangled stump of the ankle, then falls unconscious to the ground, losing D4 Wounds per round until medical attention is received. Roll all criticals on the Sudden Death Critical Chart below.",
-			"Twój przeciwnik patrzy osłupiały na krew, tryskającą z kikuta obciętej stopy, a potem pada nieprzytomny na ziemię. Do czasu otrzymania pomocy medycznej traci co rundę K4 punkty Żywotności. Wszystkie rzuty krytyczne wykonuj wg. Tabeli nagłej śmierci.",
+			"Your opponent stares with horror as blood pumps from the mangled stump of the ankle, then falls unconscious to the ground, losing D4 Wounds per round until medical attention is received. Resolve all further Critical Hits using the Sudden Death Critical Chart.",
+			"Twój przeciwnik patrzy osłupiały na krew, tryskającą z kikuta obciętej stopy, a potem pada nieprzytomny na ziemię. Do czasu otrzymania pomocy medycznej traci co rundę K4 punkty Żywotności. Wszystkie dalsze trafienia krytyczne rozstrzygaj według Tabeli nagłej śmierci.",
 		),
 		effect(
-			"Your blow tears off your opponent's leg at the knee, splintering bone and mangling flesh. Your opponent collapses and may do nothing until medical attention is obtained. D4 Wounds are lost per round meanwhile. Roll all criticals on the Sudden Death Critical Chart below.",
-			"Twój cios trafia w kolano wroga i przecina mu nogę, miażdżąc ciało oraz łamiąc kości. Twój przeciwnik traci przytomność i pada na ziemię. Nie jest zdolny do robienia czegokolwiek, aż do otrzymania pomocy medycznej. Tymczasem co rundę traci K4 punkty Żywotności. Wszystkie rzuty krytyczne wykonuj wg. Tabeli nagłej śmierci.",
+			"Your blow tears off your opponent's leg at the knee, splintering bone and mangling flesh. Your opponent collapses and may do nothing until medical attention is obtained. D4 Wounds are lost per round meanwhile. Resolve all further Critical Hits using the Sudden Death Critical Chart.",
+			"Twój cios trafia w kolano wroga i przecina mu nogę, miażdżąc ciało oraz łamiąc kości. Twój przeciwnik traci przytomność i pada na ziemię. Nie jest zdolny do robienia czegokolwiek, aż do otrzymania pomocy medycznej. Tymczasem co rundę traci K4 punkty Żywotności. Wszystkie dalsze trafienia krytyczne rozstrzygaj według Tabeli nagłej śmierci.",
 		),
 		effect(
-			"Your blow shatters the pelvis. Your opponent falls to the ground (see 3 above). The pain halves all characteristics, and D4 Wounds are lost per round through internal bleeding until medical attention is received. Roll all criticals on the Sudden Death Critical Chart below. Recovery takes 10 weeks, and skills involving movement of any kind are lost until a full recovery is made.",
-			"Twój cios gruchocze miednicę przeciwnika, który pada na ziemię (patrz punkt 3 wyżej). Ból zmniejsza o połowę wszystkie jego cechy. Dodatkowo, podczas każdej rundy do czasu otrzymania pomocy medycznej, traci w wyniku krwotoku wewnętrznego K4 punkty Żywotności. Wszystkie rzuty krytyczne wykonuj wg. Tabeli nagłej śmierci. Rekonwalescencja potrwa 10 tygodni; do czasu pełnego wyzdrowienia stracone są wszystkie umiejętności związane z ruchem jakiegokolwiek rodzaju.",
+			"Your blow shatters the pelvis. Your opponent falls to the ground, jarring any hand-held object loose unless a Dexterity test is passed. For the next D4 rounds until back upright the opponent may only parry, and only if still in possession of a weapon or shield. The pain halves all characteristics, and D4 Wounds are lost per round through internal bleeding until medical attention is received. Resolve all further Critical Hits using the Sudden Death Critical Chart. Recovery takes 10 weeks, and skills involving movement of any kind are lost until a full recovery is made.",
+			"Twój cios gruchocze miednicę przeciwnika, który pada na ziemię i wypuszcza wszystkie trzymane w rękach przedmioty, chyba że wykona udany test Zręczności. Przez następne K4 rundy, podczas podnoszenia się, może jedynie parować, i tylko jeśli nadal trzyma broń lub tarczę. Ból zmniejsza o połowę wszystkie jego cechy. Dodatkowo, podczas każdej rundy do czasu otrzymania pomocy medycznej, traci w wyniku krwotoku wewnętrznego K4 punkty Żywotności. Wszystkie dalsze trafienia krytyczne rozstrzygaj według Tabeli nagłej śmierci. Rekonwalescencja potrwa 10 tygodni; do czasu pełnego wyzdrowienia stracone są wszystkie umiejętności związane z ruchem jakiegokolwiek rodzaju.",
 		),
 		effect(
-			"Your blow tears off your opponent's leg at the hip. Your opponent collapses and may do nothing until medical attention is obtained. D6 Wounds are lost per round meanwhile. Roll all criticals on the Sudden Death Critical Chart below.",
-			"Twój cios odcina nogę przeciwnika na wysokości biodra. Wróg pada nieprzytomny na ziemię i nie może nic robić do czasu otrzymania pomocy medycznej. W tym czasie traci co rundę K6 punktów Żywotności. Wszystkie rzuty krytyczne wykonuj wg. Tabeli nagłej śmierci.",
+			"Your blow tears off your opponent's leg at the hip. Your opponent collapses and may do nothing until medical attention is obtained. D6 Wounds are lost per round meanwhile. Resolve all further Critical Hits using the Sudden Death Critical Chart.",
+			"Twój cios odcina nogę przeciwnika na wysokości biodra. Wróg pada nieprzytomny na ziemię i nie może nic robić do czasu otrzymania pomocy medycznej. W tym czasie traci co rundę K6 punktów Żywotności. Wszystkie dalsze trafienia krytyczne rozstrzygaj według Tabeli nagłej śmierci.",
 		),
 		effect(
 			"Your blow destroys your opponent's hip joint almost totally - the leg hangs limply, a mass of tattered and pulpy flesh with protruding fragments of bone. By chance, one of the bone splinters has severed a major artery, and after a fraction of a second your opponent collapses, with blood pouring out from the ruined hip. Death from shock and blood loss is almost instantaneous.",
