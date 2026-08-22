@@ -97,17 +97,19 @@
 			</label>
 		</div>
 
-		<div class="combat-item-sheet__parry">
-			<label class="combat-item-sheet__check wfrp1ed-checkbox">
-				<input type="checkbox" name="system.parry.suitable" {{#if system.parry.suitable}}checked{{/if}} {{#unless editable}}disabled{{/unless}}>
-				<span>{{ui.parrySuitable}}</span>
-			</label>
+		{{#unless isRanged}}
+			<div class="combat-item-sheet__parry">
+				<label class="combat-item-sheet__check wfrp1ed-checkbox">
+					<input type="checkbox" name="system.parry.suitable" {{#if system.parry.suitable}}checked{{/if}} {{#unless editable}}disabled{{/unless}}>
+					<span>{{ui.parrySuitable}}</span>
+				</label>
 
-			<label class="combat-item-sheet__field combat-item-sheet__field--compact">
-				<span>{{ui.parryBonus}}</span>
-				<input type="number" step="1" name="system.parry.bonus" value="{{system.parry.bonus}}" {{#unless editable}}disabled{{/unless}}>
-			</label>
-		</div>
+				<label class="combat-item-sheet__field combat-item-sheet__field--compact">
+					<span>{{ui.parryBonus}}</span>
+					<input type="number" step="1" name="system.parry.bonus" value="{{system.parry.bonus}}" {{#unless editable}}disabled{{/unless}}>
+				</label>
+			</div>
+		{{/unless}}
 	</section>
 
 	{{#if isRanged}}
@@ -136,14 +138,10 @@
 				<h3>{{ui.firingCycle}}</h3>
 				<p>{{ui.firingCycleHint}}</p>
 			</div>
-			<div class="combat-item-sheet__grid combat-item-sheet__grid--5">
+			<div class="combat-item-sheet__grid combat-item-sheet__grid--4">
 				<label class="combat-item-sheet__field">
-					<span>{{ui.loadRounds}}</span>
-					<input type="number" min="0" step="1" name="system.firingCycle.loadRounds" value="{{system.firingCycle.loadRounds}}" {{#unless editable}}disabled{{/unless}}>
-				</label>
-				<label class="combat-item-sheet__field">
-					<span>{{ui.recoveryRounds}}</span>
-					<input type="number" min="0" step="1" name="system.firingCycle.recoveryRounds" value="{{system.firingCycle.recoveryRounds}}" {{#unless editable}}disabled{{/unless}}>
+					<span>{{ui.reloadRounds}}</span>
+					<input type="number" min="0" step="1" name="system.firingCycle.reloadRounds" value="{{system.firingCycle.reloadRounds}}" {{#unless editable}}disabled{{/unless}}>
 				</label>
 				<label class="combat-item-sheet__field">
 					<span>{{ui.shotsPerFireRound}}</span>
@@ -161,30 +159,32 @@
 		</section>
 	{{/if}}
 
-	<section class="combat-item-sheet__panel">
-		<div class="combat-item-sheet__panel-heading">
-			<h3>{{ui.optionalModifiers}}</h3>
-			<p>{{ui.optionalHint}}</p>
-		</div>
-		<div class="combat-item-sheet__grid combat-item-sheet__grid--4">
-			<label class="combat-item-sheet__field">
-				<span>{{ui.initiative}}</span>
-				<input type="number" step="1" name="system.optionalModifiers.initiative" value="{{system.optionalModifiers.initiative}}" {{#unless editable}}disabled{{/unless}}>
-			</label>
-			<label class="combat-item-sheet__field">
-				<span>{{ui.toHit}}</span>
-				<input type="number" step="1" name="system.optionalModifiers.toHit" value="{{system.optionalModifiers.toHit}}" {{#unless editable}}disabled{{/unless}}>
-			</label>
-			<label class="combat-item-sheet__field">
-				<span>{{ui.damage}}</span>
-				<input type="number" step="1" name="system.optionalModifiers.damage" value="{{system.optionalModifiers.damage}}" {{#unless editable}}disabled{{/unless}}>
-			</label>
-			<label class="combat-item-sheet__field">
-				<span>{{ui.parryModifier}}</span>
-				<input type="number" step="1" name="system.optionalModifiers.parry" value="{{system.optionalModifiers.parry}}" {{#unless editable}}disabled{{/unless}}>
-			</label>
-		</div>
-	</section>
+	{{#unless isRanged}}
+		<section class="combat-item-sheet__panel">
+			<div class="combat-item-sheet__panel-heading">
+				<h3>{{ui.optionalModifiers}}</h3>
+				<p>{{ui.optionalHint}}</p>
+			</div>
+			<div class="combat-item-sheet__grid combat-item-sheet__grid--4">
+				<label class="combat-item-sheet__field">
+					<span>{{ui.initiative}}</span>
+					<input type="number" step="1" name="system.optionalModifiers.initiative" value="{{system.optionalModifiers.initiative}}" {{#unless editable}}disabled{{/unless}}>
+				</label>
+				<label class="combat-item-sheet__field">
+					<span>{{ui.toHit}}</span>
+					<input type="number" step="1" name="system.optionalModifiers.toHit" value="{{system.optionalModifiers.toHit}}" {{#unless editable}}disabled{{/unless}}>
+				</label>
+				<label class="combat-item-sheet__field">
+					<span>{{ui.damage}}</span>
+					<input type="number" step="1" name="system.optionalModifiers.damage" value="{{system.optionalModifiers.damage}}" {{#unless editable}}disabled{{/unless}}>
+				</label>
+				<label class="combat-item-sheet__field">
+					<span>{{ui.parryModifier}}</span>
+					<input type="number" step="1" name="system.optionalModifiers.parry" value="{{system.optionalModifiers.parry}}" {{#unless editable}}disabled{{/unless}}>
+				</label>
+			</div>
+		</section>
+	{{/unless}}
 
 	<label class="combat-item-sheet__field combat-item-sheet__description">
 		<span>{{ui.description}}</span>
