@@ -40,6 +40,7 @@
 		"module/combat/CombatDefenceRuleReminderChat.mjs",
 		"module/combat/CombatDefenceAutoResolution.mjs",
 		"module/combat/CombatDamageIntegration.mjs",
+		"module/combat/CombatDamagePhysicalDiceIntegration.mjs",
 		"module/combat/CombatDamageSocketTransportGuard.mjs",
 		"module/combat/CombatAdjudicationReconciliation.mjs",
 		"module/combat/CombatAttackAdjudicationReconciliation.mjs",
