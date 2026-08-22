@@ -12,20 +12,17 @@ const pending = new Map();
 /*
  * Final defeated-state consistency pass for fatal Critical transactions.
  *
- * Foundry v14 represents the visible defeated state through two independent
- * mechanisms:
- *   1. a configured status ActiveEffect on the represented Actor/Token Actor;
- *   2. Combatant.defeated when that Token is in a Combat encounter.
+ * Foundry v14 stores Token status effects as ActiveEffects on the represented
+ * Actor/Token Actor. Combatant.defeated is a separate combat-tracker state.
+ * This module reconciles both and explicitly redraws rendered Token effects after
+ * the document state has been corrected.
  *
- * The critical subsystem also contains earlier lifecycle adapters which restore
- * snapshots immediately or after short delays. This final pass intentionally
- * runs after those adapters and derives the desired state only from the current
- * authoritative WFRP transaction maps. It then repairs both Foundry mechanisms.
- *
- * In particular, clearing a fatal result does not merely call
- * Actor.toggleStatusEffect(false). If a duplicate/stale ActiveEffect still
- * carries the configured defeated status, every such effect is removed when the
- * transaction baseline says the Actor was alive before this fatal result.
+ * The rollback baseline is the Actor state from before this subsystem's first
+ * managed fatal application. This is deliberate: after one broken/stale fatal
+ * left Defeated behind, a later fatal would otherwise snapshot that stale state
+ * as `defeatedBefore: true` and every subsequent rollback would keep restoring
+ * the bug forever. The first managed fatal snapshot is the unpoisoned baseline
+ * for the managed fatal-history chain.
  */
 Hooks.on("updateActor", (actor, changes) => {
 	if (!(actor instanceof foundry.documents.Actor)) return;
@@ -43,9 +40,8 @@ Hooks.on("deleteChatMessage", (message) => {
 	queueReconcile(actor, "critical-message-delete");
 });
 
-/* Repair stale defeated state left by earlier development builds. This does not
- * invent a state: only Actors/Token Actors with an existing fatal transaction
- * map are considered, and their desired state is recomputed from that history. */
+/* Repair stale defeated state left by earlier development builds. Only Actors
+ * with fatal transaction history are considered. */
 Hooks.once("ready", () => {
 	if (!isStatusAuthority(null)) return;
 
@@ -106,17 +102,25 @@ async function reconcileDefeatedState(actor, reason) {
 		return;
 	}
 
-	const release = latestReleaseApplication(fatalMap, fateMap);
-	if (!release) return;
+	const baselineApplication = earliestManagedFatalApplication(fatalMap);
+	if (!baselineApplication) return;
 
-	const desired = baselineDefeated(release);
+	const desired = baselineDefeated(baselineApplication);
 	await setDefeatedEverywhere(actor, desired);
+
+	/* One second pass closes races with the older fatal lifecycle hooks. It does
+	 * not change the desired state; it merely reasserts the already-derived
+	 * authoritative document state after those hooks have settled. */
+	if (!desired) {
+		await delay(75);
+		await setDefeatedEverywhere(actor, false);
+	}
 
 	console.info("WFRP1ED | Fatal defeated-state reconciliation", {
 		reason,
 		actor: actor.uuid,
 		desired,
-		releasePacketId: String(release.packetId ?? ""),
+		baselinePacketId: String(baselineApplication.packetId ?? ""),
 		actorStatuses: [...(actor.statuses ?? [])],
 	});
 }
@@ -139,32 +143,19 @@ function activeFatalApplications(damageMap, fatalMap, fateMap) {
 		});
 }
 
-function latestReleaseApplication(fatalMap, fateMap) {
-	const candidates = [];
-
-	for (const application of Object.values(fatalMap)) {
-		if (!isRecord(application)) continue;
-		if (application.state === "reverted") {
-			candidates.push({
-				application,
-				at: Number(application.revertedAt ?? application.appliedAt ?? 0),
-			});
-		}
-	}
-
-	for (const intervention of Object.values(fateMap)) {
-		if (!isRecord(intervention)) continue;
-		const application = fatalMap[String(intervention.packetId ?? "")];
-		if (!isRecord(application)) continue;
-		candidates.push({
-			application,
-			at: Number(intervention.spentAt ?? application.appliedAt ?? 0),
-		});
-	}
-
-	return candidates
-		.sort((left, right) => right.at - left.at)[0]
-		?.application ?? null;
+function earliestManagedFatalApplication(fatalMap) {
+	return Object.entries(fatalMap)
+		.map(([packetId, application]) => isRecord(application)
+			? {
+				...foundry.utils.deepClone(application),
+				packetId: String(application.packetId ?? packetId),
+			}
+			: null)
+		.filter(Boolean)
+		.sort((left, right) =>
+			(Number(left.appliedAt ?? 0) - Number(right.appliedAt ?? 0)) ||
+			String(left.packetId ?? "").localeCompare(String(right.packetId ?? "")),
+		)[0] ?? null;
 }
 
 async function setDefeatedEverywhere(actor, desired) {
@@ -173,6 +164,7 @@ async function setDefeatedEverywhere(actor, desired) {
 		await forceActorDefeatedStatus(represented, desired);
 	}
 	await writeMatchingCombatants(actor, desired);
+	await refreshRenderedTokenEffects(representations);
 }
 
 function representedActors(actor) {
@@ -227,7 +219,7 @@ async function forceActorDefeatedStatus(actor, desired) {
 		return;
 	}
 
-	/* Use the public API first. */
+	/* First use Foundry's supported status API. */
 	if (actor.statuses?.has?.(statusId)) {
 		await actor.toggleStatusEffect(statusId, {
 			active: false,
@@ -235,8 +227,9 @@ async function forceActorDefeatedStatus(actor, desired) {
 		});
 	}
 
-	/* Then remove every residual ActiveEffect carrying the same status. This is
-	 * the authoritative cleanup for a baseline which was explicitly alive. */
+	/* Then delete any residual status ActiveEffect explicitly. Active Effects V2
+	 * exposes statuses in source data; inspect both prepared and source forms so a
+	 * stale prepared collection cannot hide the effect we need to remove. */
 	const residualIds = [...(actor.effects ?? [])]
 		.filter((effect) => effectCarriesStatus(effect, statusId))
 		.map((effect) => String(effect.id ?? ""))
@@ -248,13 +241,63 @@ async function forceActorDefeatedStatus(actor, desired) {
 }
 
 function effectCarriesStatus(effect, statusId) {
-	const statuses = effect?.statuses;
-	if (statuses?.has?.(statusId)) return true;
-	if (Array.isArray(statuses)) return statuses.includes(statusId);
-	if (statuses && typeof statuses[Symbol.iterator] === "function") {
-		return [...statuses].includes(statusId);
+	return effectStatusIds(effect).includes(String(statusId));
+}
+
+function effectStatusIds(effect) {
+	const candidates = [
+		effect?.statuses,
+		effect?._source?.statuses,
+	];
+
+	try {
+		candidates.push(effect?.toObject?.(false)?.statuses);
+	} catch (_error) {
+		// Ignore malformed legacy effect serialization and inspect other sources.
 	}
-	return false;
+
+	const result = new Set();
+	for (const statuses of candidates) {
+		if (!statuses) continue;
+		if (typeof statuses === "string") {
+			result.add(statuses);
+			continue;
+		}
+		if (Array.isArray(statuses) || typeof statuses[Symbol.iterator] === "function") {
+			for (const status of statuses) result.add(String(status));
+		}
+	}
+	return [...result];
+}
+
+async function refreshRenderedTokenEffects(representations) {
+	const uuids = new Set(
+		representations
+			.map((actor) => String(actor?.uuid ?? ""))
+			.filter(Boolean),
+	);
+	if (uuids.size === 0) return;
+
+	for (const token of canvas?.tokens?.placeables ?? []) {
+		const tokenActorUuid = String(token?.actor?.uuid ?? "");
+		if (!uuids.has(tokenActorUuid)) continue;
+
+		/* drawEffects is a public Foundry v14 API. The render flag is also set so
+		 * any queued canvas refresh uses the same corrected Actor effect state. */
+		try {
+			token.renderFlags?.set?.({
+				redrawEffects: true,
+				refreshEffects: true,
+				refreshState: true,
+			});
+			await token.drawEffects?.();
+		} catch (error) {
+			console.warn(
+				"WFRP1ED | Unable to refresh rendered Token effects after fatal rollback.",
+				error,
+			);
+		}
+	}
 }
 
 async function writeMatchingCombatants(actor, desired) {
@@ -388,6 +431,10 @@ function primaryActiveGm() {
 	return [...(game.users ?? [])]
 		.filter((user) => user?.active && user?.isGM)
 		.sort((left, right) => String(left.id).localeCompare(String(right.id)))[0] ?? null;
+}
+
+function delay(milliseconds) {
+	return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 function isRecord(value) {
