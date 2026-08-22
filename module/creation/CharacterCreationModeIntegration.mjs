@@ -74,7 +74,6 @@ function installCharacterCreationFrameControl() {
 					`Character Creation Mode disabled for ${actor.name}.`,
 					`Wyłączono Tryb tworzenia postaci dla: ${actor.name}.`,
 				));
-			void this.render({ force: true });
 		} catch (error) {
 			console.error("WFRP1ED | Unable to toggle Character Creation Mode.", error);
 			ui.notifications.error(error?.message ?? String(error));
