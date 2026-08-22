@@ -56,33 +56,33 @@ function addContextMenuOptions(menuItems) {
 
 	menuItems.push(
 		{
-			name: localize(
+			label: localize(
 				"Test details: share with players",
 				"Szczegóły testu: udostępnij graczom",
 			),
 			icon: '<i class="fa-solid fa-eye"></i>',
-			condition: (target) => {
+			visible: (target) => {
 				const message = messageFromContextTarget(target);
 				const state = message?.getFlag?.(FLAG_SCOPE, TEST_FLAG_KEY);
 				return Boolean(state) && effectiveVisibility(message, state) !== PUBLIC;
 			},
-			callback: (target) => {
+			onClick: (_event, target) => {
 				const message = messageFromContextTarget(target);
 				if (message) void setResultVisibility(message, PUBLIC);
 			},
 		},
 		{
-			name: localize(
+			label: localize(
 				"Test details: restrict to GM & Actor owner",
 				"Szczegóły testu: tylko MG i właściciel Aktora",
 			),
 			icon: '<i class="fa-solid fa-eye-slash"></i>',
-			condition: (target) => {
+			visible: (target) => {
 				const message = messageFromContextTarget(target);
 				const state = message?.getFlag?.(FLAG_SCOPE, TEST_FLAG_KEY);
 				return Boolean(state) && effectiveVisibility(message, state) === PUBLIC;
 			},
-			callback: (target) => {
+			onClick: (_event, target) => {
 				const message = messageFromContextTarget(target);
 				if (message) void setResultVisibility(message, RESTRICTED);
 			},
