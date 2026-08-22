@@ -18,25 +18,34 @@ const SOCKET_RESPONSE_TYPE = "combat-base-damage-six-trigger-response";
 const SOCKET_TIMEOUT_MS = 10000;
 
 const pendingRequests = new Map();
-const activeTriggers = new Set();
+const activeTransitions = new Set();
 
 /*
  * Physical-dice bridge for the one rule boundary a summed damage override cannot
  * express by itself: an initial melee damage d6 of 6 triggers the Core Additional
  * Damage WS confirmation Test.
  *
- * The ordinary damage editor still owns the numeric damage total. This module
- * intervenes only when a pending single base d6 is manually changed from 1..5 to
- * 6. It records 6 as the adjudicated initial die, reuses the existing canonical
- * damage-total recalculation, then publishes the same editable Additional Damage
- * WS Test used by an originally-generated 6. CombatAdjudicationReconciliation
- * remains responsible for success/failure changes and the subsequent exploding
- * d6 rolls, so none of that rule logic is duplicated here.
+ * The ordinary Damage-card editor still owns the numeric damage total. This
+ * module intervenes only when a physical correction crosses the base-d6 value 6:
+ *
+ * - 1..5 -> 6: record 6 as the adjudicated initial die and publish the normal,
+ *   editable Additional Damage WS confirmation Test.
+ * - 6 -> 1..5: the trigger no longer exists, so remove the derived Additional
+ *   Damage Test and its exploding dice, then rebuild damage from the corrected
+ *   base d6.
+ *
+ * Values >= 6 entered after Additional Damage has actually been triggered remain
+ * ordinary summed-dice overrides. We do not attempt to reconstruct individual
+ * physical dice from that sum.
+ *
+ * CombatAdjudicationReconciliation remains responsible for edits of the WS Test
+ * and for the subsequent exploding d6 rolls. This module therefore owns only the
+ * trigger boundary, not a second copy of Additional Damage mechanics.
  */
 Hooks.on("renderChatMessageHTML", (message, html) => {
 	requestAnimationFrame(() => {
-		decorateBaseDamageSixTrigger(message, html);
-		setTimeout(() => decorateBaseDamageSixTrigger(message, html), 0);
+		decorateBaseDamageBoundary(message, html);
+		setTimeout(() => decorateBaseDamageBoundary(message, html), 0);
 	});
 });
 
@@ -44,14 +53,13 @@ Hooks.once("ready", () => {
 	game.socket?.on?.(SOCKET_CHANNEL, (payload) => void handleSocketPayload(payload));
 });
 
-function decorateBaseDamageSixTrigger(message, html) {
+function decorateBaseDamageBoundary(message, html) {
 	const sourceMessage = sourceAttackMessage(message);
 	if (!sourceMessage) return;
 
 	const rollState = sourceMessage.getFlag?.(FLAG_SCOPE, COMBAT_DAMAGE_FLAG_KEY);
 	const damageState = sourceMessage.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG_KEY);
-	if (!isSingleBaseDamageState(rollState) || !damageState?.packet?.id) return;
-	if (Number(rollState.initialDie) === 6) return;
+	if (!isBoundaryEditableState(rollState) || !damageState?.packet?.id) return;
 	if (!canEditCombatDamageDiceTotal(sourceMessage, game.user)) return;
 
 	const root = asElement(html);
@@ -63,43 +71,40 @@ function decorateBaseDamageSixTrigger(message, html) {
 	];
 	for (const input of inputs) {
 		if (!(input instanceof HTMLInputElement)) continue;
-		if (input.dataset.wfrpAdditionalDamageSixTrigger === "true") continue;
-		input.dataset.wfrpAdditionalDamageSixTrigger = "true";
+		if (input.dataset.wfrpAdditionalDamageBoundary === "true") continue;
+		input.dataset.wfrpAdditionalDamageBoundary = "true";
 		input.addEventListener(
 			"change",
-			(event) => captureManualSix(event, sourceMessage, input),
+			(event) => captureBoundaryChange(event, sourceMessage, input),
 			{ capture: true },
 		);
 	}
 }
 
-function captureManualSix(event, sourceMessage, input) {
+function captureBoundaryChange(event, sourceMessage, input) {
 	const value = Number(input.value);
-	if (value !== 6) return;
+	if (!isD6(value)) return;
 
 	const rollState = sourceMessage.getFlag?.(FLAG_SCOPE, COMBAT_DAMAGE_FLAG_KEY);
-	if (!isSingleBaseDamageState(rollState) || Number(rollState.initialDie) === 6) {
-		return;
-	}
+	if (!shouldHandleBoundaryTransition(rollState, value)) return;
 
 	/* Prevent the ordinary summed-total listener from committing the same change
-	 * first. This special boundary must create the Additional Damage Test before
-	 * the result can be considered fully reconciled. */
+	 * first. Crossing 6 must reconcile the Additional Damage branch atomically. */
 	event.preventDefault();
 	event.stopImmediatePropagation();
 	input.disabled = true;
 	input.readOnly = true;
 
-	void requestBaseDamageSixTrigger(sourceMessage)
+	void requestBaseDamageBoundaryChange(sourceMessage, value)
 		.catch((error) => {
 			console.error(
-				"WFRP1ED | Unable to trigger Additional Damage from manual base d6.",
+				"WFRP1ED | Unable to reconcile Additional Damage trigger boundary.",
 				error,
 			);
 			ui.notifications.error(
 				error?.message ?? localize(
-					"Unable to trigger the Additional Damage Test.",
-					"Nie udało się uruchomić testu Obrażeń dodatkowych.",
+					"Unable to reconcile the Additional Damage trigger.",
+					"Nie udało się uzgodnić wyzwalacza Obrażeń dodatkowych.",
 				),
 			);
 		})
@@ -113,7 +118,8 @@ function captureManualSix(event, sourceMessage, input) {
 		});
 }
 
-async function requestBaseDamageSixTrigger(message) {
+async function requestBaseDamageBoundaryChange(message, value) {
+	const normalized = d6Strict(value, "Base damage d6");
 	if (!canEditCombatDamageDiceTotal(message, game.user)) {
 		throw new Error(localize(
 			"You are not allowed to edit this damage roll.",
@@ -121,25 +127,49 @@ async function requestBaseDamageSixTrigger(message) {
 		));
 	}
 	if (game.user?.isGM) {
-		return applyBaseDamageSixTriggerAsAuthority(message, game.user);
+		return applyBaseDamageBoundaryAsAuthority(message, normalized, game.user);
 	}
-	return requestGmTrigger(message);
+	return requestGmTransition(message, normalized);
 }
 
-async function applyBaseDamageSixTriggerAsAuthority(message, requestingUser) {
+async function applyBaseDamageBoundaryAsAuthority(message, value, requestingUser) {
 	const actionKey = String(message?.id ?? "");
-	if (!actionKey || activeTriggers.has(actionKey)) {
-		throw new Error("This Additional Damage trigger is already being resolved.");
+	if (!actionKey || activeTransitions.has(actionKey)) {
+		throw new Error("This Additional Damage trigger transition is already being resolved.");
 	}
 	if (!canEditCombatDamageDiceTotal(message, requestingUser)) {
 		throw new Error("The requesting user may not edit this damage roll.");
 	}
 
-	const attack = message.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY);
-	const attackTestState = message.getFlag?.(FLAG_SCOPE, TEST_FLAG_KEY);
+	const normalized = d6Strict(value, "Base damage d6");
 	const previous = foundry.utils.deepClone(
 		message.getFlag?.(FLAG_SCOPE, COMBAT_DAMAGE_FLAG_KEY) ?? {},
 	);
+	if (!shouldHandleBoundaryTransition(previous, normalized)) return previous;
+
+	activeTransitions.add(actionKey);
+	try {
+		if (normalized === 6) {
+			return await applyTriggerAsAuthority(
+				message,
+				previous,
+				requestingUser,
+			);
+		}
+		return await removeTriggerAsAuthority(
+			message,
+			previous,
+			normalized,
+			requestingUser,
+		);
+	} finally {
+		activeTransitions.delete(actionKey);
+	}
+}
+
+async function applyTriggerAsAuthority(message, previous, requestingUser) {
+	const attack = message.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY);
+	const attackTestState = message.getFlag?.(FLAG_SCOPE, TEST_FLAG_KEY);
 	if (!attack || !attackTestState || !isSingleBaseDamageState(previous)) {
 		throw new Error("This damage result is not a pending single base d6.");
 	}
@@ -151,36 +181,14 @@ async function applyBaseDamageSixTriggerAsAuthority(message, requestingUser) {
 	}
 
 	let generatedTestMessage = null;
-	activeTriggers.add(actionKey);
 	try {
 		const prepared = foundry.utils.deepClone(previous);
-		const originalInitialDie = d6Strict(
-			prepared.initialDieOriginal ?? prepared.initialDie,
-			"Original base damage d6",
-		);
-		prepared.initialDieOriginal = originalInitialDie;
-		prepared.initialDie = 6;
-		prepared.initialDieOverridden = originalInitialDie !== 6;
-		prepared.initialDieOverriddenBy = prepared.initialDieOverridden
-			? String(requestingUser?.id ?? "")
-			: null;
-		prepared.initialDieOverriddenAt = prepared.initialDieOverridden
-			? Date.now()
-			: null;
+		applyInitialDieAdjudication(prepared, 6, requestingUser);
 		prepared.damageDice = [6];
 		prepared.diceTotal = 6;
 		prepared.diceTotalOriginal = 6;
-		prepared.diceTotalOverridden = false;
-		prepared.diceTotalOverriddenBy = null;
-		prepared.diceTotalOverriddenAt = null;
-		prepared.additionalDamage = {
-			triggered: true,
-			testMessageId: null,
-			testRoll: null,
-			testTarget: null,
-			testSucceeded: false,
-			extraDice: [],
-		};
+		clearSummedOverride(prepared);
+		prepared.additionalDamage = emptyAdditionalDamage(true);
 		prepared.updatedBy = String(requestingUser?.id ?? "");
 		prepared.updatedAt = Date.now();
 
@@ -205,7 +213,7 @@ async function applyBaseDamageSixTriggerAsAuthority(message, requestingUser) {
 			requestingUser,
 		);
 
-		/* Updating the marked Test result intentionally hands off to
+		/* Updating the marked Test intentionally hands off to
 		 * CombatAdjudicationReconciliation. It reads the editable WS result, rolls
 		 * exploding d6s on success, clears them on failure, and rebuilds damage. */
 		return foundry.utils.deepFreeze(foundry.utils.deepClone(
@@ -217,9 +225,87 @@ async function applyBaseDamageSixTriggerAsAuthority(message, requestingUser) {
 		}
 		await restorePreviousDamageState(message, previous);
 		throw error;
-	} finally {
-		activeTriggers.delete(actionKey);
 	}
+}
+
+async function removeTriggerAsAuthority(
+	message,
+	previous,
+	value,
+	requestingUser,
+) {
+	if (Number(previous.initialDie) !== 6) {
+		throw new Error("Additional Damage is not currently triggered by the base d6.");
+	}
+
+	const testMessage = additionalDamageTestForAttack(message, previous);
+	if (
+		testMessage &&
+		!testMessage.canUserModify?.(game.user, "delete")
+	) {
+		throw new Error(
+			"The derived Additional Damage Test cannot be removed by the active GM.",
+		);
+	}
+
+	try {
+		const prepared = foundry.utils.deepClone(previous);
+		applyInitialDieAdjudication(prepared, value, requestingUser);
+		prepared.damageDice = [value];
+		prepared.diceTotal = value;
+		prepared.diceTotalOriginal = value;
+		clearSummedOverride(prepared);
+		prepared.additionalDamage = emptyAdditionalDamage(false);
+		prepared.updatedBy = String(requestingUser?.id ?? "");
+		prepared.updatedAt = Date.now();
+
+		await message.setFlag(FLAG_SCOPE, COMBAT_DAMAGE_FLAG_KEY, prepared);
+		/* The same canonical recalculation path now rebuilds damage without any
+		 * Additional Damage contribution. */
+		await requestCombatDamageDiceTotalUpdate(message, value);
+
+		if (testMessage) await testMessage.delete();
+
+		return foundry.utils.deepFreeze(foundry.utils.deepClone(
+			message.getFlag?.(FLAG_SCOPE, COMBAT_DAMAGE_FLAG_KEY) ?? prepared,
+		));
+	} catch (error) {
+		await restorePreviousDamageState(message, previous);
+		throw error;
+	}
+}
+
+function applyInitialDieAdjudication(state, value, requestingUser) {
+	const original = d6Strict(
+		state.initialDieOriginal ?? state.initialDie,
+		"Original base damage d6",
+	);
+	state.initialDieOriginal = original;
+	state.initialDie = value;
+	state.initialDieOverridden = value !== original;
+	state.initialDieOverriddenBy = state.initialDieOverridden
+		? String(requestingUser?.id ?? "")
+		: null;
+	state.initialDieOverriddenAt = state.initialDieOverridden
+		? Date.now()
+		: null;
+}
+
+function clearSummedOverride(state) {
+	state.diceTotalOverridden = false;
+	state.diceTotalOverriddenBy = null;
+	state.diceTotalOverriddenAt = null;
+}
+
+function emptyAdditionalDamage(triggered) {
+	return {
+		triggered: triggered === true,
+		testMessageId: null,
+		testRoll: null,
+		testTarget: null,
+		testSucceeded: false,
+		extraDice: [],
+	};
 }
 
 async function markAdditionalDamageTest(testMessage, attackMessage, requestingUser) {
@@ -255,7 +341,7 @@ async function restorePreviousDamageState(message, previous) {
 		await message.setFlag(FLAG_SCOPE, COMBAT_DAMAGE_FLAG_KEY, previous);
 	} catch (rollbackError) {
 		console.error(
-			"WFRP1ED | Failed to restore damage after Additional Damage trigger error.",
+			"WFRP1ED | Failed to restore damage after Additional Damage boundary error.",
 			rollbackError,
 		);
 	}
@@ -268,15 +354,42 @@ function sourceAttackMessage(message) {
 	return game.messages?.get(String(view.sourceAttackMessageId)) ?? null;
 }
 
+function isBoundaryEditableState(state) {
+	return isSingleBaseDamageState(state) || Number(state?.initialDie) === 6;
+}
+
 function isSingleBaseDamageState(state) {
 	if (state?.status !== "resolved") return false;
 	const dice = Array.isArray(state.damageDice) ? state.damageDice : [];
 	if (dice.length !== 1) return false;
-	return Number.isInteger(Number(state.initialDie)) &&
-		Number(state.initialDie) >= 1 && Number(state.initialDie) <= 6;
+	return isD6(state.initialDie);
 }
 
-async function requestGmTrigger(message) {
+function shouldHandleBoundaryTransition(state, value) {
+	if (state?.status !== "resolved" || !isD6(value)) return false;
+	const initial = Number(state.initialDie);
+	if (initial === 6) return value >= 1 && value <= 5;
+	return value === 6 && isSingleBaseDamageState(state);
+}
+
+function additionalDamageTestForAttack(attackMessage, rollState) {
+	const storedId = String(rollState?.additionalDamage?.testMessageId ?? "").trim();
+	if (storedId) {
+		const stored = game.messages?.get(storedId);
+		if (stored) return stored;
+	}
+
+	const attackId = String(attackMessage?.id ?? "");
+	if (!attackId) return null;
+	return [...(game.messages ?? [])]
+		.filter((message) => {
+			const marker = message.getFlag?.(FLAG_SCOPE, ADDITIONAL_DAMAGE_FLAG_KEY);
+			return String(marker?.attackMessageId ?? "") === attackId;
+		})
+		.sort((left, right) => Number(right.timestamp ?? 0) - Number(left.timestamp ?? 0))[0] ?? null;
+}
+
+async function requestGmTransition(message, value) {
 	if (!game.socket) {
 		throw new Error(localize(
 			"The system socket is unavailable.",
@@ -286,8 +399,8 @@ async function requestGmTrigger(message) {
 	const gm = primaryActiveGM();
 	if (!gm) {
 		throw new Error(localize(
-			"An active GM is required to trigger Additional Damage.",
-			"Do uruchomienia Obrażeń dodatkowych wymagany jest aktywny MG.",
+			"An active GM is required to reconcile Additional Damage.",
+			"Do uzgodnienia Obrażeń dodatkowych wymagany jest aktywny MG.",
 		));
 	}
 
@@ -296,8 +409,8 @@ async function requestGmTrigger(message) {
 		const timeout = setTimeout(() => {
 			pendingRequests.delete(requestId);
 			reject(new Error(localize(
-				"The GM did not resolve the Additional Damage trigger in time.",
-				"MG nie rozstrzygnął uruchomienia Obrażeń dodatkowych w wymaganym czasie.",
+				"The GM did not resolve the Additional Damage transition in time.",
+				"MG nie rozstrzygnął zmiany Obrażeń dodatkowych w wymaganym czasie.",
 			)));
 		}, SOCKET_TIMEOUT_MS);
 		pendingRequests.set(requestId, { resolve, reject, timeout });
@@ -306,6 +419,7 @@ async function requestGmTrigger(message) {
 			requestId,
 			requestUserId: String(game.user?.id ?? ""),
 			messageId: String(message?.id ?? ""),
+			value,
 		});
 	});
 }
@@ -331,14 +445,15 @@ async function handleSocketPayload(payload) {
 		const message = game.messages?.get(String(payload.messageId ?? ""));
 		if (!requester?.active) throw new Error("The requesting user is not active.");
 		if (!message) throw new Error("The requested attack message is unavailable.");
-		response.result = await applyBaseDamageSixTriggerAsAuthority(
+		response.result = await applyBaseDamageBoundaryAsAuthority(
 			message,
+			payload.value,
 			requester,
 		);
 		response.ok = true;
 	} catch (error) {
-		console.error("WFRP1ED | GM rejected Additional Damage trigger.", error);
-		response.error = error?.message ?? "Unable to trigger Additional Damage.";
+		console.error("WFRP1ED | GM rejected Additional Damage boundary change.", error);
+		response.error = error?.message ?? "Unable to reconcile Additional Damage.";
 	}
 	game.socket.emit(SOCKET_CHANNEL, response);
 }
@@ -352,7 +467,7 @@ function handleSocketResponse(payload) {
 	clearTimeout(pending.timeout);
 	if (!payload.ok) {
 		pending.reject(new Error(String(
-			payload.error ?? "Unable to trigger Additional Damage.",
+			payload.error ?? "Unable to reconcile Additional Damage.",
 		)));
 		return;
 	}
@@ -380,9 +495,14 @@ function isPrimaryActiveGM() {
 	return Boolean(game.user?.isGM && primaryActiveGM()?.id === game.user.id);
 }
 
+function isD6(value) {
+	const number = Number(value);
+	return Number.isInteger(number) && number >= 1 && number <= 6;
+}
+
 function d6Strict(value, label) {
 	const number = Number(value);
-	if (!Number.isInteger(number) || number < 1 || number > 6) {
+	if (!isD6(number)) {
 		throw new Error(`${label} must be an integer from 1 to 6.`);
 	}
 	return number;
