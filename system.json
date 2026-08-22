@@ -71,6 +71,7 @@
 		"module/criticals/CriticalTransactionRollback.mjs",
 		"module/criticals/FatalStatusTransactionIntegration.mjs",
 		"module/criticals/SuddenDeathLifecycleIntegration.mjs",
+		"module/criticals/SuddenDeathManualRollIntegration.mjs",
 		"module/combat/CombatAttackDefenceUpdateGuard.mjs",
 		"module/health/HealthCategoryIntegration.mjs",
 		"module/fate/FateSheetIntegration.mjs",
