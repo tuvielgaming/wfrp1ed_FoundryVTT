@@ -156,6 +156,7 @@
 		"css/chat/combat-attack-targeting.css",
 		"css/chat/combat-defence.css",
 		"css/chat/combat-damage.css",
+		"css/chat/combat-damage-physical-dice.css",
 		"css/chat/combat-rollback.css",
 		"css/chat/damage-result.css",
 		"css/chat/resolved-card-disclosure.css",
