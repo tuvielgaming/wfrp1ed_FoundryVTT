@@ -2,15 +2,20 @@
  * Character Creation UI
  * ---------------------
  * Career acquisition dialogs run in Foundry's dark application chrome rather
- * than on the parchment Actor sheet. Draw our own high-contrast selection mark
- * so unchecked choices remain obvious regardless of browser/Foundry theme.
+ * than on the parchment Actor sheet. Checkbox inputs are normalized by the
+ * system-wide WfrpCheckbox integration; radio inputs remain native DOM inputs.
+ * This stylesheet gives both types one explicit, high-contrast presentation.
  */
 .career-choice-dialog__option {
-	grid-template-columns: 20px minmax(0, 1fr);
+	grid-template-columns: 22px minmax(0, 1fr);
+	align-items: center;
+	column-gap: 10px;
 }
 
-.career-choice-dialog__option input[type="checkbox"],
-.career-choice-dialog__option input[type="radio"] {
+/* Keep the actual controls available to forms and keyboard navigation while
+ * drawing the visible radio control ourselves. Checkbox hiding is already
+ * owned by css/forms/checkbox.css through .wfrp1ed-checkbox. */
+.career-choice-dialog__option > input[type="radio"] {
 	position: absolute !important;
 	width: 1px !important;
 	height: 1px !important;
@@ -23,15 +28,24 @@
 	pointer-events: none;
 }
 
-.career-choice-dialog__option::before {
-	content: "";
-	display: inline-grid;
-	place-items: center;
+/* SystemCheckboxIntegration wraps Career checkboxes after the dialog renders.
+ * Make that canonical wrapper the ONLY checkbox marker. This avoids the former
+ * duplicate checkmark and keeps the Skill/Trapping text on the same row. */
+.career-choice-dialog__option > .wfrp1ed-checkbox {
 	grid-column: 1;
 	grid-row: 1;
-	width: 17px;
-	height: 17px;
-	margin-top: 1px;
+	align-self: center;
+	display: inline-flex;
+	width: 18px;
+	height: 18px;
+	min-width: 18px;
+	gap: 0;
+}
+
+.career-choice-dialog__option > .wfrp1ed-checkbox::before {
+	flex: 0 0 18px;
+	width: 18px;
+	height: 18px;
 	border: 2px solid rgb(245 218 164 / 96%);
 	border-radius: 2px;
 	background: rgb(20 17 14 / 92%);
@@ -45,11 +59,7 @@
 	line-height: 1;
 }
 
-.career-choice-dialog__option:has(input[type="radio"])::before {
-	border-radius: 50%;
-}
-
-.career-choice-dialog__option:has(input[type="checkbox"]:checked)::before {
+.career-choice-dialog__option > .wfrp1ed-checkbox:has(> input:checked)::before {
 	content: "✓";
 	border-color: rgb(129 232 139 / 98%);
 	background: rgb(18 48 25 / 96%);
@@ -57,7 +67,37 @@
 	text-shadow: 0 0 4px rgb(86 220 103 / 46%);
 }
 
-.career-choice-dialog__option:has(input[type="radio"]:checked)::before {
+.career-choice-dialog__option > .wfrp1ed-checkbox:has(> input:focus-visible)::before {
+	outline: 2px solid rgb(250 230 190 / 96%);
+	outline-offset: 2px;
+}
+
+/* Checkbox rows already have their visual marker in the normalized wrapper,
+ * so suppress the generic row marker there. */
+.career-choice-dialog__option:has(> .wfrp1ed-checkbox)::before {
+	content: none;
+	display: none;
+}
+
+/* Radio choices are not normalized by SystemCheckboxIntegration, therefore
+ * the row itself owns the one visible circular marker. */
+.career-choice-dialog__option:has(> input[type="radio"])::before {
+	content: "";
+	display: inline-grid;
+	place-items: center;
+	grid-column: 1;
+	grid-row: 1;
+	width: 18px;
+	height: 18px;
+	border: 2px solid rgb(245 218 164 / 96%);
+	border-radius: 50%;
+	background: rgb(20 17 14 / 92%);
+	box-shadow:
+		0 0 0 1px rgb(0 0 0 / 65%),
+		inset 0 0 0 1px rgb(255 255 255 / 7%);
+}
+
+.career-choice-dialog__option:has(> input[type="radio"]:checked)::before {
 	border-color: rgb(129 232 139 / 98%);
 	background:
 		radial-gradient(
@@ -70,9 +110,18 @@
 		0 0 5px rgb(86 220 103 / 28%);
 }
 
-.career-choice-dialog__option:has(input:focus-visible)::before {
+.career-choice-dialog__option:has(> input[type="radio"]:focus-visible)::before {
 	outline: 2px solid rgb(250 230 190 / 96%);
 	outline-offset: 2px;
+}
+
+/* The option text always occupies the second column and therefore remains on
+ * the same horizontal line as its checkbox/radio marker. Long labels may wrap
+ * naturally inside that text column without dropping below the control. */
+.career-choice-dialog__option > span:not(.wfrp1ed-checkbox) {
+	grid-column: 2;
+	grid-row: 1;
+	min-width: 0;
 }
 
 /*
@@ -106,4 +155,17 @@
 .classic-actor-sheet .wfrp1ed-character-creation-toggle.is-active:focus-visible {
 	background: rgb(39 105 52 / 48%);
 	color: rgb(139 239 151);
+}
+
+/* A small header icon is easy to miss once the sheet is scrolled. Keep the
+ * whole Foundry window visibly in creation state by tracing the frame in gold.
+ * :has() binds presentation directly to the authoritative active frame button,
+ * so there is no second UI-state flag or render-time bookkeeping. */
+.classic-actor-sheet:has(.wfrp1ed-character-creation-toggle.is-active) {
+	border-color: rgb(218 174 85 / 96%) !important;
+	outline: 2px solid rgb(218 174 85 / 88%);
+	outline-offset: -2px;
+	box-shadow:
+		0 0 0 1px rgb(255 226 157 / 30%),
+		0 0 18px rgb(218 174 85 / 35%) !important;
 }
