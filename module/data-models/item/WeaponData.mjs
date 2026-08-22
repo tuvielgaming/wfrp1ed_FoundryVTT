@@ -124,6 +124,16 @@ export class WeaponData extends TypeDataModel {
 		};
 	}
 
+	/**
+	 * Temporary read-only compatibility alias for the printed Classic table.
+	 * It is deliberately derived, not persisted. Existing presentation code can
+	 * keep reading `system.reload` while the ranged table is migrated to the
+	 * explicit firing-cycle vocabulary.
+	 */
+	get reload() {
+		return toNonNegativeInteger(this.firingCycle?.loadRounds);
+	}
+
 	static migrateData(source, options = {}) {
 		const migrated = migrateInventoryData(source, {
 			allowedModes: [
