@@ -52,12 +52,18 @@
 .combat-item-sheet .combat-item-sheet__panel > h3,
 .combat-item-sheet .combat-item-sheet__panel-heading h3 {
 	margin: 0;
-	font-size: 17px;
+	padding: 0 0 5px;
+	border-bottom: 1px solid rgb(70 51 30 / 34%);
+	font-size: 18px;
+	font-weight: 700;
+	line-height: 1.1;
+	color: #2a1b0d;
+	text-shadow: 0 1px 0 rgb(255 250 231 / 78%);
 }
 
 .combat-item-sheet .combat-item-sheet__panel-heading {
 	display: grid;
-	gap: 2px;
+	gap: 4px;
 }
 
 .combat-item-sheet .combat-item-sheet__panel-heading p,
@@ -95,6 +101,21 @@
 	min-width: 0;
 	font-size: 12px;
 	font-weight: 700;
+}
+
+/*
+ * Rows which follow an explanatory panel heading often contain labels of
+ * different lengths (for example one-line Reload beside two-line Magazine
+ * Reload). Reserve the same label area for every field so all controls finish
+ * on the same baseline instead of visually stepping up and down.
+ */
+.combat-item-sheet .combat-item-sheet__panel-heading + .combat-item-sheet__grid > .combat-item-sheet__field {
+	grid-template-rows: minmax(2.4em, auto) 32px;
+	align-content: end;
+}
+
+.combat-item-sheet .combat-item-sheet__panel-heading + .combat-item-sheet__grid > .combat-item-sheet__field > span {
+	align-self: end;
 }
 
 .combat-item-sheet .combat-item-sheet__field input,
