@@ -137,8 +137,7 @@
 /* Remaining Attacks in the printed A characteristic cell         */
 /******************************************************************/
 
-.wfrp1ed-classic-sheet
-	.characteristic-cell--current[data-characteristic="a"] {
+.wfrp1ed-classic-sheet .characteristic-cell--current[data-characteristic="a"] {
 	position: relative;
 }
 
@@ -188,8 +187,7 @@
 	-webkit-appearance: none;
 }
 
-.wfrp1ed-classic-sheet
-	.characteristic-current-attacks-input[type="number"] {
+.wfrp1ed-classic-sheet .characteristic-current-attacks-input[type="number"] {
 	appearance: textfield;
 	-moz-appearance: textfield;
 }
@@ -216,14 +214,12 @@
 }
 
 /* Red closed lock = player editing disabled. Green open lock = enabled. */
-.wfrp1ed-classic-sheet
-	.characteristic-current-attacks-permission.is-locked {
+.wfrp1ed-classic-sheet .characteristic-current-attacks-permission.is-locked {
 	background: rgb(189 42 42 / 10%);
 	color: #b51f1f;
 }
 
-.wfrp1ed-classic-sheet
-	.characteristic-current-attacks-permission.is-enabled {
+.wfrp1ed-classic-sheet .characteristic-current-attacks-permission.is-enabled {
 	background: rgb(44 126 58 / 12%);
 	color: #267a36;
 }
@@ -257,7 +253,7 @@
 .wfrp1ed-classic-sheet .ranged-cell--reload .ranged-reload-runtime {
 	display: inline-flex;
 	align-items: baseline;
-	justify-content: center;
+	justify-content: left;
 	gap: 0;
 	width: 100%;
 	font-variant-numeric: tabular-nums;
@@ -288,8 +284,7 @@
 	border-bottom-color: transparent;
 }
 
-.wfrp1ed-classic-sheet
-	.ranged-reload-runtime__input::-webkit-outer-spin-button,
+.wfrp1ed-classic-sheet .ranged-reload-runtime__input::-webkit-outer-spin-button,
 .wfrp1ed-classic-sheet
 	.ranged-reload-runtime__input::-webkit-inner-spin-button {
 	margin: 0;
@@ -302,7 +297,8 @@
 }
 
 .wfrp1ed-classic-sheet .ranged-reload-runtime__maximum {
-	font-size: 0.88em;
+	margin-left: 3px;
+	font-size: 1em;
 	opacity: 0.78;
 }
 
