@@ -115,7 +115,9 @@ function decorateRangedAttackDialog(_application, root) {
 	root.querySelector("[data-wfrp-magazine-reload-choice]")?.remove();
 
 	const runtime = CombatRangedState.runtime(weapon);
-	const accessible = AmmunitionInventory.accessibleStacks(actor, weapon);
+	const ammunitionSources = runtime.magazineCapacity > 0
+		? AmmunitionInventory.magazineReloadStacks(actor, weapon)
+		: AmmunitionInventory.accessibleStacks(actor, weapon);
 	const requiresAmmo = AmmunitionInventory.requiresExternalAmmunition(weapon);
 	let ammunitionSelect = null;
 
@@ -129,7 +131,13 @@ function decorateRangedAttackDialog(_application, root) {
 			: localize("Ammunition", "Amunicja");
 		ammunitionSelect = document.createElement("select");
 		ammunitionSelect.name = "wfrpAmmunitionUuid";
-		for (const item of accessible) {
+		if (runtime.magazineCapacity > 0) {
+			ammunitionSelect.title = localize(
+				"Magazine reloads may use compatible ammunition from anywhere in this Actor's inventory.",
+				"Przeładowanie magazynka może użyć zgodnej amunicji z dowolnego miejsca w ekwipunku tego Aktora.",
+			);
+		}
+		for (const item of ammunitionSources) {
 			const option = document.createElement("option");
 			option.value = String(item.uuid ?? "");
 			option.textContent = `${item.name} — ${quantity(item)}`;
