@@ -114,6 +114,7 @@
 		"module/movement/DrowningRiskEditLockIntegration.mjs",
 		"module/movement/ClimbingConsequenceIntegration.mjs",
 		"module/movement/ClimbingSkillIntegration.mjs",
+		"module/movement/MovementGMGameplayNoticeIntegration.mjs",
 		"module/combat/CombatTransactionEditLock.mjs",
 		"module/chat/PendingInteractionReminder.mjs",
 		"module/criticals/DetailedCriticalAdjudication.mjs",
