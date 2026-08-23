@@ -115,10 +115,12 @@ function install() {
 		const combatant = this.combatantForActor(actor, { requireActive: true });
 		const turn = this.turnState(combatant, weapon);
 		const lock = this.actionLock(actor);
-		const continuing = turn.committedAction === "magazineReload" &&
-			turn.weaponUuid === weapon.uuid;
 		let reason = "";
-		if (lock.locked && !continuing) reason = lock.reason;
+		/* One click represents one complete reload round. Once this turn is
+		 * committed, a second click in the same round must not progress the
+		 * counter again. On the character's next round CombatRangedState resets the
+		 * round-scoped commitment while the Item's magazine counter persists. */
+		if (lock.locked) reason = lock.reason;
 		else if (runtime.magazineCapacity <= 0 || runtime.magazineReloadRounds <= 0) {
 			reason = localize(
 				"This weapon does not have a separately refillable magazine.",
@@ -321,7 +323,7 @@ function notifyCompletion(weapon, completion) {
 	}
 	ui.notifications.warn(localize(
 		`${weapon.name}: magazine reload finished, but there was not enough ammunition. Loaded ${completion.loaded}; magazine ${runtime.magazineRemaining}/${runtime.magazineCapacity}.`,
-		`${weapon.name}: przeładowanie magazynka zakończone, ale zabrakło amunicji. Załadowano ${completion.loaded}; magazynek ${runtime.magazineRemaining}/${runtime.magazineCapacity}.`,
+		`${weapon.name}: przeładowanie magazynka zakończone, ale nie było wystarczającej ilości amunicji. Załadowano ${completion.loaded}; magazynek ${runtime.magazineRemaining}/${runtime.magazineCapacity}.`,
 	));
 }
 
