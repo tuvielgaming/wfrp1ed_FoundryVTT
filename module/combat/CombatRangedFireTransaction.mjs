@@ -20,7 +20,9 @@ export class CombatRangedFireTransaction {
 		assertInputs(actor, weapon);
 
 		if (game.user?.isGM) {
-			return CombatRangedState.commitShot(actor, weapon, game.user);
+			return socketSafeResult(
+				await CombatRangedState.commitShot(actor, weapon, game.user),
+			);
 		}
 		assertCanFire(actor, game.user);
 
@@ -81,10 +83,8 @@ function registerSocket() {
 			assertInputs(actor, weapon);
 			assertCanFire(actor, user);
 
-			response.result = await CombatRangedState.commitShot(
-				actor,
-				weapon,
-				user,
+			response.result = socketSafeResult(
+				await CombatRangedState.commitShot(actor, weapon, user),
 			);
 		} catch (error) {
 			response.error = error instanceof Error ? error.message : String(error);
@@ -104,6 +104,16 @@ function handleResponse(message) {
 	pendingRequests.delete(requestId);
 	if (message.error) pending.reject(new Error(String(message.error)));
 	else pending.resolve(message.result ?? null);
+}
+
+function socketSafeResult(value) {
+	return Object.freeze({
+		available: value?.available === true,
+		reason: String(value?.reason ?? ""),
+		runtime: foundry.utils.deepClone(value?.runtime ?? null),
+		turn: foundry.utils.deepClone(value?.turn ?? null),
+		combatantId: String(value?.combatant?.id ?? ""),
+	});
 }
 
 function assertInputs(actor, weapon) {
