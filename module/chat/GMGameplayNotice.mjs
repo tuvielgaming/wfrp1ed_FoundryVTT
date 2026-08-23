@@ -80,7 +80,16 @@ export class GMGameplayNotice {
 	}
 }
 
-Hooks.once("init", () => {
+/*
+ * Foundry v14 lifecycle contract:
+ *   init -> i18nInit -> setup -> ready
+ *
+ * Localized setting labels must not be resolved during init. The official
+ * i18nInit hook fires after translations have been loaded and before setup, so
+ * the setting is registered early enough for normal Settings initialization but
+ * only after the active language is authoritative.
+ */
+Hooks.once("i18nInit", () => {
 	game.settings.register(game.system.id, SETTING_KEY, {
 		name: localize(
 			"Save GM gameplay notices in chat",
@@ -321,18 +330,7 @@ function reportPersistenceFailure(error, fallbackMessage) {
 }
 
 function localize(english, polish) {
-	/* During Foundry's init hook game.i18n.lang can still report the default
-	 * language even though the world's Core language preference is already set.
-	 * Read that preference first so World Settings are registered in the same
-	 * language as the rest of the Foundry interface. At runtime game.i18n.lang
-	 * remains the normal fallback. */
-	let language = String(game.i18n?.lang ?? "").toLowerCase();
-	try {
-		language = String(
-			game.settings?.get?.("core", "language") ?? language,
-		).toLowerCase();
-	} catch (_error) {
-		/* Core settings may be unavailable in very early bootstrap contexts. */
-	}
-	return language.startsWith("pl") ? polish : english;
+	return String(game.i18n?.lang ?? "").toLowerCase().startsWith("pl")
+		? polish
+		: english;
 }
