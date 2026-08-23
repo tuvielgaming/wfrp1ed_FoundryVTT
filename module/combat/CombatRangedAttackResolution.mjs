@@ -8,6 +8,7 @@ import {
 import { CombatAttackRangeRules } from "./CombatAttackRangeRules.mjs";
 import { CombatAttackResultChat } from "./CombatAttackResultChat.mjs";
 import { CombatEquipmentState } from "./CombatEquipmentState.mjs";
+import { CombatRangedFireTransaction } from "./CombatRangedFireTransaction.mjs";
 import { CombatRangedState } from "./CombatRangedState.mjs";
 
 /**
@@ -64,7 +65,7 @@ export class CombatRangedAttackResolution {
 		 * Commit ammunition/readiness/shot-pool state authoritatively before the
 		 * d100, exactly as melee spends its Attack resource before rolling.
 		 */
-		const after = await CombatRangedState.fire(actor, weapon);
+		const after = await CombatRangedFireTransaction.fire(actor, weapon);
 
 		const options = {
 			modifier: finiteNumber(configuration?.modifier ?? 0, "Attack modifier"),
@@ -217,7 +218,7 @@ function snapshotAvailability(value) {
 		reason: String(value?.reason ?? ""),
 		runtime: foundry.utils.deepClone(value?.runtime ?? null),
 		turn: foundry.utils.deepClone(value?.turn ?? null),
-		combatantId: String(value?.combatant?.id ?? ""),
+		combatantId: String(value?.combatant?.id ?? value?.combatantId ?? ""),
 	});
 }
 
