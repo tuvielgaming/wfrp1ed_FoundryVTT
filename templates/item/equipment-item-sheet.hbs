@@ -1,118 +1,120 @@
-<nav class="equipment-item-sheet__tabs" aria-label="{{ui.name}}">
-	<button type="button" class="is-active" data-action="showDetails" data-equipment-tab-button="details">
-		<i class="fa-solid fa-list"></i>
-		<span>{{ui.detailsTab}}</span>
-	</button>
-	<button type="button" data-action="showEffects" data-equipment-tab-button="effects">
-		<i class="fa-solid fa-wand-magic-sparkles"></i>
-		<span>{{ui.effectsTab}}</span>
-	</button>
-</nav>
+<div class="equipment-item-sheet__root">
+	<nav class="equipment-item-sheet__tabs" aria-label="{{ui.name}}">
+		<button type="button" class="is-active" data-action="showDetails" data-equipment-tab-button="details">
+			<i class="fa-solid fa-list"></i>
+			<span>{{ui.detailsTab}}</span>
+		</button>
+		<button type="button" data-action="showEffects" data-equipment-tab-button="effects">
+			<i class="fa-solid fa-wand-magic-sparkles"></i>
+			<span>{{ui.effectsTab}}</span>
+		</button>
+	</nav>
 
-<section class="combat-item-sheet__content" data-equipment-tab-panel="details">
-	<header class="combat-item-sheet__header">
-		<img class="combat-item-sheet__image" src="{{item.img}}" alt="">
-		<label class="combat-item-sheet__field combat-item-sheet__field--name">
-			<span>{{ui.name}}</span>
-			<input type="text" name="name" value="{{item.name}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}>
-		</label>
-	</header>
+	<section class="combat-item-sheet__content" data-equipment-tab-panel="details">
+		<header class="combat-item-sheet__header">
+			<img class="combat-item-sheet__image" src="{{item.img}}" alt="">
+			<label class="combat-item-sheet__field combat-item-sheet__field--name">
+				<span>{{ui.name}}</span>
+				<input type="text" name="name" value="{{item.name}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}>
+			</label>
+		</header>
 
-	<section class="combat-item-sheet__panel">
-		<h3 class="equipment-item-sheet__section-title">{{ui.inventory}}</h3>
+		<section class="combat-item-sheet__panel">
+			<h3 class="equipment-item-sheet__section-title">{{ui.inventory}}</h3>
 
-		<div class="combat-item-sheet__grid combat-item-sheet__grid--3">
-			<div class="equipment-item-sheet__flags">
-				<label class="combat-item-sheet__check"><input type="checkbox" name="system.isWealth" {{checked system.isWealth}} {{#unless editable}}disabled{{/unless}}><span>{{ui.wealth}}</span></label>
-				<label class="combat-item-sheet__check"><input type="checkbox" name="system.isContainer" {{checked system.isContainer}} {{#unless editable}}disabled{{/unless}}><span>{{ui.container}}</span></label>
-				<label class="combat-item-sheet__check"><input type="checkbox" name="system.isClothing" {{checked system.isClothing}} {{#unless editable}}disabled{{/unless}}><span>{{ui.clothing}}</span></label>
+			<div class="combat-item-sheet__grid combat-item-sheet__grid--3">
+				<div class="equipment-item-sheet__flags">
+					<label class="combat-item-sheet__check"><input type="checkbox" name="system.isWealth" {{checked system.isWealth}} {{#unless editable}}disabled{{/unless}}><span>{{ui.wealth}}</span></label>
+					<label class="combat-item-sheet__check"><input type="checkbox" name="system.isContainer" {{checked system.isContainer}} {{#unless editable}}disabled{{/unless}}><span>{{ui.container}}</span></label>
+					<label class="combat-item-sheet__check"><input type="checkbox" name="system.isClothing" {{checked system.isClothing}} {{#unless editable}}disabled{{/unless}}><span>{{ui.clothing}}</span></label>
+				</div>
+				<label class="combat-item-sheet__field"><span>{{ui.quantity}}</span><input type="number" min="1" step="1" name="system.referenceQuantity" value="{{system.referenceQuantity}}" {{#unless editable}}disabled{{/unless}}></label>
+				<label class="combat-item-sheet__field"><span>{{ui.encumbrance}}</span><input type="number" min="0" step="0.01" name="system.encumbrance" value="{{system.encumbrance}}" {{#unless editable}}disabled{{/unless}}></label>
 			</div>
-			<label class="combat-item-sheet__field"><span>{{ui.quantity}}</span><input type="number" min="1" step="1" name="system.referenceQuantity" value="{{system.referenceQuantity}}" {{#unless editable}}disabled{{/unless}}></label>
-			<label class="combat-item-sheet__field"><span>{{ui.encumbrance}}</span><input type="number" min="0" step="0.01" name="system.encumbrance" value="{{system.encumbrance}}" {{#unless editable}}disabled{{/unless}}></label>
-		</div>
 
-		<label class="combat-item-sheet__field">
-			<span>{{ui.equipmentKind}}</span>
-			<select name="system.equipmentKind" {{#unless editable}}disabled{{/unless}}>
-				{{#each equipmentKindOptions as |option|}}<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>{{/each}}
-			</select>
-		</label>
+			<label class="combat-item-sheet__field">
+				<span>{{ui.equipmentKind}}</span>
+				<select name="system.equipmentKind" {{#unless editable}}disabled{{/unless}}>
+					{{#each equipmentKindOptions as |option|}}<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>{{/each}}
+				</select>
+			</label>
 
-		{{#if isAmmunition}}
-			<div class="combat-item-sheet__grid combat-item-sheet__grid--2 equipment-item-sheet__conditional">
-				<label class="combat-item-sheet__field">
-					<span>{{ui.ammunitionType}}</span>
-					<select name="system.ammunitionType" {{#unless editable}}disabled{{/unless}}>
-						{{#each ammunitionTypeOptions as |option|}}<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>{{/each}}
-					</select>
-				</label>
-				{{#if isCustomAmmunition}}
-					<label class="combat-item-sheet__field"><span>{{ui.customAmmunitionId}}</span><input type="text" name="system.ammunitionCustomId" value="{{system.ammunitionCustomId}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}></label>
-				{{/if}}
-			</div>
-		{{/if}}
-
-		{{#if isContainer}}
-			<div class="combat-item-sheet__grid combat-item-sheet__grid--2 equipment-item-sheet__conditional">
-				<label class="combat-item-sheet__field">
-					<span>{{ui.containerKind}}</span>
-					<select name="system.containerKind" {{#unless editable}}disabled{{/unless}}>
-						{{#each containerKindOptions as |option|}}<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>{{/each}}
-					</select>
-				</label>
-			</div>
-			{{#if isQuickAmmunitionContainer}}
-				<div class="combat-item-sheet__grid combat-item-sheet__grid--3 equipment-item-sheet__conditional">
+			{{#if isAmmunition}}
+				<div class="combat-item-sheet__grid combat-item-sheet__grid--2 equipment-item-sheet__conditional">
 					<label class="combat-item-sheet__field">
 						<span>{{ui.ammunitionType}}</span>
-						<select name="system.containerAmmunitionType" {{#unless editable}}disabled{{/unless}}>
-							{{#each containerAmmunitionTypeOptions as |option|}}<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>{{/each}}
+						<select name="system.ammunitionType" {{#unless editable}}disabled{{/unless}}>
+							{{#each ammunitionTypeOptions as |option|}}<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>{{/each}}
 						</select>
 					</label>
-					{{#if isCustomContainerAmmunition}}
-						<label class="combat-item-sheet__field"><span>{{ui.customAmmunitionId}}</span><input type="text" name="system.containerAmmunitionCustomId" value="{{system.containerAmmunitionCustomId}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}></label>
+					{{#if isCustomAmmunition}}
+						<label class="combat-item-sheet__field"><span>{{ui.customAmmunitionId}}</span><input type="text" name="system.ammunitionCustomId" value="{{system.ammunitionCustomId}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}></label>
 					{{/if}}
-					<label class="combat-item-sheet__field"><span>{{ui.containerCapacity}}</span><input type="number" min="1" step="1" name="system.containerCapacity" value="{{system.containerCapacity}}" {{#unless editable}}disabled{{/unless}}></label>
 				</div>
 			{{/if}}
-		{{/if}}
 
-		<label class="combat-item-sheet__field"><span>{{ui.availability}}</span><input type="text" name="system.availability" value="{{system.availability}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}></label>
-	</section>
-
-	<section class="combat-item-sheet__panel">
-		<h3 class="equipment-item-sheet__section-title">{{ui.price}}</h3>
-		<div class="combat-item-sheet__grid combat-item-sheet__grid--3">
-			<label class="combat-item-sheet__field equipment-item-sheet__currency-field"><span class="equipment-item-sheet__currency-label equipment-item-sheet__currency-label--gold">{{ui.gc}}</span><input type="number" min="0" step="1" name="system.price.gc" value="{{system.price.gc}}" {{#unless editable}}disabled{{/unless}}></label>
-			<label class="combat-item-sheet__field equipment-item-sheet__currency-field"><span class="equipment-item-sheet__currency-label equipment-item-sheet__currency-label--silver">{{ui.ss}}</span><input type="number" min="0" step="1" name="system.price.ss" value="{{system.price.ss}}" {{#unless editable}}disabled{{/unless}}></label>
-			<label class="combat-item-sheet__field equipment-item-sheet__currency-field"><span class="equipment-item-sheet__currency-label equipment-item-sheet__currency-label--copper">{{ui.bp}}</span><input type="number" min="0" step="1" name="system.price.bp" value="{{system.price.bp}}" {{#unless editable}}disabled{{/unless}}></label>
-		</div>
-	</section>
-
-	<label class="combat-item-sheet__field combat-item-sheet__description"><span>{{ui.description}}</span><textarea name="system.description" {{#unless editable}}disabled{{/unless}}>{{system.description}}</textarea></label>
-</section>
-
-<section class="equipment-effects-panel" data-equipment-tab-panel="effects" hidden>
-	<header class="equipment-effects-panel__header">
-		<div>
-			<h3>{{ui.effectsTab}}</h3>
-			<p>{{ui.effectsHint}}</p>
-		</div>
-		<button type="button" data-action="createEffect" {{#unless editable}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> {{ui.addEffect}}</button>
-	</header>
-	<div class="equipment-effects-list">
-		{{#each effects as |effect|}}
-			<article class="equipment-effect-card {{#if effect.disabled}}is-disabled{{/if}}" data-effect-id="{{effect.id}}">
-				<img src="{{effect.img}}" alt="">
-				<div class="equipment-effect-card__identity"><strong>{{effect.name}}</strong><span>{{effect.stateLabel}}</span></div>
-				<div class="equipment-effect-card__actions">
-					<button type="button" data-action="toggleEffect" {{#unless ../editable}}disabled{{/unless}}><i class="fa-solid {{#if effect.disabled}}fa-toggle-off{{else}}fa-toggle-on{{/if}}"></i></button>
-					<button type="button" data-action="configureEffect"><i class="fa-solid fa-gear"></i></button>
-					<button type="button" data-action="deleteEffect" {{#unless ../editable}}disabled{{/unless}}><i class="fa-solid fa-trash"></i></button>
+			{{#if isContainer}}
+				<div class="combat-item-sheet__grid combat-item-sheet__grid--2 equipment-item-sheet__conditional">
+					<label class="combat-item-sheet__field">
+						<span>{{ui.containerKind}}</span>
+						<select name="system.containerKind" {{#unless editable}}disabled{{/unless}}>
+							{{#each containerKindOptions as |option|}}<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>{{/each}}
+						</select>
+					</label>
 				</div>
-			</article>
-		{{else}}
-			<p class="equipment-effects-panel__empty">{{ui.noEffects}}</p>
-		{{/each}}
-	</div>
-</section>
+				{{#if isQuickAmmunitionContainer}}
+					<div class="combat-item-sheet__grid combat-item-sheet__grid--3 equipment-item-sheet__conditional">
+						<label class="combat-item-sheet__field">
+							<span>{{ui.ammunitionType}}</span>
+							<select name="system.containerAmmunitionType" {{#unless editable}}disabled{{/unless}}>
+								{{#each containerAmmunitionTypeOptions as |option|}}<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>{{/each}}
+							</select>
+						</label>
+						{{#if isCustomContainerAmmunition}}
+							<label class="combat-item-sheet__field"><span>{{ui.customAmmunitionId}}</span><input type="text" name="system.containerAmmunitionCustomId" value="{{system.containerAmmunitionCustomId}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}></label>
+						{{/if}}
+						<label class="combat-item-sheet__field"><span>{{ui.containerCapacity}}</span><input type="number" min="1" step="1" name="system.containerCapacity" value="{{system.containerCapacity}}" {{#unless editable}}disabled{{/unless}}></label>
+					</div>
+				{{/if}}
+			{{/if}}
+
+			<label class="combat-item-sheet__field"><span>{{ui.availability}}</span><input type="text" name="system.availability" value="{{system.availability}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}></label>
+		</section>
+
+		<section class="combat-item-sheet__panel">
+			<h3 class="equipment-item-sheet__section-title">{{ui.price}}</h3>
+			<div class="combat-item-sheet__grid combat-item-sheet__grid--3">
+				<label class="combat-item-sheet__field equipment-item-sheet__currency-field"><span class="equipment-item-sheet__currency-label equipment-item-sheet__currency-label--gold">{{ui.gc}}</span><input type="number" min="0" step="1" name="system.price.gc" value="{{system.price.gc}}" {{#unless editable}}disabled{{/unless}}></label>
+				<label class="combat-item-sheet__field equipment-item-sheet__currency-field"><span class="equipment-item-sheet__currency-label equipment-item-sheet__currency-label--silver">{{ui.ss}}</span><input type="number" min="0" step="1" name="system.price.ss" value="{{system.price.ss}}" {{#unless editable}}disabled{{/unless}}></label>
+				<label class="combat-item-sheet__field equipment-item-sheet__currency-field"><span class="equipment-item-sheet__currency-label equipment-item-sheet__currency-label--copper">{{ui.bp}}</span><input type="number" min="0" step="1" name="system.price.bp" value="{{system.price.bp}}" {{#unless editable}}disabled{{/unless}}></label>
+			</div>
+		</section>
+
+		<label class="combat-item-sheet__field combat-item-sheet__description"><span>{{ui.description}}</span><textarea name="system.description" {{#unless editable}}disabled{{/unless}}>{{system.description}}</textarea></label>
+	</section>
+
+	<section class="equipment-effects-panel" data-equipment-tab-panel="effects" hidden>
+		<header class="equipment-effects-panel__header">
+			<div>
+				<h3>{{ui.effectsTab}}</h3>
+				<p>{{ui.effectsHint}}</p>
+			</div>
+			<button type="button" data-action="createEffect" {{#unless editable}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> {{ui.addEffect}}</button>
+		</header>
+		<div class="equipment-effects-list">
+			{{#each effects as |effect|}}
+				<article class="equipment-effect-card {{#if effect.disabled}}is-disabled{{/if}}" data-effect-id="{{effect.id}}">
+					<img src="{{effect.img}}" alt="">
+					<div class="equipment-effect-card__identity"><strong>{{effect.name}}</strong><span>{{effect.stateLabel}}</span></div>
+					<div class="equipment-effect-card__actions">
+						<button type="button" data-action="toggleEffect" {{#unless ../editable}}disabled{{/unless}}><i class="fa-solid {{#if effect.disabled}}fa-toggle-off{{else}}fa-toggle-on{{/if}}"></i></button>
+						<button type="button" data-action="configureEffect"><i class="fa-solid fa-gear"></i></button>
+						<button type="button" data-action="deleteEffect" {{#unless ../editable}}disabled{{/unless}}><i class="fa-solid fa-trash"></i></button>
+					</div>
+				</article>
+			{{else}}
+				<p class="equipment-effects-panel__empty">{{ui.noEffects}}</p>
+			{{/each}}
+		</div>
+	</section>
+</div>
