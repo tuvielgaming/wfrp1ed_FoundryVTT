@@ -1,0 +1,73 @@
+/******************************************************************/
+/* Persistent private GM gameplay notices                         */
+/******************************************************************/
+
+.wfrp1e-gm-gameplay-notice {
+	display: grid;
+	gap: 6px;
+	margin: 2px 0;
+	padding: 8px 9px 7px 10px;
+	border: 1px solid rgb(103 75 41 / 38%);
+	border-left: 4px solid rgb(126 91 45 / 78%);
+	border-radius: 3px;
+	background: rgb(126 91 45 / 7%);
+	color: #2e2419;
+	font-family: "Book Antiqua", "Times New Roman", serif;
+	line-height: 1.3;
+}
+
+.wfrp1e-gm-gameplay-notice__header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	margin: -2px -2px 0;
+	padding: 3px 4px 5px;
+	border-bottom: 1px solid rgb(103 75 41 / 22%);
+	background: rgb(126 91 45 / 5%);
+}
+
+.wfrp1e-gm-gameplay-notice__title {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	font-size: 13px;
+	font-weight: 800;
+}
+
+.wfrp1e-gm-gameplay-notice__title i {
+	flex: 0 0 auto;
+	font-size: 12px;
+	opacity: 0.82;
+}
+
+.wfrp1e-gm-gameplay-notice__badge {
+	flex: 0 0 auto;
+	padding: 1px 5px;
+	border: 1px solid rgb(103 75 41 / 38%);
+	border-radius: 999px;
+	background: rgb(255 255 255 / 22%);
+	font-size: 9px;
+	font-weight: 800;
+	letter-spacing: 0.08em;
+}
+
+.wfrp1e-gm-gameplay-notice__context {
+	font-size: 11px;
+	font-weight: 700;
+	opacity: 0.82;
+}
+
+.wfrp1e-gm-gameplay-notice__body {
+	font-size: 12px;
+	white-space: pre-wrap;
+}
+
+.wfrp1e-gm-gameplay-notice__footer {
+	padding-top: 4px;
+	border-top: 1px solid rgb(103 75 41 / 16%);
+	font-size: 10px;
+	font-style: italic;
+	opacity: 0.66;
+}
