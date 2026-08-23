@@ -326,12 +326,17 @@ function splitQuantityPrompt(source, current, { x = 0, y = 0 } = {}) {
 		const panel = ownerDocument.createElement("form");
 		panel.setAttribute("role", "dialog");
 		panel.setAttribute("aria-modal", "false");
+		panel.setAttribute("aria-label", localize(
+			`Split stack: ${source.name}`,
+			`Podziel stos: ${source.name}`,
+		));
 		panel.style.cssText = [
 			"position:fixed",
 			"z-index:12000",
-			"min-width:220px",
-			"max-width:300px",
-			"padding:10px",
+			"width:auto",
+			"min-width:0",
+			"max-width:calc(100vw - 16px)",
+			"padding:6px",
 			"border:1px solid var(--color-border-dark-1, #5c4a32)",
 			"border-radius:5px",
 			"background:var(--color-bg, #f0e5cf)",
@@ -340,20 +345,6 @@ function splitQuantityPrompt(source, current, { x = 0, y = 0 } = {}) {
 			"font:14px var(--font-primary, serif)",
 		].join(";");
 
-		const title = ownerDocument.createElement("div");
-		title.textContent = localize(
-			`Split stack: ${source.name}`,
-			`Podziel stos: ${source.name}`,
-		);
-		title.style.cssText = "font-weight:700;margin-bottom:6px";
-
-		const hint = ownerDocument.createElement("label");
-		hint.textContent = localize(
-			`How many to separate? (1–${current - 1})`,
-			`Ile oddzielić? (1–${current - 1})`,
-		);
-		hint.style.cssText = "display:block;margin-bottom:5px";
-
 		const input = ownerDocument.createElement("input");
 		input.type = "number";
 		input.min = "1";
@@ -361,19 +352,35 @@ function splitQuantityPrompt(source, current, { x = 0, y = 0 } = {}) {
 		input.step = "1";
 		input.value = "1";
 		input.required = true;
-		input.style.cssText = "box-sizing:border-box;width:100%;margin:0 0 8px;padding:4px 6px;text-align:center";
+		input.setAttribute("aria-label", localize(
+			`How many to separate? 1 to ${current - 1}`,
+			`Ile oddzielić? Od 1 do ${current - 1}`,
+		));
+		input.title = localize(
+			`Separate 1–${current - 1}.`,
+			`Oddziel 1–${current - 1}.`,
+		);
+		input.style.cssText = "box-sizing:border-box;width:100%;min-width:0;margin:0 0 6px;padding:3px 5px;text-align:center";
 
 		const buttons = ownerDocument.createElement("div");
-		buttons.style.cssText = "display:flex;gap:6px;justify-content:flex-end";
+		buttons.style.cssText = "display:flex;width:max-content;gap:6px;margin:0";
 		const cancelButton = ownerDocument.createElement("button");
 		cancelButton.type = "button";
 		cancelButton.textContent = localize("Cancel", "Anuluj");
+		cancelButton.style.cssText = "flex:0 0 auto;width:auto;min-width:0;margin:0;padding:3px 8px;white-space:nowrap";
 		const confirmButton = ownerDocument.createElement("button");
 		confirmButton.type = "submit";
 		confirmButton.textContent = localize("Split", "Podziel");
+		confirmButton.style.cssText = "flex:0 0 auto;width:auto;min-width:0;margin:0;padding:3px 8px;white-space:nowrap";
 		buttons.append(cancelButton, confirmButton);
-		panel.append(title, hint, input, buttons);
+		panel.append(input, buttons);
 		ownerDocument.body.append(panel);
+
+		/* Let the two action buttons define the popup width. The number input then
+		 * fills exactly that width, while removing the old title/hint rows keeps
+		 * the popup only as tall as the input plus the button row. */
+		const buttonRowWidth = Math.ceil(buttons.getBoundingClientRect().width);
+		if (buttonRowWidth > 0) panel.style.width = `${buttonRowWidth}px`;
 
 		const finish = (value) => {
 			if (!panel.isConnected) return;
