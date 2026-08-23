@@ -6,6 +6,11 @@ const REQUEST_TYPE = "gm-gameplay-notice-request";
 const RESPONSE_TYPE = "gm-gameplay-notice-response";
 const TIMEOUT_MS = 8000;
 
+const NOTICE_SEVERITY = Object.freeze({
+	INFO: "info",
+	WARN: "warn",
+});
+
 const pending = new Map();
 let socketRegistered = false;
 
@@ -15,9 +20,10 @@ let socketRegistered = false;
  *
  * This is deliberately separate from technical/system errors. Callers opt in
  * only for expected gameplay notices. With the world setting disabled (the
- * default), the notice remains an ordinary temporary Foundry warning. With the
- * setting enabled, the full notice is authored by an active GM and whispered to
- * every GM account; the initiating client receives only a short confirmation.
+ * default), the notice remains an ordinary temporary Foundry notification with
+ * its original information/warning severity. With the setting enabled, the full
+ * notice is authored by an active GM and whispered to every GM account; the
+ * initiating client receives only a short notification of the same severity.
  * Authoring on the GM client is important because Foundry lets a whisper author
  * see their own message even when they are not one of the listed recipients.
  */
@@ -30,9 +36,20 @@ export class GMGameplayNotice {
 		}
 	}
 
+	/** Present an expected gameplay/rule warning. */
+	static async warn(options = {}) {
+		return this.#present(NOTICE_SEVERITY.WARN, options);
+	}
+
+	/** Present an expected gameplay/rule informational notice. */
+	static async info(options = {}) {
+		return this.#present(NOTICE_SEVERITY.INFO, options);
+	}
+
 	/**
 	 * Present one expected gameplay/rule notice.
 	 *
+	 * @param {"info"|"warn"} severity Foundry toast severity to preserve.
 	 * @param {Object} options
 	 * @param {string} options.message Full gameplay/rule explanation.
 	 * @param {string} [options.title] Compact notice heading.
@@ -42,21 +59,21 @@ export class GMGameplayNotice {
 	 * @param {Item|null} [options.item=null]
 	 * @returns {Promise<ChatMessage|null>}
 	 */
-	static async warn(options = {}) {
-		const notice = normalizeNotice(options);
+	static async #present(severity, options = {}) {
+		const notice = normalizeNotice({ ...options, severity });
 
 		if (!this.persistenceEnabled()) {
-			ui.notifications.warn(notice.message);
+		notify(notice.severity, notice.message);
 			return null;
 		}
 
 		if (game.user?.isGM) {
 			try {
 				const chatMessage = await persistNotice(notice);
-				ui.notifications.warn(notice.summary);
+				notify(notice.severity, notice.summary);
 				return chatMessage;
 			} catch (error) {
-				reportPersistenceFailure(error, notice.message);
+				reportPersistenceFailure(error, notice.message, notice.severity);
 				return null;
 			}
 		}
@@ -65,16 +82,16 @@ export class GMGameplayNotice {
 		if (!gm) {
 			/* Without an active GM there is nobody who can safely author a message
 			 * that is truly GM-only. Keep the gameplay explanation visible locally. */
-			ui.notifications.warn(notice.message);
+			notify(notice.severity, notice.message);
 			return null;
 		}
 
 		try {
 			await requestPersistence(notice);
-			ui.notifications.warn(notice.summary);
+			notify(notice.severity, notice.summary);
 			return null;
 		} catch (error) {
-			reportPersistenceFailure(error, notice.message);
+			reportPersistenceFailure(error, notice.message, notice.severity);
 			return null;
 		}
 	}
@@ -115,6 +132,7 @@ function normalizeNotice({
 	category = "rules",
 	actor = null,
 	item = null,
+	severity = NOTICE_SEVERITY.WARN,
 } = {}) {
 	const fullMessage = String(message ?? "").trim();
 	if (!fullMessage) {
@@ -135,6 +153,7 @@ function normalizeNotice({
 		title: heading,
 		summary: short,
 		category: String(category ?? "rules"),
+		severity: normalizeSeverity(severity),
 		actorUuid: String(actor?.uuid ?? ""),
 		actorName: String(actor?.name ?? "").trim(),
 		itemUuid: String(item?.uuid ?? ""),
@@ -164,6 +183,7 @@ async function persistNotice(notice) {
 				[FLAG_KEY]: {
 					version: 1,
 					category: notice.category,
+					severity: notice.severity,
 					title: notice.title,
 					actorUuid: notice.actorUuid,
 					itemUuid: notice.itemUuid,
@@ -226,7 +246,7 @@ function registerSocket() {
 			}
 			const notice = normalizeSocketNotice(message.notice, requestingUser.id);
 			const chatMessage = await persistNotice(notice);
-			ui.notifications.warn(notice.summary);
+			notify(notice.severity, notice.summary);
 			response.result = { messageId: String(chatMessage?.id ?? "") };
 		} catch (error) {
 			console.error("WFRP1ED | Unable to persist requested GM gameplay notice.", error);
@@ -252,6 +272,7 @@ function normalizeSocketNotice(value, requestingUserId) {
 			"Komunikat rozgrywki zapisano w prywatnym czacie MG.",
 		),
 		category: String(source.category ?? "rules"),
+		severity: normalizeSeverity(source.severity),
 		actorUuid: String(source.actorUuid ?? ""),
 		actorName: String(source.actorName ?? "").trim(),
 		itemUuid: String(source.itemUuid ?? ""),
@@ -320,13 +341,27 @@ function noticeContent(notice) {
 	return root.outerHTML;
 }
 
-function reportPersistenceFailure(error, fallbackMessage) {
+function reportPersistenceFailure(error, fallbackMessage, severity) {
 	console.error("WFRP1ED | Unable to persist GM gameplay notice.", error);
 	ui.notifications.error(localize(
 		"The GM gameplay notice could not be saved to chat. Showing it as a temporary notification instead.",
 		"Nie udało się zapisać komunikatu dla MG w czacie. Zostanie pokazany jako zwykłe tymczasowe powiadomienie.",
 	));
-	ui.notifications.warn(fallbackMessage);
+	notify(severity, fallbackMessage);
+}
+
+function normalizeSeverity(value) {
+	return value === NOTICE_SEVERITY.INFO
+		? NOTICE_SEVERITY.INFO
+		: NOTICE_SEVERITY.WARN;
+}
+
+function notify(severity, message) {
+	if (normalizeSeverity(severity) === NOTICE_SEVERITY.INFO) {
+		ui.notifications.info(message);
+		return;
+	}
+	ui.notifications.warn(message);
 }
 
 function localize(english, polish) {
