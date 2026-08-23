@@ -8,7 +8,16 @@ const { ItemSheetV2 } = foundry.applications.sheets;
 const { DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
 /*
- * World/Compendium Equipment acts as an authored definition. Its visible
+ * Equipment has two mutually-exclusive authored roles in the ammunition layer:
+ * - an Ammunition stack; or
+ * - a Container (which may itself be a Quick Access Ammunition container).
+ *
+ * A quiver is therefore a Standard Equipment container whose container subtype
+ * declares Arrow compatibility. It is not also an Ammunition Item. Normalize
+ * edits at the document boundary so hidden stale fields cannot make one Item
+ * act as both roles after a sheet change.
+ *
+ * World/Compendium Equipment also acts as an authored definition. Its visible
  * `Ilość` field is the reference package quantity from the Core tables, so keep
  * the hidden default current quantity synchronized with it. Once an Item is
  * embedded in an Actor, current quantity belongs to that character and must no
@@ -16,6 +25,8 @@ const { DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
  */
 Hooks.on("preUpdateItem", (item, changes) => {
 	if (item?.type !== "equipment") return;
+
+	normalizeEquipmentRoleUpdate(item, changes);
 
 	const actor = item?.actor ?? item?.parent;
 	if (actor?.documentName === "Actor") return;
@@ -79,12 +90,15 @@ export class EquipmentItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) 
 		context.system = system;
 		context.editable = this.isEditable;
 		context.ui = equipmentUi();
-		context.isAmmunition = system?.equipmentKind === EQUIPMENT_KIND.AMMUNITION;
 		context.isContainer = system?.isContainer === true;
+		context.isAmmunition = !context.isContainer &&
+			system?.equipmentKind === EQUIPMENT_KIND.AMMUNITION;
 		context.isQuickAmmunitionContainer = context.isContainer &&
 			system?.containerKind === CONTAINER_KIND.QUICK_AMMUNITION;
-		context.isCustomAmmunition = system?.ammunitionType === AMMUNITION_TYPE.CUSTOM;
-		context.isCustomContainerAmmunition = system?.containerAmmunitionType === AMMUNITION_TYPE.CUSTOM;
+		context.isCustomAmmunition = context.isAmmunition &&
+			system?.ammunitionType === AMMUNITION_TYPE.CUSTOM;
+		context.isCustomContainerAmmunition = context.isQuickAmmunitionContainer &&
+			system?.containerAmmunitionType === AMMUNITION_TYPE.CUSTOM;
 		context.equipmentKindOptions = selectOptions([
 			[EQUIPMENT_KIND.STANDARD, localize("Standard", "Standard")],
 			[EQUIPMENT_KIND.AMMUNITION, localize("Ammunition", "Amunicja")],
@@ -155,6 +169,75 @@ export class EquipmentItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) 
 		});
 		if (confirmed) await effect.delete();
 	}
+}
+
+function normalizeEquipmentRoleUpdate(item, changes) {
+	if (!changes || typeof changes !== "object") return;
+
+	const current = item.system ?? {};
+	const isContainerChanged = hasSystemChange(changes, "isContainer");
+	const equipmentKindChanged = hasSystemChange(changes, "equipmentKind");
+	const nextIsContainer = isContainerChanged
+		? systemChange(changes, "isContainer") === true ||
+			String(systemChange(changes, "isContainer")).toLowerCase() === "true"
+		: current.isContainer === true;
+	const nextEquipmentKind = equipmentKindChanged
+		? String(systemChange(changes, "equipmentKind") ?? "")
+		: String(current.equipmentKind ?? EQUIPMENT_KIND.STANDARD);
+
+	/* Explicitly choosing Ammunition converts the Item out of container role. */
+	if (equipmentKindChanged && nextEquipmentKind === EQUIPMENT_KIND.AMMUNITION) {
+		setSystemChange(changes, "isContainer", false);
+		resetContainerRole(changes);
+		return;
+	}
+
+	/* Checking Container wins over any stale Ammunition subtype. Also repair
+	 * previously-authored contradictory Items on their next edit. */
+	if (nextIsContainer) {
+		setSystemChange(changes, "equipmentKind", EQUIPMENT_KIND.STANDARD);
+		setSystemChange(changes, "ammunitionType", AMMUNITION_TYPE.NONE);
+		setSystemChange(changes, "ammunitionCustomId", "");
+		return;
+	}
+
+	/* When a container is explicitly removed, its container-only authored facts
+	 * no longer describe the Item and should not remain hidden stale state. */
+	if (isContainerChanged && !nextIsContainer) {
+		resetContainerRole(changes);
+	}
+
+	if (equipmentKindChanged && nextEquipmentKind !== EQUIPMENT_KIND.AMMUNITION) {
+		setSystemChange(changes, "ammunitionType", AMMUNITION_TYPE.NONE);
+		setSystemChange(changes, "ammunitionCustomId", "");
+	}
+}
+
+function resetContainerRole(changes) {
+	setSystemChange(changes, "containerKind", CONTAINER_KIND.STANDARD);
+	setSystemChange(changes, "containerAmmunitionType", AMMUNITION_TYPE.NONE);
+	setSystemChange(changes, "containerAmmunitionCustomId", "");
+	setSystemChange(changes, "containerCapacity", 0);
+}
+
+function hasSystemChange(changes, key) {
+	const path = `system.${key}`;
+	return Object.hasOwn(changes, path) ||
+		foundry.utils.getProperty(changes, path) !== undefined;
+}
+
+function systemChange(changes, key) {
+	const path = `system.${key}`;
+	return Object.hasOwn(changes, path)
+		? changes[path]
+		: foundry.utils.getProperty(changes, path);
+}
+
+function setSystemChange(changes, key, value) {
+	const path = `system.${key}`;
+	const flat = Object.keys(changes).some((entry) => entry.startsWith("system."));
+	if (flat) changes[path] = value;
+	else foundry.utils.setProperty(changes, path, value);
 }
 
 function equipmentUi() {
