@@ -8,6 +8,12 @@ import {
 	unwrapText,
 	unwrapValue,
 } from "./InventoryItemFields.mjs";
+import {
+	AMMUNITION_TYPE,
+	ammunitionIdentity,
+	normalizeAmmunitionType,
+	normalizeCustomId,
+} from "./AmmunitionTypes.mjs";
 
 const {
 	BooleanField,
@@ -58,15 +64,13 @@ const WEAPON_MODIFIER_KEYS = Object.freeze([
  * weapon; resolution skips it and proceeds to the next authored band.
  *
  * Ranged cadence uses one canonical Reload value. It is the number of complete
- * preparation rounds which must pass before another firing round is available:
- * - Reload 0: the weapon may fire every round;
- * - Reload 1: one preparation round between firing rounds (e.g. Crossbow);
- * - Reload 2: two preparation rounds between firing rounds (e.g. Pistol/Lasso
- *   according to the relevant Core timing entry).
- *
+ * preparation rounds which must pass before another firing round is available.
  * `shotsPerFireRound` and magazine fields are separate because repeating
  * weapons can fire more than once in their legal firing round and may require a
  * distinct magazine-refill procedure.
+ *
+ * `ammunitionType` is compatibility only. The concrete Equipment Item selected
+ * for a shot remains the ammunition variant and may carry its own ActiveEffects.
  */
 export class WeaponData extends TypeDataModel {
 	static defineSchema() {
@@ -78,21 +82,13 @@ export class WeaponData extends TypeDataModel {
 				],
 			}),
 
-			/** Stable package/module identity when one exists. */
 			rulesId: textField(),
-
-			/** Human-readable weapon class, e.g. Hand Weapon or Dagger. */
 			weaponClass: textField(),
-
 			kind: textField(WEAPON_KIND.MELEE),
 			group: textField(WEAPON_GROUP.ORDINARY),
-
-			/** Stable Skill/rule identity required by a Specialist Weapon. */
 			specialistSkillId: textField(),
-
 			handedness: textField(WEAPON_HANDEDNESS.ONE),
 
-			/** Main-rule parry eligibility/bonus for melee use. */
 			parry: new SchemaField({
 				suitable: new BooleanField({
 					required: true,
@@ -102,7 +98,6 @@ export class WeaponData extends TypeDataModel {
 				bonus: integerField(),
 			}),
 
-			/** Optional Core melee Weapon Modifiers. */
 			optionalModifiers: new SchemaField({
 				initiative: integerField(),
 				toHit: integerField(),
@@ -110,13 +105,14 @@ export class WeaponData extends TypeDataModel {
 				parry: integerField(),
 			}),
 
-			/** Authored ranged/thrown-weapon facts shown by the printed sheet. */
 			range: new SchemaField({
 				short: rangeField(),
 				long: rangeField(),
 				max: rangeField(),
 			}),
 			effectiveStrength: nonNegativeIntegerField(),
+			ammunitionType: textField(AMMUNITION_TYPE.NONE),
+			ammunitionCustomId: textField(),
 			firingCycle: new SchemaField({
 				reloadRounds: nonNegativeIntegerField(),
 				shotsPerFireRound: positiveIntegerField(1),
@@ -126,22 +122,11 @@ export class WeaponData extends TypeDataModel {
 		};
 	}
 
-	/**
-	 * Read-only compatibility alias for the printed Classic `Ład.`/Reload column.
-	 * The authoritative persisted value lives in firingCycle.reloadRounds.
-	 */
 	get reload() {
 		return toNonNegativeInteger(this.firingCycle?.reloadRounds);
 	}
 
 	static migrateData(source, options = {}) {
-		/*
-		 * Foundry v14 invokes migrateData for differential updates too. This broad
-		 * legacy migration deliberately fills omitted full-record fields with
-		 * defaults, so running it against a partial update such as
-		 * `system.state.mode` can reset kind/range/handedness/etc. For partial
-		 * cleaning, delegate directly to TypeDataModel and touch only supplied keys.
-		 */
 		if (options?.partial === true) {
 			return TypeDataModel.migrateData.call(this, source, options);
 		}
@@ -191,28 +176,14 @@ export class WeaponData extends TypeDataModel {
 		};
 
 		migrated.optionalModifiers = {
-			initiative: legacyModifier(
-				optional,
-				"initiative",
-				sourceObject.initiative,
-			),
-			toHit: legacyModifier(
-				optional,
-				"toHit",
-				sourceObject.weaponSkill,
-			),
+			initiative: legacyModifier(optional, "initiative", sourceObject.initiative),
+			toHit: legacyModifier(optional, "toHit", sourceObject.weaponSkill),
 			damage: legacyModifier(
 				optional,
 				"damage",
-				kind === WEAPON_KIND.MELEE
-					? sourceObject.damage
-					: 0,
+				kind === WEAPON_KIND.MELEE ? sourceObject.damage : 0,
 			),
-			parry: legacyModifier(
-				optional,
-				"parry",
-				sourceObject.parry,
-			),
+			parry: legacyModifier(optional, "parry", sourceObject.parry),
 		};
 
 		migrated.range = {
@@ -229,15 +200,14 @@ export class WeaponData extends TypeDataModel {
 						: 0,
 			),
 		);
+		migrated.ammunitionType = normalizeAmmunitionType(
+			unwrapText(sourceObject.ammunitionType),
+			AMMUNITION_TYPE.NONE,
+		);
+		migrated.ammunitionCustomId = normalizeCustomId(
+			unwrapText(sourceObject.ammunitionCustomId),
+		);
 
-		/*
-		 * Accept every temporary/legacy timing shape which has existed in this
-		 * project. `reloadRounds` is authoritative. The short-lived split model is
-		 * collapsed without summing values. A non-zero load value wins; otherwise
-		 * a non-zero recovery value is preserved (important for e.g. a Lasso which
-		 * may have been authored during that short-lived model), then the original
-		 * scalar reload value is used as the last fallback.
-		 */
 		migrated.firingCycle = {
 			reloadRounds: migratedReloadRounds(sourceObject, firingCycle),
 			shotsPerFireRound: positiveIntegerValue(
@@ -340,14 +310,8 @@ function legacyModifier(container, key, legacyValue) {
 }
 
 function inferWeaponKind(source, range) {
-	if (source?.isRanged === true) {
-		return WEAPON_KIND.RANGED;
-	}
-
-	if (source?.isRanged === false) {
-		return WEAPON_KIND.MELEE;
-	}
-
+	if (source?.isRanged === true) return WEAPON_KIND.RANGED;
+	if (source?.isRanged === false) return WEAPON_KIND.MELEE;
 	return [range.short, range.long, range.max].some(
 		(value) => (rangeNumericValue(value) ?? 0) > 0,
 	)
@@ -416,5 +380,13 @@ export function weaponRangedCycleSnapshot(weapon) {
 		magazineReloadRounds: magazineCapacity > 0
 			? toNonNegativeInteger(source.magazineReloadRounds)
 			: 0,
+	});
+}
+
+export function weaponAmmunitionSnapshot(weapon) {
+	if (weapon?.type !== "weapon") return null;
+	return ammunitionIdentity({
+		type: weapon.system?.ammunitionType,
+		customId: weapon.system?.ammunitionCustomId,
 	});
 }
