@@ -15,6 +15,13 @@ const CLIMBING_HAND_VALIDATION_SETTING_KEY =
  * Native Foundry settings for explicit WFRP 1e rule interpretations and local
  * combat-roll preferences.
  *
+ * IMPORTANT LOCALIZATION CONTRACT:
+ * Settings whose visible labels/hints are localized are registered from
+ * Foundry's `i18nInit` hook, not `init`. In Foundry v14, `init` fires before
+ * translations are guaranteed to be loaded, while `i18nInit` fires after
+ * localization is ready and before `setup`, when Settings initialization occurs.
+ * Keep future localized World/User/Client settings on the same lifecycle.
+ *
  * Automatic damage/parry dice are intentionally limited to GM-controlled Actors
  * which have no player OWNER. Player-owned Actors always keep these rolls as an
  * explicit player/GM action so physical dice can be entered before adjudication.
@@ -198,4 +205,4 @@ export class WfrpRuleSettings {
 	}
 }
 
-Hooks.once("init", () => WfrpRuleSettings.register());
+Hooks.once("i18nInit", () => WfrpRuleSettings.register());
