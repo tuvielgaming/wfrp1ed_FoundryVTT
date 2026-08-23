@@ -37,7 +37,7 @@ export class CombatAttackRangeRules {
 		});
 	}
 
-	static profile({ short = 0, long = 0, extreme = 0 } = {}) {
+	static profile({ short = null, long = null, extreme = null } = {}) {
 		const normalized = {
 			short: optionalRangeNumber(short, "short range"),
 			long: optionalRangeNumber(long, "long range"),
@@ -117,9 +117,10 @@ function effectsForBand(band) {
 }
 
 function optionalRangeNumber(value, label) {
-	const text = String(value ?? "").trim();
-	if (text === "-" || text === "—") return null;
-	return nonNegativeNumber(value, label);
+	if (value === null || value === undefined) return null;
+	const text = String(value).trim();
+	if (text === "" || text === "-" || text === "—") return null;
+	return nonNegativeNumber(text, label);
 }
 
 function nonNegativeNumber(value, label) {
