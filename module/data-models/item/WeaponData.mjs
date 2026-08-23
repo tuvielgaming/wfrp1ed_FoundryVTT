@@ -135,6 +135,17 @@ export class WeaponData extends TypeDataModel {
 	}
 
 	static migrateData(source, options = {}) {
+		/*
+		 * Foundry v14 invokes migrateData for differential updates too. This broad
+		 * legacy migration deliberately fills omitted full-record fields with
+		 * defaults, so running it against a partial update such as
+		 * `system.state.mode` can reset kind/range/handedness/etc. For partial
+		 * cleaning, delegate directly to TypeDataModel and touch only supplied keys.
+		 */
+		if (options?.partial === true) {
+			return TypeDataModel.migrateData.call(this, source, options);
+		}
+
 		const migrated = migrateInventoryData(source, {
 			allowedModes: [
 				INVENTORY_MODE.CARRIED,
