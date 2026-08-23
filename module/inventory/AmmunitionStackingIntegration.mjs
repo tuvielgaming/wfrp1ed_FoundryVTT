@@ -9,8 +9,9 @@ const OWNED_ITEM_DRAG_TYPE = "application/x-wfrp1ed-owned-item";
  * storage fields are ignored because those are exactly what stacking changes.
  *
  * The handler is loaded before ClassicActorItemDragIntegration and runs in the
- * capture phase. It consumes only confirmed stack merges; every other drop is
- * left to the normal inventory/container implementation.
+ * capture phase. It consumes confirmed stack merges and stackable Equipment
+ * leaving a container; every unrelated drop is left to the normal inventory and
+ * container implementation.
  */
 Hooks.on("renderApplicationV2", (application, element) => {
 	const actor = application?.document;
@@ -52,17 +53,22 @@ Hooks.on("renderApplicationV2", (application, element) => {
 			return;
 		}
 
-		/* When an Item leaves a container and is dropped anywhere on the main
-		 * Equipment level, coalesce it with an identical top-level stack if one
-		 * already exists. If no match exists, the generic integration performs the
-		 * normal move-to-top-level operation. */
+		/* Stackable Equipment leaving a container is fully owned here. This is
+		 * important for ammunition too: the older generic drag integration still
+		 * contains a legacy ammunition-only coalescer with a looser identity test.
+		 * Consuming the drop here prevents that fallback from ever merging two
+		 * stacks that fail our strict Equipment + ActiveEffect identity contract. */
 		if (!containerId(source)) return;
 		if (target && containerId(target)) return;
 		const matchingTopLevel = topLevelMatchingStack(actor, source);
-		if (!matchingTopLevel) return;
 
 		consumeDrop(event);
-		void mergeStacks(source, matchingTopLevel, application)
+		if (matchingTopLevel) {
+			void mergeStacks(source, matchingTopLevel, application)
+				.catch(reportStackingError);
+			return;
+		}
+		void moveStackToTopLevel(source, application)
 			.catch(reportStackingError);
 	}, true);
 });
@@ -199,9 +205,20 @@ async function mergeStacks(source, target, application) {
 		"system.quantity": quantity(target) + sourceQuantity,
 	});
 	await source.delete();
-	if (typeof application?.render === "function") {
-		await Promise.resolve(application.render({ force: true }));
-	}
+	await rerender(application);
+}
+
+async function moveStackToTopLevel(source, application) {
+	await source.update({
+		"system.containerId": "",
+		"system.storageLocation": "",
+	});
+	await rerender(application);
+}
+
+async function rerender(application) {
+	if (typeof application?.render !== "function") return;
+	await Promise.resolve(application.render({ force: true }));
 }
 
 function ownedItemFromMarker(actor, marker) {
