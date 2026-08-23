@@ -394,6 +394,7 @@ function serializeConfiguration(configuration = {}) {
 		automaticRangeEffects: configuration.automaticRangeEffects === true,
 		distance,
 		manualDamageModifier,
+		ammunitionUuid: String(configuration.ammunitionUuid ?? ""),
 	};
 }
 
