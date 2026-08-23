@@ -52,10 +52,6 @@ function install() {
 
 		const resolved = await originalExecute(actor, weapon, configuration, targetOptions);
 
-		/* The generic ranged resolver performs every legality/range check before it
-		 * commits the shot. Consume the external projectile only after that
-		 * transaction succeeds; otherwise an invalid range or cancelled resolution
-		 * could eat the last arrow before a shot actually exists. */
 		if (externalItem) {
 			const live = actor.items?.get?.(externalItem.id);
 			const before = quantity(live);
@@ -172,6 +168,13 @@ function decorateRangedAttackDialog(_application, root) {
 					`${weapon.name}: przeładowanie magazynka — pozostało ${result?.runtime?.magazineReloadRemaining ?? 0} rund(y).`,
 				));
 			} else {
+				const ordinary = CombatRangedState.reloadAvailability(actor, weapon);
+				if (ordinary.magazineProxy === true) {
+					throw new Error(localize(
+						"Select Reload magazine to refill this weapon's magazine.",
+						"Zaznacz Przeładuj magazynek, aby uzupełnić magazynek tej broni.",
+					));
+				}
 				const result = await CombatRangedState.reload(actor, weapon);
 				const remaining = result?.runtime?.reloadRemaining ?? 0;
 				ui.notifications.info(remaining > 0
@@ -220,8 +223,11 @@ function decorateRangedAttackDialog(_application, root) {
 			ordinaryReload = { available: false, reason: fire.reason };
 		}
 		roll.disabled = !fire.available;
-		reload.disabled = !ordinaryReload.available;
-		reload.title = ordinaryReload.reason || "";
+		const ordinaryAvailable = ordinaryReload.available && ordinaryReload.magazineProxy !== true;
+		reload.disabled = !ordinaryAvailable;
+		reload.title = ordinaryReload.magazineProxy === true
+			? localize("Select Reload magazine to use this action.", "Zaznacz Przeładuj magazynek, aby użyć tej akcji.")
+			: (ordinaryReload.reason || "");
 		reload.querySelector("span").textContent = localize("Reload", "Przeładuj");
 		if (ammunitionSelect) {
 			ammunitionSelect.disabled = current.magazineCapacity > 0;
