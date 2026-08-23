@@ -4,33 +4,61 @@ import { AmmunitionInventory } from "./AmmunitionInventory.mjs";
 Hooks.on("renderApplicationV2", (application, element) => {
 	const actor = application?.document;
 	if (actor?.documentName !== "Actor") return;
-	if (!element?.querySelector?.(".wfrp1ed-classic-sheet")) return;
+	const sheet = classicSheetRoot(element);
+	if (!sheet) return;
 
-	for (const row of element.querySelectorAll(".classic-inventory__row[data-item-id]")) {
-		const container = actor.items?.get?.(String(row.dataset.itemId ?? ""));
-		if (!AmmunitionInventory.isQuickAccessContainer(container)) continue;
-		decorateCapacity(row, container);
-		installCapacityDropTarget(row, actor, container, application);
-	}
+	decorateQuickAccessRows(sheet, actor, application);
+	installQuickAccessMutationObserver(sheet, actor, application);
 });
 
 Hooks.on("createItem", (item) => refreshQuickContainerActor(item));
 Hooks.on("updateItem", (item) => refreshQuickContainerActor(item));
 Hooks.on("deleteItem", (item) => refreshQuickContainerActor(item));
 
+function decorateQuickAccessRows(root, actor, application) {
+	for (const row of root.querySelectorAll(".classic-inventory__row[data-item-id]")) {
+		const container = actor.items?.get?.(String(row.dataset.itemId ?? ""));
+		if (!AmmunitionInventory.isQuickAccessContainer(container)) continue;
+		decorateCapacity(row, container);
+		installCapacityDropTarget(row, actor, container, application);
+	}
+}
+
+/**
+ * ClassicInventoryIntegration rebuilds only the inventory host for interactions
+ * such as expand/collapse and quantity/location edits. Those partial renders do
+ * not fire renderApplicationV2 again, so any presentation decorator attached
+ * only to the application render would disappear until the whole Actor sheet
+ * was reopened. Observe only the inventory hosts and reapply this integration
+ * after their DOM is rebuilt.
+ */
+function installQuickAccessMutationObserver(root, actor, application) {
+	if (root.__wfrpQuickAccessAmmunitionObserver) return;
+
+	const hosts = [...root.querySelectorAll("[data-wfrp1ed-inventory]")];
+	if (!hosts.length) return;
+
+	let queued = false;
+	const observer = new MutationObserver(() => {
+		if (queued) return;
+		queued = true;
+		requestAnimationFrame(() => {
+			queued = false;
+			decorateQuickAccessRows(root, actor, application);
+		});
+	});
+	for (const host of hosts) observer.observe(host, { childList: true, subtree: true });
+	Object.defineProperty(root, "__wfrpQuickAccessAmmunitionObserver", {
+		value: observer,
+		configurable: true,
+	});
+}
+
 function decorateCapacity(row, container) {
 	const state = AmmunitionInventory.containerState(container);
 	if (!state) return;
 
-	const ammunitionLabel = ammunitionTypeLabel(state);
-	const name = row.querySelector(".classic-inventory__name");
-	if (name) {
-		const displayName = ammunitionLabel
-			? `${container.name} (${ammunitionLabel})`
-			: String(container.name ?? "");
-		name.textContent = displayName;
-		name.title = displayName;
-	}
+	decorateContainerName(row, container, state);
 
 	const capacityText = `${state.current}/${state.capacity}`;
 	const capacityTitle = localize(
@@ -39,7 +67,7 @@ function decorateCapacity(row, container) {
 	);
 	const existing = row.querySelector("[data-wfrp-ammunition-capacity]");
 	if (existing) {
-		existing.textContent = capacityText;
+		if (existing.textContent !== capacityText) existing.textContent = capacityText;
 		existing.title = capacityTitle;
 		return;
 	}
@@ -57,6 +85,39 @@ function decorateCapacity(row, container) {
 	capacity.textContent = capacityText;
 	capacity.title = capacityTitle;
 	quantityControl.replaceWith(capacity);
+}
+
+function decorateContainerName(row, container, state) {
+	const ammunitionLabel = ammunitionTypeLabel(state);
+	const name = row.querySelector(".classic-inventory__name");
+	if (!name) return;
+
+	const rawName = String(container.name ?? "");
+	const fullDisplayName = ammunitionLabel ? `${rawName} (${ammunitionLabel})` : rawName;
+	name.title = fullDisplayName;
+	if (!ammunitionLabel) {
+		if (name.textContent !== rawName) name.textContent = rawName;
+		name.classList.remove("classic-inventory__name--quick-ammunition");
+		return;
+	}
+
+	name.classList.add("classic-inventory__name--quick-ammunition");
+	let primary = name.querySelector("[data-wfrp-quick-ammo-primary]");
+	let specialisation = name.querySelector("[data-wfrp-quick-ammo-specialisation]");
+	if (!primary || !specialisation) {
+		primary = document.createElement("span");
+		primary.className = "classic-inventory__name-primary";
+		primary.dataset.wfrpQuickAmmoPrimary = "";
+		specialisation = document.createElement("span");
+		specialisation.className = "classic-inventory__name-specialisation";
+		specialisation.dataset.wfrpQuickAmmoSpecialisation = "";
+		name.replaceChildren(primary, specialisation);
+	}
+	if (primary.textContent !== rawName) primary.textContent = rawName;
+	const specialisationText = `(${ammunitionLabel})`;
+	if (specialisation.textContent !== specialisationText) {
+		specialisation.textContent = specialisationText;
+	}
 }
 
 function installCapacityDropTarget(row, actor, container, application) {
@@ -271,6 +332,11 @@ function refreshQuickContainerActor(item) {
 	if (actor?.documentName === "Actor" && actor.sheet?.rendered) {
 		void actor.sheet.render({ force: true });
 	}
+}
+
+function classicSheetRoot(root) {
+	if (root?.matches?.(".wfrp1ed-classic-sheet")) return root;
+	return root?.querySelector?.(".wfrp1ed-classic-sheet") ?? null;
 }
 
 function localize(english, polish) {
