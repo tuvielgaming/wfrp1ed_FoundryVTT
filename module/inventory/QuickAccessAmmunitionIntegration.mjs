@@ -32,7 +32,18 @@ function decorateCapacity(row, container) {
 		name.title = displayName;
 	}
 
-	row.querySelector("[data-wfrp-ammunition-capacity]")?.remove();
+	const capacityText = `${state.current}/${state.capacity}`;
+	const capacityTitle = localize(
+		`Quick-access ammunition: ${capacityText}`,
+		`Amunicja z łatwym dostępem: ${capacityText}`,
+	);
+	const existing = row.querySelector("[data-wfrp-ammunition-capacity]");
+	if (existing) {
+		existing.textContent = capacityText;
+		existing.title = capacityTitle;
+		return;
+	}
+
 	const quantityControl = row.querySelector(".classic-inventory__quantity");
 	if (!quantityControl) return;
 
@@ -43,11 +54,8 @@ function decorateCapacity(row, container) {
 	const capacity = document.createElement("span");
 	capacity.className = "classic-inventory__ammunition-capacity";
 	capacity.dataset.wfrpAmmunitionCapacity = "";
-	capacity.textContent = `${state.current}/${state.capacity}`;
-	capacity.title = localize(
-		`Quick-access ammunition: ${state.current}/${state.capacity}`,
-		`Amunicja z łatwym dostępem: ${state.current}/${state.capacity}`,
-	);
+	capacity.textContent = capacityText;
+	capacity.title = capacityTitle;
 	quantityControl.replaceWith(capacity);
 }
 
