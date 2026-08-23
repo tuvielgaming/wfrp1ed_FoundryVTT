@@ -1,3 +1,4 @@
+import { WEAPON_KIND } from "../data-models/item/WeaponData.mjs";
 import { AmmunitionInventory } from "../inventory/AmmunitionInventory.mjs";
 import { CombatRangedState } from "./CombatRangedState.mjs";
 
@@ -170,7 +171,10 @@ Hooks.on("updateCombat", (combat, changes) => {
 
 async function decrementMagazineReloads(actor) {
 	for (const weapon of actor.items ?? []) {
-		if (weapon?.type !== "weapon") continue;
+		if (
+			weapon?.type !== "weapon" ||
+			weapon.system?.kind !== WEAPON_KIND.RANGED
+		) continue;
 		const runtime = CombatRangedState.runtime(weapon);
 		if (runtime.magazineReloadRemaining <= 0) continue;
 		const remaining = runtime.magazineReloadRemaining - 1;
