@@ -125,16 +125,25 @@ export class CombatRangedState {
 		const combatant = this.combatantForActor(actor, { requireActive: false });
 		if (!combatant) return Object.freeze({ locked: false, reason: "" });
 		const turn = this.turnState(combatant);
-		if (turn.committedAction !== "reload") {
-			return Object.freeze({ locked: false, reason: "" });
+		if (turn.committedAction === "reload") {
+			return Object.freeze({
+				locked: true,
+				reason: localize(
+					"You cannot perform another action while reloading a weapon this turn.",
+					"Nie możesz wykonać innej akcji w tej turze podczas przeładowywania broni.",
+				),
+			});
 		}
-		return Object.freeze({
-			locked: true,
-			reason: localize(
-				"You cannot perform another action while reloading a weapon this turn.",
-				"Nie możesz wykonać innej akcji w tej turze podczas przeładowywania broni.",
-			),
-		});
+		if (turn.committedAction === "fire") {
+			return Object.freeze({
+				locked: true,
+				reason: localize(
+					"This turn is already committed to ranged fire. Only remaining shots from the same weapon may still be used.",
+					"Ta tura jest już poświęcona ostrzałowi. Możesz wykorzystać jedynie pozostałe strzały z tej samej broni.",
+				),
+			});
+		}
+		return Object.freeze({ locked: false, reason: "" });
 	}
 
 	static fireAvailability(actor, weapon) {
@@ -143,16 +152,18 @@ export class CombatRangedState {
 		const combatant = this.combatantForActor(actor, { requireActive: true });
 		const turn = this.turnState(combatant, weapon);
 		const lock = this.actionLock(actor);
+		const continuingSameFire = turn.committedAction === "fire" &&
+			turn.weaponUuid === weapon.uuid;
 		const magazineEmpty = runtime.magazineCapacity > 0 &&
 			runtime.magazineRemaining <= 0;
 		const boundToOtherWeapon = Boolean(
 			turn.weaponUuid &&
 			turn.weaponUuid !== weapon.uuid &&
-			turn.spent > 0,
+			turn.committedAction === "fire",
 		);
 
 		let reason = "";
-		if (lock.locked) reason = lock.reason;
+		if (lock.locked && !continuingSameFire) reason = lock.reason;
 		else if (runtime.reloadRemaining > 0) {
 			reason = localize(
 				`Reloading: ${runtime.reloadRemaining} round(s) remain.`,
@@ -340,7 +351,7 @@ export class CombatRangedState {
 		});
 	}
 
-	/** Reserved for the firing transaction wired in the next ranged-combat step. */
+	/** Commit one legal ranged shot and its turn-scoped firing resource. */
 	static async commitShot(actor, weapon, requestingUser = game.user) {
 		if (!game.user?.isGM) {
 			throw new Error("Ranged shot commits require GM authority.");
@@ -357,7 +368,7 @@ export class CombatRangedState {
 				weaponUuid: String(weapon.uuid ?? ""),
 				allowance: turn.allowance,
 				spent: turn.spent + 1,
-				committedAction: "",
+				committedAction: "fire",
 				updatedBy: String(game.user?.id ?? ""),
 				updatedAt: Date.now(),
 			});
