@@ -383,11 +383,14 @@ export class CombatRangedState {
 
 Hooks.once("init", () => {
 	game.settings.register(game.system.id, SETTING_KEY, {
-		name: localize(
+		/* game.i18n.lang is not yet reliable during early init in every client.
+		 * Read Foundry's persisted core language for settings registration so the
+		 * Configure Settings panel is localized on its first render. */
+		name: settingLocalize(
 			"Automatic ranged reload countdown",
 			"Automatyczne odliczanie przeładowania broni dystansowej",
 		),
-		hint: localize(
+		hint: settingLocalize(
 			"When enabled, ranged reload counters are decremented automatically at the end of the Combatant's turn. Disabled by default; manual Reload actions are the canonical workflow.",
 			"Po włączeniu liczniki przeładowania broni dystansowej są automatycznie zmniejszane na końcu tury uczestnika. Domyślnie wyłączone; podstawowym trybem jest jawna akcja Przeładuj.",
 		),
@@ -569,6 +572,16 @@ function clampInteger(value, min, max) {
 	const number = Number(value);
 	const integer = Number.isFinite(number) ? Math.trunc(number) : min;
 	return Math.min(max, Math.max(min, integer));
+}
+
+function settingLocalize(english, polish) {
+	let language = "";
+	try {
+		language = String(game.settings.get("core", "language") ?? "");
+	} catch (_error) {
+		language = String(game.i18n?.lang ?? "");
+	}
+	return language.toLowerCase().startsWith("pl") ? polish : english;
 }
 
 function localize(english, polish) {
