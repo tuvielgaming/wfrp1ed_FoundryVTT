@@ -257,11 +257,11 @@ async function commitReload(actor, weapon, payload) {
 
 	if (AmmunitionInventory.trackingEnabled() && AmmunitionInventory.requiresExternalAmmunition(weapon)) {
 		if (!sourceUuid) sourceUuid = String(payload?.ammunitionUuid ?? "");
-		const selected = AmmunitionInventory.accessibleStacks(actor, weapon).find((item) => item.uuid === sourceUuid);
+		const selected = AmmunitionInventory.magazineReloadStacks(actor, weapon).find((item) => item.uuid === sourceUuid);
 		if (!selected) {
 			throw new Error(localize(
-				"Choose compatible readily accessible ammunition before reloading the magazine.",
-				"Przed przeładowaniem magazynka wybierz zgodną, łatwo dostępną amunicję.",
+				"Choose compatible ammunition from this Actor's inventory before reloading the magazine.",
+				"Przed przeładowaniem magazynka wybierz zgodną amunicję z ekwipunku tego Aktora.",
 			));
 		}
 		const selectedVariant = AmmunitionInventory.ammunitionVariantSnapshot(selected);
