@@ -91,6 +91,7 @@ export class CombatEquipmentState {
 			String(item.system?.state?.mode ?? "") === mode &&
 			String(item.system?.state?.hand ?? "") === hand
 		) {
+			if (displaced.length > 0) notifyHandReplacement(item, hand, displaced);
 			return item;
 		}
 
@@ -148,6 +149,7 @@ export class CombatEquipmentState {
 		}
 
 		if (String(item.system?.state?.hand ?? "") === hand) {
+			if (displaced.length > 0) notifyHandReplacement(item, hand, displaced);
 			return item;
 		}
 
@@ -180,6 +182,11 @@ export class CombatEquipmentState {
  * Move real slot conflicts to Carried. A validation failure caused by the
  * candidate itself (for example an impossible hand choice) is never repaired by
  * unequipping unrelated Items.
+ *
+ * IMPORTANT: update the complete Item system snapshot, not only
+ * `system.state.mode`. Weapon/Armour TypeDataModel migration is allowed to see
+ * partial update payloads; feeding it only `state.mode` can therefore make all
+ * omitted authored fields look absent and fall back to their schema defaults.
  */
 async function displaceHandConflicts(actor, candidate, hand) {
 	const validation = HandEquipValidator.validate(actor, candidate, hand);
@@ -204,11 +211,17 @@ async function displaceHandConflicts(actor, candidate, hand) {
 		}
 		if (conflict.system?.state?.mode !== INVENTORY_MODE.HELD) continue;
 
-		const previousState = foundry.utils.deepClone(conflict.system?.state ?? {});
-		displaced.push({ item: conflict, previousState });
-		await conflict.update({
-			"system.state.mode": INVENTORY_MODE.CARRIED,
-		}, { wfrp1edValidatedEquipmentState: true });
+		const previousSystem = systemSource(conflict);
+		displaced.push({ item: conflict, previousSystem });
+		const nextSystem = foundry.utils.deepClone(previousSystem);
+		nextSystem.state = {
+			...(nextSystem.state ?? {}),
+			mode: INVENTORY_MODE.CARRIED,
+		};
+		await conflict.update(
+			{ system: nextSystem },
+			{ wfrp1edValidatedEquipmentState: true },
+		);
 	}
 
 	const after = HandEquipValidator.validate(actor, candidate, hand);
@@ -222,9 +235,10 @@ async function displaceHandConflicts(actor, candidate, hand) {
 async function restoreDisplaced(displaced) {
 	for (const entry of [...(displaced ?? [])].reverse()) {
 		try {
-			await entry.item?.update?.({
-				"system.state": foundry.utils.deepClone(entry.previousState ?? {}),
-			}, { wfrp1edValidatedEquipmentState: true });
+			await entry.item?.update?.(
+				{ system: foundry.utils.deepClone(entry.previousSystem ?? {}) },
+				{ wfrp1edValidatedEquipmentState: true },
+			);
 		} catch (error) {
 			console.error(
 				"WFRP1ED | Unable to restore a displaced held Item after a failed loadout change.",
