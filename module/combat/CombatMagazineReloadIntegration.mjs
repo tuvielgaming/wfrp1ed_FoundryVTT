@@ -72,6 +72,15 @@ function install() {
 				runtime,
 			});
 		}
+
+		/* Preserve the authoritative ranged-action reason before asking whether
+		 * ammunition is accessible. Once the firing allowance is spent (or the
+		 * weapon is otherwise not ready), inventory state is secondary and must
+		 * not replace the more useful "no shots remain this turn" explanation. */
+		if (!result.available) {
+			return Object.freeze({ ...result, runtime });
+		}
+
 		const ammoGate = AmmunitionInventory.fireGate(actor, weapon, runtime);
 		if (!ammoGate.allowed) {
 			return Object.freeze({
