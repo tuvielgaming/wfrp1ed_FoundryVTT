@@ -24,6 +24,7 @@ function install() {
 	const originalRuntime = CombatRangedState.runtime.bind(CombatRangedState);
 	const originalActionLock = CombatRangedState.actionLock.bind(CombatRangedState);
 	const originalFireAvailability = CombatRangedState.fireAvailability.bind(CombatRangedState);
+	const originalReloadAvailability = CombatRangedState.reloadAvailability.bind(CombatRangedState);
 	const originalCommitShot = CombatRangedState.commitShot.bind(CombatRangedState);
 
 	CombatRangedState.runtime = function runtimeWithMagazineReload(weapon) {
@@ -81,6 +82,23 @@ function install() {
 			});
 		}
 		return Object.freeze({ ...result, runtime, ammunition: ammoGate });
+	};
+
+	/* The existing ranged launcher decides whether to open its dialog from only
+	 * `fireAvailability` and `reloadAvailability`. Expose a magazine refill as a
+	 * proxy reload action when ordinary Reload is unavailable, so a repeating
+	 * weapon with Reload 0 can still open the same dialog and offer the magazine
+	 * checkbox. UI code recognises `magazineProxy` and does not present it as an
+	 * ordinary weapon reload. */
+	CombatRangedState.reloadAvailability = function reloadAvailabilityWithMagazineProxy(actor, weapon) {
+		const base = originalReloadAvailability(actor, weapon);
+		if (base.available) return base;
+		if (typeof this.magazineReloadAvailability !== "function") return base;
+		let magazine;
+		try { magazine = this.magazineReloadAvailability(actor, weapon); }
+		catch (_error) { return base; }
+		if (!magazine.available) return base;
+		return Object.freeze({ ...base, available: true, reason: "", magazineProxy: true });
 	};
 
 	CombatRangedState.commitShot = async function commitShotWithMagazine(actor, weapon, requestingUser = game.user) {
