@@ -3,6 +3,9 @@ import {
 	INVENTORY_MODE,
 } from "../data-models/item/InventoryItemFields.mjs";
 import {
+	AMMUNITION_TYPE,
+} from "../data-models/item/AmmunitionTypes.mjs";
+import {
 	WEAPON_GROUP,
 	WEAPON_HANDEDNESS,
 	WEAPON_KIND,
@@ -54,6 +57,11 @@ export class WeaponItemSheet extends HandlebarsApplicationMixin(
 		context.editable = this.isEditable;
 		context.ui = weaponUi();
 		context.isRanged = system?.kind === WEAPON_KIND.RANGED;
+		context.isCustomAmmunition = system?.ammunitionType === AMMUNITION_TYPE.CUSTOM;
+		context.ammunitionTypeOptions = selectOptions(
+			ammunitionTypeEntries(true),
+			system?.ammunitionType,
+		);
 		context.modeOptions = selectOptions(
 			[
 				[INVENTORY_MODE.CARRIED, localize("Carried", "Przenoszona")],
@@ -101,6 +109,20 @@ function handOptionEntries() {
 	];
 }
 
+function ammunitionTypeEntries(includeNone = false) {
+	const entries = [
+		[AMMUNITION_TYPE.ARROW, localize("Arrow", "Strzała")],
+		[AMMUNITION_TYPE.BOLT, localize("Bolt", "Bełt")],
+		[AMMUNITION_TYPE.SLING, localize("Sling ammunition", "Pocisk do procy")],
+		[AMMUNITION_TYPE.FIREARM_LOAD, localize("Firearm load", "Ładunek broni palnej")],
+		[AMMUNITION_TYPE.CUSTOM, localize("Other / custom", "Inna / własna")],
+	];
+	if (includeNone) {
+		entries.unshift([AMMUNITION_TYPE.NONE, localize("None / self-contained", "Brak / bez osobnej amunicji")]);
+	}
+	return entries;
+}
+
 function weaponUi() {
 	return Object.freeze({
 		name: localize("Name", "Nazwa"),
@@ -123,6 +145,8 @@ function weaponUi() {
 		longRange: localize("Long range", "Daleki zasięg"),
 		maximumRange: localize("Extreme range", "Maksymalny zasięg"),
 		effectiveStrength: localize("Effective Strength", "Siła efektywna"),
+		ammunitionType: localize("Ammunition type", "Typ amunicji"),
+		ammunitionCustomId: localize("Custom ammunition ID", "Identyfikator własnej amunicji"),
 		firingCycle: localize("Reload / firing cycle", "Przeładowanie / cykl strzału"),
 		firingCycleHint: localize(
 			"Reload is the number of complete preparation rounds between firing rounds. Use 0 for a weapon which may fire every round, 1 for a Crossbow and 2 for a Pistol. The system will use this as one countdown instead of modelling Draw/Load/Aim separately. Magazine fields apply only to repeating weapons.",
