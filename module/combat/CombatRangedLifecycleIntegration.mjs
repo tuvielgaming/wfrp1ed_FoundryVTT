@@ -4,8 +4,11 @@ import {
 } from "../data-models/item/WeaponData.mjs";
 import { CombatAttackDialog } from "./CombatAttackDialog.mjs";
 import { CombatAttackLauncher } from "./CombatAttackLauncher.mjs";
+import { COMBAT_ATTACK_TARGET_MODE } from "./CombatAttackResolution.mjs";
 import { CombatEquipmentState } from "./CombatEquipmentState.mjs";
+import { CombatRangedAttackResolution } from "./CombatRangedAttackResolution.mjs";
 import { CombatRangedState } from "./CombatRangedState.mjs";
+import { PendingRangedCombatAttack } from "./PendingRangedCombatAttack.mjs";
 
 let installed = false;
 let openingRangedContext = null;
@@ -83,16 +86,31 @@ function install() {
 
 		if (!configuration) return null;
 
-		/*
-		 * This checkpoint wires the complete preparation/reload resource contract
-		 * before the BS attack transaction itself. Do not silently route a ranged
-		 * Roll into the verified melee resolution path.
-		 */
-		ui.notifications.info(localize(
-			"The weapon is ready. Ballistic Skill firing resolution is the next ranged-combat checkpoint; no shot or ammunition was consumed.",
-			"Broń jest gotowa. Rozstrzygnięcie strzału Umiejętnością Strzelecką jest następnym etapem walki dystansowej; nie zużyto strzału ani amunicji.",
-		));
-		return null;
+		if (configuration.targetMode === COMBAT_ATTACK_TARGET_MODE.NONE) {
+			return CombatRangedAttackResolution.execute(
+				actor,
+				weapon,
+				configuration,
+				{
+					targetMode: COMBAT_ATTACK_TARGET_MODE.NONE,
+					target: null,
+				},
+			);
+		}
+
+		if (configuration.target) {
+			return CombatRangedAttackResolution.execute(
+				actor,
+				weapon,
+				configuration,
+				{
+					targetMode: COMBAT_ATTACK_TARGET_MODE.DEFENDER,
+					target: configuration.target,
+				},
+			);
+		}
+
+		return PendingRangedCombatAttack.create(actor, weapon, configuration);
 	};
 }
 
