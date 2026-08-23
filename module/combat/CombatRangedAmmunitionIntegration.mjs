@@ -1,7 +1,9 @@
+import { GMGameplayNotice } from "../chat/GMGameplayNotice.mjs";
+import { AmmunitionInventory } from "../inventory/AmmunitionInventory.mjs";
+import { WfrpCheckbox } from "../ui/WfrpCheckbox.mjs";
 import { CombatAttackDialog } from "./CombatAttackDialog.mjs";
 import { CombatRangedAttackResolution } from "./CombatRangedAttackResolution.mjs";
 import { CombatRangedState } from "./CombatRangedState.mjs";
-import { AmmunitionInventory } from "../inventory/AmmunitionInventory.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
 const ATTACK_FLAG_KEY = "combatAttackResult";
@@ -59,10 +61,24 @@ function install() {
 				await live.update({ "system.quantity": before - 1 });
 				ammunition = AmmunitionInventory.ammunitionVariantSnapshot(live, before - 1);
 			} else {
-				ui.notifications.warn(localize(
-					"The selected ammunition changed while the shot was being resolved. The shot was kept, but no ammunition was deducted; the GM should adjudicate the inventory state.",
-					"Wybrana amunicja zmieniła się podczas rozstrzygania strzału. Strzał zachowano, ale amunicja nie została odjęta; MG powinien rozstrzygnąć stan ekwipunku.",
+				const selectedName = String(externalItem.name ?? localize(
+					"selected ammunition",
+					"wybrana amunicja",
 				));
+				await GMGameplayNotice.warn({
+					category: "ranged-ammunition-state-conflict",
+					title: localize("Ammunition inventory", "Stan amunicji"),
+					message: localize(
+						`The selected ammunition changed while the shot was being resolved. The shot was kept, but no ammunition was deducted. The GM should adjudicate the inventory state for ${selectedName}.`,
+						`Wybrana amunicja zmieniła się podczas rozstrzygania strzału. Strzał zachowano, ale amunicja nie została odjęta. MG powinien rozstrzygnąć stan ekwipunku dla „${selectedName}”.`,
+					),
+					summary: localize(
+						"Ammunition changed while resolving the shot — details saved in private GM chat.",
+						"Amunicja zmieniła się podczas rozstrzygania strzału — szczegóły zapisano w prywatnym czacie MG.",
+					),
+					actor,
+					item: weapon,
+				});
 			}
 		}
 
@@ -137,17 +153,27 @@ function decorateRangedAttackDialog(_application, root) {
 
 	let magazineChoice = null;
 	if (runtime.magazineCapacity > 0 && runtime.magazineReloadRounds > 0) {
-		magazineChoice = document.createElement("label");
-		magazineChoice.className = "combat-item-sheet__check combat-ranged-magazine-choice";
+		const title = localize(
+			"Reload the weapon's internal magazine instead of performing its ordinary reload action.",
+			"Przeładuj wewnętrzny magazynek broni zamiast wykonywać jej zwykłą akcję przeładowania.",
+		);
+		const checkbox = WfrpCheckbox.create({
+			name: "wfrpMagazineReloadChoice",
+			checked: runtime.magazineReloadRemaining > 0,
+			title,
+			ariaLabel: localize("Reload magazine", "Przeładuj magazynek"),
+		});
+		magazineChoice = checkbox.root;
+		magazineChoice.classList.add(
+			"combat-item-sheet__check",
+			"combat-ranged-magazine-choice",
+		);
 		magazineChoice.dataset.wfrpMagazineReloadChoice = "";
-		const checkbox = document.createElement("input");
-		checkbox.type = "checkbox";
-		checkbox.checked = runtime.magazineReloadRemaining > 0;
 		const text = document.createElement("span");
 		text.textContent = localize("Reload magazine", "Przeładuj magazynek");
-		magazineChoice.append(checkbox, text);
+		magazineChoice.append(text);
 		body.append(magazineChoice);
-		checkbox.addEventListener("change", refresh);
+		checkbox.input.addEventListener("change", refresh);
 	}
 
 	const reload = oldReload.cloneNode(true);
