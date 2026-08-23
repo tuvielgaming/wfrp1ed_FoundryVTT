@@ -56,10 +56,9 @@ function install() {
 	};
 
 	CombatAttackLauncher.launch = async function launchWithRangedLifecycle(actor, weapon) {
-		const lock = CombatRangedState.actionLock(actor);
-		if (lock.locked) throw new Error(lock.reason);
-
 		if (weapon?.system?.kind !== WEAPON_KIND.RANGED) {
+			const lock = CombatRangedState.actionLock(actor);
+			if (lock.locked) throw new Error(lock.reason);
 			return originalLaunch.call(this, actor, weapon);
 		}
 
@@ -75,6 +74,23 @@ function install() {
 
 		/* A participant may open the ranged dialog only on their active turn. */
 		CombatRangedState.combatantForActor(actor, { requireActive: true });
+
+		/*
+		 * Do not open a modal which can only offer Cancel. If neither firing nor
+		 * reloading is legal in this turn, surface the actual ranged-state reason
+		 * immediately. A repeating weapon may still reopen the dialog while it has
+		 * shots left; a weapon awaiting a legal Reload action still opens it too.
+		 */
+		const fire = CombatRangedState.fireAvailability(actor, weapon);
+		const reload = CombatRangedState.reloadAvailability(actor, weapon);
+		if (!fire.available && !reload.available) {
+			throw new Error(
+				fire.reason || reload.reason || localize(
+					"No ranged action is available for this weapon this turn.",
+					"Ta broń nie ma dostępnej akcji dystansowej w tej turze.",
+				),
+			);
+		}
 
 		openingRangedContext = { actor, weapon };
 		let configuration;
