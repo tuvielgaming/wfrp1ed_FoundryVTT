@@ -1,6 +1,7 @@
 import { CombatAttackRangeRules } from "./CombatAttackRangeRules.mjs";
 import { TestResultChat } from "../tests/TestResultChat.mjs";
 import { canSeeFullTestDetails } from "../tests/TestResultAudienceVisibility.mjs";
+import { WfrpCheckbox } from "../ui/WfrpCheckbox.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
 const FLAG_KEY = "combatAttackResult";
@@ -133,19 +134,24 @@ export class CombatAttackResultChat {
 		const wrapper = document.createElement("div");
 		wrapper.classList.add("combat-attack-range");
 
-		const automaticRow = document.createElement("label");
-		automaticRow.classList.add("combat-attack-range__control");
-		const automatic = document.createElement("input");
-		automatic.type = "checkbox";
-		automatic.checked = range.automatic;
-		automatic.dataset.attackRangeAutomatic = "";
-		automatic.disabled = !game.user?.isGM;
-		const automaticText = document.createElement("span");
-		automaticText.textContent = localize(
+		const automaticLabel = localize(
 			"Automatically apply range effects",
 			"Automatycznie uwzględnij zasięg",
 		);
-		automaticRow.append(automatic, automaticText);
+		const {
+			root: automaticRow,
+			input: automatic,
+		} = WfrpCheckbox.create({
+			name: "attackRangeAutomatic",
+			checked: range.automatic,
+			disabled: !game.user?.isGM,
+			ariaLabel: automaticLabel,
+		});
+		automaticRow.classList.add("combat-attack-range__control");
+		automatic.dataset.attackRangeAutomatic = "";
+		const automaticText = document.createElement("span");
+		automaticText.textContent = automaticLabel;
+		automaticRow.append(automaticText);
 		wrapper.append(automaticRow);
 
 		const distanceRow = editableNumberRow(
