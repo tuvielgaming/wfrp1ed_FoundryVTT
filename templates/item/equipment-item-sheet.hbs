@@ -32,12 +32,14 @@
 				<label class="combat-item-sheet__field"><span>{{ui.encumbrance}}</span><input type="number" min="0" step="0.01" name="system.encumbrance" value="{{system.encumbrance}}" {{#unless editable}}disabled{{/unless}}></label>
 			</div>
 
-			<label class="combat-item-sheet__field">
-				<span>{{ui.equipmentKind}}</span>
-				<select name="system.equipmentKind" {{#unless editable}}disabled{{/unless}}>
-					{{#each equipmentKindOptions as |option|}}<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>{{/each}}
-				</select>
-			</label>
+			{{#unless isContainer}}
+				<label class="combat-item-sheet__field">
+					<span>{{ui.equipmentKind}}</span>
+					<select name="system.equipmentKind" {{#unless editable}}disabled{{/unless}}>
+						{{#each equipmentKindOptions as |option|}}<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>{{/each}}
+					</select>
+				</label>
+			{{/unless}}
 
 			{{#if isAmmunition}}
 				<div class="combat-item-sheet__grid combat-item-sheet__grid--2 equipment-item-sheet__conditional">
