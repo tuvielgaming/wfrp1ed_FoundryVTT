@@ -85,6 +85,30 @@
 	display: none !important;
 }
 
+/* Foundry's parchment button skin does not make disabled actions obvious enough
+ * for a stateful ranged workflow. Keep the label readable while clearly showing
+ * that the action cannot currently be selected. */
+.wfrp1ed-combat-attack-dialog .form-footer button:disabled,
+.wfrp1ed-combat-attack-dialog footer.form-footer button:disabled {
+	opacity: 0.42;
+	filter: grayscale(0.9) saturate(0.25);
+	cursor: not-allowed;
+	box-shadow: none;
+}
+
+.wfrp1ed-combat-attack-dialog .combat-ranged-readiness-warning {
+	margin: 5px 4px 2px;
+	padding: 7px 9px;
+	border: 1px solid rgb(122 69 0 / 48%);
+	border-radius: 4px;
+	background: rgb(173 116 19 / 12%);
+	color: #4b3214;
+	font-size: 12px;
+	font-weight: 700;
+	line-height: 1.25;
+	text-align: center;
+}
+
 /******************************************************************/
 /* Pending melee attack target card                               */
 /******************************************************************/
