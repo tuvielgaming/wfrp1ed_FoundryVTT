@@ -381,22 +381,16 @@ export class CombatRangedState {
 	}
 }
 
-Hooks.once("init", () => {
+/*
+ * Foundry v14 fires i18nInit after init once the selected language dictionary
+ * has been loaded, but before setup initializes world Settings. Register this
+ * localized World setting here instead of trying to guess the language during
+ * init, when translations are explicitly not ready yet.
+ */
+Hooks.once("i18nInit", () => {
 	game.settings.register(game.system.id, SETTING_KEY, {
-		/*
-		 * Foundry's translated strings are already available here (the existing
-		 * WfrpRuleSettings registrations use game.i18n.localize during init), while
-		 * game.i18n.lang/core.language can still be timing-sensitive. Probe one
-		 * existing system translation instead of guessing from those properties.
-		 */
-		name: settingLocalize(
-			"Automatic ranged reload countdown",
-			"Automatyczne odliczanie przeładowania broni dystansowej",
-		),
-		hint: settingLocalize(
-			"When enabled, ranged reload counters are decremented automatically at the end of the Combatant's turn. Disabled by default; manual Reload actions are the canonical workflow.",
-			"Po włączeniu liczniki przeładowania broni dystansowej są automatycznie zmniejszane na końcu tury uczestnika. Domyślnie wyłączone; podstawowym trybem jest jawna akcja Przeładuj.",
-		),
+		name: game.i18n.localize("WFRP1ED.Settings.AutoRangedReload.Name"),
+		hint: game.i18n.localize("WFRP1ED.Settings.AutoRangedReload.Hint"),
 		scope: "world",
 		config: true,
 		type: Boolean,
@@ -575,15 +569,6 @@ function clampInteger(value, min, max) {
 	const number = Number(value);
 	const integer = Number.isFinite(number) ? Math.trunc(number) : min;
 	return Math.min(max, Math.max(min, integer));
-}
-
-function settingLocalize(english, polish) {
-	try {
-		const probe = game.i18n.localize("WFRP1ED.Settings.ParryEconomy.Name");
-		return probe === "Koszt Ataków za parowanie" ? polish : english;
-	} catch (_error) {
-		return english;
-	}
 }
 
 function localize(english, polish) {
