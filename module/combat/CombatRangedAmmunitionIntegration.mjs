@@ -1,5 +1,4 @@
 import { CombatAttackDialog } from "./CombatAttackDialog.mjs";
-import { CombatAttackResultChat } from "./CombatAttackResultChat.mjs";
 import { CombatRangedAttackResolution } from "./CombatRangedAttackResolution.mjs";
 import { CombatRangedState } from "./CombatRangedState.mjs";
 import { AmmunitionInventory } from "../inventory/AmmunitionInventory.mjs";
@@ -34,7 +33,6 @@ function install() {
 		const runtimeBefore = CombatRangedState.runtime(weapon);
 		const internalMagazine = runtimeBefore.magazineCapacity > 0;
 		let externalItem = null;
-		let externalBefore = 0;
 		let ammunition = internalMagazine ? runtimeBefore.magazineVariant ?? null : null;
 
 		if (
@@ -47,34 +45,41 @@ function install() {
 				weapon,
 				configuration?.ammunitionUuid,
 			);
-			externalBefore = quantity(externalItem);
-			if (externalBefore <= 0) throw new Error(localize("The selected ammunition stack is empty.", "Wybrany stos amunicji jest pusty."));
-			await externalItem.update({ "system.quantity": externalBefore - 1 });
-			ammunition = AmmunitionInventory.ammunitionVariantSnapshot(externalItem, externalBefore - 1);
+			if (quantity(externalItem) <= 0) {
+				throw new Error(localize("The selected ammunition stack is empty.", "Wybrany stos amunicji jest pusty."));
+			}
 		}
 
-		try {
-			const resolved = await originalExecute(actor, weapon, configuration, targetOptions);
-			if (resolved?.message && ammunition) {
-				const state = foundry.utils.deepClone(
-					resolved.message.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY) ?? {},
-				);
-				state.ammunition = foundry.utils.deepClone(ammunition);
-				state.updatedBy = String(game.user?.id ?? "");
-				state.updatedAt = Date.now();
-				await resolved.message.setFlag(FLAG_SCOPE, ATTACK_FLAG_KEY, state);
+		const resolved = await originalExecute(actor, weapon, configuration, targetOptions);
+
+		/* The generic ranged resolver performs every legality/range check before it
+		 * commits the shot. Consume the external projectile only after that
+		 * transaction succeeds; otherwise an invalid range or cancelled resolution
+		 * could eat the last arrow before a shot actually exists. */
+		if (externalItem) {
+			const live = actor.items?.get?.(externalItem.id);
+			const before = quantity(live);
+			if (before > 0) {
+				await live.update({ "system.quantity": before - 1 });
+				ammunition = AmmunitionInventory.ammunitionVariantSnapshot(live, before - 1);
+			} else {
+				ui.notifications.warn(localize(
+					"The selected ammunition changed while the shot was being resolved. The shot was kept, but no ammunition was deducted; the GM should adjudicate the inventory state.",
+					"Wybrana amunicja zmieniła się podczas rozstrzygania strzału. Strzał zachowano, ale amunicja nie została odjęta; MG powinien rozstrzygnąć stan ekwipunku.",
+				));
 			}
-			return resolved;
-		} catch (error) {
-			/* External ammunition is reserved before the ranged transaction so two
-			 * clients cannot spend the same last arrow. If attack execution fails,
-			 * restore that reservation rather than silently losing ammunition. */
-			if (externalItem) {
-				const live = actor.items?.get?.(externalItem.id);
-				if (live) await live.update({ "system.quantity": externalBefore }).catch(() => {});
-			}
-			throw error;
 		}
+
+		if (resolved?.message && ammunition) {
+			const state = foundry.utils.deepClone(
+				resolved.message.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY) ?? {},
+			);
+			state.ammunition = foundry.utils.deepClone(ammunition);
+			state.updatedBy = String(game.user?.id ?? "");
+			state.updatedAt = Date.now();
+			await resolved.message.setFlag(FLAG_SCOPE, ATTACK_FLAG_KEY, state);
+		}
+		return resolved;
 	};
 }
 
@@ -149,9 +154,6 @@ function decorateRangedAttackDialog(_application, root) {
 		checkbox.addEventListener("change", refresh);
 	}
 
-	/* Clone the button to remove the ordinary reload listener installed by the
-	 * generic ranged lifecycle. This late integration owns the unified choice
-	 * between weapon Reload and magazine refill. */
 	const reload = oldReload.cloneNode(true);
 	oldReload.replaceWith(reload);
 	reload.addEventListener("click", async (event) => {
