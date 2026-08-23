@@ -143,17 +143,61 @@
 	background: rgb(255 255 255 / 34%);
 }
 
-.classic-inventory__ammunition-capacity {
-	flex: 0 0 auto;
-	margin-left: 5px;
-	padding: 0 4px;
-	border: 1px solid rgb(83 59 31 / 52%);
-	border-radius: 4px;
+/* Quick Access container rows use two compact text lines: the authored Item
+ * name stays untouched, while ammunition compatibility is shown as a small
+ * specialization-style second line. */
+.wfrp1ed-classic-sheet .classic-inventory__name--quick-ammunition {
+	display: flex;
+	flex-direction: column;
+	align-self: stretch;
+	justify-content: center;
+	white-space: normal;
+	line-height: 1;
+	text-overflow: clip;
+}
+
+.wfrp1ed-classic-sheet .classic-inventory__name-primary,
+.wfrp1ed-classic-sheet .classic-inventory__name-specialisation {
+	display: block;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.wfrp1ed-classic-sheet .classic-inventory__name-primary {
+	font-size: 11px;
+	font-weight: 700;
+	line-height: 10px;
+}
+
+.wfrp1ed-classic-sheet .classic-inventory__name-specialisation {
+	font-size: 8px;
+	font-weight: 600;
+	line-height: 9px;
+	opacity: 0.72;
+}
+
+/* Capacity replaces the ordinary container quantity in exactly the same slot
+ * and footprint, so 15/20 is as readable as a normal Equipment quantity. */
+.wfrp1ed-classic-sheet .classic-inventory__ammunition-capacity {
+	position: absolute;
+	top: 4px;
+	right: var(--classic-inventory-quantity-right);
+	box-sizing: border-box;
+	width: 39px;
+	height: 19px;
+	margin: 0;
+	padding: 0 3px;
+	border: 1px solid rgb(83 59 31 / 42%);
+	border-radius: 2px;
 	background: rgb(222 202 154 / 72%);
 	color: #2a1b0d;
-	font-size: 9px;
+	font: inherit;
+	font-variant-numeric: tabular-nums;
 	font-weight: 700;
-	line-height: 15px;
+	line-height: 17px;
+	text-align: center;
 }
 
 .classic-inventory__row.is-ammunition-drop-target {
