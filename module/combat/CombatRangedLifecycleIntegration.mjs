@@ -1,4 +1,7 @@
-import { WEAPON_KIND } from "../data-models/item/WeaponData.mjs";
+import {
+	WEAPON_KIND,
+	rangeDisplayValue,
+} from "../data-models/item/WeaponData.mjs";
 import { CombatAttackDialog } from "./CombatAttackDialog.mjs";
 import { CombatAttackLauncher } from "./CombatAttackLauncher.mjs";
 import { CombatEquipmentState } from "./CombatEquipmentState.mjs";
@@ -147,7 +150,11 @@ function decorateRangedWeaponItem(application, root) {
 	const reload = field(
 		localize("Reload remaining", "Pozostałe przeładowanie"),
 		runtime.reloadRemaining,
-		{ min: 0, max: runtime.reloadRounds + (runtime.automaticCountdown ? 1 : 0), disabled: !editable },
+		{
+			min: 0,
+			max: runtime.reloadRounds + (runtime.automaticCountdown ? 1 : 0),
+			disabled: !editable,
+		},
 	);
 	grid.append(reload.root);
 
@@ -201,32 +208,100 @@ function decorateClassicRangedRows(application, root) {
 		const weapon = actor.items?.get?.(String(row.dataset.itemId ?? ""));
 		if (
 			weapon?.type !== "weapon" ||
-			weapon.system?.kind !== WEAPON_KIND.RANGED ||
-			!CombatAttackLauncher.canLaunch(weapon)
+			weapon.system?.kind !== WEAPON_KIND.RANGED
 		) continue;
+
+		decorateRangeCells(row, weapon);
+		decorateReloadCell(row, weapon);
+
+		if (!CombatAttackLauncher.canLaunch(weapon)) continue;
 
 		row.classList.add("rollable", "combat-sheet-attack-rollable");
 		row.tabIndex = 0;
 		row.title = localize(
-			`Left-click to use ${weapon.name}. Shift-click to open.`,
-			`Lewy przycisk: użyj ${weapon.name}. Shift+klik: otwórz.`,
+			`Left-click to use ${weapon.name}. Double-click to open.`,
+			`Lewy klik: użyj ${weapon.name}. Dwuklik: otwórz.`,
 		);
 		if (row.dataset.wfrpRangedLifecycleBound === "true") continue;
 		row.dataset.wfrpRangedLifecycleBound = "true";
 
-		row.addEventListener("click", (event) => {
-			if (event.shiftKey) return;
-			event.preventDefault();
-			event.stopPropagation();
-			void launchRanged(actor, weapon);
-		});
+		/* Keyboard access is handled here. Pointer attacks are centrally delayed
+		 * by CombatItemInteractionConsistency so double-click can open the Item. */
 		row.addEventListener("keydown", (event) => {
 			if (event.shiftKey || (event.key !== "Enter" && event.key !== " ")) return;
+			if (event.target instanceof HTMLInputElement) return;
 			event.preventDefault();
 			event.stopPropagation();
 			void launchRanged(actor, weapon);
 		});
 	}
+}
+
+function decorateRangeCells(row, weapon) {
+	const range = weapon.system?.range ?? {};
+	const values = [
+		[".ranged-cell--short-range", range.short],
+		[".ranged-cell--long-range", range.long],
+		[".ranged-cell--maximum-range", range.max],
+	];
+	for (const [selector, value] of values) {
+		const cell = row.querySelector(selector);
+		if (cell) cell.textContent = rangeDisplayValue(value);
+	}
+}
+
+function decorateReloadCell(row, weapon) {
+	const cell = row.querySelector(".ranged-cell--reload");
+	if (!(cell instanceof HTMLElement)) return;
+
+	const runtime = CombatRangedState.runtime(weapon);
+	const wrapper = document.createElement("span");
+	wrapper.className = "ranged-reload-runtime";
+	wrapper.title = runtime.readyToFire
+		? localize(
+			`Ready to fire. Reload remaining: ${runtime.reloadRemaining}/${runtime.reloadRounds}.`,
+			`Gotowa do strzału. Pozostałe przeładowanie: ${runtime.reloadRemaining}/${runtime.reloadRounds}.`,
+		)
+		: localize(
+			`Not ready to fire. Reload remaining: ${runtime.reloadRemaining}/${runtime.reloadRounds}.`,
+			`Nieprzygotowana do strzału. Pozostałe przeładowanie: ${runtime.reloadRemaining}/${runtime.reloadRounds}.`,
+		);
+
+	if (game.user?.isGM) {
+		const input = document.createElement("input");
+		input.type = "number";
+		input.className = "ranged-reload-runtime__input";
+		input.min = "0";
+		input.max = String(runtime.reloadRounds + (runtime.automaticCountdown ? 1 : 0));
+		input.step = "1";
+		input.value = String(runtime.reloadRemaining);
+		input.inputMode = "numeric";
+		input.autocomplete = "off";
+		input.setAttribute(
+			"aria-label",
+			localize("Reload remaining", "Pozostałe przeładowanie"),
+		);
+		for (const eventName of ["pointerdown", "click", "dblclick", "keydown"]) {
+			input.addEventListener(eventName, (event) => event.stopPropagation());
+		}
+		input.addEventListener("change", () => {
+			void updateRuntimeField(weapon, input, {
+				reloadRemaining: integerValue(input.value),
+			});
+		});
+		wrapper.append(input);
+	} else {
+		const value = document.createElement("span");
+		value.className = "ranged-reload-runtime__value";
+		value.textContent = String(runtime.reloadRemaining);
+		wrapper.append(value);
+	}
+
+	const maximum = document.createElement("span");
+	maximum.className = "ranged-reload-runtime__maximum";
+	maximum.textContent = `/${runtime.reloadRounds}`;
+	wrapper.append(maximum);
+	cell.replaceChildren(wrapper);
 }
 
 async function launchRanged(actor, weapon) {
@@ -247,6 +322,8 @@ async function updateRuntimeField(weapon, input, patch) {
 		ui.notifications.error(error?.message ?? String(error));
 	} finally {
 		if (weapon.sheet?.rendered) void weapon.sheet.render();
+		const actor = weapon.actor ?? weapon.parent;
+		if (actor?.sheet?.rendered) void actor.sheet.render();
 	}
 }
 
@@ -268,6 +345,14 @@ function decorateOpeningAttackDialog(application, root) {
 	reload.dataset.action = "ranged-reload";
 	reload.innerHTML = `<i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i><span>${localize("Reload", "Przeładuj")}</span>`;
 	footer.insertBefore(reload, cancel);
+
+	let warning = root.querySelector("[data-wfrp-ranged-readiness-warning]");
+	if (!warning) {
+		warning = document.createElement("div");
+		warning.className = "combat-ranged-readiness-warning";
+		warning.dataset.wfrpRangedReadinessWarning = "";
+		footer.parentElement?.insertBefore(warning, footer);
+	}
 
 	reload.addEventListener("click", async (event) => {
 		event.preventDefault();
@@ -313,6 +398,7 @@ function refreshOpenRangedDialogs(item = null) {
 function refreshDialog(root, actor, weapon) {
 	const roll = root.querySelector('button[data-action="roll"]');
 	const reload = root.querySelector('button[data-action="ranged-reload"]');
+	const warning = root.querySelector("[data-wfrp-ranged-readiness-warning]");
 	if (!roll || !reload) return;
 
 	let fire;
@@ -325,6 +411,7 @@ function refreshDialog(root, actor, weapon) {
 		reload.disabled = true;
 		roll.title = error?.message ?? String(error);
 		reload.title = roll.title;
+		if (warning) warning.hidden = true;
 		return;
 	}
 
@@ -336,6 +423,18 @@ function refreshDialog(root, actor, weapon) {
 	reload.title = reloadState.available
 		? localize("Spend this turn reloading the weapon.", "Poświęć tę turę na przeładowanie broni.")
 		: reloadState.reason;
+
+	if (warning) {
+		const preparationRequired = fire.runtime.reloadRemaining > 0 ||
+			fire.runtime.readyToFire !== true;
+		warning.hidden = !preparationRequired;
+		warning.textContent = preparationRequired
+			? localize(
+				"Weapon not ready to fire (Reload).",
+				"Broń nieprzygotowana do strzału (Przeładuj).",
+			)
+			: "";
+	}
 }
 
 function field(label, value, { min = 0, max = 0, disabled = false } = {}) {
