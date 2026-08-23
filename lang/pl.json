@@ -204,6 +204,8 @@
 	"WFRP1ED.Settings.CareerCompletionAdvanced.Hint": "Opcjonalna, bardziej rygorystyczna zasada kampanii. Po włączeniu przejście do dozwolonej Profesji Zaawansowanej wymaga wykupienia wszystkich rozwinięć cech aktualnej Profesji oraz wszystkich Umiejętności Profesji nadal widocznych na karcie jako możliwe do wykupienia. Szczególne wymagania konkretnych ścieżek z zasad podstawowych obowiązują niezależnie. Domyślnie wyłączone; po wyłączeniu standardowa procedura zmiany Profesji WFRP 1e pozostaje bez zmian.",
 	"WFRP1ED.Settings.ClimbingHandValidation.Name": "Automatycznie sprawdzaj wolne ręce przy wspinaczce",
 	"WFRP1ED.Settings.ClimbingHandValidation.Hint": "Opcjonalna automatyzacja świata, domyślnie wyłączona. Po włączeniu system blokuje użycie liny lub drabiny niestałej, jeśli bohater nie ma dwóch wolnych rąk, oraz drabiny stałej, jeśli nie ma jednej wolnej ręki. Po wyłączeniu system tylko przypomina o zasadzie, pozostawiając rozstrzygnięcie graczom i MG.",
+	"WFRP1ED.Settings.AutoRangedReload.Name": "Automatyczne odliczanie przeładowania broni dystansowej",
+	"WFRP1ED.Settings.AutoRangedReload.Hint": "Po włączeniu liczniki przeładowania broni dystansowej są automatycznie zmniejszane na końcu tury uczestnika. Domyślnie wyłączone; podstawowym trybem jest jawna akcja Przeładuj.",
 
 	"WFRP1ED.SkillSheet.Name": "Nazwa",
 	"WFRP1ED.SkillSheet.RulesId": "Powiązanie z zasadami",
