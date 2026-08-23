@@ -108,6 +108,19 @@ export class CombatAttackResultChat {
 			);
 		}
 
+		/* The concrete Equipment Item is the ammunition variant. Persisting its
+		 * snapshot on the attack lets chat history state which special arrow/bolt
+		 * was actually fired even if the inventory stack is later renamed, moved
+		 * or depleted. */
+		if (state.family === "ranged" && state.ammunition?.name) {
+			panel.append(
+				row(
+					localize("Ammunition", "Amunicja"),
+					String(state.ammunition.name),
+				),
+			);
+		}
+
 		if (state.range) {
 			panel.append(this.#rangePanel(message, state));
 		}
