@@ -204,6 +204,8 @@
 	"WFRP1ED.Settings.CareerCompletionAdvanced.Hint": "Optional stricter campaign rule. When enabled, entering a valid Advanced Career requires every characteristic advance in the current Career and every Career Skill still shown as purchasable on the character sheet. Career-specific Core requirements apply independently. Disabled by default; standard WFRP 1e Career-change rules remain unchanged when this option is off.",
 	"WFRP1ED.Settings.ClimbingHandValidation.Name": "Automatically validate free hands while climbing",
 	"WFRP1ED.Settings.ClimbingHandValidation.Hint": "Optional world automation, disabled by default. When enabled, the system blocks rope or non-fixed-ladder climbing without two free hands and fixed-ladder climbing without one free hand. When disabled, the system only reminds the table about the rule and leaves adjudication to the players and GM.",
+	"WFRP1ED.Settings.AutoRangedReload.Name": "Automatic ranged reload countdown",
+	"WFRP1ED.Settings.AutoRangedReload.Hint": "When enabled, ranged reload counters are decremented automatically at the end of the Combatant's turn. Disabled by default; manual Reload actions are the canonical workflow.",
 
 	"WFRP1ED.SkillSheet.Name": "Name",
 	"WFRP1ED.SkillSheet.RulesId": "Rules link",
