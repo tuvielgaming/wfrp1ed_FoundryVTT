@@ -9,6 +9,16 @@ import {
 	unwrapText,
 	unwrapValue,
 } from "./InventoryItemFields.mjs";
+import {
+	AMMUNITION_TYPE,
+	ammunitionIdentity,
+	CONTAINER_KIND,
+	EQUIPMENT_KIND,
+	normalizeAmmunitionType,
+	normalizeContainerKind,
+	normalizeCustomId,
+	normalizeEquipmentKind,
+} from "./AmmunitionTypes.mjs";
 
 const {
 	BooleanField,
@@ -30,31 +40,21 @@ const EQUIPMENT_MODES = Object.freeze([
  * rules which care about carried/held/worn objects do not need to special-case
  * legacy template.json fields or localized Item names.
  *
- * `isWealth` mirrors the two physical lists on the original WFRP 1e character
- * sheet. `false` means Equipment/Trappings; `true` means Wealth. A Boolean is
- * deliberately used because the printed sheet defines exactly those two
- * destinations and ordinary Equipment is the natural default.
- *
- * `isClothing` is an authored rules fact used by Core Encumbrance: clothing
- * worn on the character contributes no personal Encumbrance, while the same
- * clothing carried in a bag/container does. `worn` remains available in the
- * state schema so this distinction is explicit rather than inferred from names.
- *
  * Quantity has two distinct meanings for stackable Core equipment:
- *
- * - `referenceQuantity` is the authored quantity to which the listed price and
- *   Encumbrance apply (for example 5 arrows or 10 firearm balls).
+ * - `referenceQuantity` is the authored package quantity to which listed price
+ *   and Encumbrance apply;
  * - `quantity` is the current amount represented by this owned Item.
  *
- * Containers use two separate facts:
+ * Ammunition is deliberately an Equipment subtype rather than another Foundry
+ * Item type. The concrete Equipment Item is the ammunition variant: two Arrow
+ * stacks can therefore share compatibility while having different names and
+ * embedded ActiveEffects.
  *
- * - `isContainer` says an Equipment definition can contain other Equipment.
- * - `containerId` is an owned-instance relationship to another Equipment Item
- *   embedded in the same Actor. World/Compendium definitions normally keep it
- *   blank. UI/services must validate the referenced parent and prevent cycles.
- *
- * The Core tables can therefore remain unchanged while an owned stack changes
- * during play. `totalEncumbrance` is derived and is never persisted.
+ * Containers keep their existing relationship contract through `containerId`.
+ * A Quick Access Ammunition container adds one compatible ammunition identity
+ * plus a unit capacity. Capacity counts ammunition units, not generic inventory
+ * slots or Encumbrance; ordinary containers remain governed by normal inventory
+ * and Encumbrance rules.
  */
 export class EquipmentData extends TypeDataModel {
 	static defineSchema() {
@@ -68,6 +68,13 @@ export class EquipmentData extends TypeDataModel {
 			isContainer: booleanField(false),
 			isClothing: booleanField(false),
 			containerId: textField(),
+			equipmentKind: textField(EQUIPMENT_KIND.STANDARD),
+			ammunitionType: textField(AMMUNITION_TYPE.NONE),
+			ammunitionCustomId: textField(),
+			containerKind: textField(CONTAINER_KIND.STANDARD),
+			containerAmmunitionType: textField(AMMUNITION_TYPE.NONE),
+			containerAmmunitionCustomId: textField(),
+			containerCapacity: nonNegativeIntegerField(),
 		};
 	}
 
@@ -90,12 +97,6 @@ export class EquipmentData extends TypeDataModel {
 				1,
 			);
 		} else if (shouldSeedLegacyReferenceQuantity(sourceObject)) {
-			/*
-			 * Existing Equipment predates the reference/current quantity split.
-			 * A complete legacy Item source has more authored inventory fields than
-			 * a differential quantity update, so initialize its reference package
-			 * from the old quantity exactly once during construction/migration.
-			 */
 			migrated.referenceQuantity = positiveInteger(
 				unwrapValue(sourceObject.quantity),
 				1,
@@ -122,6 +123,43 @@ export class EquipmentData extends TypeDataModel {
 		if (Object.hasOwn(sourceObject, "containerId")) {
 			migrated.containerId = unwrapText(sourceObject.containerId);
 		}
+		if (Object.hasOwn(sourceObject, "equipmentKind")) {
+			migrated.equipmentKind = normalizeEquipmentKind(
+				unwrapText(sourceObject.equipmentKind),
+			);
+		}
+		if (Object.hasOwn(sourceObject, "ammunitionType")) {
+			migrated.ammunitionType = normalizeAmmunitionType(
+				unwrapText(sourceObject.ammunitionType),
+				AMMUNITION_TYPE.NONE,
+			);
+		}
+		if (Object.hasOwn(sourceObject, "ammunitionCustomId")) {
+			migrated.ammunitionCustomId = normalizeCustomId(
+				unwrapText(sourceObject.ammunitionCustomId),
+			);
+		}
+		if (Object.hasOwn(sourceObject, "containerKind")) {
+			migrated.containerKind = normalizeContainerKind(
+				unwrapText(sourceObject.containerKind),
+			);
+		}
+		if (Object.hasOwn(sourceObject, "containerAmmunitionType")) {
+			migrated.containerAmmunitionType = normalizeAmmunitionType(
+				unwrapText(sourceObject.containerAmmunitionType),
+				AMMUNITION_TYPE.NONE,
+			);
+		}
+		if (Object.hasOwn(sourceObject, "containerAmmunitionCustomId")) {
+			migrated.containerAmmunitionCustomId = normalizeCustomId(
+				unwrapText(sourceObject.containerAmmunitionCustomId),
+			);
+		}
+		if (Object.hasOwn(sourceObject, "containerCapacity")) {
+			migrated.containerCapacity = toNonNegativeInteger(
+				unwrapValue(sourceObject.containerCapacity),
+			);
+		}
 
 		return super.migrateData(migrated, options);
 	}
@@ -140,6 +178,39 @@ export class EquipmentData extends TypeDataModel {
 		this.totalEncumbrance =
 			(quantity / referenceQuantity) * referenceEncumbrance;
 	}
+}
+
+export function equipmentAmmunitionSnapshot(item) {
+	if (item?.type !== "equipment") return null;
+	const system = item.system ?? {};
+	if (system.equipmentKind !== EQUIPMENT_KIND.AMMUNITION) return null;
+	const identity = ammunitionIdentity({
+		type: system.ammunitionType,
+		customId: system.ammunitionCustomId,
+	});
+	if (identity.type === AMMUNITION_TYPE.NONE) return null;
+	return Object.freeze({
+		...identity,
+		quantity: toNonNegativeInteger(system.quantity),
+	});
+}
+
+export function quickAmmunitionContainerSnapshot(item) {
+	if (item?.type !== "equipment") return null;
+	const system = item.system ?? {};
+	if (
+		system.isContainer !== true ||
+		system.containerKind !== CONTAINER_KIND.QUICK_AMMUNITION
+	) return null;
+	const identity = ammunitionIdentity({
+		type: system.containerAmmunitionType,
+		customId: system.containerAmmunitionCustomId,
+	});
+	if (identity.type === AMMUNITION_TYPE.NONE) return null;
+	return Object.freeze({
+		...identity,
+		capacity: toNonNegativeInteger(system.containerCapacity),
+	});
 }
 
 function migrateSparseInventoryFields(migrated, source) {
@@ -255,12 +326,6 @@ function shouldSeedLegacyReferenceQuantity(source) {
 	if (!Object.hasOwn(source, "quantity")) return false;
 	if (Object.hasOwn(source, "referenceQuantity")) return false;
 
-	/*
-	 * A differential current-quantity update contains only `quantity`. A stored
-	 * legacy Item source contains other authored inventory facts. Requiring at
-	 * least one such fact prevents later quantity changes from redefining the
-	 * reference package.
-	 */
 	return [
 		"description",
 		"gmDescription",
@@ -276,6 +341,9 @@ function shouldSeedLegacyReferenceQuantity(source) {
 		"inventorySection",
 		"isContainer",
 		"isClothing",
+		"equipmentKind",
+		"ammunitionType",
+		"containerKind",
 	].some((key) => Object.hasOwn(source, key));
 }
 
@@ -304,6 +372,16 @@ function positiveIntegerField(initial = 1) {
 		integer: true,
 		initial,
 		min: 1,
+	});
+}
+
+function nonNegativeIntegerField(initial = 0) {
+	return new NumberField({
+		required: true,
+		nullable: false,
+		integer: true,
+		initial,
+		min: 0,
 	});
 }
 
