@@ -1,4 +1,5 @@
 import { LootPileService } from "../loot/LootPileService.mjs";
+import { AmmunitionInventory } from "./AmmunitionInventory.mjs";
 
 const OWNED_ITEM_DRAG_TYPE = "application/x-wfrp1ed-owned-item";
 
@@ -179,11 +180,38 @@ async function moveOwnedEquipmentToTopLevel(marker, actor, application) {
 	const containerId = String(item.system?.containerId ?? "").trim();
 	if (!containerId) return;
 
-	await item.update({
-		"system.containerId": "",
-		"system.storageLocation": "",
-	});
+	const matching = matchingTopLevelAmmunitionStack(actor, item);
+	if (matching) {
+		await matching.update({
+			"system.quantity": itemQuantity(matching) + itemQuantity(item),
+		});
+		await item.delete();
+	} else {
+		await item.update({
+			"system.containerId": "",
+			"system.storageLocation": "",
+		});
+	}
 	await rerenderActorSheet(application);
+}
+
+function matchingTopLevelAmmunitionStack(actor, source) {
+	const sourceSnapshot = AmmunitionInventory.ammunitionVariantSnapshot(source);
+	if (!sourceSnapshot?.variantKey) return null;
+	return [...(actor.items ?? [])].find((candidate) => {
+		if (
+			candidate?.type !== "equipment" ||
+			candidate.id === source.id ||
+			String(candidate.system?.containerId ?? "").trim()
+		) return false;
+		const candidateSnapshot = AmmunitionInventory.ammunitionVariantSnapshot(candidate);
+		return candidateSnapshot?.variantKey === sourceSnapshot.variantKey;
+	}) ?? null;
+}
+
+function itemQuantity(item) {
+	const number = Number(item?.system?.quantity ?? 0);
+	return Number.isFinite(number) ? Math.max(0, Math.trunc(number)) : 0;
 }
 
 function ownedItemDragMarker(dataTransfer) {
