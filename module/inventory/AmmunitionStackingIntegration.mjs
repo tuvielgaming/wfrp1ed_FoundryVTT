@@ -333,16 +333,19 @@ function splitQuantityPrompt(source, current, { x = 0, y = 0 } = {}) {
 		panel.style.cssText = [
 			"position:fixed",
 			"z-index:12000",
-			"width:auto",
+			"display:grid",
+			"box-sizing:border-box",
+			"width:max-content",
 			"min-width:0",
 			"max-width:calc(100vw - 16px)",
-			"padding:6px",
+			"gap:4px",
+			"padding:4px",
 			"border:1px solid var(--color-border-dark-1, #5c4a32)",
-			"border-radius:5px",
+			"border-radius:4px",
 			"background:var(--color-bg, #f0e5cf)",
-			"box-shadow:0 4px 16px rgba(0,0,0,.45)",
+			"box-shadow:0 3px 10px rgba(0,0,0,.4)",
 			"color:var(--color-text-primary, #191813)",
-			"font:14px var(--font-primary, serif)",
+			"font:12px var(--font-primary, serif)",
 		].join(";");
 
 		const input = ownerDocument.createElement("input");
@@ -360,27 +363,43 @@ function splitQuantityPrompt(source, current, { x = 0, y = 0 } = {}) {
 			`Separate 1–${current - 1}.`,
 			`Oddziel 1–${current - 1}.`,
 		);
-		input.style.cssText = "box-sizing:border-box;width:100%;min-width:0;margin:0 0 6px;padding:3px 5px;text-align:center";
+		input.style.cssText = [
+			"box-sizing:border-box",
+			"width:100%",
+			"min-width:0",
+			"height:24px",
+			"margin:0",
+			"padding:2px 5px",
+			"text-align:center",
+			"font-size:12px",
+		].join(";");
 
 		const buttons = ownerDocument.createElement("div");
-		buttons.style.cssText = "display:flex;width:max-content;gap:6px;margin:0";
+		buttons.style.cssText = "display:flex;width:max-content;gap:4px;margin:0";
 		const cancelButton = ownerDocument.createElement("button");
 		cancelButton.type = "button";
 		cancelButton.textContent = localize("Cancel", "Anuluj");
-		cancelButton.style.cssText = "flex:0 0 auto;width:auto;min-width:0;margin:0;padding:3px 8px;white-space:nowrap";
+		cancelButton.style.cssText = "box-sizing:border-box;flex:0 0 auto;width:auto;min-width:0;height:24px;margin:0;padding:2px 7px;font-size:12px;line-height:1;white-space:nowrap";
 		const confirmButton = ownerDocument.createElement("button");
 		confirmButton.type = "submit";
 		confirmButton.textContent = localize("Split", "Podziel");
-		confirmButton.style.cssText = "flex:0 0 auto;width:auto;min-width:0;margin:0;padding:3px 8px;white-space:nowrap";
+		confirmButton.style.cssText = "box-sizing:border-box;flex:0 0 auto;width:auto;min-width:0;height:24px;margin:0;padding:2px 7px;font-size:12px;line-height:1;white-space:nowrap";
 		buttons.append(cancelButton, confirmButton);
 		panel.append(input, buttons);
 		ownerDocument.body.append(panel);
 
-		/* Let the two action buttons define the popup width. The number input then
-		 * fills exactly that width, while removing the old title/hint rows keeps
-		 * the popup only as tall as the input plus the button row. */
+		/* Measure the natural two-button row, then make the panel just wide enough
+		 * for that row plus its own padding/border. Afterwards the button row and
+		 * input both fill the same inner width, so nothing can protrude beyond the
+		 * popup and the two actions remain visually balanced. */
 		const buttonRowWidth = Math.ceil(buttons.getBoundingClientRect().width);
-		if (buttonRowWidth > 0) panel.style.width = `${buttonRowWidth}px`;
+		if (buttonRowWidth > 0) {
+			const panelChrome = 10; // 4px padding per side + 1px border per side.
+			panel.style.width = `${buttonRowWidth + panelChrome}px`;
+			buttons.style.width = "100%";
+			cancelButton.style.flex = "1 1 0";
+			confirmButton.style.flex = "1 1 0";
+		}
 
 		const finish = (value) => {
 			if (!panel.isConnected) return;
