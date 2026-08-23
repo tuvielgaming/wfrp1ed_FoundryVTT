@@ -73,6 +73,15 @@ async function handleDrop(event, actor, container, application) {
 	}
 	assertCompatible(container, source);
 
+	/* Dragging a stack onto the container which already owns it is a no-op. The
+	 * stack already counts against capacity; treating it as incoming ammunition
+	 * would make the current contents look like overflow and could split the same
+	 * Item into duplicate stacks. */
+	if (
+		source.parent === actor &&
+		String(source.system?.containerId ?? "") === String(container.id ?? "")
+	) return;
+
 	const state = AmmunitionInventory.containerState(container);
 	if (!state || state.remaining <= 0) {
 		throw new Error(localize("This ammunition container is full.", "Ten pojemnik na amunicję jest pełny."));
