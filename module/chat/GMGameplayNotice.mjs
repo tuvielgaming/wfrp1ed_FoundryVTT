@@ -321,5 +321,18 @@ function reportPersistenceFailure(error, fallbackMessage) {
 }
 
 function localize(english, polish) {
-	return game.i18n.lang === "pl" ? polish : english;
+	/* During Foundry's init hook game.i18n.lang can still report the default
+	 * language even though the world's Core language preference is already set.
+	 * Read that preference first so World Settings are registered in the same
+	 * language as the rest of the Foundry interface. At runtime game.i18n.lang
+	 * remains the normal fallback. */
+	let language = String(game.i18n?.lang ?? "").toLowerCase();
+	try {
+		language = String(
+			game.settings?.get?.("core", "language") ?? language,
+		).toLowerCase();
+	} catch (_error) {
+		/* Core settings may be unavailable in very early bootstrap contexts. */
+	}
+	return language.startsWith("pl") ? polish : english;
 }
