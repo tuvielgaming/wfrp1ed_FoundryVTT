@@ -135,21 +135,16 @@ export class AmmunitionInventory {
 			return Object.freeze({ allowed: true, reason: "", accessible, reserves });
 		}
 
-		const reserveText = reserves.length
+		const reason = reserves.length
 			? localize(
-				` Compatible reserve ammunition exists elsewhere: ${stackSummary(reserves)}. The GM decides the time or complication required to prepare it.`,
-				` Zgodna amunicja zapasowa znajduje się w innym miejscu: ${stackSummary(reserves)}. MG rozstrzyga czas lub komplikację potrzebną do jej przygotowania.`,
+				`No readily accessible ammunition is available. Compatible reserve ammunition exists elsewhere: ${stackSummary(reserves)}. The GM decides the time or complication required to prepare it.`,
+				`Brak łatwo dostępnej amunicji. Zgodna amunicja zapasowa znajduje się w innym miejscu: ${stackSummary(reserves)}. MG rozstrzyga czas lub komplikację potrzebną do jej przygotowania.`,
 			)
-			: "";
-		return Object.freeze({
-			allowed: false,
-			reason: localize(
-				`No readily accessible ammunition is available.${reserveText}`,
-				`Brak łatwo dostępnej amunicji.${reserveText}`,
-			),
-			accessible,
-			reserves,
-		});
+			: localize(
+				"No readily accessible ammunition is available.",
+				"Brak łatwo dostępnej amunicji.",
+			);
+		return Object.freeze({ allowed: false, reason, accessible, reserves });
 	}
 
 	static validateSelectedShot(actor, weapon, ammunitionUuid) {
@@ -251,18 +246,47 @@ function stackSummary(items) {
 function ammunitionVariantSnapshot(item, remainingQuantity = null) {
 	const identity = equipmentAmmunitionSnapshot(item);
 	if (!identity) return null;
+	const effects = [...(item.effects ?? [])]
+		.filter((effect) => effect.disabled !== true)
+		.map((effect) => effect.toObject());
 	return Object.freeze({
-		version: 1,
+		version: 2,
 		uuid: String(item.uuid ?? ""),
 		name: String(item.name ?? ""),
 		type: identity.type,
 		customId: identity.customId,
 		key: identity.key,
+		/* Compatibility (`key`) answers Arrow vs Bolt. Variant identity must also
+		 * distinguish a normal Arrow from another Arrow carrying different
+		 * ActiveEffects. It intentionally ignores embedded Effect ids/origin so
+		 * split/copy stacks with the same name and mechanics remain one variant. */
+		variantKey: variantKey(item, identity, effects),
 		remainingQuantity: remainingQuantity === null ? quantity(item) : Math.max(0, Number(remainingQuantity) || 0),
-		effects: [...(item.effects ?? [])]
-			.filter((effect) => effect.disabled !== true)
-			.map((effect) => effect.toObject()),
+		effects,
 	});
+}
+
+function variantKey(item, identity, effects) {
+	const normalizedEffects = effects.map((effect) => normalizeEffectForVariant(effect));
+	return `${identity.key}|${String(item?.name ?? "").trim()}|${stableStringify(normalizedEffects)}`;
+}
+
+function normalizeEffectForVariant(effect) {
+	const source = foundry.utils.deepClone(effect ?? {});
+	delete source._id;
+	delete source.origin;
+	return source;
+}
+
+function stableStringify(value) {
+	if (Array.isArray(value)) {
+		return `[${value.map((entry) => stableStringify(entry)).join(",")}]`;
+	}
+	if (value && typeof value === "object") {
+		const keys = Object.keys(value).sort();
+		return `{${keys.map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(",")}}`;
+	}
+	return JSON.stringify(value);
 }
 
 function localize(english, polish) {
