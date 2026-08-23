@@ -18,10 +18,10 @@ const SETTING_KEY = "trackAccessibleAmmunition";
  *
  * Compatibility is type-based; the concrete Equipment Item is the ammunition
  * variant and therefore remains the owner of name, quantity and ActiveEffects.
- * Only ammunition stored directly in a matching Quick Access Ammunition
- * container is automatically available to ranged combat. Compatible reserves
- * elsewhere on the Actor are reported to the GM/player but never consumed
- * silently.
+ * Direct firing may automatically consume only ammunition stored in a matching
+ * Quick Access Ammunition container. An explicit internal-magazine refill is a
+ * separate reload action and may use a selected compatible ammunition stack
+ * anywhere in the Actor's inventory.
  */
 export class AmmunitionInventory {
 	static trackingEnabled() {
@@ -84,36 +84,44 @@ export class AmmunitionInventory {
 		});
 	}
 
+	static compatibleStacks(actor, weaponOrIdentity) {
+		const identity = identityFor(weaponOrIdentity);
+		if (!actor || !identity || identity.type === AMMUNITION_TYPE.NONE) return [];
+		return [...(actor.items ?? [])]
+			.filter((item) => {
+				const ammo = equipmentAmmunitionSnapshot(item);
+				return ammo &&
+					quantity(item) > 0 &&
+					ammunitionIdentityMatches(ammo, identity);
+			})
+			.sort(ammunitionSort);
+	}
+
 	static accessibleStacks(actor, weaponOrIdentity) {
 		const identity = identityFor(weaponOrIdentity);
 		if (!actor || !identity || identity.type === AMMUNITION_TYPE.NONE) return [];
 		const containerIds = new Set(
 			this.compatibleQuickContainers(actor, identity).map((item) => String(item.id ?? "")),
 		);
-		return [...(actor.items ?? [])]
-			.filter((item) => {
-				const ammo = equipmentAmmunitionSnapshot(item);
-				return ammo &&
-					quantity(item) > 0 &&
-					ammunitionIdentityMatches(ammo, identity) &&
-					containerIds.has(String(item.system?.containerId ?? ""));
-			})
-			.sort(ammunitionSort);
+		return this.compatibleStacks(actor, identity)
+			.filter((item) => containerIds.has(String(item.system?.containerId ?? "")));
 	}
 
 	static reserveStacks(actor, weaponOrIdentity) {
 		const identity = identityFor(weaponOrIdentity);
 		if (!actor || !identity || identity.type === AMMUNITION_TYPE.NONE) return [];
 		const accessible = new Set(this.accessibleStacks(actor, identity).map((item) => item.id));
-		return [...(actor.items ?? [])]
-			.filter((item) => {
-				const ammo = equipmentAmmunitionSnapshot(item);
-				return ammo &&
-					quantity(item) > 0 &&
-					ammunitionIdentityMatches(ammo, identity) &&
-					!accessible.has(item.id);
-			})
-			.sort(ammunitionSort);
+		return this.compatibleStacks(actor, identity)
+			.filter((item) => !accessible.has(item.id));
+	}
+
+	/**
+	 * A magazine refill is already an explicit reload action, so its selected
+	 * source does not need to live in a Quick Access Ammunition container.
+	 * Firing a weapon without an internal magazine remains accessibility-gated.
+	 */
+	static magazineReloadStacks(actor, weaponOrIdentity) {
+		return this.compatibleStacks(actor, weaponOrIdentity);
 	}
 
 	static fireGate(actor, weapon, runtime = null) {
@@ -189,7 +197,7 @@ export class AmmunitionInventory {
 		}
 
 		const uuid = String(runtime?.magazineReloadSourceUuid ?? "");
-		const source = this.accessibleStacks(actor, weapon).find((item) => item.uuid === uuid);
+		const source = this.magazineReloadStacks(actor, weapon).find((item) => item.uuid === uuid);
 		if (!source) {
 			return Object.freeze({ loaded: 0, magazineRemaining: current, full: false, variant: runtime?.magazineVariant ?? null });
 		}
@@ -209,8 +217,8 @@ Hooks.once("i18nInit", () => {
 	game.settings.register(game.system.id, SETTING_KEY, {
 		name: localize("Track readily accessible ammunition", "Śledzenie łatwo dostępnej amunicji"),
 		hint: localize(
-			"Optional. Ranged weapons automatically consume compatible ammunition only from Quick Access Ammunition containers. Compatible reserves elsewhere are reported but never consumed without GM adjudication.",
-			"Opcjonalne. Broń dystansowa automatycznie zużywa zgodną amunicję wyłącznie z pojemników z łatwym dostępem do amunicji. Zgodne zapasy w innych miejscach są zgłaszane, ale nigdy nie są zużywane bez rozstrzygnięcia MG.",
+			"Optional. Direct ranged shots automatically consume compatible ammunition only from Quick Access Ammunition containers. Explicit internal-magazine refills may use a selected compatible ammunition stack anywhere in the Actor's inventory.",
+			"Opcjonalne. Bezpośrednie strzały z broni dystansowej automatycznie zużywają zgodną amunicję wyłącznie z pojemników z łatwym dostępem do amunicji. Jawne przeładowanie wewnętrznego magazynka może użyć wybranego zgodnego stosu amunicji z dowolnego miejsca w ekwipunku Aktora.",
 		),
 		scope: "world",
 		config: true,
