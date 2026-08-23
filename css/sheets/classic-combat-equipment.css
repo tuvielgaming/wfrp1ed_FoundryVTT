@@ -251,6 +251,62 @@
 }
 
 /******************************************************************/
+/* Ranged Reload runtime in the printed Ład. column               */
+/******************************************************************/
+
+.wfrp1ed-classic-sheet .ranged-cell--reload .ranged-reload-runtime {
+	display: inline-flex;
+	align-items: baseline;
+	justify-content: center;
+	gap: 0;
+	width: 100%;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.wfrp1ed-classic-sheet .ranged-reload-runtime__input {
+	width: 1.5em;
+	min-width: 0;
+	height: 1.25em;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	border-bottom: 1px dotted currentColor;
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+	color: inherit;
+	font: inherit;
+	font-variant-numeric: tabular-nums;
+	line-height: 1;
+	text-align: right;
+}
+
+.wfrp1ed-classic-sheet .ranged-reload-runtime__input:focus {
+	outline: 1px solid currentColor;
+	outline-offset: 1px;
+	border-bottom-color: transparent;
+}
+
+.wfrp1ed-classic-sheet
+	.ranged-reload-runtime__input::-webkit-outer-spin-button,
+.wfrp1ed-classic-sheet
+	.ranged-reload-runtime__input::-webkit-inner-spin-button {
+	margin: 0;
+	-webkit-appearance: none;
+}
+
+.wfrp1ed-classic-sheet .ranged-reload-runtime__input[type="number"] {
+	appearance: textfield;
+	-moz-appearance: textfield;
+}
+
+.wfrp1ed-classic-sheet .ranged-reload-runtime__maximum {
+	font-size: 0.88em;
+	opacity: 0.78;
+}
+
+/******************************************************************/
 /* Armour location presentation                                   */
 /******************************************************************/
 
