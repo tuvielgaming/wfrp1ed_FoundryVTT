@@ -1,20 +1,9 @@
 <section class="combat-item-sheet__content">
 	<header class="combat-item-sheet__header">
-		<img
-			class="combat-item-sheet__image"
-			src="{{item.img}}"
-			alt="{{item.name}}"
-		>
+		<img class="combat-item-sheet__image" src="{{item.img}}" alt="{{item.name}}">
 		<label class="combat-item-sheet__field combat-item-sheet__field--name">
 			<span>{{ui.name}}</span>
-			<input
-				type="text"
-				name="name"
-				value="{{item.name}}"
-				autocomplete="off"
-				required
-				{{#unless editable}}disabled{{/unless}}
-			>
+			<input type="text" name="name" value="{{item.name}}" autocomplete="off" required {{#unless editable}}disabled{{/unless}}>
 		</label>
 	</header>
 
@@ -24,90 +13,44 @@
 			<label class="combat-item-sheet__field">
 				<span>{{ui.mode}}</span>
 				<select name="system.state.mode" {{#unless editable}}disabled{{/unless}}>
-					{{#each modeOptions as |option|}}
-						<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>
-					{{/each}}
+					{{#each modeOptions as |option|}}<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>{{/each}}
 				</select>
 			</label>
-
 			<label class="combat-item-sheet__field">
 				<span>{{ui.hand}}</span>
 				<select name="system.state.hand" {{#unless editable}}disabled{{/unless}}>
-					{{#each handOptions as |option|}}
-						<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>
-					{{/each}}
+					{{#each handOptions as |option|}}<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>{{/each}}
 				</select>
 			</label>
-
-			<label class="combat-item-sheet__field">
-				<span>{{ui.quantity}}</span>
-				<input type="number" min="0" step="1" name="system.quantity" value="{{system.quantity}}" {{#unless editable}}disabled{{/unless}}>
-			</label>
-
-			<label class="combat-item-sheet__field">
-				<span>{{ui.encumbrance}}</span>
-				<input type="number" min="0" step="any" name="system.encumbrance" value="{{system.encumbrance}}" {{#unless editable}}disabled{{/unless}}>
-			</label>
+			<label class="combat-item-sheet__field"><span>{{ui.quantity}}</span><input type="number" min="0" step="1" name="system.quantity" value="{{system.quantity}}" {{#unless editable}}disabled{{/unless}}></label>
+			<label class="combat-item-sheet__field"><span>{{ui.encumbrance}}</span><input type="number" min="0" step="any" name="system.encumbrance" value="{{system.encumbrance}}" {{#unless editable}}disabled{{/unless}}></label>
 		</div>
 	</section>
 
 	<section class="combat-item-sheet__panel">
 		<h3>{{ui.combat}}</h3>
 		<div class="combat-item-sheet__grid combat-item-sheet__grid--2">
-			<label class="combat-item-sheet__field">
-				<span>{{ui.rulesId}}</span>
-				<input type="text" name="system.rulesId" value="{{system.rulesId}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}>
-			</label>
-
-			<label class="combat-item-sheet__field">
-				<span>{{ui.weaponClass}}</span>
-				<input type="text" name="system.weaponClass" value="{{system.weaponClass}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}>
-			</label>
-
+			<label class="combat-item-sheet__field"><span>{{ui.rulesId}}</span><input type="text" name="system.rulesId" value="{{system.rulesId}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}></label>
+			<label class="combat-item-sheet__field"><span>{{ui.weaponClass}}</span><input type="text" name="system.weaponClass" value="{{system.weaponClass}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}></label>
 			<label class="combat-item-sheet__field">
 				<span>{{ui.kind}}</span>
-				<select name="system.kind" {{#unless editable}}disabled{{/unless}}>
-					{{#each kindOptions as |option|}}
-						<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>
-					{{/each}}
-				</select>
+				<select name="system.kind" {{#unless editable}}disabled{{/unless}}>{{#each kindOptions as |option|}}<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>{{/each}}</select>
 			</label>
-
 			<label class="combat-item-sheet__field">
 				<span>{{ui.group}}</span>
-				<select name="system.group" {{#unless editable}}disabled{{/unless}}>
-					{{#each groupOptions as |option|}}
-						<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>
-					{{/each}}
-				</select>
+				<select name="system.group" {{#unless editable}}disabled{{/unless}}>{{#each groupOptions as |option|}}<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>{{/each}}</select>
 			</label>
-
 			<label class="combat-item-sheet__field">
 				<span>{{ui.handedness}}</span>
-				<select name="system.handedness" {{#unless editable}}disabled{{/unless}}>
-					{{#each handednessOptions as |option|}}
-						<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>
-					{{/each}}
-				</select>
+				<select name="system.handedness" {{#unless editable}}disabled{{/unless}}>{{#each handednessOptions as |option|}}<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>{{/each}}</select>
 			</label>
-
-			<label class="combat-item-sheet__field">
-				<span>{{ui.specialistSkillId}}</span>
-				<input type="text" name="system.specialistSkillId" value="{{system.specialistSkillId}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}>
-			</label>
+			<label class="combat-item-sheet__field"><span>{{ui.specialistSkillId}}</span><input type="text" name="system.specialistSkillId" value="{{system.specialistSkillId}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}></label>
 		</div>
 
 		{{#unless isRanged}}
 			<div class="combat-item-sheet__parry">
-				<label class="combat-item-sheet__check wfrp1ed-checkbox">
-					<input type="checkbox" name="system.parry.suitable" {{#if system.parry.suitable}}checked{{/if}} {{#unless editable}}disabled{{/unless}}>
-					<span>{{ui.parrySuitable}}</span>
-				</label>
-
-				<label class="combat-item-sheet__field combat-item-sheet__field--compact">
-					<span>{{ui.parryBonus}}</span>
-					<input type="number" step="1" name="system.parry.bonus" value="{{system.parry.bonus}}" {{#unless editable}}disabled{{/unless}}>
-				</label>
+				<label class="combat-item-sheet__check wfrp1ed-checkbox"><input type="checkbox" name="system.parry.suitable" {{#if system.parry.suitable}}checked{{/if}} {{#unless editable}}disabled{{/unless}}><span>{{ui.parrySuitable}}</span></label>
+				<label class="combat-item-sheet__field combat-item-sheet__field--compact"><span>{{ui.parryBonus}}</span><input type="number" step="1" name="system.parry.bonus" value="{{system.parry.bonus}}" {{#unless editable}}disabled{{/unless}}></label>
 			</div>
 		{{/unless}}
 	</section>
@@ -116,78 +59,43 @@
 		<section class="combat-item-sheet__panel">
 			<h3>{{ui.rangedDetails}}</h3>
 			<div class="combat-item-sheet__grid combat-item-sheet__grid--4">
-				<label class="combat-item-sheet__field">
-					<span>{{ui.shortRange}}</span>
-					<input type="text" inputmode="numeric" pattern="(?:-|[0-9]+)" name="system.range.short" value="{{system.range.short}}" {{#unless editable}}disabled{{/unless}}>
-				</label>
-				<label class="combat-item-sheet__field">
-					<span>{{ui.longRange}}</span>
-					<input type="text" inputmode="numeric" pattern="(?:-|[0-9]+)" name="system.range.long" value="{{system.range.long}}" {{#unless editable}}disabled{{/unless}}>
-				</label>
-				<label class="combat-item-sheet__field">
-					<span>{{ui.maximumRange}}</span>
-					<input type="text" inputmode="numeric" pattern="(?:-|[0-9]+)" name="system.range.max" value="{{system.range.max}}" {{#unless editable}}disabled{{/unless}}>
-				</label>
-				<label class="combat-item-sheet__field">
-					<span>{{ui.effectiveStrength}}</span>
-					<input type="number" min="0" step="1" name="system.effectiveStrength" value="{{system.effectiveStrength}}" {{#unless editable}}disabled{{/unless}}>
-				</label>
+				<label class="combat-item-sheet__field"><span>{{ui.shortRange}}</span><input type="text" inputmode="numeric" pattern="(?:-|[0-9]+)" name="system.range.short" value="{{system.range.short}}" {{#unless editable}}disabled{{/unless}}></label>
+				<label class="combat-item-sheet__field"><span>{{ui.longRange}}</span><input type="text" inputmode="numeric" pattern="(?:-|[0-9]+)" name="system.range.long" value="{{system.range.long}}" {{#unless editable}}disabled{{/unless}}></label>
+				<label class="combat-item-sheet__field"><span>{{ui.maximumRange}}</span><input type="text" inputmode="numeric" pattern="(?:-|[0-9]+)" name="system.range.max" value="{{system.range.max}}" {{#unless editable}}disabled{{/unless}}></label>
+				<label class="combat-item-sheet__field"><span>{{ui.effectiveStrength}}</span><input type="number" min="0" step="1" name="system.effectiveStrength" value="{{system.effectiveStrength}}" {{#unless editable}}disabled{{/unless}}></label>
 			</div>
 
-			<div class="combat-item-sheet__panel-heading">
-				<h3>{{ui.firingCycle}}</h3>
-				<p>{{ui.firingCycleHint}}</p>
+			<div class="combat-item-sheet__grid combat-item-sheet__grid--2">
+				<label class="combat-item-sheet__field">
+					<span>{{ui.ammunitionType}}</span>
+					<select name="system.ammunitionType" {{#unless editable}}disabled{{/unless}}>{{#each ammunitionTypeOptions as |option|}}<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>{{/each}}</select>
+				</label>
+				{{#if isCustomAmmunition}}
+					<label class="combat-item-sheet__field"><span>{{ui.ammunitionCustomId}}</span><input type="text" name="system.ammunitionCustomId" value="{{system.ammunitionCustomId}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}></label>
+				{{/if}}
 			</div>
+
+			<div class="combat-item-sheet__panel-heading"><h3>{{ui.firingCycle}}</h3><p>{{ui.firingCycleHint}}</p></div>
 			<div class="combat-item-sheet__grid combat-item-sheet__grid--4">
-				<label class="combat-item-sheet__field">
-					<span>{{ui.reloadRounds}}</span>
-					<input type="number" min="0" step="1" name="system.firingCycle.reloadRounds" value="{{system.firingCycle.reloadRounds}}" {{#unless editable}}disabled{{/unless}}>
-				</label>
-				<label class="combat-item-sheet__field">
-					<span>{{ui.shotsPerFireRound}}</span>
-					<input type="number" min="1" step="1" name="system.firingCycle.shotsPerFireRound" value="{{system.firingCycle.shotsPerFireRound}}" {{#unless editable}}disabled{{/unless}}>
-				</label>
-				<label class="combat-item-sheet__field">
-					<span>{{ui.magazineCapacity}}</span>
-					<input type="number" min="0" step="1" name="system.firingCycle.magazineCapacity" value="{{system.firingCycle.magazineCapacity}}" {{#unless editable}}disabled{{/unless}}>
-				</label>
-				<label class="combat-item-sheet__field">
-					<span>{{ui.magazineReloadRounds}}</span>
-					<input type="number" min="0" step="1" name="system.firingCycle.magazineReloadRounds" value="{{system.firingCycle.magazineReloadRounds}}" {{#unless editable}}disabled{{/unless}}>
-				</label>
+				<label class="combat-item-sheet__field"><span>{{ui.reloadRounds}}</span><input type="number" min="0" step="1" name="system.firingCycle.reloadRounds" value="{{system.firingCycle.reloadRounds}}" {{#unless editable}}disabled{{/unless}}></label>
+				<label class="combat-item-sheet__field"><span>{{ui.shotsPerFireRound}}</span><input type="number" min="1" step="1" name="system.firingCycle.shotsPerFireRound" value="{{system.firingCycle.shotsPerFireRound}}" {{#unless editable}}disabled{{/unless}}></label>
+				<label class="combat-item-sheet__field"><span>{{ui.magazineCapacity}}</span><input type="number" min="0" step="1" name="system.firingCycle.magazineCapacity" value="{{system.firingCycle.magazineCapacity}}" {{#unless editable}}disabled{{/unless}}></label>
+				<label class="combat-item-sheet__field"><span>{{ui.magazineReloadRounds}}</span><input type="number" min="0" step="1" name="system.firingCycle.magazineReloadRounds" value="{{system.firingCycle.magazineReloadRounds}}" {{#unless editable}}disabled{{/unless}}></label>
 			</div>
 		</section>
 	{{/if}}
 
 	{{#unless isRanged}}
 		<section class="combat-item-sheet__panel">
-			<div class="combat-item-sheet__panel-heading">
-				<h3>{{ui.optionalModifiers}}</h3>
-				<p>{{ui.optionalHint}}</p>
-			</div>
+			<div class="combat-item-sheet__panel-heading"><h3>{{ui.optionalModifiers}}</h3><p>{{ui.optionalHint}}</p></div>
 			<div class="combat-item-sheet__grid combat-item-sheet__grid--4">
-				<label class="combat-item-sheet__field">
-					<span>{{ui.initiative}}</span>
-					<input type="number" step="1" name="system.optionalModifiers.initiative" value="{{system.optionalModifiers.initiative}}" {{#unless editable}}disabled{{/unless}}>
-				</label>
-				<label class="combat-item-sheet__field">
-					<span>{{ui.toHit}}</span>
-					<input type="number" step="1" name="system.optionalModifiers.toHit" value="{{system.optionalModifiers.toHit}}" {{#unless editable}}disabled{{/unless}}>
-				</label>
-				<label class="combat-item-sheet__field">
-					<span>{{ui.damage}}</span>
-					<input type="number" step="1" name="system.optionalModifiers.damage" value="{{system.optionalModifiers.damage}}" {{#unless editable}}disabled{{/unless}}>
-				</label>
-				<label class="combat-item-sheet__field">
-					<span>{{ui.parryModifier}}</span>
-					<input type="number" step="1" name="system.optionalModifiers.parry" value="{{system.optionalModifiers.parry}}" {{#unless editable}}disabled{{/unless}}>
-				</label>
+				<label class="combat-item-sheet__field"><span>{{ui.initiative}}</span><input type="number" step="1" name="system.optionalModifiers.initiative" value="{{system.optionalModifiers.initiative}}" {{#unless editable}}disabled{{/unless}}></label>
+				<label class="combat-item-sheet__field"><span>{{ui.toHit}}</span><input type="number" step="1" name="system.optionalModifiers.toHit" value="{{system.optionalModifiers.toHit}}" {{#unless editable}}disabled{{/unless}}></label>
+				<label class="combat-item-sheet__field"><span>{{ui.damage}}</span><input type="number" step="1" name="system.optionalModifiers.damage" value="{{system.optionalModifiers.damage}}" {{#unless editable}}disabled{{/unless}}></label>
+				<label class="combat-item-sheet__field"><span>{{ui.parryModifier}}</span><input type="number" step="1" name="system.optionalModifiers.parry" value="{{system.optionalModifiers.parry}}" {{#unless editable}}disabled{{/unless}}></label>
 			</div>
 		</section>
 	{{/unless}}
 
-	<label class="combat-item-sheet__field combat-item-sheet__description">
-		<span>{{ui.description}}</span>
-		<textarea name="system.description" spellcheck="true" {{#unless editable}}disabled{{/unless}}>{{system.description}}</textarea>
-	</label>
+	<label class="combat-item-sheet__field combat-item-sheet__description"><span>{{ui.description}}</span><textarea name="system.description" spellcheck="true" {{#unless editable}}disabled{{/unless}}>{{system.description}}</textarea></label>
 </section>
