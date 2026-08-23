@@ -53,6 +53,7 @@
 		"module/combat/CombatAttackAdjudicationReconciliation.mjs",
 		"module/inventory/ClassicInventoryIntegration.mjs",
 		"module/inventory/InventoryEncumbranceIntegration.mjs",
+		"module/inventory/AmmunitionStackingIntegration.mjs",
 		"module/inventory/ClassicActorItemDragIntegration.mjs",
 		"module/inventory/QuickAccessAmmunitionIntegration.mjs",
 		"module/inventory/ClassicInventoryToolbarPlacement.mjs",
