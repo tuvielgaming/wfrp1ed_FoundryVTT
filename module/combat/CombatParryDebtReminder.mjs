@@ -1,3 +1,4 @@
+import { GMGameplayNotice } from "../chat/GMGameplayNotice.mjs";
 import { WfrpRuleSettings } from "../settings/WfrpRuleSettings.mjs";
 import { CombatAttackEconomy } from "./CombatAttackEconomy.mjs";
 import { CombatRoundTurnState } from "./CombatRoundTurnState.mjs";
@@ -93,7 +94,13 @@ Hooks.on("updateCombatant", (combatant, changes) => {
 	void refreshActorSheet(combatant?.actor);
 });
 
-/** Summarize debt carried into a new round only for the default interpretation. */
+/**
+ * Summarize debt carried into a new round only for the default interpretation.
+ *
+ * This is rule state the GM may need after the transient toast disappears, so it
+ * uses the GM gameplay-notice channel. With persistence disabled it remains the
+ * same ordinary informational Foundry notification as before.
+ */
 Hooks.on("updateCombat", (combat, changes) => {
 	if (WfrpRuleSettings.usesRoundDefenceContract()) return;
 	if (!game.user?.isGM || !Object.hasOwn(changes ?? {}, "round")) return;
@@ -120,10 +127,20 @@ Hooks.on("updateCombat", (combat, changes) => {
 	const details = entries
 		.map((entry) => `${entry.name}: −${entry.debt} A`)
 		.join(", ");
-	ui.notifications.info(localize(
+	const message = localize(
 		`Parry debt carried into round ${round}: ${details}.`,
 		`Dług za parowanie przeniesiony do rundy ${round}: ${details}.`,
-	));
+	);
+
+	void GMGameplayNotice.info({
+		category: "parry-debt",
+		title: localize("Parry debt", "Dług za parowanie"),
+		message,
+		summary: localize(
+			`Parry debt carried into round ${round} — details saved in private GM chat.`,
+			`Dług za parowanie przeniesiono do rundy ${round} — szczegóły zapisano w prywatnym czacie MG.`,
+		),
+	});
 });
 
 function combatantForActor(actor) {
