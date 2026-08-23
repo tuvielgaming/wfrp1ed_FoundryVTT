@@ -1,0 +1,52 @@
+.wfrp1ed-combat-attack-dialog .combat-ranged-ammunition-group {
+	display: grid;
+	grid-template-columns: minmax(130px, 0.42fr) minmax(0, 1fr);
+	align-items: center;
+	gap: 8px;
+}
+
+.wfrp1ed-combat-attack-dialog .combat-ranged-ammunition-group > span,
+.wfrp1ed-combat-attack-dialog .combat-ranged-magazine-choice > span {
+	font-weight: 700;
+}
+
+.wfrp1ed-combat-attack-dialog .combat-ranged-ammunition-group select {
+	min-width: 0;
+	color-scheme: light;
+	background: #e8dfcc;
+	color: #1c1812;
+}
+
+.wfrp1ed-combat-attack-dialog .combat-ranged-magazine-choice {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	margin: 6px 0 2px;
+	padding: 6px 8px;
+	border: 1px solid rgb(70 51 30 / 26%);
+	border-radius: 4px;
+	background: rgb(222 202 154 / 22%);
+}
+
+.combat-ranged-magazine-runtime {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto auto;
+	align-items: center;
+	gap: 8px;
+	padding-top: 8px;
+	border-top: 1px solid rgb(70 51 30 / 24%);
+	font-size: 12px;
+}
+
+.combat-ranged-magazine-runtime__actions {
+	display: flex;
+	gap: 4px;
+}
+
+.combat-ranged-magazine-runtime__actions button {
+	width: auto;
+	min-height: 27px;
+	margin: 0;
+	padding: 3px 7px;
+	font-size: 10px;
+}
