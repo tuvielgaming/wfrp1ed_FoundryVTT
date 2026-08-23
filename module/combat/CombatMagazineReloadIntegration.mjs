@@ -252,10 +252,18 @@ async function commitReload(actor, weapon, payload) {
 			));
 		}
 		const selectedVariant = AmmunitionInventory.ammunitionVariantSnapshot(selected);
+		const existingVariantKey = runtime.magazineVariant?.variantKey ||
+			runtime.magazineVariant?.uuid ||
+			runtime.magazineVariant?.key ||
+			"";
+		const selectedVariantKey = selectedVariant?.variantKey ||
+			selectedVariant?.uuid ||
+			selectedVariant?.key ||
+			"";
 		if (
 			runtime.magazineRemaining > 0 &&
-			runtime.magazineVariant?.key &&
-			selectedVariant?.key !== runtime.magazineVariant.key
+			existingVariantKey &&
+			selectedVariantKey !== existingVariantKey
 		) {
 			throw new Error(localize(
 				"Mixed ammunition inside one magazine is not supported yet. Refill with the same ammunition variant or empty the magazine first.",
