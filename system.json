@@ -15,6 +15,7 @@
 		"module/wfrp1ed.mjs",
 		"module/ui/DialogV2ElementContentCompatibility.mjs",
 		"module/ui/SystemCheckboxIntegration.mjs",
+		"module/chat/GMGameplayNotice.mjs",
 		"module/data-models/actor/CharacterPartialMigrationFix.mjs",
 		"module/forms/SelectAllOnFocus.mjs",
 		"module/careers/CareerBootstrap.mjs",
@@ -40,6 +41,7 @@
 		"module/combat/CombatMagazineReloadIntegration.mjs",
 		"module/combat/CombatRangedLifecycleIntegration.mjs",
 		"module/combat/CombatRangedAmmunitionIntegration.mjs",
+		"module/combat/CombatGMGameplayNoticeIntegration.mjs",
 		"module/combat/CombatDeleteButtonPlacement.mjs",
 		"module/combat/CombatItemInteractionConsistency.mjs",
 		"module/combat/CombatDefenceSheetIntegration.mjs",
@@ -178,6 +180,7 @@
 		"css/chat/combat-lifecycle-polish.css",
 		"css/chat/held-items-result.css",
 		"css/chat/loot-pile.css",
+		"css/chat/gm-gameplay-notice.css",
 		"css/effects/rule-effects.css",
 		"css/forms/checkbox.css"
 	],
