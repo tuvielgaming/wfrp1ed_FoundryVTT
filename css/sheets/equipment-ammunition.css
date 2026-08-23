@@ -142,3 +142,22 @@
 	border-color: rgb(70 51 30 / 28%);
 	background: rgb(255 255 255 / 34%);
 }
+
+.classic-inventory__ammunition-capacity {
+	flex: 0 0 auto;
+	margin-left: 5px;
+	padding: 0 4px;
+	border: 1px solid rgb(83 59 31 / 52%);
+	border-radius: 4px;
+	background: rgb(222 202 154 / 72%);
+	color: #2a1b0d;
+	font-size: 9px;
+	font-weight: 700;
+	line-height: 15px;
+}
+
+.classic-inventory__row.is-ammunition-drop-target {
+	outline: 2px dashed rgb(77 119 65 / 92%) !important;
+	outline-offset: -2px;
+	background: rgb(113 148 84 / 12%);
+}
