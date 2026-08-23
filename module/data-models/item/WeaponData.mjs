@@ -53,6 +53,10 @@ const WEAPON_MODIFIER_KEYS = Object.freeze([
  * values stay on the common Weapon data model so an Item can be re-authored,
  * but ranged presentation and ranged attack resolution must not consume them.
  *
+ * Range bands deliberately preserve the printed-table dash (`-`) instead of
+ * coercing it to numeric zero. A dash means that band does not exist for this
+ * weapon; resolution skips it and proceeds to the next authored band.
+ *
  * Ranged cadence uses one canonical Reload value. It is the number of complete
  * preparation rounds which must pass before another firing round is available:
  * - Reload 0: the weapon may fire every round;
@@ -108,9 +112,9 @@ export class WeaponData extends TypeDataModel {
 
 			/** Authored ranged/thrown-weapon facts shown by the printed sheet. */
 			range: new SchemaField({
-				short: nonNegativeIntegerField(),
-				long: nonNegativeIntegerField(),
-				max: nonNegativeIntegerField(),
+				short: rangeField(),
+				long: rangeField(),
+				max: rangeField(),
 			}),
 			effectiveStrength: nonNegativeIntegerField(),
 			firingCycle: new SchemaField({
@@ -201,9 +205,9 @@ export class WeaponData extends TypeDataModel {
 		};
 
 		migrated.range = {
-			short: toNonNegativeInteger(unwrapValue(range.short)),
-			long: toNonNegativeInteger(unwrapValue(range.long)),
-			max: toNonNegativeInteger(unwrapValue(range.max)),
+			short: normalizeRangeValue(range.short),
+			long: normalizeRangeValue(range.long),
+			max: normalizeRangeValue(range.max),
 		};
 		migrated.effectiveStrength = toNonNegativeInteger(
 			unwrapValue(
@@ -271,6 +275,16 @@ function textField(initial = "") {
 	});
 }
 
+function rangeField(initial = "0") {
+	return new StringField({
+		required: true,
+		nullable: false,
+		blank: false,
+		initial,
+		trim: true,
+	});
+}
+
 function integerField(initial = 0) {
 	return new NumberField({
 		required: true,
@@ -324,7 +338,7 @@ function inferWeaponKind(source, range) {
 	}
 
 	return [range.short, range.long, range.max].some(
-		(value) => toNonNegativeInteger(unwrapValue(value)) > 0,
+		(value) => (rangeNumericValue(value) ?? 0) > 0,
 	)
 		? WEAPON_KIND.RANGED
 		: WEAPON_KIND.MELEE;
@@ -339,6 +353,35 @@ function objectValue(value) {
 	return value && typeof value === "object" && !Array.isArray(value)
 		? value
 		: {};
+}
+
+function normalizeRangeValue(value) {
+	const raw = unwrapValue(value);
+	const text = String(raw ?? "").trim();
+	if (text === "-" || text === "—") return "-";
+	const number = Number(text);
+	if (!Number.isFinite(number) || !Number.isInteger(number) || number < 0) {
+		return "0";
+	}
+	return String(number);
+}
+
+export function rangeNumericValue(value) {
+	const raw = unwrapValue(value);
+	const text = String(raw ?? "").trim();
+	if (text === "-" || text === "—") return null;
+	const number = Number(text);
+	return Number.isFinite(number) && Number.isInteger(number) && number >= 0
+		? number
+		: null;
+}
+
+export function rangeDisplayValue(value) {
+	const raw = unwrapValue(value);
+	const text = String(raw ?? "").trim();
+	if (text === "-" || text === "—") return "-";
+	const number = rangeNumericValue(value);
+	return number === null ? "-" : String(number);
 }
 
 export function weaponOptionalModifierSnapshot(weapon) {
