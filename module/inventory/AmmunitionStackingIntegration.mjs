@@ -1,29 +1,31 @@
-import { AmmunitionInventory } from "./AmmunitionInventory.mjs";
-
 const OWNED_ITEM_DRAG_TYPE = "application/x-wfrp1ed-owned-item";
 
 /*
- * Ammunition is a stackable Equipment subtype. ClassicActorItemDragIntegration
- * owns the generic move/container behaviour, but historically a drop anywhere
- * outside a container only changed location: dropping one ammunition stack onto
- * another never merged them. Install this capture handler before the generic
- * inventory drag integration so matching ammunition can consume the gesture
- * first, while every non-stack drop continues through the normal path.
+ * Equipment quantities represent stacks, so identical Equipment Items should be
+ * able to coalesce by drag-and-drop instead of leaving duplicate rows. This
+ * module started as ammunition-only support; the identity contract is now
+ * deliberately generic and stricter: name, authored Equipment system data and
+ * the complete ActiveEffect definition must match. Only quantity and physical
+ * storage fields are ignored because those are exactly what stacking changes.
+ *
+ * The handler is loaded before ClassicActorItemDragIntegration and runs in the
+ * capture phase. It consumes only confirmed stack merges; every other drop is
+ * left to the normal inventory/container implementation.
  */
 Hooks.on("renderApplicationV2", (application, element) => {
 	const actor = application?.document;
 	if (!(actor instanceof foundry.documents.Actor)) return;
 	if (application.isEditable !== true) return;
 	const sheet = classicSheetRoot(element);
-	if (!sheet || sheet.dataset.wfrpAmmunitionStacking === "true") return;
-	sheet.dataset.wfrpAmmunitionStacking = "true";
+	if (!sheet || sheet.dataset.wfrpEquipmentStacking === "true") return;
+	sheet.dataset.wfrpEquipmentStacking = "true";
 
 	sheet.addEventListener("drop", (event) => {
 		const marker = ownedItemDragMarker(event.dataTransfer);
 		if (!isSameActorEquipmentMarker(marker, actor)) return;
 
 		const source = ownedItemFromMarker(actor, marker);
-		if (!AmmunitionInventory.isAmmunition(source)) return;
+		if (!isStackableEquipment(source)) return;
 
 		const targetRow = event.target?.closest?.(
 			".classic-inventory__row[data-item-id]",
@@ -32,15 +34,15 @@ Hooks.on("renderApplicationV2", (application, element) => {
 			? actor.items?.get?.(String(targetRow.dataset.itemId ?? ""))
 			: null;
 
-		/* A container row owns capacity/compatibility adjudication. Never bypass
-		 * that path by treating the container itself as a stacking destination. */
+		/* Container rows own capacity/compatibility adjudication. A container is
+		 * never itself a stack destination. */
 		if (target?.system?.isContainer === true) return;
 
 		const explicitTarget = stackableDropTarget(source, target);
 		if (explicitTarget) {
-			/* Moving onto a stack inside another container would bypass that
-			 * container's capacity rules. Same-container merges are safe, and a
-			 * top-level target is always a legal destination. */
+			/* Do not smuggle an Item into another container by dropping it onto a
+			 * child row. Same-container merges are safe, while a top-level target
+			 * is always a legal destination for a source leaving a container. */
 			const sourceContainerId = containerId(source);
 			const targetContainerId = containerId(explicitTarget);
 			if (targetContainerId && targetContainerId !== sourceContainerId) return;
@@ -50,10 +52,10 @@ Hooks.on("renderApplicationV2", (application, element) => {
 			return;
 		}
 
-		/* Dropping ammunition out of a container onto empty/top-level inventory
-		 * should also coalesce with an already-existing equivalent reserve stack.
-		 * If there is no match, do nothing here and let the generic integration
-		 * perform its normal move-to-top-level operation. */
+		/* When an Item leaves a container and is dropped anywhere on the main
+		 * Equipment level, coalesce it with an identical top-level stack if one
+		 * already exists. If no match exists, the generic integration performs the
+		 * normal move-to-top-level operation. */
 		if (!containerId(source)) return;
 		if (target && containerId(target)) return;
 		const matchingTopLevel = topLevelMatchingStack(actor, source);
@@ -65,40 +67,66 @@ Hooks.on("renderApplicationV2", (application, element) => {
 	}, true);
 });
 
+function isStackableEquipment(item) {
+	return Boolean(
+		item instanceof foundry.documents.Item &&
+		item.type === "equipment" &&
+		item.system?.isContainer !== true &&
+		item.system?.isWealth !== true
+	);
+}
+
 function stackableDropTarget(source, target) {
-	if (!(target instanceof foundry.documents.Item) || target === source) return null;
-	if (!AmmunitionInventory.isAmmunition(target)) return null;
+	if (!isStackableEquipment(target) || target === source) return null;
 	return sameStackVariant(source, target) ? target : null;
 }
 
 function topLevelMatchingStack(actor, source) {
 	return [...(actor.items ?? [])].find((candidate) =>
 		candidate !== source &&
-		AmmunitionInventory.isAmmunition(candidate) &&
+		isStackableEquipment(candidate) &&
 		!containerId(candidate) &&
 		sameStackVariant(source, candidate)
 	) ?? null;
 }
 
+/**
+ * Stack identity is intentionally conservative. Two Items merge only when they
+ * are the same authored Equipment definition, apart from current quantity and
+ * current storage. This automatically protects ammunition variants: Arrow and
+ * Special Arrow, or two Special Arrows with different ActiveEffects, remain
+ * separate stacks.
+ */
 function sameStackVariant(first, second) {
-	const firstSnapshot = AmmunitionInventory.ammunitionVariantSnapshot(first);
-	const secondSnapshot = AmmunitionInventory.ammunitionVariantSnapshot(second);
-	if (!firstSnapshot || !secondSnapshot) return false;
-	if (firstSnapshot.key !== secondSnapshot.key) return false;
+	if (!isStackableEquipment(first) || !isStackableEquipment(second)) return false;
 	if (normalizedName(first) !== normalizedName(second)) return false;
-
-	/* Prefer the strict ammunition identity when it already agrees. The fallback
-	 * below deliberately ignores only runtime ActiveEffect identity/timing data
-	 * (embedded ids, origins and start markers) so copied/split instances of the
-	 * same authored special ammunition still stack. Mechanical changes, effect
-	 * system data, statuses and duration limits remain part of the signature. */
-	if (firstSnapshot.variantKey === secondSnapshot.variantKey) return true;
+	if (equipmentSystemSignature(first) !== equipmentSystemSignature(second)) return false;
+	if (itemFlagsSignature(first) !== itemFlagsSignature(second)) return false;
 	return effectSignature(first) === effectSignature(second);
+}
+
+function equipmentSystemSignature(item) {
+	const source = item?.toObject?.()?.system ?? {};
+	const normalized = stripRuntimeMetadata(source);
+
+	/* Quantity and physical storage are instance state, not item identity. The
+	 * remaining Equipment fields (reference quantity, Encumbrance, price,
+	 * availability, subtype/ammunition identity, clothing state, etc.) stay in
+	 * the signature so mechanically different Items never collapse together. */
+	delete normalized.quantity;
+	delete normalized.containerId;
+	delete normalized.storageLocation;
+	delete normalized.totalEncumbrance;
+	return stableStringify(normalized);
+}
+
+function itemFlagsSignature(item) {
+	const flags = item?.toObject?.()?.flags ?? {};
+	return stableStringify(stripRuntimeMetadata(flags));
 }
 
 function effectSignature(item) {
 	const definitions = [...(item.effects ?? [])]
-		.filter((effect) => effect.disabled !== true)
 		.map((effect) => normalizedEffect(effect))
 		.map((effect) => stableStringify(effect))
 		.sort();
@@ -109,9 +137,8 @@ function normalizedEffect(effect) {
 	const source = effect?.toObject?.() ?? {};
 	const duration = source.duration && typeof source.duration === "object"
 		? {
-			/* Foundry v14 replaced the legacy seconds/rounds/turns accessors with
-			 * a canonical value + units pair. Compare only that authored duration
-			 * contract so stacking never touches deprecated compatibility getters. */
+			/* Foundry v14 duration contract. Runtime start markers are intentionally
+			 * excluded below, but authored value/units remain mechanical identity. */
 			value: nullableNumber(source.duration.value),
 			units: String(source.duration.units ?? ""),
 		}
@@ -130,6 +157,7 @@ function normalizedEffect(effect) {
 	return {
 		name: String(source.name ?? ""),
 		type: String(source.type ?? ""),
+		disabled: source.disabled === true,
 		transfer: source.transfer === true,
 		duration,
 		changes,
@@ -148,7 +176,17 @@ function stripRuntimeMetadata(value) {
 	if (!value || typeof value !== "object") return value;
 	const result = {};
 	for (const [key, entry] of Object.entries(value)) {
-		if (["_id", "id", "origin", "sourceId", "startTime", "startRound", "startTurn", "updatedAt", "createdAt"].includes(key)) continue;
+		if ([
+			"_id",
+			"id",
+			"origin",
+			"sourceId",
+			"startTime",
+			"startRound",
+			"startTurn",
+			"updatedAt",
+			"createdAt",
+		].includes(key)) continue;
 		result[key] = stripRuntimeMetadata(entry);
 	}
 	return result;
@@ -234,6 +272,6 @@ function classicSheetRoot(root) {
 }
 
 function reportStackingError(error) {
-	console.error("WFRP1ED | Ammunition stacking failed.", error);
+	console.error("WFRP1ED | Equipment stacking failed.", error);
 	ui.notifications.error(error?.message ?? String(error));
 }
