@@ -383,9 +383,12 @@ export class CombatRangedState {
 
 Hooks.once("init", () => {
 	game.settings.register(game.system.id, SETTING_KEY, {
-		/* game.i18n.lang is not yet reliable during early init in every client.
-		 * Read Foundry's persisted core language for settings registration so the
-		 * Configure Settings panel is localized on its first render. */
+		/*
+		 * Foundry's translated strings are already available here (the existing
+		 * WfrpRuleSettings registrations use game.i18n.localize during init), while
+		 * game.i18n.lang/core.language can still be timing-sensitive. Probe one
+		 * existing system translation instead of guessing from those properties.
+		 */
 		name: settingLocalize(
 			"Automatic ranged reload countdown",
 			"Automatyczne odliczanie przeładowania broni dystansowej",
@@ -575,13 +578,12 @@ function clampInteger(value, min, max) {
 }
 
 function settingLocalize(english, polish) {
-	let language = "";
 	try {
-		language = String(game.settings.get("core", "language") ?? "");
+		const probe = game.i18n.localize("WFRP1ED.Settings.ParryEconomy.Name");
+		return probe === "Koszt Ataków za parowanie" ? polish : english;
 	} catch (_error) {
-		language = String(game.i18n?.lang ?? "");
+		return english;
 	}
-	return language.toLowerCase().startsWith("pl") ? polish : english;
 }
 
 function localize(english, polish) {
