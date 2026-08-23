@@ -14,8 +14,10 @@ export const COMBAT_RANGE_BAND = Object.freeze({
  * - Extreme: -20 BS and -2 damage.
  *
  * Polish Core pp. 126, 128 uses Krótki / Długi / Maksymalny for the same
- * mechanical bands. WeaponData keeps the existing `range.max` storage key for
- * compatibility; mechanically that value is the Extreme/Maximum threshold.
+ * mechanical bands. A printed `-` means that a band does not exist for that
+ * weapon. Resolution skips an unavailable band rather than converting it to
+ * zero distance. For example Short 32 / Long - / Maximum 100 resolves 0-32 as
+ * Short and 33-100 directly as Maximum/Extreme.
  *
  * Whether these effects are applied automatically belongs to one attack
  * transaction, not to the Weapon Item. This service only derives consequences
@@ -37,18 +39,22 @@ export class CombatAttackRangeRules {
 
 	static profile({ short = 0, long = 0, extreme = 0 } = {}) {
 		const normalized = {
-			short: nonNegativeNumber(short, "short range"),
-			long: nonNegativeNumber(long, "long range"),
-			extreme: nonNegativeNumber(extreme, "extreme range"),
+			short: optionalRangeNumber(short, "short range"),
+			long: optionalRangeNumber(long, "long range"),
+			extreme: optionalRangeNumber(extreme, "extreme range"),
 		};
 
-		if (
-			normalized.long < normalized.short ||
-			normalized.extreme < normalized.long
-		) {
-			throw new Error(
-				"Weapon range thresholds must satisfy Short <= Long <= Extreme.",
-			);
+		const authored = [
+			["Short", normalized.short],
+			["Long", normalized.long],
+			["Extreme", normalized.extreme],
+		].filter(([, value]) => value !== null);
+		for (let index = 1; index < authored.length; index += 1) {
+			if (authored[index][1] < authored[index - 1][1]) {
+				throw new Error(
+					"Available weapon range thresholds must increase from Short through Long to Extreme.",
+				);
+			}
 		}
 
 		return Object.freeze(normalized);
@@ -59,11 +65,11 @@ export class CombatAttackRangeRules {
 		const measured = nonNegativeNumber(distance, "attack distance");
 		let band;
 
-		if (measured <= ranges.short) {
+		if (ranges.short !== null && measured <= ranges.short) {
 			band = COMBAT_RANGE_BAND.SHORT;
-		} else if (measured <= ranges.long) {
+		} else if (ranges.long !== null && measured <= ranges.long) {
 			band = COMBAT_RANGE_BAND.LONG;
-		} else if (measured <= ranges.extreme) {
+		} else if (ranges.extreme !== null && measured <= ranges.extreme) {
 			band = COMBAT_RANGE_BAND.EXTREME;
 		} else {
 			band = COMBAT_RANGE_BAND.OUT_OF_RANGE;
@@ -110,10 +116,16 @@ function effectsForBand(band) {
 	}
 }
 
+function optionalRangeNumber(value, label) {
+	const text = String(value ?? "").trim();
+	if (text === "-" || text === "—") return null;
+	return nonNegativeNumber(value, label);
+}
+
 function nonNegativeNumber(value, label) {
 	const number = Number(value);
 	if (!Number.isFinite(number) || number < 0) {
-		throw new Error(`${label} must be a finite non-negative number.`);
+		throw new Error(`${label} must be a finite non-negative number or '-'.`);
 	}
 	return number;
 }
