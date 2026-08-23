@@ -109,9 +109,11 @@ function normalizedEffect(effect) {
 	const source = effect?.toObject?.() ?? {};
 	const duration = source.duration && typeof source.duration === "object"
 		? {
-			seconds: nullableNumber(source.duration.seconds),
-			rounds: nullableNumber(source.duration.rounds),
-			turns: nullableNumber(source.duration.turns),
+			/* Foundry v14 replaced the legacy seconds/rounds/turns accessors with
+			 * a canonical value + units pair. Compare only that authored duration
+			 * contract so stacking never touches deprecated compatibility getters. */
+			value: nullableNumber(source.duration.value),
+			units: String(source.duration.units ?? ""),
 		}
 		: null;
 	const changes = [...(source.changes ?? [])]
