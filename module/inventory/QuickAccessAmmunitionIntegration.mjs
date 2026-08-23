@@ -21,16 +21,34 @@ Hooks.on("deleteItem", (item) => refreshQuickContainerActor(item));
 function decorateCapacity(row, container) {
 	const state = AmmunitionInventory.containerState(container);
 	if (!state) return;
+
+	const ammunitionLabel = ammunitionTypeLabel(state);
+	const name = row.querySelector(".classic-inventory__name");
+	if (name) {
+		const displayName = ammunitionLabel
+			? `${container.name} (${ammunitionLabel})`
+			: String(container.name ?? "");
+		name.textContent = displayName;
+		name.title = displayName;
+	}
+
 	row.querySelector("[data-wfrp-ammunition-capacity]")?.remove();
-	const badge = document.createElement("span");
-	badge.className = "classic-inventory__ammunition-capacity";
-	badge.dataset.wfrpAmmunitionCapacity = "";
-	badge.textContent = `${state.current}/${state.capacity}`;
-	badge.title = localize(
+	const quantityControl = row.querySelector(".classic-inventory__quantity");
+	if (!quantityControl) return;
+
+	/* A Quick Access container is one concrete storage Item, so its ordinary
+	 * Equipment-stack quantity is not useful in the compact inventory row. Use
+	 * that same slot for its mechanically relevant ammunition capacity instead
+	 * of adding a second badge beside the quantity control. */
+	const capacity = document.createElement("span");
+	capacity.className = "classic-inventory__ammunition-capacity";
+	capacity.dataset.wfrpAmmunitionCapacity = "";
+	capacity.textContent = `${state.current}/${state.capacity}`;
+	capacity.title = localize(
 		`Quick-access ammunition: ${state.current}/${state.capacity}`,
 		`Amunicja z łatwym dostępem: ${state.current}/${state.capacity}`,
 	);
-	row.querySelector(".classic-inventory__name-cell")?.append(badge);
+	quantityControl.replaceWith(capacity);
 }
 
 function installCapacityDropTarget(row, actor, container, application) {
@@ -115,7 +133,23 @@ async function handleDrop(event, actor, container, application) {
 	const overflow = Math.max(0, amount - accepted);
 	if (accepted <= 0) return;
 
-	if (overflow === 0) {
+	const matching = matchingAmmunitionStack(actor, owned, String(container.id ?? ""));
+	if (matching) {
+		await matching.update({
+			"system.quantity": quantity(matching) + accepted,
+		});
+		if (overflow === 0) {
+			await owned.delete();
+		} else {
+			await owned.update({
+				"system.quantity": overflow,
+				...(overflowDestination === "top" ? {
+					"system.containerId": "",
+					"system.storageLocation": "",
+				} : {}),
+			});
+		}
+	} else if (overflow === 0) {
 		await owned.update({
 			"system.containerId": String(container.id ?? ""),
 			"system.storageLocation": String(container.name ?? ""),
@@ -171,6 +205,32 @@ function assertCompatible(container, ammunition) {
 			"This ammunition type does not match the Quick Access container.",
 			"Ten typ amunicji nie pasuje do pojemnika z łatwym dostępem.",
 		));
+	}
+}
+
+function matchingAmmunitionStack(actor, source, containerId) {
+	const sourceSnapshot = AmmunitionInventory.ammunitionVariantSnapshot(source);
+	if (!sourceSnapshot?.variantKey) return null;
+	return [...(actor.items ?? [])].find((candidate) => {
+		if (
+			candidate?.type !== "equipment" ||
+			candidate.id === source.id ||
+			String(candidate.system?.containerId ?? "") !== String(containerId ?? "")
+		) return false;
+		const candidateSnapshot = AmmunitionInventory.ammunitionVariantSnapshot(candidate);
+		return candidateSnapshot?.variantKey === sourceSnapshot.variantKey;
+	}) ?? null;
+}
+
+function ammunitionTypeLabel(state) {
+	switch (String(state?.type ?? "")) {
+		case "arrow": return localize("arrows", "strzały");
+		case "bolt": return localize("bolts", "bełty");
+		case "sling": return localize("sling ammunition", "pociski do procy");
+		case "firearmLoad": return localize("firearm loads", "ładunki broni palnej");
+		case "custom": return String(state?.customId ?? "").trim() ||
+			localize("custom ammunition", "inna amunicja");
+		default: return "";
 	}
 }
 
