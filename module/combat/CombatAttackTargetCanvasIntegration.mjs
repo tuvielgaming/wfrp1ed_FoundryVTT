@@ -9,6 +9,7 @@ const TARGET_SELECTION_PENDING = "__pending__";
 const ATTACK_DIALOG_CLASS = "wfrp1ed-combat-attack-dialog";
 
 let activePendingPick = null;
+let hoveredPendingPickToken = null;
 
 install();
 
@@ -22,10 +23,12 @@ install();
  * Pending ChatMessage cards are different: their selected defender is shared
  * adjudication state, while Foundry target markers are private per-user state.
  * They therefore do NOT follow game.user.targets. Instead a card can enter an
- * explicit "pick on scene" mode. The next token the user controls with a normal
- * canvas click is copied into that specific pending card without changing the
- * user's Foundry Target Token state. The existing dropdown / clear / GM Actor
- * picker / GM drag-drop paths remain authoritative alternatives.
+ * explicit "pick on scene" mode. While armed, hovering a visible Token and
+ * left-clicking the canvas copies that Token into the specific pending card.
+ * This works for GM and Actor owners even when they cannot control the target
+ * Token, and it does not change the user's Foundry Target Token state.
+ * The existing dropdown / clear / GM Actor picker / GM drag-drop paths remain
+ * authoritative alternatives.
  */
 function install() {
 	const DialogV2 = foundry.applications?.api?.DialogV2;
@@ -73,13 +76,22 @@ function install() {
 		requestAnimationFrame(() => decoratePendingTargetCard(message, rendered));
 	});
 
-	Hooks.on("controlToken", (token, controlled) => {
-		if (controlled !== true) return;
-		void applyControlledTokenToPendingPick(token);
+	/* `controlToken` only fires when a user can actually control the clicked
+	 * Token. Players commonly cannot control hostile targets, so pending target
+	 * picking is instead based on Foundry's public hoverToken hook plus the next
+	 * left pointer press on the canvas. */
+	Hooks.on("hoverToken", (token, hovered) => {
+		if (!activePendingPick) return;
+		if (hovered === true) {
+			hoveredPendingPickToken = token;
+			return;
+		}
+		if (hoveredPendingPickToken === token) hoveredPendingPickToken = null;
 	});
 
 	Hooks.once("ready", () => {
 		document.addEventListener("keydown", onGlobalKeydown, true);
+		document.addEventListener("pointerdown", onGlobalPointerDown, true);
 	});
 
 	Object.defineProperty(
@@ -263,18 +275,23 @@ function installPendingScenePickButton(message, card) {
 
 function armPendingPick(message, card, button) {
 	disarmPendingPick();
+	hoveredPendingPickToken = null;
 	activePendingPick = {
 		messageId: String(message.id),
 		card,
 		button,
 	};
+	document.body?.classList.add("wfrp1ed-pending-scene-pick-active");
 	setPendingPickVisual(card, button, true);
 }
 
 function disarmPendingPick() {
-	if (!activePendingPick) return;
-	setPendingPickVisual(activePendingPick.card, activePendingPick.button, false);
+	if (activePendingPick) {
+		setPendingPickVisual(activePendingPick.card, activePendingPick.button, false);
+	}
 	activePendingPick = null;
+	hoveredPendingPickToken = null;
+	document.body?.classList.remove("wfrp1ed-pending-scene-pick-active");
 }
 
 function setPendingPickVisual(card, button, armed) {
@@ -301,7 +318,19 @@ function setPendingPickVisual(card, button, armed) {
 	}
 }
 
-async function applyControlledTokenToPendingPick(token) {
+function onGlobalPointerDown(event) {
+	if (!activePendingPick || event.button !== 0) return;
+	const token = hoveredPendingPickToken;
+	if (!token) return;
+
+	/* Consume this pointer press before Foundry starts token control/movement.
+	 * Scene-pick mode is an attack-card action, not a canvas selection action. */
+	event.preventDefault();
+	event.stopImmediatePropagation();
+	void applySceneTokenToPendingPick(token);
+}
+
+async function applySceneTokenToPendingPick(token) {
 	if (!activePendingPick) return;
 	const messageId = String(activePendingPick.messageId ?? "");
 	const message = game.messages?.get(messageId);
@@ -327,8 +356,8 @@ async function applyControlledTokenToPendingPick(token) {
 	ensureTargetOption(select, actor, displayName);
 	select.value = String(actor.uuid);
 
-	/* Clear the armed visual before dispatching. The change may immediately
-	 * re-render the ChatMessage on every client. */
+	/* Keep the orange armed state until a valid Token has actually been chosen;
+	 * then clear it before the ChatMessage update re-renders every client. */
 	disarmPendingPick();
 	select.dispatchEvent(new Event("change", { bubbles: true }));
 }
