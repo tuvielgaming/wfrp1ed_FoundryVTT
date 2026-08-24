@@ -29,6 +29,10 @@ install();
  * DialogV2 also focuses its default Roll button when the window first opens.
  * We release that automatic initial focus after the render frame so native
  * canvas targeting works immediately, before the user touches any dialog input.
+ *
+ * Target selectors deliberately distinguish visible Scene tokens from the GM's
+ * broader World Actor picker. The latter keeps its compact button label but has
+ * an explanatory tooltip in both the pre-roll dialog and pending chat card.
  */
 function install() {
 	const DialogV2 = foundry.applications?.api?.DialogV2;
@@ -71,6 +75,11 @@ function install() {
 		return Promise.resolve(promise).finally(cleanup);
 	};
 
+	Hooks.on("renderChatMessageHTML", (_message, html) => {
+		const rendered = asElement(html);
+		requestAnimationFrame(() => decoratePendingTargetCard(rendered));
+	});
+
 	Object.defineProperty(
 		DialogV2,
 		"__wfrpAttackCanvasTargetingInstalled",
@@ -90,6 +99,8 @@ function activateTargetSync(root) {
 	if (!(selection instanceof HTMLSelectElement) || !(targetUuid instanceof HTMLInputElement)) {
 		return null;
 	}
+
+	decorateAttackTargetControls(root, selection);
 
 	/* Native Foundry targeting is now live while this dialog is open. Keeping a
 	 * second "Use current target" action would duplicate the normal workflow and
@@ -155,6 +166,65 @@ function activateTargetSync(root) {
 	};
 }
 
+function decorateAttackTargetControls(root, selection) {
+	const pendingOption = [...selection.options].find(
+		(option) => option.value === TARGET_SELECTION_PENDING,
+	);
+	if (pendingOption) {
+		pendingOption.textContent = localize(
+			"Choose scene token…",
+			"Wybierz token ze sceny…",
+		);
+	}
+	selection.title = localize(
+		"Choose a visible token on the current scene. You can also change the target directly on the canvas.",
+		"Wybierz widoczny token na bieżącej scenie. Możesz też normalnie zmieniać cel bezpośrednio na mapie.",
+	);
+
+	const chooseActor = root.querySelector('[data-attack-target-action="choose-actor"]');
+	if (chooseActor instanceof HTMLButtonElement) {
+		chooseActor.title = worldActorTooltip();
+	}
+}
+
+function decoratePendingTargetCard(rendered) {
+	const card = rendered?.matches?.("[data-wfrp-pending-combat-attack]")
+		? rendered
+		: rendered?.querySelector?.("[data-wfrp-pending-combat-attack]");
+	if (!card) return;
+
+	const select = card.querySelector("[data-pending-attack-scene-target]");
+	if (select instanceof HTMLSelectElement) {
+		const label = select.closest("label")?.querySelector("span");
+		if (label) label.textContent = localize("Scene token", "Token na scenie");
+		const pendingOption = [...select.options].find(
+			(option) => option.value === TARGET_SELECTION_PENDING,
+		);
+		if (pendingOption) {
+			pendingOption.textContent = localize(
+				"Choose scene token…",
+				"Wybierz token ze sceny…",
+			);
+		}
+		select.title = localize(
+			"Choose a visible token from the current scene.",
+			"Wybierz widoczny token z bieżącej sceny.",
+		);
+	}
+
+	const chooseActor = card.querySelector('[data-pending-attack-action="choose-actor"]');
+	if (chooseActor instanceof HTMLButtonElement) {
+		chooseActor.title = worldActorTooltip();
+	}
+}
+
+function worldActorTooltip() {
+	return localize(
+		"Choose any Actor from the World Actors directory, including an Actor without a token on the current scene.",
+		"Wybierz dowolnego Aktora z panelu Aktorów świata, także takiego, który nie ma tokenu na bieżącej scenie.",
+	);
+}
+
 function releaseInitialDialogFocus(root) {
 	requestAnimationFrame(() => {
 		if (!root?.isConnected) return;
@@ -194,4 +264,16 @@ function ensureTargetOption(selection, target) {
 	option.textContent = displayName;
 	option.dataset.targetName = displayName;
 	return option;
+}
+
+function asElement(html) {
+	if (html instanceof HTMLElement) return html;
+	if (html?.[0] instanceof HTMLElement) return html[0];
+	return null;
+}
+
+function localize(english, polish) {
+	return String(game.i18n?.lang ?? "").toLowerCase().startsWith("pl")
+		? polish
+		: english;
 }
