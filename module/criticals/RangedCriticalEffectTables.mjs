@@ -46,7 +46,7 @@ export async function rangedCriticalEffectFor(hitLocation, effectNumber) {
 	}
 
 	const result = results[0];
-	const text = String(result.text ?? "").trim();
+	const text = tableResultDescription(result);
 	if (!text) {
 		warnOnce(
 			`empty:${resolved.table.uuid}:${result.id}`,
@@ -139,6 +139,17 @@ async function resolveNamedTable(tableName) {
 		);
 		return null;
 	}
+}
+
+/**
+ * Foundry v14 deprecated TableResult#text. Ranged override tables contain a
+ * narrative effect description, so prefer description and accept name as the
+ * compact fallback for user-authored tables which intentionally omit it.
+ */
+function tableResultDescription(result) {
+	const description = String(result?.description ?? "").trim();
+	if (description) return description;
+	return String(result?.name ?? "").trim();
 }
 
 function isRollTablePack(pack) {
