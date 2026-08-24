@@ -35,7 +35,9 @@ function install() {
 		const runtimeBefore = CombatRangedState.runtime(weapon);
 		const internalMagazine = runtimeBefore.magazineCapacity > 0;
 		let externalItem = null;
-		let ammunition = internalMagazine ? runtimeBefore.magazineVariant ?? null : null;
+		let ammunition = internalMagazine
+			? ammunitionWithAccessMode(runtimeBefore.magazineVariant, "internal-magazine")
+			: null;
 
 		if (
 			AmmunitionInventory.trackingEnabled() &&
@@ -59,7 +61,8 @@ function install() {
 			const before = quantity(live);
 			if (before > 0) {
 				await live.update({ "system.quantity": before - 1 });
-				ammunition = AmmunitionInventory.ammunitionVariantSnapshot(live, before - 1);
+				const snapshot = AmmunitionInventory.ammunitionVariantSnapshot(live, before - 1);
+				ammunition = directShotAmmunitionSnapshot(actor, live, snapshot, configuration);
 			} else {
 				const selectedName = String(externalItem.name ?? localize(
 					"selected ammunition",
@@ -340,6 +343,36 @@ function notifyMagazineCompletion(weapon, completion) {
 			`${weapon.name}: przeładowanie magazynka zakończone, ale zabrakło amunicji. Załadowano ${completion.loaded}; magazynek ${runtime.magazineRemaining}/${runtime.magazineCapacity}.`,
 		));
 	}
+}
+
+function ammunitionWithAccessMode(snapshot, accessMode) {
+	if (!snapshot) return null;
+	return Object.freeze({
+		...foundry.utils.deepClone(snapshot),
+		accessMode: String(accessMode ?? ""),
+	});
+}
+
+function directShotAmmunitionSnapshot(actor, item, snapshot, configuration) {
+	if (!snapshot) return null;
+	const reserve = String(configuration?.ammunitionAccessMode ?? "") === "reserve-adjudicated";
+	const sourceContainer = reserve ? null : quickAccessContainerSnapshot(actor, item);
+	return Object.freeze({
+		...foundry.utils.deepClone(snapshot),
+		accessMode: reserve ? "reserve-adjudicated" : "quick-access",
+		sourceContainer,
+	});
+}
+
+function quickAccessContainerSnapshot(actor, item) {
+	const containerId = String(item?.system?.containerId ?? "");
+	if (!containerId) return null;
+	const container = actor?.items?.get?.(containerId);
+	if (!container || !AmmunitionInventory.isQuickAccessContainer(container)) return null;
+	return Object.freeze({
+		uuid: String(container.uuid ?? ""),
+		name: String(container.name ?? ""),
+	});
 }
 
 function quantity(item) {
