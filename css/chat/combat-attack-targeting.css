@@ -53,9 +53,28 @@
 	gap: 5px;
 }
 
-.wfrp1ed-pending-combat-attack .pending-combat-attack__pick-scene.is-active {
+/* Do not rely on Foundry's transient :hover/:focus button skin here. Armed
+ * scene-pick mode is stateful, so its orange action colour remains visible
+ * until a token is actually picked or the user explicitly cancels. */
+.wfrp1ed-pending-combat-attack .pending-combat-attack__pick-scene.is-active,
+.wfrp1ed-pending-combat-attack .pending-combat-attack__pick-scene.is-active:hover,
+.wfrp1ed-pending-combat-attack .pending-combat-attack__pick-scene.is-active:focus {
+	border-color: rgb(136 61 29 / 90%);
+	background: rgb(196 87 45 / 88%);
+	color: #fff7e8;
 	font-weight: 800;
-	box-shadow: inset 0 0 0 1px rgb(122 88 29 / 56%);
+	box-shadow:
+		inset 0 0 0 1px rgb(255 222 177 / 32%),
+		0 0 0 1px rgb(122 53 24 / 18%);
+}
+
+/* The armed card is selecting an attack target, not moving or controlling a
+ * canvas object. A crosshair cursor communicates that temporary mode without
+ * changing Foundry's own Target Token state. */
+body.wfrp1ed-pending-scene-pick-active #board,
+body.wfrp1ed-pending-scene-pick-active #board canvas,
+body.wfrp1ed-pending-scene-pick-active canvas#board {
+	cursor: crosshair !important;
 }
 
 @media (max-width: 500px) {
