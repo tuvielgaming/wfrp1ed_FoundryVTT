@@ -1,12 +1,18 @@
+import { DamageApplication } from "../damage/DamageApplication.mjs";
 import { DamageChat } from "../damage/DamageChat.mjs";
 import {
 	DAMAGE_CRITICAL_MODE,
 	DamagePacket,
 } from "../damage/DamagePacket.mjs";
+import {
+	resolveDamageMessageCritical,
+} from "./CriticalDamageIntegration.mjs";
 
 const SETTING_KEY = "detailedCriticalsForRangedAttacks";
 const FLAG_SCOPE = "wfrp1ed";
 const ATTACK_FLAG_KEY = "combatAttackResult";
+const DAMAGE_FLAG_KEY = "damageState";
+const DAMAGE_RESULT_VIEW_FLAG_KEY = "combatDamageResultView";
 
 /**
  * Core WFRP 1e recommends Sudden Death Critical Hit tables for missile fire,
@@ -91,3 +97,197 @@ DamageChat.attach = async function rangedCriticalPolicyAttach(
 		resolution,
 	});
 };
+
+/*
+ * CombatLifecyclePresentation predates ranged Sudden Death routing. Its linked
+ * Damage card therefore still creates a Detailed Critical button for every
+ * applied combat critical, while CriticalDamageIntegration correctly creates a
+ * Sudden Death launcher on the source Attack card. The result is two conflicting
+ * controls for one authoritative damage transaction.
+ *
+ * Register this presentation repair at ready so its render hook runs after the
+ * older lifecycle hooks registered during init. The dedicated Damage card owns
+ * the critical action once it exists; the source Attack card keeps only attack
+ * history. We do not change the transaction here -- only the UI is normalized
+ * to the packet/Actor state already selected above.
+ */
+Hooks.once("ready", () => {
+	Hooks.on("renderChatMessageHTML", (message, html) => {
+		requestAnimationFrame(() => {
+			repairRangedCriticalPresentation(message, html);
+		});
+	});
+
+	Hooks.on("updateActor", (actor) => {
+		requestAnimationFrame(() => refreshVisibleRangedCriticalPresentation(actor));
+	});
+
+	requestAnimationFrame(() => refreshAllVisibleRangedCriticalPresentation());
+});
+
+function repairRangedCriticalPresentation(message, html) {
+	const root = asElement(html);
+	if (!root) return;
+
+	const view = message?.getFlag?.(FLAG_SCOPE, DAMAGE_RESULT_VIEW_FLAG_KEY);
+	if (view?.sourceAttackMessageId) {
+		repairDedicatedDamageCritical(message, root, view);
+		return;
+	}
+
+	const attack = message?.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY);
+	const damage = message?.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG_KEY);
+	if (attack?.family !== "ranged" || !damage?.packet?.id) return;
+	if (!findDamageResultView(message.id, damage.packet.id)) return;
+
+	/* The linked Damage card is the single critical-action surface. */
+	root.querySelector?.("[data-wfrp-critical-result]")?.remove();
+	root.querySelector?.("[data-wfrp-detailed-critical-panel]")?.remove();
+}
+
+function repairDedicatedDamageCritical(message, root, view) {
+	const sourceMessage = game.messages?.get(String(view.sourceAttackMessageId ?? ""));
+	const attack = sourceMessage?.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY);
+	const damage = sourceMessage?.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG_KEY);
+	if (attack?.family !== "ranged" || !damage?.packet?.id) return;
+	if (String(damage.packet.id) !== String(view.packetId ?? "")) return;
+
+	const actor = actorFromUuidSync(
+		view.targetActorUuid ?? damage.packet.targetActorUuid,
+	);
+	const transaction = actor
+		? DamageApplication.transactionFor(actor, view.packetId)
+		: damage.application ?? null;
+	if (!transaction || transaction.state !== "applied") return;
+
+	const actions = root.querySelector?.("[data-wfrp-damage-result-actions]");
+	if (!(actions instanceof HTMLElement)) return;
+
+	/* Detailed mode is already rendered correctly by the shared lifecycle. */
+	if (transaction.criticalMode === DAMAGE_CRITICAL_MODE.DETAILED) return;
+
+	/* For Sudden Death, remove the legacy Detailed launcher even when the current
+	 * user is not authorized to replace it with an actionable control. */
+	actions.replaceChildren();
+	if (
+		transaction.criticalMode !== DAMAGE_CRITICAL_MODE.SUDDEN_DEATH ||
+		Number(transaction.criticalValue) <= 0 ||
+		transaction.criticalResolution ||
+		!canResolveSourceCritical(sourceMessage, damage, game.user)
+	) {
+		return;
+	}
+
+	const button = document.createElement("button");
+	button.type = "button";
+	button.className = "wfrp1e-critical-result__action";
+	button.dataset.wfrpResolveCritical = "";
+	button.innerHTML = `<i class="fa-solid fa-skull"></i> ${localize(
+		"Resolve Critical",
+		"Rozstrzygnij trafienie krytyczne",
+	)}`;
+	button.addEventListener("click", () => {
+		button.disabled = true;
+		void resolveDamageMessageCritical(sourceMessage)
+			.catch((error) => {
+				console.error("WFRP1ED | Unable to resolve ranged Sudden Death critical.", error);
+				ui.notifications.error(
+					error?.message ?? localize(
+						"Unable to resolve the critical hit.",
+						"Nie udało się rozstrzygnąć trafienia krytycznego.",
+					),
+				);
+			})
+			.finally(() => {
+				if (button.isConnected) button.disabled = false;
+			});
+	});
+	actions.append(button);
+}
+
+function refreshVisibleRangedCriticalPresentation(actor) {
+	if (!(actor instanceof foundry.documents.Actor)) return;
+
+	for (const message of game.messages ?? []) {
+		const view = message.getFlag?.(FLAG_SCOPE, DAMAGE_RESULT_VIEW_FLAG_KEY);
+		if (
+			view?.sourceAttackMessageId &&
+			String(view.targetActorUuid ?? "") === String(actor.uuid ?? "")
+		) {
+			const entry = visibleMessageEntry(message.id);
+			if (entry) repairRangedCriticalPresentation(message, entry);
+			continue;
+		}
+
+		const damage = message.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG_KEY);
+		if (String(damage?.packet?.targetActorUuid ?? "") !== String(actor.uuid ?? "")) {
+			continue;
+		}
+		const entry = visibleMessageEntry(message.id);
+		if (entry) repairRangedCriticalPresentation(message, entry);
+	}
+}
+
+function refreshAllVisibleRangedCriticalPresentation() {
+	for (const message of game.messages ?? []) {
+		const entry = visibleMessageEntry(message.id);
+		if (entry) repairRangedCriticalPresentation(message, entry);
+	}
+}
+
+function findDamageResultView(sourceMessageId, packetId) {
+	const sourceId = String(sourceMessageId ?? "");
+	const id = String(packetId ?? "");
+	if (!sourceId || !id) return null;
+
+	return [...(game.messages ?? [])].find((message) => {
+		const view = message.getFlag?.(FLAG_SCOPE, DAMAGE_RESULT_VIEW_FLAG_KEY);
+		return Boolean(
+			String(view?.sourceAttackMessageId ?? "") === sourceId &&
+			String(view?.packetId ?? "") === id
+		);
+	}) ?? null;
+}
+
+function canResolveSourceCritical(sourceMessage, damageState, user) {
+	if (!sourceMessage || !damageState || !user) return false;
+	if (user.isGM) return true;
+
+	const sourceUserId = String(
+		damageState.createdBy ??
+		sourceMessage.user?.id ??
+		sourceMessage.author?.id ??
+		"",
+	).trim();
+	return Boolean(sourceUserId && sourceUserId === String(user.id ?? ""));
+}
+
+function actorFromUuidSync(uuid) {
+	const value = String(uuid ?? "").trim();
+	if (!value) return null;
+	try {
+		const document = foundry.utils.fromUuidSync(value);
+		if (document instanceof foundry.documents.Actor) return document;
+		if (document?.actor instanceof foundry.documents.Actor) return document.actor;
+	} catch (_error) {
+		return null;
+	}
+	return null;
+}
+
+function visibleMessageEntry(messageId) {
+	const id = String(messageId ?? "");
+	return id
+		? document.querySelector(`[data-message-id="${id}"]`)
+		: null;
+}
+
+function asElement(html) {
+	if (html instanceof HTMLElement) return html;
+	if (html?.[0] instanceof HTMLElement) return html[0];
+	return null;
+}
+
+function localize(english, polish) {
+	return game.i18n.lang === "pl" ? polish : english;
+}
