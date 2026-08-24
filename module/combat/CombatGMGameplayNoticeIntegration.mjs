@@ -48,20 +48,27 @@ function rangedAmmunitionNotice(actor, weapon, error) {
 
 	/* The ammunition integration exposes its gate on fireAvailability. Because
 	 * the ranged-state reason now has priority over ammunition, this marker is
-	 * present only when missing accessible ammunition is actually the reason the
+	 * present only when ammunition availability is actually the reason the
 	 * attack was refused. Match the thrown text as an additional guard against
 	 * accidentally reclassifying some unrelated exception. */
 	if (fire?.ammunition?.allowed !== false) return null;
 	if (String(error?.message ?? "") !== String(fire.reason ?? "")) return null;
 
+	const hasReserves = Array.isArray(fire.ammunition?.reserves) &&
+		fire.ammunition.reserves.length > 0;
 	return {
 		category: "ranged-ammunition",
 		title: localize("Ammunition", "Amunicja"),
 		message: fire.reason,
-		summary: localize(
-			"No readily accessible ammunition — details saved in private GM chat.",
-			"Brak łatwo dostępnej amunicji — szczegóły zapisano w prywatnym czacie MG.",
-		),
+		summary: hasReserves
+			? localize(
+				"No readily accessible ammunition — details saved in private GM chat.",
+				"Brak łatwo dostępnej amunicji — szczegóły zapisano w prywatnym czacie MG.",
+			)
+			: localize(
+				"No ammunition is available — details saved in private GM chat.",
+				"Brak dostępnej amunicji — szczegóły zapisano w prywatnym czacie MG.",
+			),
 		actor,
 		item: weapon,
 	};
