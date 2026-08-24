@@ -82,6 +82,17 @@ function isManagedInput(input) {
 	if (input.dataset.wfrpPreserveInputSelection !== undefined) return false;
 	if (!SELECTABLE_TYPES.has(String(input.type ?? "text").toLowerCase())) return false;
 
+	/* Editable combat result inputs live in ChatMessage cards rather than under
+	 * the normal sheet/dialog roots below. Keep the same system-wide replace-on-
+	 * focus contract for physical/adjudicated roll entry without affecting native
+	 * Foundry chat/search inputs. */
+	if (input.matches(
+		"[data-wfrp-detailed-critical-roll-input], " +
+		"[data-wfrp-damage-dice-total]",
+	)) {
+		return true;
+	}
+
 	/* All of our sheets/dialogs use a WFRP root class. This prevents the system
 	 * from changing native Foundry search bars or other core application fields. */
 	return Boolean(input.closest(
