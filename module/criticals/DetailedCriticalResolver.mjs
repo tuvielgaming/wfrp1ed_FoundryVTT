@@ -145,7 +145,7 @@ export class DetailedCriticalResolver {
 				tableUuid: effectResolution.tableUuid,
 				tableName: String(effectTable.name ?? ""),
 				resultId: String(effectResult.id ?? ""),
-				text: String(effectResult.text ?? "").trim(),
+				text: tableResultDescription(effectResult),
 				outcome: effectData.outcome,
 			},
 			outcome: effectData.outcome,
@@ -227,6 +227,17 @@ function structuredEffectResult(
 	}
 
 	return { outcome };
+}
+
+/**
+ * Foundry v14 deprecated TableResult#text in favor of the split result name and
+ * description fields. Detailed critical effects are narrative descriptions, so
+ * prefer description and use the result name only as a readable fallback.
+ */
+function tableResultDescription(result) {
+	const description = String(result?.description ?? "").trim();
+	if (description) return description;
+	return String(result?.name ?? "").trim();
 }
 
 function hitLocationDefinition(value) {
