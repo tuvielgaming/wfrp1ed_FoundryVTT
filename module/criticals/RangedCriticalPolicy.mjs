@@ -1,9 +1,12 @@
-import { DAMAGE_CRITICAL_MODE } from "../damage/DamagePacket.mjs";
+import { DamageChat } from "../damage/DamageChat.mjs";
+import {
+	DAMAGE_CRITICAL_MODE,
+	DamagePacket,
+} from "../damage/DamagePacket.mjs";
 
 const SETTING_KEY = "detailedCriticalsForRangedAttacks";
 const FLAG_SCOPE = "wfrp1ed";
 const ATTACK_FLAG_KEY = "combatAttackResult";
-const DAMAGE_FLAG_KEY = "damageState";
 
 /**
  * Core WFRP 1e recommends Sudden Death Critical Hit tables for missile fire,
@@ -50,32 +53,41 @@ export class RangedCriticalPolicy {
 Hooks.once("i18nInit", () => RangedCriticalPolicy.registerSetting());
 
 /*
- * CombatRangedDamageIntegration creates the canonical Core DamagePacket and
- * DamageChat.attach persists it. Keep that damage implementation isolated from
- * campaign-policy concerns by changing only the incoming packet's critical
- * routing at the ChatMessage persistence boundary.
+ * Ranged damage used to create a DamagePacket with DETAILED hard-coded and then
+ * tried to rewrite the nested ChatMessage update in preUpdateChatMessage. That
+ * is too late and is not a reliable mutation boundary in Foundry v14: the
+ * canonical DamagePacket has already been constructed and DamageChat may clone
+ * the update data before persistence.
  *
- * This also covers rerolls/reconciliation because every rebuilt ranged damage
- * packet passes through DamageChat.attach again.
+ * DamageChat.attach is the explicit boundary where a combat attack becomes the
+ * shared damage transaction. Rebuild only ranged packets here, preserving the
+ * same packet id and every damage/mitigation field while replacing the critical
+ * routing from the World rule. This makes the packet persisted in damageState
+ * authoritative for subsequent DamageApplication and critical resolution.
  */
-Hooks.on("preUpdateChatMessage", (message, changes) => {
+const originalAttach = DamageChat.attach;
+DamageChat.attach = async function rangedCriticalPolicyAttach(
+	message,
+	{ packet, resolution } = {},
+) {
 	const attack = message?.getFlag?.(FLAG_SCOPE, ATTACK_FLAG_KEY);
-	if (attack?.family !== "ranged") return;
-
-	const state = incomingDamageState(changes);
-	if (!state?.packet?.critical || typeof state.packet.critical !== "object") {
-		return;
+	if (attack?.family !== "ranged" || !packet) {
+		return originalAttach.call(this, message, { packet, resolution });
 	}
 
-	state.packet.critical.mode = RangedCriticalPolicy.criticalMode();
-});
+	const source = packet instanceof DamagePacket
+		? packet.toJSON()
+		: foundry.utils.deepClone(packet);
+	const rewritten = DamagePacket.fromJSON({
+		...source,
+		critical: {
+			...(source?.critical ?? {}),
+			mode: RangedCriticalPolicy.criticalMode(),
+		},
+	});
 
-function incomingDamageState(changes) {
-	if (!changes || typeof changes !== "object") return null;
-	const flat = changes[`flags.${FLAG_SCOPE}.${DAMAGE_FLAG_KEY}`];
-	if (flat && typeof flat === "object") return flat;
-	return foundry.utils.getProperty(
-		changes,
-		`flags.${FLAG_SCOPE}.${DAMAGE_FLAG_KEY}`,
-	) ?? null;
-}
+	return originalAttach.call(this, message, {
+		packet: rewritten,
+		resolution,
+	});
+};
