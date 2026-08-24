@@ -6,7 +6,8 @@ const ATTACK_DIALOG_CLASS = "wfrp1ed-combat-attack-dialog";
 install();
 
 /**
- * Keep attack dialogs connected to Foundry's native canvas targeting workflow.
+ * Keep attack dialogs and pending attack cards connected to Foundry's native
+ * canvas targeting workflow.
  *
  * DialogV2 stringifies HTMLElement content before render, so form-control state
  * assigned only as DOM properties while building the content is not a reliable
@@ -29,6 +30,11 @@ install();
  * DialogV2 also focuses its default Roll button when the window first opens.
  * We release that automatic initial focus after the render frame so native
  * canvas targeting works immediately, before the user touches any dialog input.
+ *
+ * Pending attack cards use the same native Foundry targeting convention. The
+ * newest pending card which the current user is allowed to resolve follows the
+ * user's canvas target automatically. The explicit scene-token dropdown remains
+ * available, but the old "Use current target" button is intentionally redundant.
  *
  * Target selectors deliberately distinguish visible Scene tokens from the GM's
  * broader World Actor picker. The latter keeps its compact button label but has
@@ -77,7 +83,15 @@ function install() {
 
 	Hooks.on("renderChatMessageHTML", (_message, html) => {
 		const rendered = asElement(html);
-		requestAnimationFrame(() => decoratePendingTargetCard(rendered));
+		requestAnimationFrame(() => {
+			decoratePendingTargetCard(rendered);
+			syncRenderedPendingCardFromFoundryTarget(rendered);
+		});
+	});
+
+	Hooks.on("targetToken", (user) => {
+		if (String(user?.id ?? "") !== String(game.user?.id ?? "")) return;
+		syncNewestPendingCardFromFoundryTarget();
 	});
 
 	Object.defineProperty(
@@ -102,10 +116,9 @@ function activateTargetSync(root) {
 
 	decorateAttackTargetControls(root, selection);
 
-	/* Native Foundry targeting is now live while this dialog is open. Keeping a
+	/* Native Foundry targeting is live while this dialog is open. Keeping a
 	 * second "Use current target" action would duplicate the normal workflow and
-	 * encourage unnecessary extra clicks. The pending chat-card fallback keeps
-	 * its own button because it is a separate, post-roll adjudication surface. */
+	 * encourage unnecessary extra clicks. */
 	root.querySelector('[data-attack-target-action="current-target"]')?.remove();
 
 	const syncFromFoundryTarget = () => {
@@ -188,15 +201,11 @@ function decorateAttackTargetControls(root, selection) {
 }
 
 function decoratePendingTargetCard(rendered) {
-	const card = rendered?.matches?.("[data-wfrp-pending-combat-attack]")
-		? rendered
-		: rendered?.querySelector?.("[data-wfrp-pending-combat-attack]");
+	const card = pendingCardFromElement(rendered);
 	if (!card) return;
 
 	const select = card.querySelector("[data-pending-attack-scene-target]");
 	if (select instanceof HTMLSelectElement) {
-		const label = select.closest("label")?.querySelector("span");
-		if (label) label.textContent = localize("Scene token", "Token na scenie");
 		const pendingOption = [...select.options].find(
 			(option) => option.value === TARGET_SELECTION_PENDING,
 		);
@@ -207,8 +216,8 @@ function decoratePendingTargetCard(rendered) {
 			);
 		}
 		select.title = localize(
-			"Choose a visible token from the current scene.",
-			"Wybierz widoczny token z bieżącej sceny.",
+			"Choose a visible token from the current scene. You can also change the target directly on the canvas.",
+			"Wybierz widoczny token z bieżącej sceny. Możesz też normalnie zmieniać cel bezpośrednio na mapie.",
 		);
 	}
 
@@ -216,6 +225,55 @@ function decoratePendingTargetCard(rendered) {
 	if (chooseActor instanceof HTMLButtonElement) {
 		chooseActor.title = worldActorTooltip();
 	}
+}
+
+function syncRenderedPendingCardFromFoundryTarget(rendered) {
+	const card = pendingCardFromElement(rendered);
+	if (!card || !canResolvePendingCard(card)) return;
+	/* Do not erase an explicit card selection merely because no canvas target is
+	 * active during a ChatMessage re-render. A real targetToken event handles
+	 * later deselection and deliberately returns the card to pending state. */
+	applyFoundryTargetToPendingCard(card, { clearWhenNoTarget: false });
+}
+
+function syncNewestPendingCardFromFoundryTarget() {
+	const cards = [...document.querySelectorAll("[data-wfrp-pending-combat-attack]")]
+		.filter((card) => card instanceof HTMLElement)
+		.filter((card) => card.isConnected)
+		.filter(canResolvePendingCard);
+	const card = cards.at(-1);
+	if (!card) return;
+	applyFoundryTargetToPendingCard(card, { clearWhenNoTarget: true });
+}
+
+function applyFoundryTargetToPendingCard(card, { clearWhenNoTarget }) {
+	const select = card.querySelector("[data-pending-attack-scene-target]");
+	if (!(select instanceof HTMLSelectElement)) return;
+
+	const target = ActorTargetResolver.singleTargetActor();
+	if (!target) {
+		if (!clearWhenNoTarget || select.value === TARGET_SELECTION_PENDING) return;
+		select.value = TARGET_SELECTION_PENDING;
+		select.dispatchEvent(new Event("change", { bubbles: true }));
+		return;
+	}
+
+	const uuid = String(target.uuid ?? "");
+	if (!uuid || select.value === uuid) return;
+	ensureTargetOption(select, target);
+	select.value = uuid;
+	select.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+function canResolvePendingCard(card) {
+	const controls = card.querySelector("[data-pending-attack-controls]");
+	return controls instanceof HTMLElement && controls.hidden !== true;
+}
+
+function pendingCardFromElement(rendered) {
+	return rendered?.matches?.("[data-wfrp-pending-combat-attack]")
+		? rendered
+		: rendered?.querySelector?.("[data-wfrp-pending-combat-attack]") ?? null;
 }
 
 function worldActorTooltip() {
