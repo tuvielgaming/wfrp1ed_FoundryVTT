@@ -11,22 +11,37 @@ import {
 	weaponRangedCycleSnapshot,
 } from "../data-models/item/WeaponData.mjs";
 
-const SETTING_KEY = "trackAccessibleAmmunition";
+const QUANTITY_SETTING_KEY = "trackAmmunitionQuantities";
+/* Keep the existing setting id so worlds which already enabled the old
+ * "Track readily accessible ammunition" option retain that preference. Its
+ * meaning is now narrowed to enforcing Quick Access for direct shots. */
+const QUICK_ACCESS_SETTING_KEY = "trackAccessibleAmmunition";
 
 /**
  * Optional ammunition bookkeeping layered on top of normal Equipment.
  *
  * Compatibility is type-based; the concrete Equipment Item is the ammunition
  * variant and therefore remains the owner of name, quantity and ActiveEffects.
- * Direct firing may automatically consume only ammunition stored in a matching
- * Quick Access Ammunition container. An explicit internal-magazine refill is a
- * separate reload action and may use a selected compatible ammunition stack
- * anywhere in the Actor's inventory.
+ * Quantity tracking and Quick Access enforcement are separate world policies:
+ * - quantity tracking selects and consumes compatible ammunition;
+ * - Quick Access enforcement restricts direct shots to matching Quick Access
+ *   Ammunition containers and exposes other compatible stacks as reserves.
+ *
+ * Explicit internal-magazine refill is a separate reload action and may use a
+ * selected compatible ammunition stack anywhere in the Actor's inventory.
  */
 export class AmmunitionInventory {
 	static trackingEnabled() {
 		try {
-			return game.settings.get(game.system.id, SETTING_KEY) === true;
+			return game.settings.get(game.system.id, QUANTITY_SETTING_KEY) === true;
+		} catch (_error) {
+			return true;
+		}
+	}
+
+	static quickAccessEnforced() {
+		try {
+			return game.settings.get(game.system.id, QUICK_ACCESS_SETTING_KEY) === true;
 		} catch (_error) {
 			return false;
 		}
@@ -97,7 +112,8 @@ export class AmmunitionInventory {
 			.sort(ammunitionSort);
 	}
 
-	static accessibleStacks(actor, weaponOrIdentity) {
+	/** Strict physical Quick Access stacks, independent of the world policy. */
+	static quickAccessStacks(actor, weaponOrIdentity) {
 		const identity = identityFor(weaponOrIdentity);
 		if (!actor || !identity || identity.type === AMMUNITION_TYPE.NONE) return [];
 		const containerIds = new Set(
@@ -107,10 +123,22 @@ export class AmmunitionInventory {
 			.filter((item) => containerIds.has(String(item.system?.containerId ?? "")));
 	}
 
+	/**
+	 * Stacks which may be selected for an ordinary direct shot under the current
+	 * world policy. With Quick Access enforcement OFF, location is deliberately
+	 * ignored and every compatible carried stack is directly selectable.
+	 */
+	static accessibleStacks(actor, weaponOrIdentity) {
+		return this.quickAccessEnforced()
+			? this.quickAccessStacks(actor, weaponOrIdentity)
+			: this.compatibleStacks(actor, weaponOrIdentity);
+	}
+
 	static reserveStacks(actor, weaponOrIdentity) {
+		if (!this.quickAccessEnforced()) return [];
 		const identity = identityFor(weaponOrIdentity);
 		if (!actor || !identity || identity.type === AMMUNITION_TYPE.NONE) return [];
-		const accessible = new Set(this.accessibleStacks(actor, identity).map((item) => item.id));
+		const accessible = new Set(this.quickAccessStacks(actor, identity).map((item) => item.id));
 		return this.compatibleStacks(actor, identity)
 			.filter((item) => !accessible.has(item.id));
 	}
@@ -118,7 +146,6 @@ export class AmmunitionInventory {
 	/**
 	 * A magazine refill is already an explicit reload action, so its selected
 	 * source does not need to live in a Quick Access Ammunition container.
-	 * Firing a weapon without an internal magazine remains accessibility-gated.
 	 */
 	static magazineReloadStacks(actor, weaponOrIdentity) {
 		return this.compatibleStacks(actor, weaponOrIdentity);
@@ -163,10 +190,15 @@ export class AmmunitionInventory {
 			(item) => String(item.uuid ?? "") === String(ammunitionUuid ?? ""),
 		);
 		if (!selected) {
-			throw new Error(localize(
-				"Choose an available ammunition variant from a Quick Access Ammunition container.",
-				"Wybierz dostępną odmianę amunicji z pojemnika z łatwym dostępem do amunicji.",
-			));
+			throw new Error(this.quickAccessEnforced()
+				? localize(
+					"Choose an available ammunition variant from a Quick Access Ammunition container.",
+					"Wybierz dostępną odmianę amunicji z pojemnika z łatwym dostępem do amunicji.",
+				)
+				: localize(
+					"Choose an available compatible ammunition variant from this Actor's inventory.",
+					"Wybierz dostępną zgodną odmianę amunicji z ekwipunku tego Aktora.",
+				));
 		}
 		return selected;
 	}
@@ -213,19 +245,60 @@ export class AmmunitionInventory {
 	}
 }
 
+/* Foundry v14 loads translations before i18nInit. Register both settings here
+ * with translation keys so World Settings never depend on early language
+ * detection. */
 Hooks.once("i18nInit", () => {
-	game.settings.register(game.system.id, SETTING_KEY, {
-		name: localize("Track readily accessible ammunition", "Śledzenie łatwo dostępnej amunicji"),
-		hint: localize(
-			"Optional. Direct ranged shots automatically consume compatible ammunition only from Quick Access Ammunition containers. Explicit internal-magazine refills may use a selected compatible ammunition stack anywhere in the Actor's inventory.",
-			"Opcjonalne. Bezpośrednie strzały z broni dystansowej automatycznie zużywają zgodną amunicję wyłącznie z pojemników z łatwym dostępem do amunicji. Jawne przeładowanie wewnętrznego magazynka może użyć wybranego zgodnego stosu amunicji z dowolnego miejsca w ekwipunku Aktora.",
-		),
+	game.settings.register(game.system.id, QUANTITY_SETTING_KEY, {
+		name: game.i18n.localize("WFRP1ED.Settings.TrackAmmunitionQuantities.Name"),
+		hint: game.i18n.localize("WFRP1ED.Settings.TrackAmmunitionQuantities.Hint"),
+		scope: "world",
+		config: true,
+		type: Boolean,
+		default: true,
+		onChange: (value) => {
+			if (value === false) void disableQuickAccessWhenTrackingTurnsOff();
+		},
+	});
+
+	game.settings.register(game.system.id, QUICK_ACCESS_SETTING_KEY, {
+		name: game.i18n.localize("WFRP1ED.Settings.EnforceQuickAccessAmmunition.Name"),
+		hint: game.i18n.localize("WFRP1ED.Settings.EnforceQuickAccessAmmunition.Hint"),
 		scope: "world",
 		config: true,
 		type: Boolean,
 		default: false,
+		onChange: (value) => {
+			if (value === true) void enableTrackingForQuickAccess();
+		},
 	});
 });
+
+async function enableTrackingForQuickAccess() {
+	if (AmmunitionInventory.trackingEnabled()) return;
+	try {
+		await game.settings.set(game.system.id, QUANTITY_SETTING_KEY, true);
+		ui.notifications.info(game.i18n.localize(
+			"WFRP1ED.Settings.EnforceQuickAccessAmmunition.EnabledTrackingNotice",
+		));
+	} catch (error) {
+		console.error("WFRP1ED | Unable to enable ammunition quantity tracking required by Quick Access.", error);
+		ui.notifications.error(error?.message ?? String(error));
+	}
+}
+
+async function disableQuickAccessWhenTrackingTurnsOff() {
+	if (!AmmunitionInventory.quickAccessEnforced()) return;
+	try {
+		await game.settings.set(game.system.id, QUICK_ACCESS_SETTING_KEY, false);
+		ui.notifications.info(game.i18n.localize(
+			"WFRP1ED.Settings.TrackAmmunitionQuantities.DisabledQuickAccessNotice",
+		));
+	} catch (error) {
+		console.error("WFRP1ED | Unable to disable Quick Access after ammunition tracking was disabled.", error);
+		ui.notifications.error(error?.message ?? String(error));
+	}
+}
 
 function identityFor(value) {
 	if (value?.type === "weapon") return weaponAmmunitionSnapshot(value);
@@ -298,5 +371,7 @@ function stableStringify(value) {
 }
 
 function localize(english, polish) {
-	return game.i18n.lang === "pl" ? polish : english;
+	return String(game.i18n?.lang ?? "").toLowerCase().startsWith("pl")
+		? polish
+		: english;
 }
