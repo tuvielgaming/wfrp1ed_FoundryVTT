@@ -34,6 +34,30 @@
 	cursor: default;
 }
 
+/* Explicit scene-pick mode belongs to one pending card only. Keep the visual
+ * cue noticeable enough to show which unresolved attack will receive the next
+ * canvas click, but restrained enough not to compete with the actual roll. */
+.wfrp1ed-pending-combat-attack.is-picking-scene-target {
+	outline: 2px solid rgb(122 88 29 / 68%);
+	outline-offset: 2px;
+	box-shadow:
+		inset 0 0 0 1px rgb(255 255 255 / 38%),
+		0 0 0 3px rgb(122 88 29 / 10%),
+		0 1px 2px rgb(0 0 0 / 16%);
+}
+
+.wfrp1ed-pending-combat-attack .pending-combat-attack__pick-scene {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 5px;
+}
+
+.wfrp1ed-pending-combat-attack .pending-combat-attack__pick-scene.is-active {
+	font-weight: 800;
+	box-shadow: inset 0 0 0 1px rgb(122 88 29 / 56%);
+}
+
 @media (max-width: 500px) {
 	.wfrp1ed-pending-combat-attack .pending-combat-attack__scene-target {
 		grid-template-columns: 1fr;
