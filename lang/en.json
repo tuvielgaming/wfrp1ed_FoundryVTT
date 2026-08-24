@@ -206,6 +206,12 @@
 	"WFRP1ED.Settings.ClimbingHandValidation.Hint": "Optional world automation, disabled by default. When enabled, the system blocks rope or non-fixed-ladder climbing without two free hands and fixed-ladder climbing without one free hand. When disabled, the system only reminds the table about the rule and leaves adjudication to the players and GM.",
 	"WFRP1ED.Settings.AutoRangedReload.Name": "Automatic ranged reload countdown",
 	"WFRP1ED.Settings.AutoRangedReload.Hint": "When enabled, ranged reload counters are decremented automatically at the end of the Combatant's turn. Disabled by default; manual Reload actions are the canonical workflow.",
+	"WFRP1ED.Settings.TrackAmmunitionQuantities.Name": "Track ammunition quantities",
+	"WFRP1ED.Settings.TrackAmmunitionQuantities.Hint": "Enabled by default. Ranged attacks which require ammunition select and consume compatible Equipment ammunition. When Quick Access enforcement is disabled, compatible ammunition may be used from anywhere in the Actor's inventory.",
+	"WFRP1ED.Settings.TrackAmmunitionQuantities.DisabledQuickAccessNotice": "Quick Access ammunition enforcement was disabled because ammunition quantity tracking was turned off.",
+	"WFRP1ED.Settings.EnforceQuickAccessAmmunition.Name": "Enforce Quick Access ammunition",
+	"WFRP1ED.Settings.EnforceQuickAccessAmmunition.Hint": "Optional. Direct shots from weapons without an internal magazine must use ammunition from a matching Quick Access Ammunition container. Compatible ammunition elsewhere is reserve ammunition and requires GM adjudication. Enabling this option also enables Track ammunition quantities.",
+	"WFRP1ED.Settings.EnforceQuickAccessAmmunition.EnabledTrackingNotice": "Quick Access ammunition enforcement requires ammunition quantity tracking, so Track ammunition quantities was enabled automatically.",
 
 	"WFRP1ED.SkillSheet.Name": "Name",
 	"WFRP1ED.SkillSheet.RulesId": "Rules link",
