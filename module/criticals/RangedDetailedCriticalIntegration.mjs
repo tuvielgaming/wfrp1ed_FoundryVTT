@@ -71,7 +71,7 @@ async function persistRangedEffectOverride(message) {
 	await message.setFlag(FLAG_SCOPE, RANGED_EFFECT_OVERRIDE_FLAG_KEY, snapshot);
 }
 
-async function decorateRangedDetailedResult(message, html) {
+function decorateRangedDetailedResult(message, html) {
 	const context = rangedDetailedContext(message);
 	if (!context) return;
 
@@ -81,13 +81,12 @@ async function decorateRangedDetailedResult(message, html) {
 		: root?.querySelector?.("[data-wfrp-detailed-critical-card]");
 	if (!card) return;
 
-	let override = validStoredOverride(message, context.resolution);
-	if (!override && RangedCriticalPolicy.usesDetailedCriticals()) {
-		override = await rangedCriticalEffectFor(
-			context.resolution.hitLocation,
-			context.resolution.effectNumber,
-		);
-	}
+	/* Chat rendering is passive history presentation. Never re-query current
+	 * World/Compendium tables here: doing so makes old messages emit ambiguity
+	 * warnings on world load and lets later table changes rewrite historical
+	 * presentation. New ranged Detailed results snapshot their selected override
+	 * when the result is created; cards render only that persisted snapshot. */
+	const override = validStoredOverride(message, context.resolution);
 	if (!override || !card.isConnected) return;
 
 	const effect = card.querySelector("[data-wfrp-detailed-effect]");
