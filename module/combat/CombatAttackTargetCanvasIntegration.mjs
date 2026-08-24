@@ -18,6 +18,13 @@ install();
  * The targetToken hook then mirrors the current user's single target into the
  * dialog. Zero or multiple targets return the dialog to the pending/deferred
  * target state rather than silently retaining a stale defender.
+ *
+ * Foundry's canvas hotkeys are intentionally suppressed while a form control
+ * owns keyboard focus. After a discrete dialog choice (select, checkbox or
+ * button) is completed we release that focus again, so the user may immediately
+ * hover another token and use their normal Foundry Target Token keybinding
+ * without first clicking an empty part of the canvas. Text/number inputs retain
+ * focus because typing into them must remain uninterrupted.
  */
 function install() {
 	const DialogV2 = foundry.applications?.api?.DialogV2;
@@ -80,6 +87,12 @@ function activateTargetSync(root) {
 		return null;
 	}
 
+	/* Native Foundry targeting is now live while this dialog is open. Keeping a
+	 * second "Use current target" action would duplicate the normal workflow and
+	 * encourage unnecessary extra clicks. The pending chat-card fallback keeps
+	 * its own button because it is a separate, post-roll adjudication surface. */
+	root.querySelector('[data-attack-target-action="current-target"]')?.remove();
+
 	const syncFromFoundryTarget = () => {
 		const target = ActorTargetResolver.singleTargetActor();
 		if (!target) {
@@ -101,13 +114,46 @@ function activateTargetSync(root) {
 	 * stringified content. This repairs pre-selected targets on open. */
 	syncFromFoundryTarget();
 
+	const onChange = (event) => {
+		const control = event.target;
+		if (control instanceof HTMLSelectElement) {
+			releaseFocusAfterInteraction(control);
+			return;
+		}
+		if (
+			control instanceof HTMLInputElement &&
+			(control.type === "checkbox" || control.type === "radio")
+		) {
+			releaseFocusAfterInteraction(control);
+		}
+	};
+
+	const onClick = (event) => {
+		const button = event.target?.closest?.("button");
+		if (!(button instanceof HTMLButtonElement) || !root.contains(button)) return;
+		releaseFocusAfterInteraction(button);
+	};
+
+	root.addEventListener("change", onChange);
+	root.addEventListener("click", onClick);
+
 	const hookId = Hooks.on("targetToken", (user) => {
 		if (String(user?.id ?? "") !== String(game.user?.id ?? "")) return;
 		if (!root.isConnected) return;
 		syncFromFoundryTarget();
 	});
 
-	return () => Hooks.off("targetToken", hookId);
+	return () => {
+		Hooks.off("targetToken", hookId);
+		root.removeEventListener("change", onChange);
+		root.removeEventListener("click", onClick);
+	};
+}
+
+function releaseFocusAfterInteraction(control) {
+	queueMicrotask(() => {
+		if (document.activeElement === control) control.blur();
+	});
 }
 
 function ensureTargetOption(selection, target) {
