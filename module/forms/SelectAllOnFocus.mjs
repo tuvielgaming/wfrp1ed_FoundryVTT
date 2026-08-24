@@ -11,10 +11,10 @@ const SELECTABLE_TYPES = new Set([
 const replaceOnNextInsert = new WeakSet();
 
 /**
- * WFRP sheet forms are primarily data-entry surfaces rather than prose editors.
- * When a system input receives focus, its current value becomes replace-on-type:
- * the first typed/pasted value replaces the whole previous value instead of
- * being inserted at the clicked caret position.
+ * WFRP sheet/forms/chat controls are primarily data-entry surfaces rather than
+ * prose editors. When a system input receives focus, its current value becomes
+ * replace-on-type: the first typed/pasted value replaces the whole previous
+ * value instead of being inserted at the clicked caret position.
  *
  * Text-like controls are additionally selected visually. Number inputs are not
  * consistently selectable across browsers, so beforeinput provides the actual
@@ -82,20 +82,18 @@ function isManagedInput(input) {
 	if (input.dataset.wfrpPreserveInputSelection !== undefined) return false;
 	if (!SELECTABLE_TYPES.has(String(input.type ?? "text").toLowerCase())) return false;
 
-	/* Editable combat result inputs live in ChatMessage cards rather than under
-	 * the normal sheet/dialog roots below. Keep the same system-wide replace-on-
-	 * focus contract for physical/adjudicated roll entry without affecting native
-	 * Foundry chat/search inputs. */
-	if (input.matches(
-		"[data-wfrp-detailed-critical-roll-input], " +
-		"[data-wfrp-damage-dice-total]",
-	)) {
-		return true;
-	}
-
-	/* All of our sheets/dialogs use a WFRP root class. This prevents the system
-	 * from changing native Foundry search bars or other core application fields. */
+	/*
+	 * Keep this a system-wide UX contract rather than an ever-growing list of
+	 * individual combat fields. WFRP sheets/dialogs use the historical roots
+	 * below, while system-owned ChatMessage cards and newer applications use the
+	 * wfrp1e-/wfrp1ed- class namespaces. Native Foundry search/chat inputs remain
+	 * outside those roots and are therefore untouched.
+	 */
 	return Boolean(input.closest(
-		".wfrp1ed, .career-item-sheet, .wfrp1ed-parchment-window",
+		".wfrp1ed, " +
+		".career-item-sheet, " +
+		".wfrp1ed-parchment-window, " +
+		"[class*='wfrp1e-'], " +
+		"[class*='wfrp1ed-']",
 	));
 }
