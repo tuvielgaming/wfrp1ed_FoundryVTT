@@ -35,6 +35,8 @@ install();
  * newest pending card which the current user is allowed to resolve follows the
  * user's canvas target automatically. The explicit scene-token dropdown remains
  * available, but the old "Use current target" button is intentionally redundant.
+ * If a live pre-roll attack dialog is also open, it takes priority so targeting
+ * a new attack cannot silently rewrite an older pending ChatMessage.
  *
  * Target selectors deliberately distinguish visible Scene tokens from the GM's
  * broader World Actor picker. The latter keeps its compact button label but has
@@ -225,9 +227,30 @@ function decoratePendingTargetCard(rendered) {
 	if (chooseActor instanceof HTMLButtonElement) {
 		chooseActor.title = worldActorTooltip();
 	}
+
+	activatePendingCardFocusRelease(card);
+}
+
+function activatePendingCardFocusRelease(card) {
+	if (card.dataset.wfrpCanvasTargetFocusRelease === "true") return;
+	card.dataset.wfrpCanvasTargetFocusRelease = "true";
+
+	card.addEventListener("change", (event) => {
+		const control = event.target;
+		if (control instanceof HTMLSelectElement) {
+			releaseFocusAfterInteraction(control);
+		}
+	});
+
+	card.addEventListener("click", (event) => {
+		const button = event.target?.closest?.("button");
+		if (!(button instanceof HTMLButtonElement) || !card.contains(button)) return;
+		releaseFocusAfterInteraction(button);
+	});
 }
 
 function syncRenderedPendingCardFromFoundryTarget(rendered) {
+	if (attackDialogIsOpen()) return;
 	const card = pendingCardFromElement(rendered);
 	if (!card || !canResolvePendingCard(card)) return;
 	/* Do not erase an explicit card selection merely because no canvas target is
@@ -237,6 +260,7 @@ function syncRenderedPendingCardFromFoundryTarget(rendered) {
 }
 
 function syncNewestPendingCardFromFoundryTarget() {
+	if (attackDialogIsOpen()) return;
 	const cards = [...document.querySelectorAll("[data-wfrp-pending-combat-attack]")]
 		.filter((card) => card instanceof HTMLElement)
 		.filter((card) => card.isConnected)
@@ -268,6 +292,10 @@ function applyFoundryTargetToPendingCard(card, { clearWhenNoTarget }) {
 function canResolvePendingCard(card) {
 	const controls = card.querySelector("[data-pending-attack-controls]");
 	return controls instanceof HTMLElement && controls.hidden !== true;
+}
+
+function attackDialogIsOpen() {
+	return Boolean(document.querySelector(`.${ATTACK_DIALOG_CLASS}`));
 }
 
 function pendingCardFromElement(rendered) {
