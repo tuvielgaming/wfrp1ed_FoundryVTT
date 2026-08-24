@@ -115,29 +115,11 @@ function wrapRangedLauncher() {
 			return originalLaunch.call(this, actor, weapon);
 		}
 
-		/* Opening the adjudication UI must not make the original missing-ammo
-		 * warning disappear. Keep it in the central GM gameplay-notice lifecycle,
-		 * then offer the explicit one-shot override in the dialog. */
-		await GMGameplayNotice.warn({
-			category: "ranged-reserve-ammunition-required",
-			title: localize("Reserve ammunition", "Amunicja zapasowa"),
-			message: localize(
-				`${fire.reason} The attack dialog was opened for explicit GM adjudication. Checking “Use reserve ammunition” authorizes only this configured shot; retrieval time or complications are not automated.`,
-				`${fire.reason} Okno ataku zostało otwarte do jawnego rozstrzygnięcia MG. Zaznaczenie „Użyj zapasowej amunicji” zezwala wyłącznie na ten skonfigurowany strzał; czas lub komplikacje przygotowania amunicji nie są automatyzowane.`,
-			),
-			summary: localize(
-				"Reserve ammunition requires GM adjudication — details saved in private GM chat.",
-				"Amunicja zapasowa wymaga rozstrzygnięcia MG — szczegóły zapisano w prywatnym czacie MG.",
-			),
-			actor,
-			item: weapon,
-		});
-
 		/* CombatRangedLifecycleIntegration normally refuses to open a dialog which
 		 * can only Cancel. Spend exactly one synthetic availability result so that
-		 * its pre-dialog gate opens the UI. All render-time checks immediately fall
-		 * back to the real blocked state until the GM explicitly ticks the reserve
-		 * ammunition adjudication checkbox. */
+		 * its pre-dialog gate opens the UI. No GM notice is emitted merely because
+		 * the dialog opened; the adjudication notice is emitted only if the GM
+		 * explicitly enables reserve ammunition in that dialog. */
 		const key = weaponKey(weapon);
 		launcherBypassBudget.set(key, 1);
 		try {
@@ -276,6 +258,7 @@ function decorateReserveAdjudication(root) {
 	root.querySelector("[data-wfrp-reserve-ammunition-choice]")?.remove();
 	const key = weaponKey(weapon);
 	reserveModeByWeapon.set(key, false);
+	let noticeSent = false;
 
 	const title = localize(
 		"GM adjudication only. This allows one shot to consume the selected compatible reserve stack without moving it into Quick Access. It does not spend a turn or decide the time/complication required to retrieve the ammunition; adjudicate that separately before enabling this shot.",
@@ -303,7 +286,7 @@ function decorateReserveAdjudication(root) {
 		"Użyj zapasowej amunicji — rozstrzygnięcie MG",
 	);
 	choice.append(text);
-	group.insertAdjacentElement("afterend", choice);
+	group.insertAdjacentElement("beforebegin", choice);
 
 	const refillSelect = (items, { reserve = false } = {}) => {
 		const previous = String(select.value ?? "");
@@ -344,7 +327,7 @@ function decorateReserveAdjudication(root) {
 
 		const currentReserve = reserveStack(actor, weapon, select.value);
 		const fire = safeFireAvailability(actor, weapon);
-		const canAdjudicate = Boolean(currentReserve && isReserveOnlyBlock(fire));
+		const canAdjudicate = Boolean(currentReserve && reserveShotAllowed(fire));
 		roll.disabled = !canAdjudicate;
 		roll.title = canAdjudicate
 			? localize(
@@ -367,6 +350,13 @@ function decorateReserveAdjudication(root) {
 			{ reserve: reserveMode },
 		);
 		refresh();
+
+		if (reserveMode && !noticeSent) {
+			noticeSent = true;
+			void notifyReserveAdjudication(actor, weapon).catch((error) => {
+				console.error("WFRP1ED | Unable to present reserve-ammunition GM notice.", error);
+			});
+		}
 	});
 	select.addEventListener("change", refresh);
 
@@ -399,6 +389,10 @@ function isReserveOnlyBlock(fire) {
 		Array.isArray(fire.ammunition?.reserves) &&
 		fire.ammunition.reserves.length > 0
 	);
+}
+
+function reserveShotAllowed(fire) {
+	return fire?.available === true || isReserveOnlyBlock(fire);
 }
 
 function allowedReserveResult(result, ammunitionUuid, launcherOnly) {
@@ -436,6 +430,38 @@ function safeFireAvailability(actor, weapon) {
 			reason: error?.message ?? String(error),
 		});
 	}
+}
+
+async function notifyReserveAdjudication(actor, weapon) {
+	const accessible = AmmunitionInventory.accessibleStacks(actor, weapon);
+	const reserves = AmmunitionInventory.reserveStacks(actor, weapon);
+	const reserveText = reserves.length
+		? reserves.map((item) => `${item.name} ×${quantity(item)}`).join(", ")
+		: localize("none", "brak");
+	const accessibility = accessible.length
+		? localize(
+			"Readily accessible ammunition is also available, but reserve ammunition was explicitly selected for this shot.",
+			"Łatwo dostępna amunicja również jest dostępna, ale dla tego strzału jawnie wybrano amunicję zapasową.",
+		)
+		: localize(
+			"No compatible ammunition is currently in Quick Access.",
+			"W łatwym dostępie nie ma obecnie zgodnej amunicji.",
+		);
+
+	return GMGameplayNotice.warn({
+		category: "ranged-reserve-ammunition-required",
+		title: localize("Reserve ammunition", "Amunicja zapasowa"),
+		message: localize(
+			`${accessibility} Compatible reserve ammunition: ${reserveText}. The reserve-ammunition option was enabled for this configured shot. The GM decides any retrieval time or complications outside the automatic ammunition rules.`,
+			`${accessibility} Zgodna amunicja zapasowa: ${reserveText}. Dla tego skonfigurowanego strzału włączono użycie amunicji zapasowej. MG rozstrzyga ewentualny czas lub komplikacje jej przygotowania poza automatycznymi zasadami amunicji.`,
+		),
+		summary: localize(
+			"Reserve ammunition selected — GM adjudication required.",
+			"Wybrano amunicję zapasową — wymagane rozstrzygnięcie MG.",
+		),
+		actor,
+		item: weapon,
+	});
 }
 
 async function tagAttackAsReserveAdjudicated(message) {
