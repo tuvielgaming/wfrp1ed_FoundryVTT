@@ -112,11 +112,12 @@ export class CombatAttackResultChat {
 		/* The concrete Equipment Item is the ammunition variant. Persisting its
 		 * snapshot on the attack lets chat history state which special arrow/bolt
 		 * was actually fired even if the inventory stack is later renamed, moved
-		 * or depleted. */
+		 * or depleted. Direct-shot snapshots also preserve whether that ammunition
+		 * came from Quick Access or from the explicit reserve-ammunition override. */
 		if (state.family === "ranged" && state.ammunition?.name) {
 			panel.append(
 				row(
-					localize("Ammunition", "Amunicja"),
+					ammunitionSourceLabel(state.ammunition),
 					String(state.ammunition.name),
 				),
 			);
@@ -373,6 +374,20 @@ function row(labelText, value) {
 	strong.textContent = String(value ?? "—");
 	element.append(label, strong);
 	return element;
+}
+
+function ammunitionSourceLabel(ammunition) {
+	const accessMode = String(ammunition?.accessMode ?? "");
+	if (accessMode === "reserve-adjudicated") {
+		return localize("Ammunition (Reserve)", "Amunicja (Zapasowa)");
+	}
+	if (accessMode === "quick-access") {
+		const containerName = String(ammunition?.sourceContainer?.name ?? "").trim();
+		if (containerName) {
+			return localize(`Ammunition (${containerName})`, `Amunicja (${containerName})`);
+		}
+	}
+	return localize("Ammunition", "Amunicja");
 }
 
 function attackFamilyLabel(family) {
