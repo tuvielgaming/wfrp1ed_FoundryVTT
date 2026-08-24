@@ -149,8 +149,8 @@ export class AmmunitionInventory {
 				`Brak łatwo dostępnej amunicji. Zgodna amunicja zapasowa znajduje się w innym miejscu: ${stackSummary(reserves)}. MG rozstrzyga czas lub komplikację potrzebną do jej przygotowania.`,
 			)
 			: localize(
-				"No readily accessible ammunition is available.",
-				"Brak łatwo dostępnej amunicji.",
+				"No ammunition is available.",
+				"Brak dostępnej amunicji.",
 			);
 		return Object.freeze({ allowed: false, reason, accessible, reserves });
 	}
