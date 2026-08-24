@@ -68,13 +68,16 @@
 		0 0 0 1px rgb(122 53 24 / 18%);
 }
 
-/* The armed card is selecting an attack target, not moving or controlling a
- * canvas object. A crosshair cursor communicates that temporary mode without
- * changing Foundry's own Target Token state. */
+/* While the card is armed, replace the generic browser crosshair with a small
+ * WFRP-style aiming reticle: a ring, four sight marks and a central point. The
+ * 16/16 hotspot is the exact centre of the reticle. `crosshair` remains as the
+ * browser fallback if a custom SVG cursor is unavailable. */
 body.wfrp1ed-pending-scene-pick-active #board,
 body.wfrp1ed-pending-scene-pick-active #board canvas,
 body.wfrp1ed-pending-scene-pick-active canvas#board {
-	cursor: crosshair !important;
+	cursor:
+		url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='8' fill='none' stroke='%23532f1f' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='8' fill='none' stroke='%23f09a4a' stroke-width='1.5'/%3E%3Cpath d='M16 2v8M16 22v8M2 16h8M22 16h8' stroke='%23532f1f' stroke-width='3' stroke-linecap='round'/%3E%3Cpath d='M16 2v8M16 22v8M2 16h8M22 16h8' stroke='%23f09a4a' stroke-width='1.5' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='16' r='2.3' fill='%23f09a4a' stroke='%23532f1f' stroke-width='1'/%3E%3C/svg%3E") 16 16,
+		crosshair !important;
 }
 
 @media (max-width: 500px) {
