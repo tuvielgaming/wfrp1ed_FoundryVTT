@@ -31,10 +31,16 @@ install();
  * We release that automatic initial focus after the render frame so native
  * canvas targeting works immediately, before the user touches any dialog input.
  *
- * Pending attack cards use the same native Foundry targeting convention. The
- * newest pending card which the current user is allowed to resolve follows the
- * user's canvas target automatically. The explicit scene-token dropdown remains
- * available, but the old "Use current target" button is intentionally redundant.
+ * Pending attack cards use the same native Foundry targeting convention. A real
+ * targetToken event updates the newest pending card which the current user may
+ * resolve. The persisted ChatMessage selection is otherwise authoritative and
+ * is never re-derived from each client's private game.user.targets during card
+ * rendering. This is essential because the GM and an Actor owner may have
+ * different local canvas targets: whichever valid card action or targetToken
+ * event updates the ChatMessage last becomes the shared selection for everyone.
+ * Manual Clear, scene-dropdown selection and GM World-Actor/drop choices are
+ * therefore not immediately overwritten by a stale local canvas target.
+ *
  * If a live pre-roll attack dialog is also open, it takes priority so targeting
  * a new attack cannot silently rewrite an older pending ChatMessage.
  *
@@ -85,10 +91,7 @@ function install() {
 
 	Hooks.on("renderChatMessageHTML", (_message, html) => {
 		const rendered = asElement(html);
-		requestAnimationFrame(() => {
-			decoratePendingTargetCard(rendered);
-			syncRenderedPendingCardFromFoundryTarget(rendered);
-		});
+		requestAnimationFrame(() => decoratePendingTargetCard(rendered));
 	});
 
 	Hooks.on("targetToken", (user) => {
@@ -249,16 +252,6 @@ function activatePendingCardFocusRelease(card) {
 	});
 }
 
-function syncRenderedPendingCardFromFoundryTarget(rendered) {
-	if (attackDialogIsOpen()) return;
-	const card = pendingCardFromElement(rendered);
-	if (!card || !canResolvePendingCard(card)) return;
-	/* Do not erase an explicit card selection merely because no canvas target is
-	 * active during a ChatMessage re-render. A real targetToken event handles
-	 * later deselection and deliberately returns the card to pending state. */
-	applyFoundryTargetToPendingCard(card, { clearWhenNoTarget: false });
-}
-
 function syncNewestPendingCardFromFoundryTarget() {
 	if (attackDialogIsOpen()) return;
 	const cards = [...document.querySelectorAll("[data-wfrp-pending-combat-attack]")]
@@ -267,16 +260,16 @@ function syncNewestPendingCardFromFoundryTarget() {
 		.filter(canResolvePendingCard);
 	const card = cards.at(-1);
 	if (!card) return;
-	applyFoundryTargetToPendingCard(card, { clearWhenNoTarget: true });
+	applyFoundryTargetToPendingCard(card);
 }
 
-function applyFoundryTargetToPendingCard(card, { clearWhenNoTarget }) {
+function applyFoundryTargetToPendingCard(card) {
 	const select = card.querySelector("[data-pending-attack-scene-target]");
 	if (!(select instanceof HTMLSelectElement)) return;
 
 	const target = ActorTargetResolver.singleTargetActor();
 	if (!target) {
-		if (!clearWhenNoTarget || select.value === TARGET_SELECTION_PENDING) return;
+		if (select.value === TARGET_SELECTION_PENDING) return;
 		select.value = TARGET_SELECTION_PENDING;
 		select.dispatchEvent(new Event("change", { bubbles: true }));
 		return;
