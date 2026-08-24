@@ -99,7 +99,11 @@ function wrapFireAvailability() {
 
 		const key = weaponKey(weapon);
 		const active = activeReserveShots.get(key);
-		if (active && reserveStack(actor, weapon, active.ammunitionUuid)) {
+		if (
+			active &&
+			isReserveOnlyBlock(result) &&
+			reserveStack(actor, weapon, active.ammunitionUuid)
+		) {
 			return allowedReserveResult(result, active.ammunitionUuid, false);
 		}
 
