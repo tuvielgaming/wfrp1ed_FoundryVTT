@@ -35,6 +35,7 @@
 		"module/tests/TestResultVisibilityMetadataIntegration.mjs",
 		"module/combat/CombatEquipmentBootstrap.mjs",
 		"module/combat/CombatAttackBootstrap.mjs",
+		"module/combat/PendingAttackTargetAuthorityIntegration.mjs",
 		"module/combat/CombatSheetIntegration.mjs",
 		"module/inventory/AmmunitionInventory.mjs",
 		"module/combat/CombatRangedState.mjs",
