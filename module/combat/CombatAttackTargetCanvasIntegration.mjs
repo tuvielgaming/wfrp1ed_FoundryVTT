@@ -25,6 +25,10 @@ install();
  * hover another token and use their normal Foundry Target Token keybinding
  * without first clicking an empty part of the canvas. Text/number inputs retain
  * focus because typing into them must remain uninterrupted.
+ *
+ * DialogV2 also focuses its default Roll button when the window first opens.
+ * We release that automatic initial focus after the render frame so native
+ * canvas targeting works immediately, before the user touches any dialog input.
  */
 function install() {
 	const DialogV2 = foundry.applications?.api?.DialogV2;
@@ -113,6 +117,7 @@ function activateTargetSync(root) {
 	/* Re-apply the current Foundry target after DialogV2 has rendered the
 	 * stringified content. This repairs pre-selected targets on open. */
 	syncFromFoundryTarget();
+	releaseInitialDialogFocus(root);
 
 	const onChange = (event) => {
 		const control = event.target;
@@ -148,6 +153,22 @@ function activateTargetSync(root) {
 		root.removeEventListener("change", onChange);
 		root.removeEventListener("click", onClick);
 	};
+}
+
+function releaseInitialDialogFocus(root) {
+	requestAnimationFrame(() => {
+		if (!root?.isConnected) return;
+		const active = document.activeElement;
+		if (!active || !root.contains(active)) return;
+		if (
+			active instanceof HTMLButtonElement ||
+			active instanceof HTMLSelectElement ||
+			(active instanceof HTMLInputElement &&
+				(active.type === "checkbox" || active.type === "radio"))
+		) {
+			active.blur();
+		}
+	});
 }
 
 function releaseFocusAfterInteraction(control) {
