@@ -113,17 +113,21 @@ DamageChat.attach = async function rangedCriticalPolicyAttach(
  */
 Hooks.once("ready", () => {
 	Hooks.on("renderChatMessageHTML", (message, html) => {
-		requestAnimationFrame(() => {
-			repairRangedCriticalPresentation(message, html);
-		});
+		scheduleRepair(() => repairRangedCriticalPresentation(message, html));
 	});
 
 	Hooks.on("updateActor", (actor) => {
-		requestAnimationFrame(() => refreshVisibleRangedCriticalPresentation(actor));
+		scheduleRepair(() => refreshVisibleRangedCriticalPresentation(actor));
 	});
 
-	requestAnimationFrame(() => refreshAllVisibleRangedCriticalPresentation());
+	scheduleRepair(() => refreshAllVisibleRangedCriticalPresentation());
 });
+
+function scheduleRepair(callback) {
+	requestAnimationFrame(() => {
+		setTimeout(() => callback(), 0);
+	});
+}
 
 function repairRangedCriticalPresentation(message, html) {
 	const root = asElement(html);
@@ -152,27 +156,42 @@ function repairDedicatedDamageCritical(message, root, view) {
 	if (attack?.family !== "ranged" || !damage?.packet?.id) return;
 	if (String(damage.packet.id) !== String(view.packetId ?? "")) return;
 
-	const actor = actorFromUuidSync(
-		view.targetActorUuid ?? damage.packet.targetActorUuid,
-	);
-	const transaction = actor
-		? DamageApplication.transactionFor(actor, view.packetId)
-		: damage.application ?? null;
-	if (!transaction || transaction.state !== "applied") return;
-
 	const actions = root.querySelector?.("[data-wfrp-damage-result-actions]");
 	if (!(actions instanceof HTMLElement)) return;
 
-	/* Detailed mode is already rendered correctly by the shared lifecycle. */
-	if (transaction.criticalMode === DAMAGE_CRITICAL_MODE.DETAILED) return;
+	const actor = actorFromUuidSync(
+		view.targetActorUuid ?? damage.packet.targetActorUuid,
+	);
+	const authoritative = actor
+		? DamageApplication.transactionFor(actor, view.packetId)
+		: null;
+	const transaction = authoritative ?? damage.application ?? null;
 
-	/* For Sudden Death, remove the legacy Detailed launcher even when the current
-	 * user is not authorized to replace it with an actionable control. */
+	/* The packet is the immutable rules-routing snapshot. Do not infer the UI
+	 * mode from whether this client can currently resolve the target Actor. */
+	const criticalMode = String(
+		damage.packet?.critical?.mode ?? transaction?.criticalMode ?? "",
+	);
+
+	/* Detailed mode is already rendered correctly by the shared lifecycle. */
+	if (criticalMode === DAMAGE_CRITICAL_MODE.DETAILED) return;
+
+	/* Any non-Detailed ranged packet must never expose the legacy Detailed
+	 * launcher, even on a client which cannot read the target Actor transaction. */
 	actions.replaceChildren();
+	if (criticalMode !== DAMAGE_CRITICAL_MODE.SUDDEN_DEATH) return;
+
+	const state = String(transaction?.state ?? damage.application?.state ?? "");
+	const criticalValue = Number(
+		transaction?.criticalValue ?? damage.application?.criticalValue ?? 0,
+	);
+	const criticalResolution =
+		transaction?.criticalResolution ?? damage.application?.criticalResolution ?? null;
+
 	if (
-		transaction.criticalMode !== DAMAGE_CRITICAL_MODE.SUDDEN_DEATH ||
-		Number(transaction.criticalValue) <= 0 ||
-		transaction.criticalResolution ||
+		state !== "applied" ||
+		criticalValue <= 0 ||
+		criticalResolution ||
 		!canResolveSourceCritical(sourceMessage, damage, game.user)
 	) {
 		return;
