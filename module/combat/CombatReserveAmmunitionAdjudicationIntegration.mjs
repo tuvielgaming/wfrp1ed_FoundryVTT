@@ -1,3 +1,4 @@
+import { GMGameplayNotice } from "../chat/GMGameplayNotice.mjs";
 import { WEAPON_KIND } from "../data-models/item/WeaponData.mjs";
 import { AmmunitionInventory } from "../inventory/AmmunitionInventory.mjs";
 import { WfrpCheckbox } from "../ui/WfrpCheckbox.mjs";
@@ -5,9 +6,11 @@ import { CombatAttackDialog } from "./CombatAttackDialog.mjs";
 import { CombatAttackLauncher } from "./CombatAttackLauncher.mjs";
 import { CombatRangedAttackResolution } from "./CombatRangedAttackResolution.mjs";
 import { CombatRangedState } from "./CombatRangedState.mjs";
+import { PendingRangedCombatAttack } from "./PendingRangedCombatAttack.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
 const ATTACK_FLAG_KEY = "combatAttackResult";
+const PENDING_ATTACK_FLAG_KEY = "pendingRangedCombatAttack";
 const ACCESS_MODE = "reserve-adjudicated";
 
 /*
@@ -40,6 +43,7 @@ function install() {
 	installed = true;
 
 	wrapAttackConfiguration();
+	wrapPendingRangedAttack();
 	wrapRangedLauncher();
 	wrapFireAvailability();
 	wrapSelectedAmmunitionValidation();
@@ -63,6 +67,42 @@ function wrapAttackConfiguration() {
 	};
 }
 
+/*
+ * PendingRangedCombatAttack serializes only the core ranged-dialog fields. The
+ * reserve approval is an integration-owned field, so persist it explicitly on
+ * the pending ChatMessage after the core serializer has created the request.
+ * This keeps the GM verdict alive across target selection and even across a
+ * browser reload instead of relying on transient module memory.
+ */
+function wrapPendingRangedAttack() {
+	const originalCreate = PendingRangedCombatAttack.create.bind(PendingRangedCombatAttack);
+	PendingRangedCombatAttack.create = async function createWithReserveAdjudication(
+		actor,
+		weapon,
+		configuration,
+	) {
+		const message = await originalCreate(actor, weapon, configuration);
+		if (
+			configuration?.ammunitionAccessMode !== ACCESS_MODE ||
+			!message?.id
+		) return message;
+
+		const request = foundry.utils.deepClone(
+			message.getFlag?.(FLAG_SCOPE, PENDING_ATTACK_FLAG_KEY) ?? {},
+		);
+		request.configuration = {
+			...(request.configuration ?? {}),
+			ammunitionAccessMode: ACCESS_MODE,
+			reserveAdjudicatedBy: String(game.user?.id ?? ""),
+			reserveAdjudicatedAt: Date.now(),
+		};
+		request.updatedBy = String(game.user?.id ?? "");
+		request.updatedAt = Date.now();
+		await message.setFlag(FLAG_SCOPE, PENDING_ATTACK_FLAG_KEY, request);
+		return message;
+	};
+}
+
 function wrapRangedLauncher() {
 	const originalLaunch = CombatAttackLauncher.launch;
 	CombatAttackLauncher.launch = async function launchWithReserveAdjudication(actor, weapon) {
@@ -74,6 +114,24 @@ function wrapRangedLauncher() {
 		if (!isReserveOnlyBlock(fire)) {
 			return originalLaunch.call(this, actor, weapon);
 		}
+
+		/* Opening the adjudication UI must not make the original missing-ammo
+		 * warning disappear. Keep it in the central GM gameplay-notice lifecycle,
+		 * then offer the explicit one-shot override in the dialog. */
+		await GMGameplayNotice.warn({
+			category: "ranged-reserve-ammunition-required",
+			title: localize("Reserve ammunition", "Amunicja zapasowa"),
+			message: localize(
+				`${fire.reason} The attack dialog was opened for explicit GM adjudication. Checking “Use reserve ammunition” authorizes only this configured shot; retrieval time or complications are not automated.`,
+				`${fire.reason} Okno ataku zostało otwarte do jawnego rozstrzygnięcia MG. Zaznaczenie „Użyj zapasowej amunicji” zezwala wyłącznie na ten skonfigurowany strzał; czas lub komplikacje przygotowania amunicji nie są automatyzowane.`,
+			),
+			summary: localize(
+				"Reserve ammunition requires GM adjudication — details saved in private GM chat.",
+				"Amunicja zapasowa wymaga rozstrzygnięcia MG — szczegóły zapisano w prywatnym czacie MG.",
+			),
+			actor,
+			item: weapon,
+		});
 
 		/* CombatRangedLifecycleIntegration normally refuses to open a dialog which
 		 * can only Cancel. Spend exactly one synthetic availability result so that
@@ -189,6 +247,20 @@ function wrapRangedResolution() {
 		try {
 			const resolved = await originalExecute(actor, weapon, configuration, targetOptions);
 			await tagAttackAsReserveAdjudicated(resolved?.message);
+			await GMGameplayNotice.info({
+				category: "ranged-reserve-ammunition-approved",
+				title: localize("Reserve ammunition approved", "Zatwierdzono amunicję zapasową"),
+				message: localize(
+					`The GM authorized this direct shot using reserve ammunition “${selectedReserve.name}”. The ammunition remained in its existing inventory location; retrieval time or complications were adjudicated outside the automatic ammunition rules.`,
+					`MG zezwolił na ten bezpośredni strzał z użyciem zapasowej amunicji „${selectedReserve.name}”. Amunicja pozostała w dotychczasowym miejscu ekwipunku; czas lub komplikacje jej przygotowania zostały rozstrzygnięte poza automatycznymi zasadami amunicji.`,
+				),
+				summary: localize(
+					"Reserve-ammunition shot approved — verdict saved in private GM chat.",
+					"Strzał z amunicji zapasowej zatwierdzony — rozstrzygnięcie zapisano w prywatnym czacie MG.",
+				),
+				actor,
+				item: weapon,
+			});
 			return resolved;
 		} finally {
 			if (activeReserveShots.get(key)?.token === token) activeReserveShots.delete(key);
