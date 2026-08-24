@@ -426,7 +426,7 @@ function registerSocket() {
 		if (message.type === NOTICE_REQUEST_TYPE) {
 			try {
 				const context = await validatedPlayerRequest(message);
-				await presentReserveNotice(context.actor, context.weapon, context.user);
+				await presentReserveNotice(context.actor, context.weapon);
 			} catch (error) {
 				console.error("WFRP1ED | Unable to present player reserve-ammunition notice.", error);
 			}
@@ -509,7 +509,7 @@ async function validatedPlayerRequest(message) {
 	return { user, actor, weapon };
 }
 
-async function presentReserveNotice(actor, weapon, requestingUser) {
+async function presentReserveNotice(actor, weapon) {
 	const accessible = AmmunitionInventory.accessibleStacks(actor, weapon);
 	const reserves = AmmunitionInventory.reserveStacks(actor, weapon);
 	const reserveText = reserves.length
@@ -524,9 +524,9 @@ async function presentReserveNotice(actor, weapon, requestingUser) {
 			"No compatible ammunition is currently in Quick Access.",
 			"W łatwym dostępie nie ma obecnie zgodnej amunicji.",
 		);
-	const userName = String(requestingUser?.name ?? "").trim();
-	const who = userName
-		? localize(`Player ${userName} selected reserve ammunition. `, `Gracz ${userName} wybrał zapasową amunicję. `)
+	const actorName = String(actor?.name ?? "").trim();
+	const who = actorName
+		? localize(`${actorName}: reserve ammunition selected. `, `${actorName}: wybrano zapasową amunicję. `)
 		: "";
 
 	return GMGameplayNotice.warn({
