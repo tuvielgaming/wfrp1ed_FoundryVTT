@@ -1,52 +1,31 @@
 import { ActorTargetResolver } from "../targets/ActorTargetResolver.mjs";
 
+const FLAG_SCOPE = "wfrp1ed";
+const PENDING_FLAG_KEYS = Object.freeze([
+	"pendingCombatAttack",
+	"pendingRangedCombatAttack",
+]);
 const TARGET_SELECTION_PENDING = "__pending__";
 const ATTACK_DIALOG_CLASS = "wfrp1ed-combat-attack-dialog";
+
+let activePendingPick = null;
 
 install();
 
 /**
- * Keep attack dialogs and pending attack cards connected to Foundry's native
- * canvas targeting workflow.
+ * Target-selection presentation for attack dialogs and pending attack cards.
  *
- * DialogV2 stringifies HTMLElement content before render, so form-control state
- * assigned only as DOM properties while building the content is not a reliable
- * way to preserve a pre-selected target. The rendered dialog is therefore
- * synchronized from game.user.targets after its own listeners are attached.
+ * Pre-roll attack dialogs intentionally follow Foundry's normal Target Token
+ * state. They are non-modal and mirror the current user's single target through
+ * the targetToken hook.
  *
- * Attack dialogs are explicitly non-modal so the user can still interact with
- * the canvas and use normal Foundry token targeting while the dialog is open.
- * The targetToken hook then mirrors the current user's single target into the
- * dialog. Zero or multiple targets return the dialog to the pending/deferred
- * target state rather than silently retaining a stale defender.
- *
- * Foundry's canvas hotkeys are intentionally suppressed while a form control
- * owns keyboard focus. After a discrete dialog choice (select, checkbox or
- * button) is completed we release that focus again, so the user may immediately
- * hover another token and use their normal Foundry Target Token keybinding
- * without first clicking an empty part of the canvas. Text/number inputs retain
- * focus because typing into them must remain uninterrupted.
- *
- * DialogV2 also focuses its default Roll button when the window first opens.
- * We release that automatic initial focus after the render frame so native
- * canvas targeting works immediately, before the user touches any dialog input.
- *
- * Pending attack cards use the same native Foundry targeting convention. A real
- * targetToken event updates the newest pending card which the current user may
- * resolve. The persisted ChatMessage selection is otherwise authoritative and
- * is never re-derived from each client's private game.user.targets during card
- * rendering. This is essential because the GM and an Actor owner may have
- * different local canvas targets: whichever valid card action or targetToken
- * event updates the ChatMessage last becomes the shared selection for everyone.
- * Manual Clear, scene-dropdown selection and GM World-Actor/drop choices are
- * therefore not immediately overwritten by a stale local canvas target.
- *
- * If a live pre-roll attack dialog is also open, it takes priority so targeting
- * a new attack cannot silently rewrite an older pending ChatMessage.
- *
- * Target selectors deliberately distinguish visible Scene tokens from the GM's
- * broader World Actor picker. The latter keeps its compact button label but has
- * an explanatory tooltip in both the pre-roll dialog and pending chat card.
+ * Pending ChatMessage cards are different: their selected defender is shared
+ * adjudication state, while Foundry target markers are private per-user state.
+ * They therefore do NOT follow game.user.targets. Instead a card can enter an
+ * explicit "pick on scene" mode. The next token the user controls with a normal
+ * canvas click is copied into that specific pending card without changing the
+ * user's Foundry Target Token state. The existing dropdown / clear / GM Actor
+ * picker / GM drag-drop paths remain authoritative alternatives.
  */
 function install() {
 	const DialogV2 = foundry.applications?.api?.DialogV2;
@@ -89,14 +68,18 @@ function install() {
 		return Promise.resolve(promise).finally(cleanup);
 	};
 
-	Hooks.on("renderChatMessageHTML", (_message, html) => {
+	Hooks.on("renderChatMessageHTML", (message, html) => {
 		const rendered = asElement(html);
-		requestAnimationFrame(() => decoratePendingTargetCard(rendered));
+		requestAnimationFrame(() => decoratePendingTargetCard(message, rendered));
 	});
 
-	Hooks.on("targetToken", (user) => {
-		if (String(user?.id ?? "") !== String(game.user?.id ?? "")) return;
-		syncNewestPendingCardFromFoundryTarget();
+	Hooks.on("controlToken", (token, controlled) => {
+		if (controlled !== true) return;
+		void applyControlledTokenToPendingPick(token);
+	});
+
+	Hooks.once("ready", () => {
+		document.addEventListener("keydown", onGlobalKeydown, true);
 	});
 
 	Object.defineProperty(
@@ -113,6 +96,10 @@ function isAttackDialogConfig(config) {
 function activateTargetSync(root) {
 	if (!root?.classList?.contains?.(ATTACK_DIALOG_CLASS)) return null;
 
+	/* A live pre-roll dialog is a new targeting workflow. Do not leave an older
+	 * pending ChatMessage armed for a scene pick at the same time. */
+	disarmPendingPick();
+
 	const selection = root.querySelector('[name="targetSelection"]');
 	const targetUuid = root.querySelector('[name="targetUuid"]');
 	if (!(selection instanceof HTMLSelectElement) || !(targetUuid instanceof HTMLInputElement)) {
@@ -122,8 +109,7 @@ function activateTargetSync(root) {
 	decorateAttackTargetControls(root, selection);
 
 	/* Native Foundry targeting is live while this dialog is open. Keeping a
-	 * second "Use current target" action would duplicate the normal workflow and
-	 * encourage unnecessary extra clicks. */
+	 * second "Use current target" action would duplicate the normal workflow. */
 	root.querySelector('[data-attack-target-action="current-target"]')?.remove();
 
 	const syncFromFoundryTarget = () => {
@@ -143,8 +129,6 @@ function activateTargetSync(root) {
 		selection.dispatchEvent(new Event("change", { bubbles: true }));
 	};
 
-	/* Re-apply the current Foundry target after DialogV2 has rendered the
-	 * stringified content. This repairs pre-selected targets on open. */
 	syncFromFoundryTarget();
 	releaseInitialDialogFocus(root);
 
@@ -205,9 +189,10 @@ function decorateAttackTargetControls(root, selection) {
 	}
 }
 
-function decoratePendingTargetCard(rendered) {
+function decoratePendingTargetCard(message, rendered) {
 	const card = pendingCardFromElement(rendered);
-	if (!card) return;
+	if (!card || !message?.id) return;
+	card.dataset.wfrpPendingMessageId = String(message.id);
 
 	const select = card.querySelector("[data-pending-attack-scene-target]");
 	if (select instanceof HTMLSelectElement) {
@@ -221,8 +206,8 @@ function decoratePendingTargetCard(rendered) {
 			);
 		}
 		select.title = localize(
-			"Choose a visible token from the current scene. You can also change the target directly on the canvas.",
-			"Wybierz widoczny token z bieżącej sceny. Możesz też normalnie zmieniać cel bezpośrednio na mapie.",
+			"Choose a visible token from the current scene.",
+			"Wybierz widoczny token z bieżącej sceny.",
 		);
 	}
 
@@ -231,7 +216,148 @@ function decoratePendingTargetCard(rendered) {
 		chooseActor.title = worldActorTooltip();
 	}
 
+	installPendingScenePickButton(message, card);
 	activatePendingCardFocusRelease(card);
+}
+
+function installPendingScenePickButton(message, card) {
+	const actions = card.querySelector(".pending-combat-attack__actions");
+	if (!(actions instanceof HTMLElement)) return;
+
+	let button = actions.querySelector("[data-wfrp-pending-pick-scene-target]");
+	if (!(button instanceof HTMLButtonElement)) {
+		button = document.createElement("button");
+		button.type = "button";
+		button.dataset.wfrpPendingPickSceneTarget = "";
+		button.classList.add("pending-combat-attack__pick-scene");
+
+		const icon = document.createElement("i");
+		icon.className = "fa-solid fa-crosshairs";
+		const label = document.createElement("span");
+		label.dataset.wfrpPendingPickSceneLabel = "";
+		button.append(icon, label);
+		actions.prepend(button);
+
+		button.addEventListener("click", (event) => {
+			event.preventDefault();
+			event.stopImmediatePropagation();
+			button.blur();
+
+			if (!canResolvePendingMessage(message)) return;
+			if (activePendingPick?.messageId === String(message.id)) {
+				disarmPendingPick();
+				return;
+			}
+			armPendingPick(message, card, button);
+		}, true);
+	}
+
+	if (activePendingPick?.messageId === String(message.id)) {
+		activePendingPick.card = card;
+		activePendingPick.button = button;
+		setPendingPickVisual(card, button, true);
+	} else {
+		setPendingPickVisual(card, button, false);
+	}
+}
+
+function armPendingPick(message, card, button) {
+	disarmPendingPick();
+	activePendingPick = {
+		messageId: String(message.id),
+		card,
+		button,
+	};
+	setPendingPickVisual(card, button, true);
+}
+
+function disarmPendingPick() {
+	if (!activePendingPick) return;
+	setPendingPickVisual(activePendingPick.card, activePendingPick.button, false);
+	activePendingPick = null;
+}
+
+function setPendingPickVisual(card, button, armed) {
+	if (card instanceof HTMLElement) {
+		card.classList.toggle("is-picking-scene-target", armed);
+	}
+	if (!(button instanceof HTMLButtonElement)) return;
+	button.classList.toggle("is-active", armed);
+	button.setAttribute("aria-pressed", String(armed));
+	button.title = armed
+		? localize(
+			"Click a token on the scene to use it as this attack's target. Press Esc or click this button again to cancel.",
+			"Kliknij token na mapie, aby ustawić go jako cel tego ataku. Naciśnij Esc albo kliknij ten przycisk ponownie, aby anulować.",
+		)
+		: localize(
+			"Pick this pending attack's target directly from the scene without changing Foundry Target Token state.",
+			"Wskaż cel tego oczekującego ataku bezpośrednio na mapie bez zmiany stanu celu Foundry.",
+		);
+	const label = button.querySelector("[data-wfrp-pending-pick-scene-label]");
+	if (label) {
+		label.textContent = armed
+			? localize("Click token on scene…", "Kliknij token na mapie…")
+			: localize("Pick on scene", "Wskaż na mapie");
+	}
+}
+
+async function applyControlledTokenToPendingPick(token) {
+	if (!activePendingPick) return;
+	const messageId = String(activePendingPick.messageId ?? "");
+	const message = game.messages?.get(messageId);
+	if (!message || !canResolvePendingMessage(message)) {
+		disarmPendingPick();
+		return;
+	}
+
+	const actor = token?.actor;
+	if (actor?.documentName !== "Actor" || !actor.uuid) return;
+
+	let card = activePendingPick.card;
+	if (!(card instanceof HTMLElement) || !card.isConnected) {
+		card = findPendingCard(messageId);
+	}
+	const select = card?.querySelector?.("[data-pending-attack-scene-target]");
+	if (!(select instanceof HTMLSelectElement)) {
+		disarmPendingPick();
+		return;
+	}
+
+	const displayName = String(token?.name ?? token?.document?.name ?? actor.name ?? "—");
+	ensureTargetOption(select, actor, displayName);
+	select.value = String(actor.uuid);
+
+	/* Clear the armed visual before dispatching. The change may immediately
+	 * re-render the ChatMessage on every client. */
+	disarmPendingPick();
+	select.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+function canResolvePendingMessage(message) {
+	const entry = pendingEntry(message);
+	if (!entry) return false;
+	const actor = ActorTargetResolver.actorFromUuidSync(entry.request.actorUuid);
+	if (!actor || !game.user) return false;
+	if (game.user.isGM) return true;
+	return actor.testUserPermission?.(
+		game.user,
+		CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER,
+	) === true;
+}
+
+function pendingEntry(message) {
+	for (const flagKey of PENDING_FLAG_KEYS) {
+		const request = message?.getFlag?.(FLAG_SCOPE, flagKey);
+		if (request?.status === "pending") return { flagKey, request };
+	}
+	return null;
+}
+
+function findPendingCard(messageId) {
+	const id = String(messageId ?? "");
+	if (!id) return null;
+	return [...document.querySelectorAll("[data-wfrp-pending-message-id]")]
+		.find((card) => String(card.dataset?.wfrpPendingMessageId ?? "") === id) ?? null;
 }
 
 function activatePendingCardFocusRelease(card) {
@@ -252,43 +378,11 @@ function activatePendingCardFocusRelease(card) {
 	});
 }
 
-function syncNewestPendingCardFromFoundryTarget() {
-	if (attackDialogIsOpen()) return;
-	const cards = [...document.querySelectorAll("[data-wfrp-pending-combat-attack]")]
-		.filter((card) => card instanceof HTMLElement)
-		.filter((card) => card.isConnected)
-		.filter(canResolvePendingCard);
-	const card = cards.at(-1);
-	if (!card) return;
-	applyFoundryTargetToPendingCard(card);
-}
-
-function applyFoundryTargetToPendingCard(card) {
-	const select = card.querySelector("[data-pending-attack-scene-target]");
-	if (!(select instanceof HTMLSelectElement)) return;
-
-	const target = ActorTargetResolver.singleTargetActor();
-	if (!target) {
-		if (select.value === TARGET_SELECTION_PENDING) return;
-		select.value = TARGET_SELECTION_PENDING;
-		select.dispatchEvent(new Event("change", { bubbles: true }));
-		return;
-	}
-
-	const uuid = String(target.uuid ?? "");
-	if (!uuid || select.value === uuid) return;
-	ensureTargetOption(select, target);
-	select.value = uuid;
-	select.dispatchEvent(new Event("change", { bubbles: true }));
-}
-
-function canResolvePendingCard(card) {
-	const controls = card.querySelector("[data-pending-attack-controls]");
-	return controls instanceof HTMLElement && controls.hidden !== true;
-}
-
-function attackDialogIsOpen() {
-	return Boolean(document.querySelector(`.${ATTACK_DIALOG_CLASS}`));
+function onGlobalKeydown(event) {
+	if (!activePendingPick || event.key !== "Escape") return;
+	event.preventDefault();
+	event.stopImmediatePropagation();
+	disarmPendingPick();
 }
 
 function pendingCardFromElement(rendered) {
@@ -326,14 +420,14 @@ function releaseFocusAfterInteraction(control) {
 	});
 }
 
-function ensureTargetOption(selection, target) {
+function ensureTargetOption(selection, target, explicitName = "") {
 	const uuid = String(target?.uuid ?? "");
 	if (!uuid) return null;
 	let option = [...selection.options].find((entry) => entry.value === uuid);
 	const sceneEntry = ActorTargetResolver.sceneTokenTargets().find(
 		(entry) => String(entry.actorUuid ?? "") === uuid,
 	);
-	const displayName = String(sceneEntry?.name ?? target?.name ?? "—");
+	const displayName = String(explicitName || sceneEntry?.name || target?.name || "—");
 
 	if (!option) {
 		option = document.createElement("option");
