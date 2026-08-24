@@ -395,6 +395,7 @@ function serializeConfiguration(configuration = {}) {
 		distance,
 		manualDamageModifier,
 		ammunitionUuid: String(configuration.ammunitionUuid ?? ""),
+		ammunitionAccessMode: String(configuration.ammunitionAccessMode ?? "quick-access"),
 	};
 }
 
