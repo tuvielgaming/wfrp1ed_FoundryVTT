@@ -247,20 +247,6 @@ function wrapRangedResolution() {
 		try {
 			const resolved = await originalExecute(actor, weapon, configuration, targetOptions);
 			await tagAttackAsReserveAdjudicated(resolved?.message);
-			await GMGameplayNotice.info({
-				category: "ranged-reserve-ammunition-approved",
-				title: localize("Reserve ammunition approved", "Zatwierdzono amunicję zapasową"),
-				message: localize(
-					`The GM authorized this direct shot using reserve ammunition “${selectedReserve.name}”. The ammunition remained in its existing inventory location; retrieval time or complications were adjudicated outside the automatic ammunition rules.`,
-					`MG zezwolił na ten bezpośredni strzał z użyciem zapasowej amunicji „${selectedReserve.name}”. Amunicja pozostała w dotychczasowym miejscu ekwipunku; czas lub komplikacje jej przygotowania zostały rozstrzygnięte poza automatycznymi zasadami amunicji.`,
-				),
-				summary: localize(
-					"Reserve-ammunition shot approved — verdict saved in private GM chat.",
-					"Strzał z amunicji zapasowej zatwierdzony — rozstrzygnięcie zapisano w prywatnym czacie MG.",
-				),
-				actor,
-				item: weapon,
-			});
 			return resolved;
 		} finally {
 			if (activeReserveShots.get(key)?.token === token) activeReserveShots.delete(key);
