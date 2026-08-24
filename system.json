@@ -41,6 +41,7 @@
 		"module/combat/CombatMagazineReloadIntegration.mjs",
 		"module/combat/CombatRangedLifecycleIntegration.mjs",
 		"module/combat/CombatRangedAmmunitionIntegration.mjs",
+		"module/combat/CombatReserveAmmunitionAdjudicationIntegration.mjs",
 		"module/combat/CombatGMGameplayNoticeIntegration.mjs",
 		"module/combat/CombatDeleteButtonPlacement.mjs",
 		"module/combat/CombatItemInteractionConsistency.mjs",
