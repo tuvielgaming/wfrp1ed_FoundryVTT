@@ -18,7 +18,6 @@ import {
 	DAMAGE_ARMOUR_PENETRATION_TARGET_ID,
 	DAMAGE_IGNORE_ARMOUR_TARGET_ID,
 	DAMAGE_IGNORE_TOUGHNESS_TARGET_ID,
-	LEGACY_AMMUNITION_DAMAGE_TARGET_ID,
 } from "./damage/DamageRuleEffects.mjs";
 import { WFRP1ED } from "./helpers/config.mjs";
 import { ClassicActorSheet } from "./sheets/ClassicActorSheet.mjs";
@@ -312,30 +311,6 @@ function registerRuleEffectTargets() {
 		metadata: {
 			consumer: "damage",
 			parameter: "toughnessPolicy",
-		},
-	});
-
-	/* Keep authored special-ammunition rules compatible while new Items use the
-	 * source-independent damage target above. The shared resolver maps this
-	 * legacy id only when it comes from the exact fired-ammunition snapshot. */
-	RuleEffectRegistry.registerTarget({
-		id: LEGACY_AMMUNITION_DAMAGE_TARGET_ID,
-		category: "combat-ranged",
-		label: "Ammunition damage modifier",
-		labels: {
-			pl: "Modyfikator obrażeń amunicji",
-		},
-		sides: [RULE_EFFECT_SIDES.SELF],
-		operations: [
-			RULE_EFFECT_OPERATIONS.ADD,
-			RULE_EFFECT_OPERATIONS.SUBTRACT,
-		],
-		applicabilities: [RULE_EFFECT_APPLICABILITY.AUTOMATIC],
-		metadata: {
-			consumer: "combat-ranged",
-			parameter: "ammunitionDamageModifier",
-			source: "fired-ammunition",
-			authoringHidden: true,
 		},
 	});
 }

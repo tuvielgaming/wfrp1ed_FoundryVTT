@@ -24,11 +24,7 @@ export class RuleEffectDialog {
 	 * @returns {Promise<Object|null>}
 	 */
 	static async configure(existingChange = null) {
-		const existing = decodeRuleEffectChange(existingChange);
-		const targets = RuleEffectRegistry.sorted().filter((target) =>
-			target.metadata?.authoringHidden !== true ||
-			target.id === existing?.targetId
-		);
+		const targets = RuleEffectRegistry.sorted();
 
 		if (targets.length === 0) {
 			throw new Error(
@@ -36,6 +32,7 @@ export class RuleEffectDialog {
 			);
 		}
 
+		const existing = decodeRuleEffectChange(existingChange);
 		const initial = initialState(existing, targets);
 		const content = this.#buildContent(targets, initial);
 

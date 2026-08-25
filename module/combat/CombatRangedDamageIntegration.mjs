@@ -317,14 +317,14 @@ async function resolveRangedDamageAsAuthority(message, requestingUser) {
 			defender,
 			[{ kind: "ammunition", source: attack.ammunition ?? {} }],
 		);
-		const weaponRuleDamageModifier = integer(weaponRules.damageModifier);
-		const ammunitionRuleDamageModifier = integer(
+		const weaponEffectDamageModifier = integer(weaponRules.damageModifier);
+		const ammunitionEffectDamageModifier = integer(
 			ammunitionRules.damageModifier,
 		);
 		const weaponDamageModifier =
 			rangeDamageModifier +
-			weaponRuleDamageModifier +
-			ammunitionRuleDamageModifier;
+			weaponEffectDamageModifier +
+			ammunitionEffectDamageModifier;
 		const armourMitigation = [weaponRules, ammunitionRules].some(
 			(rules) => rules.armourPolicy === DAMAGE_MITIGATION_POLICY.IGNORE,
 		)
@@ -367,16 +367,13 @@ async function resolveRangedDamageAsAuthority(message, requestingUser) {
 			strength,
 			strengthSource: "weapon-effective-strength",
 			rangeDamageModifier,
-			weaponRuleDamageModifier,
-			ammunitionDamageModifier: ammunitionRuleDamageModifier,
-			ammunitionRuleEffects: foundry.utils.deepClone(ammunitionRules.entries),
 			damageRuleEffects: foundry.utils.deepClone(damageRuleEffects),
 			armourMitigation,
 			toughnessMitigation,
 			armourPenetration,
 			weaponDamageModifier,
 			modifierSource: damageRuleEffects.length > 0
-				? "range+damage-rules"
+				? "range+active-effects"
 				: "range",
 			optionalWeaponModifiersApplied: false,
 			generatedDamage,
@@ -826,11 +823,7 @@ function splitRangedModifierRows(card, rollState) {
 
 	const hasComponents = Boolean(
 		rollState &&
-		(
-			Object.hasOwn(rollState, "rangeDamageModifier") ||
-			Object.hasOwn(rollState, "weaponRuleDamageModifier") ||
-			Object.hasOwn(rollState, "ammunitionDamageModifier")
-		),
+		Object.hasOwn(rollState, "rangeDamageModifier"),
 	);
 	if (!hasComponents) {
 		relabelDamageRow(
@@ -869,22 +862,6 @@ function splitRangedModifierRows(card, rollState) {
 		row.dataset.wfrpRangedModifierRow = "range";
 		anchor.insertAdjacentElement("afterend", row);
 		anchor = row;
-	}
-
-	/* Current transactions render each Active Effect under its exact weapon or
-	 * ammunition source in the shared Damage card. Retain one readable fallback
-	 * for older saved transactions which predate those audit entries. */
-	const hasRuleEntries = Array.isArray(rollState.damageRuleEffects) &&
-		rollState.damageRuleEffects.length > 0;
-	const legacyRuleModifier = integer(rollState.weaponRuleDamageModifier) +
-		integer(rollState.ammunitionDamageModifier);
-	if (!hasRuleEntries && legacyRuleModifier !== 0) {
-		const row = damageBreakdownRow(
-			localize("Active Effect (damage)", "Aktywny Efekt (obrażenia)"),
-			signedInteger(legacyRuleModifier),
-		);
-		row.dataset.wfrpRangedModifierRow = "legacy-rule";
-		anchor.insertAdjacentElement("afterend", row);
 	}
 }
 

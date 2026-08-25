@@ -15,8 +15,6 @@ export const DAMAGE_IGNORE_ARMOUR_TARGET_ID =
 	"damage.armour.ignore";
 export const DAMAGE_IGNORE_TOUGHNESS_TARGET_ID =
 	"damage.toughness.ignore";
-export const LEGACY_AMMUNITION_DAMAGE_TARGET_ID =
-	"combat.ranged.ammunition.damage";
 
 const NUMERIC_TARGETS = new Set([
 	DAMAGE_AMOUNT_MODIFIER_TARGET_ID,
@@ -86,10 +84,7 @@ export class DamageRuleEffects {
 				const changes = ruleChanges(effect);
 				for (let changeIndex = 0; changeIndex < changes.length; changeIndex += 1) {
 					const decoded = decodeRuleEffectChange(changes[changeIndex]);
-					const targetId = canonicalTargetId(
-						decoded?.targetId,
-						descriptor.kind,
-					);
+					const targetId = canonicalTargetId(decoded?.targetId);
 					if (!decoded || !targetId) continue;
 					if (
 						decoded.applicability !== RULE_EFFECT_APPLICABILITY.AUTOMATIC ||
@@ -165,14 +160,8 @@ export class DamageRuleEffects {
 	}
 }
 
-function canonicalTargetId(targetId, sourceKind) {
+function canonicalTargetId(targetId) {
 	const normalized = String(targetId ?? "").trim();
-	if (
-		normalized === LEGACY_AMMUNITION_DAMAGE_TARGET_ID &&
-		sourceKind === "ammunition"
-	) {
-		return DAMAGE_AMOUNT_MODIFIER_TARGET_ID;
-	}
 	if (NUMERIC_TARGETS.has(normalized) || GRANT_TARGETS.has(normalized)) {
 		return normalized;
 	}
