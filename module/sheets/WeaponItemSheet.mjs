@@ -13,7 +13,9 @@ import {
 import { HandEquipValidator } from "../combat/HandEquipValidator.mjs";
 
 const { ItemSheetV2 } = foundry.applications.sheets;
-const { HandlebarsApplicationMixin } = foundry.applications.api;
+const { DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
+const WEAPON_TABS = Object.freeze(["details", "effects"]);
+const activeWeaponTabs = new WeakMap();
 
 /** Native Foundry v14 authoring sheet for WFRP 1e Weapon Items. */
 export class WeaponItemSheet extends HandlebarsApplicationMixin(
@@ -36,6 +38,14 @@ export class WeaponItemSheet extends HandlebarsApplicationMixin(
 		form: {
 			submitOnChange: true,
 			closeOnSubmit: false,
+		},
+		actions: {
+			showDetails: this.#showDetails,
+			showEffects: this.#showEffects,
+			createEffect: this.#createEffect,
+			configureEffect: this.#configureEffect,
+			toggleEffect: this.#toggleEffect,
+			deleteEffect: this.#deleteEffect,
 		},
 	};
 
@@ -96,8 +106,73 @@ export class WeaponItemSheet extends HandlebarsApplicationMixin(
 			],
 			system?.handedness,
 		);
+		context.effects = effectPresentation(this.document);
 
 		return context;
+	}
+
+	_onRender(context, options) {
+		super._onRender(context, options);
+		activateWeaponTab(
+			this.element,
+			normalizedWeaponTab(activeWeaponTabs.get(this)) || "details",
+		);
+	}
+
+	/** @this {WeaponItemSheet} */
+	static #showDetails(_event, target) {
+		setTab(this, "details", target);
+	}
+
+	/** @this {WeaponItemSheet} */
+	static #showEffects(_event, target) {
+		setTab(this, "effects", target);
+	}
+
+	/** @this {WeaponItemSheet} */
+	static async #createEffect() {
+		if (!this.isEditable) return;
+		const [effect] = await this.document.createEmbeddedDocuments(
+			"ActiveEffect",
+			[{
+				name: localize("New Effect", "Nowy efekt"),
+				img: this.document.img || foundry.documents.ActiveEffect.DEFAULT_ICON,
+				disabled: false,
+				/* Weapon rules describe the attack source. They must not transfer to
+				 * the owning Actor merely because the weapon is equipped. */
+				transfer: false,
+			}],
+		);
+		if (effect?.sheet) await effect.sheet.render({ force: true });
+	}
+
+	/** @this {WeaponItemSheet} */
+	static async #configureEffect(_event, target) {
+		const effect = effectFromTarget(this, target);
+		if (effect?.sheet) await effect.sheet.render({ force: true });
+	}
+
+	/** @this {WeaponItemSheet} */
+	static async #toggleEffect(_event, target) {
+		if (!this.isEditable) return;
+		const effect = effectFromTarget(this, target);
+		if (effect) await effect.update({ disabled: !effect.disabled });
+	}
+
+	/** @this {WeaponItemSheet} */
+	static async #deleteEffect(_event, target) {
+		if (!this.isEditable) return;
+		const effect = effectFromTarget(this, target);
+		if (!effect) return;
+		const confirmed = await DialogV2.confirm({
+			content: localize(
+				`Delete effect '${effect.name}'?`,
+				`Usunąć efekt „${effect.name}”?`,
+			),
+			rejectClose: false,
+			modal: true,
+		});
+		if (confirmed) await effect.delete();
 	}
 }
 
@@ -167,7 +242,66 @@ function weaponUi() {
 		parryModifier: localize("Parry", "Parowanie"),
 		inventory: localize("Inventory", "Ekwipunek"),
 		combat: localize("Combat", "Walka"),
+		detailsTab: localize("Details", "Dane"),
+		effectsTab: localize("Effects", "Efekty"),
+		addEffect: localize("Add Effect", "Dodaj efekt"),
+		configureEffect: localize("Configure", "Konfiguruj"),
+		deleteEffect: localize("Delete", "Usuń"),
+		enabled: localize("Enabled", "Aktywny"),
+		disabled: localize("Disabled", "Wyłączony"),
+		noEffects: localize("No Active Effects.", "Brak Aktywnych Efektów."),
+		effectsHint: localize(
+			"Mechanical effects stored on this Weapon. Automatic damage rules are snapshotted when an attack is rolled.",
+			"Efekty mechaniczne zapisane na tej Broni. Automatyczne reguły obrażeń są zapisywane w chwili rzutu ataku.",
+		),
 	});
+}
+
+function effectPresentation(item) {
+	return [...(item.effects ?? [])].map((effect) => ({
+		id: String(effect.id ?? ""),
+		name: String(effect.name ?? ""),
+		img: String(effect.img ?? foundry.documents.ActiveEffect.DEFAULT_ICON),
+		disabled: effect.disabled === true,
+		stateLabel: effect.disabled === true
+			? localize("Disabled", "Wyłączony")
+			: localize("Enabled", "Aktywny"),
+	}));
+}
+
+function effectFromTarget(sheet, target) {
+	const card = target?.closest?.("[data-effect-id]");
+	const id = String(card?.dataset?.effectId ?? "");
+	return id ? sheet.document.effects?.get?.(id) ?? null : null;
+}
+
+function setTab(sheet, tab, target) {
+	const normalized = normalizedWeaponTab(tab);
+	if (!normalized) return;
+	activeWeaponTabs.set(sheet, normalized);
+	const root = target?.closest?.("form") ?? sheet.element;
+	activateWeaponTab(root, normalized);
+}
+
+function activateWeaponTab(root, tab) {
+	if (!(root instanceof HTMLElement)) return;
+	const normalized = normalizedWeaponTab(tab) || "details";
+	for (const panel of root.querySelectorAll("[data-weapon-tab-panel]")) {
+		const active = panel.dataset.weaponTabPanel === normalized;
+		panel.hidden = !active;
+		panel.classList.toggle("is-active", active);
+	}
+	for (const button of root.querySelectorAll("[data-weapon-tab-button]")) {
+		const active = button.dataset.weaponTabButton === normalized;
+		button.classList.toggle("is-active", active);
+		button.setAttribute("aria-selected", active ? "true" : "false");
+		button.tabIndex = active ? 0 : -1;
+	}
+}
+
+function normalizedWeaponTab(value) {
+	const normalized = String(value ?? "").trim();
+	return WEAPON_TABS.includes(normalized) ? normalized : "";
 }
 
 function selectOptions(entries, selectedValue) {

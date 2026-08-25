@@ -1,11 +1,25 @@
-<section class="combat-item-sheet__content">
-	<header class="combat-item-sheet__header wfrp1ed-item-header">
+<div class="weapon-item-sheet__root">
+	<header class="combat-item-sheet__header weapon-item-sheet__header wfrp1ed-item-header">
 		<img class="combat-item-sheet__image wfrp1ed-item-header__image" data-wfrp1ed-item-image src="{{item.img}}" alt="{{item.name}}">
 		<label class="combat-item-sheet__field combat-item-sheet__field--name">
 			<span>{{ui.name}}</span>
 			<input type="text" name="name" value="{{item.name}}" autocomplete="off" required {{#unless editable}}disabled{{/unless}}>
 		</label>
 	</header>
+
+	<nav class="weapon-item-sheet__tabs wfrp1ed-tabs" role="tablist" aria-label="{{ui.name}}">
+		<button type="button" class="wfrp1ed-tab" role="tab" data-action="showDetails" data-weapon-tab-button="details">
+			<i class="fa-solid fa-list"></i>
+			<span>{{ui.detailsTab}}</span>
+		</button>
+		<button type="button" class="wfrp1ed-tab" role="tab" data-action="showEffects" data-weapon-tab-button="effects">
+			<i class="fa-solid fa-wand-magic-sparkles"></i>
+			<span>{{ui.effectsTab}}</span>
+		</button>
+	</nav>
+
+	<div class="weapon-item-sheet__tab-content">
+		<section class="combat-item-sheet__content" data-weapon-tab-panel="details">
 
 	<section class="combat-item-sheet__panel">
 		<h3>{{ui.inventory}}</h3>
@@ -97,5 +111,32 @@
 		</section>
 	{{/unless}}
 
-	<label class="combat-item-sheet__field combat-item-sheet__description"><span>{{ui.description}}</span><textarea name="system.description" spellcheck="true" {{#unless editable}}disabled{{/unless}}>{{system.description}}</textarea></label>
-</section>
+			<label class="combat-item-sheet__field combat-item-sheet__description"><span>{{ui.description}}</span><textarea name="system.description" spellcheck="true" {{#unless editable}}disabled{{/unless}}>{{system.description}}</textarea></label>
+		</section>
+
+		<section class="equipment-effects-panel" data-weapon-tab-panel="effects" hidden>
+			<header class="equipment-effects-panel__header">
+				<div>
+					<h3>{{ui.effectsTab}}</h3>
+					<p>{{ui.effectsHint}}</p>
+				</div>
+				<button type="button" data-action="createEffect" {{#unless editable}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> {{ui.addEffect}}</button>
+			</header>
+			<div class="equipment-effects-list">
+				{{#each effects as |effect|}}
+					<article class="equipment-effect-card {{#if effect.disabled}}is-disabled{{/if}}" data-effect-id="{{effect.id}}">
+						<img src="{{effect.img}}" alt="">
+						<div class="equipment-effect-card__identity"><strong>{{effect.name}}</strong><span>{{effect.stateLabel}}</span></div>
+						<div class="equipment-effect-card__actions">
+							<button type="button" data-action="toggleEffect" {{#unless ../editable}}disabled{{/unless}}><i class="fa-solid {{#if effect.disabled}}fa-toggle-off{{else}}fa-toggle-on{{/if}}"></i></button>
+							<button type="button" data-action="configureEffect"><i class="fa-solid fa-gear"></i></button>
+							<button type="button" data-action="deleteEffect" {{#unless ../editable}}disabled{{/unless}}><i class="fa-solid fa-trash"></i></button>
+						</div>
+					</article>
+				{{else}}
+					<p class="equipment-effects-panel__empty">{{ui.noEffects}}</p>
+				{{/each}}
+			</div>
+		</section>
+	</div>
+</div>

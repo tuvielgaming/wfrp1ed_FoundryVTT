@@ -279,8 +279,8 @@ function equipmentUi() {
 		disabled: localize("Disabled", "Wyłączony"),
 		noEffects: localize("No Active Effects.", "Brak Aktywnych Efektów."),
 		effectsHint: localize(
-			"Native Foundry ActiveEffects stored on this Equipment Item. Ammunition effects are non-transfer by default and can later be consumed by the ranged attack consequence pipeline.",
-			"Natywne Aktywne Efekty Foundry zapisane na tym Ekwipunku. Efekty amunicji domyślnie nie są przenoszone na właściciela i mogą być później wykorzystane przez mechanikę trafienia pociskiem.",
+			"Mechanical effects stored on this Equipment Item. Automatic damage rules on fired ammunition are resolved from the exact shot snapshot.",
+			"Efekty mechaniczne zapisane na tym Ekwipunku. Automatyczne reguły obrażeń wystrzelonej amunicji są rozstrzygane z dokładnego zapisu danego strzału.",
 		),
 	});
 }

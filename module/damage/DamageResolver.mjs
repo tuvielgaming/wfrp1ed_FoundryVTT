@@ -3,6 +3,7 @@ import { DamageResolution } from "./DamageResolution.mjs";
 
 const LEATHER_ARMOUR_CLASS = "leather";
 const PARRY_SPECIAL_KEY = "parry";
+const ARMOUR_PENETRATION_SPECIAL_KEY = "armourPenetration";
 
 /**
  * Resolve already-generated WFRP damage without mutating an Actor.
@@ -55,6 +56,7 @@ export class DamageResolver {
 			normalized.mitigation.armour,
 			snapshots.armour,
 			remaining,
+			special.armourPenetration,
 		);
 		remaining = armour.after;
 
@@ -102,7 +104,11 @@ function resolveToughness(policy, snapshot, before) {
 	};
 }
 
-function resolveArmour(policy, snapshot, before) {
+function resolveArmour(policy, snapshot, before, armourPenetration) {
+	const requestedPenetration = nonNegativeInteger(
+		armourPenetration?.value ?? 0,
+		"Armour penetration",
+	);
 	if (policy === DAMAGE_MITIGATION_POLICY.IGNORE) {
 		return {
 			policy,
@@ -116,6 +122,10 @@ function resolveArmour(policy, snapshot, before) {
 				authoredPoints: 0,
 				appliedPoints: 0,
 				ignoredByHighDamage: false,
+			},
+			penetration: {
+				requested: requestedPenetration,
+				applied: 0,
 			},
 		};
 	}
@@ -154,7 +164,9 @@ function resolveArmour(policy, snapshot, before) {
 
 	const leatherApplies = before > 0 && before <= 3;
 	const leatherApplied = leatherApplies ? leatherPoints : 0;
-	const value = fixedPoints + leatherApplied;
+	const beforePenetration = fixedPoints + leatherApplied;
+	const value = Math.max(0, beforePenetration - requestedPenetration);
+	const penetrationApplied = beforePenetration - value;
 	const after = Math.max(0, before - value);
 
 	return {
@@ -167,12 +179,17 @@ function resolveArmour(policy, snapshot, before) {
 		authoredTotal: sources.length > 0
 			? fixedPoints + leatherPoints
 			: fallbackTotal,
+		beforePenetration,
 		fixedPoints,
 		sources,
 		leather: {
 			authoredPoints: leatherPoints,
 			appliedPoints: leatherApplied,
 			ignoredByHighDamage: leatherPoints > 0 && before >= 4,
+		},
+		penetration: {
+			requested: requestedPenetration,
+			applied: penetrationApplied,
 		},
 	};
 }
@@ -214,7 +231,10 @@ function normalizeSpecialMitigation(value) {
 	}
 
 	const unknown = Object.keys(source).filter(
-		(key) => key !== PARRY_SPECIAL_KEY,
+		(key) => ![
+			PARRY_SPECIAL_KEY,
+			ARMOUR_PENETRATION_SPECIAL_KEY,
+		].includes(key),
 	);
 	if (unknown.length > 0) {
 		throw new Error(
@@ -223,23 +243,39 @@ function normalizeSpecialMitigation(value) {
 	}
 
 	const rawParry = source[PARRY_SPECIAL_KEY];
-	if (rawParry === undefined || rawParry === null) {
-		return { parry: null };
-	}
-	if (typeof rawParry !== "object" || Array.isArray(rawParry)) {
-		throw new Error("Parry special mitigation must be an object.");
-	}
-
-	return {
-		parry: {
+	let parry = null;
+	if (rawParry !== undefined && rawParry !== null) {
+		if (typeof rawParry !== "object" || Array.isArray(rawParry)) {
+			throw new Error("Parry special mitigation must be an object.");
+		}
+		parry = {
 			reduction: nonNegativeInteger(
 				rawParry.reduction ?? 0,
 				"Parry damage reduction",
 			),
 			itemUuid: optionalText(rawParry.itemUuid),
 			itemName: optionalText(rawParry.itemName),
-		},
-	};
+		};
+	}
+
+	const rawPenetration = source[ARMOUR_PENETRATION_SPECIAL_KEY];
+	let armourPenetration = null;
+	if (rawPenetration !== undefined && rawPenetration !== null) {
+		if (
+			typeof rawPenetration !== "object" ||
+			Array.isArray(rawPenetration)
+		) {
+			throw new Error("Armour penetration special mitigation must be an object.");
+		}
+		armourPenetration = {
+			value: nonNegativeInteger(
+				rawPenetration.value ?? 0,
+				"Armour penetration",
+			),
+		};
+	}
+
+	return { parry, armourPenetration };
 }
 
 function normalizeArmourSources(value) {

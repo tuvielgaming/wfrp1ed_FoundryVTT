@@ -13,6 +13,13 @@ import {
 	RuleEffectRegistry,
 } from "./effects/RuleEffectRegistry.mjs";
 import { RuleEffectResolver } from "./effects/RuleEffectResolver.mjs";
+import {
+	DAMAGE_AMOUNT_MODIFIER_TARGET_ID,
+	DAMAGE_ARMOUR_PENETRATION_TARGET_ID,
+	DAMAGE_IGNORE_ARMOUR_TARGET_ID,
+	DAMAGE_IGNORE_TOUGHNESS_TARGET_ID,
+	LEGACY_AMMUNITION_DAMAGE_TARGET_ID,
+} from "./damage/DamageRuleEffects.mjs";
 import { WFRP1ED } from "./helpers/config.mjs";
 import { ClassicActorSheet } from "./sheets/ClassicActorSheet.mjs";
 import { CriticalWoundItemSheet } from "./sheets/CriticalWoundItemSheet.mjs";
@@ -236,15 +243,83 @@ function registerRuleEffectTargets() {
 		},
 	});
 
-	/*
-	 * Special ammunition uses the same declarative Active Effect language as
-	 * Skills and other Items, but this first ranged consumer is intentionally
-	 * automatic-only. The damage layer reads the effect snapshot from the exact
-	 * ammunition variant fired; it never scans unrelated ammunition carried by
-	 * the Actor and never infers mechanics from an Item name or description.
-	 */
 	RuleEffectRegistry.registerTarget({
-		id: "combat.ranged.ammunition.damage",
+		id: DAMAGE_AMOUNT_MODIFIER_TARGET_ID,
+		category: "damage",
+		label: "Damage modifier",
+		labels: {
+			pl: "Modyfikator obrażeń",
+		},
+		sides: [RULE_EFFECT_SIDES.SELF],
+		operations: [
+			RULE_EFFECT_OPERATIONS.ADD,
+			RULE_EFFECT_OPERATIONS.SUBTRACT,
+		],
+		applicabilities: [RULE_EFFECT_APPLICABILITY.AUTOMATIC],
+		metadata: {
+			consumer: "damage",
+			parameter: "damageModifier",
+		},
+	});
+
+	RuleEffectRegistry.registerTarget({
+		id: DAMAGE_ARMOUR_PENETRATION_TARGET_ID,
+		category: "damage",
+		label: "Armour penetration",
+		labels: {
+			pl: "Przebicie pancerza",
+		},
+		sides: [RULE_EFFECT_SIDES.SELF],
+		operations: [
+			RULE_EFFECT_OPERATIONS.ADD,
+			RULE_EFFECT_OPERATIONS.SUBTRACT,
+		],
+		applicabilities: [RULE_EFFECT_APPLICABILITY.AUTOMATIC],
+		metadata: {
+			consumer: "damage",
+			parameter: "armourPenetration",
+		},
+	});
+
+	RuleEffectRegistry.registerTarget({
+		id: DAMAGE_IGNORE_ARMOUR_TARGET_ID,
+		category: "damage",
+		label: "Ignore Armour",
+		labels: {
+			pl: "Ignorowanie pancerza",
+		},
+		sides: [RULE_EFFECT_SIDES.SELF],
+		operations: [RULE_EFFECT_OPERATIONS.GRANT],
+		applicabilities: [RULE_EFFECT_APPLICABILITY.AUTOMATIC],
+		valueRequired: false,
+		metadata: {
+			consumer: "damage",
+			parameter: "armourPolicy",
+		},
+	});
+
+	RuleEffectRegistry.registerTarget({
+		id: DAMAGE_IGNORE_TOUGHNESS_TARGET_ID,
+		category: "damage",
+		label: "Ignore Toughness",
+		labels: {
+			pl: "Ignorowanie Wytrzymałości",
+		},
+		sides: [RULE_EFFECT_SIDES.SELF],
+		operations: [RULE_EFFECT_OPERATIONS.GRANT],
+		applicabilities: [RULE_EFFECT_APPLICABILITY.AUTOMATIC],
+		valueRequired: false,
+		metadata: {
+			consumer: "damage",
+			parameter: "toughnessPolicy",
+		},
+	});
+
+	/* Keep authored special-ammunition rules compatible while new Items use the
+	 * source-independent damage target above. The shared resolver maps this
+	 * legacy id only when it comes from the exact fired-ammunition snapshot. */
+	RuleEffectRegistry.registerTarget({
+		id: LEGACY_AMMUNITION_DAMAGE_TARGET_ID,
 		category: "combat-ranged",
 		label: "Ammunition damage modifier",
 		labels: {

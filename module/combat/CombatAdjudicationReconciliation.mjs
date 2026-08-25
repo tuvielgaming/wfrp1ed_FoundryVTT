@@ -241,7 +241,10 @@ async function reconcileAdditionalDamageAdjudication(testMessage, marker) {
 		if (!updated.diceTotalOverridden) updated.diceTotal = rolledTotal;
 		updated.generatedDamage = Math.max(
 			0,
-			nonNegativeInteger(updated.diceTotal) + integer(updated.strength) + integer(updated.weaponDamageModifier),
+			nonNegativeInteger(updated.diceTotal) +
+				integer(updated.strength) +
+				integer(updated.weaponDamageModifier) +
+				integer(updated.ruleDamageModifier),
 		);
 		updated.rawAmount = updated.generatedDamage;
 		updated.updatedBy = String(game.user?.id ?? "");
@@ -291,13 +294,22 @@ async function rebuildDamageFromPreservedRoll(message, attackState, rollState, e
 
 	const existingPacket = existingDamageState?.packet ? DamagePacket.fromJSON(existingDamageState.packet) : null;
 	const parry = rollState.parry ?? {};
-	const specialMitigation = parry.succeeded === true && Number.isInteger(Number(parry.reduction))
-		? { parry: {
+	const specialMitigation = {};
+	if (parry.succeeded === true && Number.isInteger(Number(parry.reduction))) {
+		specialMitigation.parry = {
 			reduction: nonNegativeInteger(parry.reduction),
 			itemName: String(parry.itemName ?? ""),
 			itemUuid: String(parry.itemUuid ?? ""),
-		} }
-		: {};
+		};
+	}
+	const armourPenetration = nonNegativeInteger(
+		rollState.armourPenetration,
+	);
+	if (armourPenetration > 0) {
+		specialMitigation.armourPenetration = {
+			value: armourPenetration,
+		};
+	}
 
 	const packet = new DamagePacket({
 		id: existingPacket?.id ?? null,
@@ -309,8 +321,12 @@ async function rebuildDamageFromPreservedRoll(message, attackState, rollState, e
 			uuid: String(message.uuid ?? `ChatMessage.${message.id}`),
 			label: String(attackState.weapon?.name ?? "Melee attack"),
 		},
-		armour: existingPacket?.mitigation?.armour ?? DAMAGE_MITIGATION_POLICY.APPLY,
-		toughness: existingPacket?.mitigation?.toughness ?? DAMAGE_MITIGATION_POLICY.APPLY,
+		armour: existingPacket?.mitigation?.armour ?? mitigationPolicy(
+			rollState.armourMitigation,
+		),
+		toughness: existingPacket?.mitigation?.toughness ?? mitigationPolicy(
+			rollState.toughnessMitigation,
+		),
 		hitLocation: rollState.hitLocation,
 		specialMitigation,
 		criticalMode: existingPacket?.critical?.mode ?? DAMAGE_CRITICAL_MODE.DETAILED,
@@ -322,7 +338,7 @@ async function rebuildDamageFromPreservedRoll(message, attackState, rollState, e
 	});
 	const finalized = {
 		...foundry.utils.deepClone(rollState),
-		version: Math.max(4, Number(rollState.version) || 0),
+		version: Math.max(5, Number(rollState.version) || 0),
 		status: "resolved",
 		packetId: packet.id,
 		rawAmount: packet.rawAmount,
@@ -397,6 +413,12 @@ function integer(value) {
 function nonNegativeInteger(value) {
 	const number = Number(value);
 	return Number.isFinite(number) ? Math.max(0, Math.trunc(number)) : 0;
+}
+
+function mitigationPolicy(value) {
+	return value === DAMAGE_MITIGATION_POLICY.IGNORE
+		? DAMAGE_MITIGATION_POLICY.IGNORE
+		: DAMAGE_MITIGATION_POLICY.APPLY;
 }
 
 function localize(english, polish) {

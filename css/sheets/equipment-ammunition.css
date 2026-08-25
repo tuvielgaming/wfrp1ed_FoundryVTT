@@ -30,6 +30,38 @@
 	display: none;
 }
 
+.weapon-item-sheet .window-content {
+	overflow: hidden;
+}
+
+.weapon-item-sheet .weapon-item-sheet__root {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	min-height: 0;
+}
+
+.weapon-item-sheet .weapon-item-sheet__header {
+	flex: 0 0 auto;
+	margin: 16px 16px 0;
+}
+
+.weapon-item-sheet .weapon-item-sheet__tabs {
+	flex: 0 0 auto;
+	margin: 10px 16px 0;
+}
+
+.weapon-item-sheet .weapon-item-sheet__tab-content {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	scrollbar-gutter: stable;
+}
+
+.weapon-item-sheet [data-weapon-tab-panel][hidden] {
+	display: none;
+}
+
 .equipment-item-sheet .equipment-item-sheet__conditional {
 	padding: 8px;
 	border: 1px dashed rgb(70 51 30 / 28%);
@@ -37,7 +69,7 @@
 	background: rgb(255 255 255 / 18%);
 }
 
-.equipment-item-sheet .equipment-effects-panel {
+:is(.equipment-item-sheet, .weapon-item-sheet) .equipment-effects-panel {
 	display: grid;
 	gap: 10px;
 	margin: 16px;
@@ -48,11 +80,11 @@
 	color: #1c1812;
 }
 
-.equipment-item-sheet .equipment-effects-panel[hidden] {
+:is(.equipment-item-sheet, .weapon-item-sheet) .equipment-effects-panel[hidden] {
 	display: none;
 }
 
-.equipment-item-sheet .equipment-effects-panel__header {
+:is(.equipment-item-sheet, .weapon-item-sheet) .equipment-effects-panel__header {
 	display: flex;
 	align-items: flex-start;
 	justify-content: space-between;
@@ -61,38 +93,38 @@
 	border-bottom: 1px solid rgb(70 51 30 / 24%);
 }
 
-.equipment-item-sheet .equipment-effects-panel__header h3,
-.equipment-item-sheet .equipment-effects-panel__header p {
+:is(.equipment-item-sheet, .weapon-item-sheet) .equipment-effects-panel__header h3,
+:is(.equipment-item-sheet, .weapon-item-sheet) .equipment-effects-panel__header p {
 	margin: 0;
 }
 
-.equipment-item-sheet .equipment-effects-panel__header h3 {
+:is(.equipment-item-sheet, .weapon-item-sheet) .equipment-effects-panel__header h3 {
 	font-size: 18px;
 	font-weight: 700;
 	color: #2a1b0d;
 	text-shadow: 0 1px 0 rgb(255 250 231 / 78%);
 }
 
-.equipment-item-sheet .equipment-effects-panel__header p,
-.equipment-item-sheet .equipment-effects-panel__empty {
+:is(.equipment-item-sheet, .weapon-item-sheet) .equipment-effects-panel__header p,
+:is(.equipment-item-sheet, .weapon-item-sheet) .equipment-effects-panel__empty {
 	font-size: 11px;
 	line-height: 1.35;
 	color: rgb(28 24 18 / 70%);
 }
 
-.equipment-item-sheet .equipment-effects-panel__header button {
+:is(.equipment-item-sheet, .weapon-item-sheet) .equipment-effects-panel__header button {
 	width: auto;
 	min-height: 30px;
 	padding: 4px 8px;
 	font-size: 12px;
 }
 
-.equipment-item-sheet .equipment-effects-list {
+:is(.equipment-item-sheet, .weapon-item-sheet) .equipment-effects-list {
 	display: grid;
 	gap: 7px;
 }
 
-.equipment-item-sheet .equipment-effect-card {
+:is(.equipment-item-sheet, .weapon-item-sheet) .equipment-effect-card {
 	display: grid;
 	grid-template-columns: 30px minmax(0, 1fr) auto;
 	align-items: center;
@@ -103,41 +135,41 @@
 	background: rgb(244 237 221 / 76%);
 }
 
-.equipment-item-sheet .equipment-effect-card.is-disabled {
+:is(.equipment-item-sheet, .weapon-item-sheet) .equipment-effect-card.is-disabled {
 	opacity: 0.58;
 }
 
-.equipment-item-sheet .equipment-effect-card > img {
+:is(.equipment-item-sheet, .weapon-item-sheet) .equipment-effect-card > img {
 	width: 28px;
 	height: 28px;
 	border: 0;
 	object-fit: cover;
 }
 
-.equipment-item-sheet .equipment-effect-card__identity {
+:is(.equipment-item-sheet, .weapon-item-sheet) .equipment-effect-card__identity {
 	display: grid;
 	gap: 1px;
 	min-width: 0;
 }
 
-.equipment-item-sheet .equipment-effect-card__identity strong {
+:is(.equipment-item-sheet, .weapon-item-sheet) .equipment-effect-card__identity strong {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	font-size: 13px;
 }
 
-.equipment-item-sheet .equipment-effect-card__identity span {
+:is(.equipment-item-sheet, .weapon-item-sheet) .equipment-effect-card__identity span {
 	font-size: 10px;
 	color: rgb(28 24 18 / 66%);
 }
 
-.equipment-item-sheet .equipment-effect-card__actions {
+:is(.equipment-item-sheet, .weapon-item-sheet) .equipment-effect-card__actions {
 	display: flex;
 	gap: 3px;
 }
 
-.equipment-item-sheet .equipment-effect-card__actions button {
+:is(.equipment-item-sheet, .weapon-item-sheet) .equipment-effect-card__actions button {
 	width: 27px;
 	height: 27px;
 	min-height: 0;
@@ -148,7 +180,7 @@
 	font-size: 11px;
 }
 
-.equipment-item-sheet .equipment-effect-card__actions button:hover {
+:is(.equipment-item-sheet, .weapon-item-sheet) .equipment-effect-card__actions button:hover {
 	border-color: rgb(70 51 30 / 28%);
 	background: rgb(255 255 255 / 34%);
 }

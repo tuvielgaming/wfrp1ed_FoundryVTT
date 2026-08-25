@@ -6,9 +6,9 @@ import {
 	DamagePacket,
 } from "../damage/DamagePacket.mjs";
 import { DamageResolver } from "../damage/DamageResolver.mjs";
+import { DamageRuleEffects } from "../damage/DamageRuleEffects.mjs";
 import { WfrpRuleSettings } from "../settings/WfrpRuleSettings.mjs";
 import { TestResultChat } from "../tests/TestResultChat.mjs";
-import { CombatAmmunitionRuleEffects } from "./CombatAmmunitionRuleEffects.mjs";
 import { CombatEquipment } from "./CombatEquipment.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
@@ -307,14 +307,42 @@ async function resolveRangedDamageAsAuthority(message, requestingUser) {
 		 */
 		const strength = nonNegativeInteger(attack.weapon?.effectiveStrength);
 		const rangeDamageModifier = integer(attack.range?.damageModifier);
-		const ammunitionRules = CombatAmmunitionRuleEffects.damageModifier(
+		const weaponRules = DamageRuleEffects.resolve(
 			attacker,
 			defender,
-			attack.ammunition,
+			[{ kind: "weapon", source: attack.weapon ?? {} }],
 		);
-		const ammunitionDamageModifier = integer(ammunitionRules.total);
+		const ammunitionRules = DamageRuleEffects.resolve(
+			attacker,
+			defender,
+			[{ kind: "ammunition", source: attack.ammunition ?? {} }],
+		);
+		const weaponRuleDamageModifier = integer(weaponRules.damageModifier);
+		const ammunitionRuleDamageModifier = integer(
+			ammunitionRules.damageModifier,
+		);
 		const weaponDamageModifier =
-			rangeDamageModifier + ammunitionDamageModifier;
+			rangeDamageModifier +
+			weaponRuleDamageModifier +
+			ammunitionRuleDamageModifier;
+		const armourMitigation = [weaponRules, ammunitionRules].some(
+			(rules) => rules.armourPolicy === DAMAGE_MITIGATION_POLICY.IGNORE,
+		)
+			? DAMAGE_MITIGATION_POLICY.IGNORE
+			: DAMAGE_MITIGATION_POLICY.APPLY;
+		const toughnessMitigation = [weaponRules, ammunitionRules].some(
+			(rules) => rules.toughnessPolicy === DAMAGE_MITIGATION_POLICY.IGNORE,
+		)
+			? DAMAGE_MITIGATION_POLICY.IGNORE
+			: DAMAGE_MITIGATION_POLICY.APPLY;
+		const armourPenetration = nonNegativeInteger(
+			integer(weaponRules.armourPenetration) +
+				integer(ammunitionRules.armourPenetration),
+		);
+		const damageRuleEffects = [
+			...weaponRules.entries,
+			...ammunitionRules.entries,
+		];
 		const generatedDamage = Math.max(
 			0,
 			diceTotal + strength + weaponDamageModifier,
@@ -322,7 +350,7 @@ async function resolveRangedDamageAsAuthority(message, requestingUser) {
 		const toughness = characteristicValue(defender, "t", "Toughness");
 		const armour = CombatEquipment.armourAt(defender, hitLocation);
 		const baseState = {
-			version: 5,
+			version: 6,
 			family: "ranged",
 			status: "resolved",
 			packetId: null,
@@ -339,11 +367,16 @@ async function resolveRangedDamageAsAuthority(message, requestingUser) {
 			strength,
 			strengthSource: "weapon-effective-strength",
 			rangeDamageModifier,
-			ammunitionDamageModifier,
+			weaponRuleDamageModifier,
+			ammunitionDamageModifier: ammunitionRuleDamageModifier,
 			ammunitionRuleEffects: foundry.utils.deepClone(ammunitionRules.entries),
+			damageRuleEffects: foundry.utils.deepClone(damageRuleEffects),
+			armourMitigation,
+			toughnessMitigation,
+			armourPenetration,
 			weaponDamageModifier,
-			modifierSource: ammunitionRules.entries.length > 0
-				? "range+ammunition"
+			modifierSource: damageRuleEffects.length > 0
+				? "range+damage-rules"
 				: "range",
 			optionalWeaponModifiersApplied: false,
 			generatedDamage,
@@ -370,6 +403,9 @@ async function resolveRangedDamageAsAuthority(message, requestingUser) {
 }
 
 async function finalizeRangedDamage(message, rollState, attack, defender) {
+	const armourPenetration = nonNegativeInteger(
+		rollState.armourPenetration,
+	);
 	const packet = new DamagePacket({
 		rawAmount: nonNegativeInteger(rollState.generatedDamage),
 		targetActorUuid: defender.uuid,
@@ -382,10 +418,12 @@ async function finalizeRangedDamage(message, rollState, attack, defender) {
 				localize("Ranged attack", "Atak dystansowy"),
 			),
 		},
-		armour: DAMAGE_MITIGATION_POLICY.APPLY,
-		toughness: DAMAGE_MITIGATION_POLICY.APPLY,
+		armour: mitigationPolicy(rollState.armourMitigation),
+		toughness: mitigationPolicy(rollState.toughnessMitigation),
 		hitLocation: rollState.hitLocation,
-		specialMitigation: {},
+		specialMitigation: armourPenetration > 0
+			? { armourPenetration: { value: armourPenetration } }
+			: {},
 		criticalMode: DAMAGE_CRITICAL_MODE.DETAILED,
 	});
 	const resolution = DamageResolver.resolve(packet, {
@@ -790,6 +828,7 @@ function splitRangedModifierRows(card, rollState, attack) {
 		rollState &&
 		(
 			Object.hasOwn(rollState, "rangeDamageModifier") ||
+			Object.hasOwn(rollState, "weaponRuleDamageModifier") ||
 			Object.hasOwn(rollState, "ammunitionDamageModifier")
 		),
 	);
@@ -832,6 +871,19 @@ function splitRangedModifierRows(card, rollState, attack) {
 		anchor = row;
 	}
 
+	const weaponRule = integer(rollState.weaponRuleDamageModifier);
+	if (weaponRule !== 0) {
+		const row = damageBreakdownRow(
+			localize("Weapon WFRP Rules", "Reguły WFRP broni"),
+			signedInteger(weaponRule),
+		);
+		row.dataset.wfrpRangedModifierRow = "weapon-rule";
+		const effectNames = damageRuleEffectNames(rollState, "weapon");
+		if (effectNames.length > 0) row.title = effectNames.join(" · ");
+		anchor.insertAdjacentElement("afterend", row);
+		anchor = row;
+	}
+
 	const ammunition = integer(rollState.ammunitionDamageModifier);
 	if (ammunition !== 0) {
 		const row = damageBreakdownRow(
@@ -851,7 +903,49 @@ function splitRangedModifierRows(card, rollState, attack) {
 			row.title = [ammunitionName, ...effectNames].filter(Boolean).join(" · ");
 		}
 		anchor.insertAdjacentElement("afterend", row);
+		anchor = row;
 	}
+
+	const mitigation = damageMitigationRuleLabel(rollState);
+	if (mitigation) {
+		const row = damageBreakdownRow(
+			localize("WFRP mitigation", "Mitygacja WFRP"),
+			mitigation,
+		);
+		row.dataset.wfrpRangedModifierRow = "mitigation";
+		const effectNames = damageRuleEffectNames(rollState);
+		if (effectNames.length > 0) row.title = effectNames.join(" · ");
+		anchor.insertAdjacentElement("afterend", row);
+	}
+}
+
+function damageRuleEffectNames(rollState, sourceKind = null) {
+	return [...new Set(
+		(Array.isArray(rollState?.damageRuleEffects)
+			? rollState.damageRuleEffects
+			: [])
+			.filter((entry) => !sourceKind || entry?.sourceKind === sourceKind)
+			.map((entry) => String(entry?.effectName ?? "").trim())
+			.filter(Boolean),
+	)];
+}
+
+function damageMitigationRuleLabel(rollState) {
+	const labels = [];
+	const penetration = nonNegativeInteger(rollState?.armourPenetration);
+	if (penetration > 0) {
+		labels.push(localize(
+			`Armour penetration ${penetration}`,
+			`Przebicie pancerza ${penetration}`,
+		));
+	}
+	if (rollState?.armourMitigation === DAMAGE_MITIGATION_POLICY.IGNORE) {
+		labels.push(localize("ignores Armour", "pomija Pancerz"));
+	}
+	if (rollState?.toughnessMitigation === DAMAGE_MITIGATION_POLICY.IGNORE) {
+		labels.push(localize("ignores Toughness", "pomija Wytrzymałość"));
+	}
+	return labels.join(" · ");
 }
 
 function findDamageRow(card, labels) {
@@ -917,6 +1011,10 @@ function applyRangedDamageAudiencePolicy(message, card, attack) {
 		"Modyfikator zasięgu",
 		"Ammunition modifier",
 		"Modyfikator amunicji",
+		"Weapon WFRP Rules",
+		"Reguły WFRP broni",
+		"WFRP mitigation",
+		"Mitygacja WFRP",
 		"Additional Damage",
 		"Obrażenia dodatkowe",
 		"Before Toughness",
@@ -1183,6 +1281,12 @@ function nonNegativeInteger(value) {
 	return Number.isFinite(number)
 		? Math.max(0, Math.trunc(number))
 		: 0;
+}
+
+function mitigationPolicy(value) {
+	return value === DAMAGE_MITIGATION_POLICY.IGNORE
+		? DAMAGE_MITIGATION_POLICY.IGNORE
+		: DAMAGE_MITIGATION_POLICY.APPLY;
 }
 
 function signedInteger(value) {

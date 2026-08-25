@@ -6,6 +6,7 @@ import {
 	DamagePacket,
 } from "../damage/DamagePacket.mjs";
 import { DamageResolver } from "../damage/DamageResolver.mjs";
+import { DamageRuleEffects } from "../damage/DamageRuleEffects.mjs";
 import { WfrpRuleSettings } from "../settings/WfrpRuleSettings.mjs";
 import { TestResultChat } from "../tests/TestResultChat.mjs";
 import { CombatDefenceTransaction } from "./CombatDefenceTransaction.mjs";
@@ -328,6 +329,13 @@ function buildResolvedDamagePanel(message, damageState, rollState, defender) {
 		));
 	}
 
+	if (Number(rollState.ruleDamageModifier) !== 0) {
+		body.append(detailRow(
+			localize("WFRP Rule modifier", "Modyfikator Reguł WFRP"),
+			signedInteger(rollState.ruleDamageModifier),
+		));
+	}
+
 	if (rollState.additionalDamage?.triggered) {
 		const additional = rollState.additionalDamage;
 		body.append(detailRow(
@@ -343,7 +351,10 @@ function buildResolvedDamagePanel(message, damageState, rollState, defender) {
 
 	body.append(
 		detailRow(localize("Before Toughness", "Przed Wytrzymałością"), String(damageState.packet?.rawAmount ?? 0)),
-		detailRow(localize("Toughness", "Wytrzymałość"), `−${nonNegativeInteger(toughness.value)}`),
+		detailRow(
+			localize("Toughness", "Wytrzymałość"),
+			mitigationLabel(toughness),
+		),
 		detailRow(localize("Armour", "Pancerz"), armourLabel(armour)),
 	);
 
@@ -568,9 +579,22 @@ async function resolveDamageAsAuthority(message, requestingUser) {
 		const weaponDamageModifier = optionalWeaponModifiers
 			? integer(CombatEquipment.optionalWeaponModifiers(weapon)?.damage)
 			: 0;
+		const weaponRuleSource = Array.isArray(attack.weapon?.effects)
+			? attack.weapon
+			: {
+				uuid: String(weapon?.uuid ?? attack.weapon?.uuid ?? ""),
+				name: String(weapon?.name ?? attack.weapon?.name ?? "Weapon"),
+				effects: DamageRuleEffects.activeEffectSnapshots(weapon),
+			};
+		const damageRules = DamageRuleEffects.resolve(
+			attacker,
+			defender,
+			[{ kind: "weapon", source: weaponRuleSource }],
+		);
+		const ruleDamageModifier = integer(damageRules.damageModifier);
 		const generatedDamage = Math.max(
 			0,
-			diceTotal + strength + weaponDamageModifier,
+			diceTotal + strength + weaponDamageModifier + ruleDamageModifier,
 		);
 		const toughness = characteristicValue(defender, "t", "Toughness");
 		const armour = CombatEquipment.armourAt(defender, hitLocation);
@@ -585,7 +609,7 @@ async function resolveDamageAsAuthority(message, requestingUser) {
 				: "",
 		};
 		const baseState = {
-			version: 4,
+			version: 5,
 			status: parry.succeeded ? "awaiting-parry" : "resolved",
 			packetId: null,
 			attackMessageId: String(message.id),
@@ -600,6 +624,11 @@ async function resolveDamageAsAuthority(message, requestingUser) {
 			diceTotalOverridden: false,
 			strength,
 			weaponDamageModifier,
+			ruleDamageModifier,
+			damageRuleEffects: foundry.utils.deepClone(damageRules.entries),
+			armourMitigation: damageRules.armourPolicy,
+			toughnessMitigation: damageRules.toughnessPolicy,
+			armourPenetration: nonNegativeInteger(damageRules.armourPenetration),
 			optionalWeaponModifiersApplied: optionalWeaponModifiers,
 			generatedDamage,
 			parry,
@@ -677,7 +706,7 @@ async function finalizeDamageResolution(message, rollState, attack, defender) {
 	});
 	const finalized = {
 		...foundry.utils.deepClone(rollState),
-		version: 4,
+		version: 5,
 		status: "resolved",
 		packetId: packet.id,
 		rawAmount: packet.rawAmount,
@@ -700,15 +729,22 @@ async function finalizeDamageResolution(message, rollState, attack, defender) {
 
 function damagePacketForState(message, rollState, attack, defender, existingPacket = null) {
 	const parry = rollState.parry ?? {};
-	const specialMitigation = parry.succeeded === true && Number.isInteger(Number(parry.reduction))
-		? {
-			parry: {
+	const specialMitigation = {};
+	if (parry.succeeded === true && Number.isInteger(Number(parry.reduction))) {
+		specialMitigation.parry = {
 				reduction: nonNegativeInteger(parry.reduction),
 				itemName: String(parry.itemName ?? ""),
 				itemUuid: String(parry.itemUuid ?? ""),
-			},
-		}
-		: {};
+			};
+	}
+	const armourPenetration = nonNegativeInteger(
+		rollState.armourPenetration,
+	);
+	if (armourPenetration > 0) {
+		specialMitigation.armourPenetration = {
+			value: armourPenetration,
+		};
+	}
 
 	return new DamagePacket({
 		id: existingPacket?.id ?? null,
@@ -720,8 +756,12 @@ function damagePacketForState(message, rollState, attack, defender, existingPack
 			uuid: String(message.uuid ?? `ChatMessage.${message.id}`),
 			label: String(attack.weapon?.name ?? "Melee attack"),
 		},
-		armour: existingPacket?.mitigation?.armour ?? DAMAGE_MITIGATION_POLICY.APPLY,
-		toughness: existingPacket?.mitigation?.toughness ?? DAMAGE_MITIGATION_POLICY.APPLY,
+		armour: existingPacket?.mitigation?.armour ?? mitigationPolicy(
+			rollState.armourMitigation,
+		),
+		toughness: existingPacket?.mitigation?.toughness ?? mitigationPolicy(
+			rollState.toughnessMitigation,
+		),
 		hitLocation: rollState.hitLocation,
 		specialMitigation,
 		criticalMode: existingPacket?.critical?.mode ?? DAMAGE_CRITICAL_MODE.DETAILED,
@@ -767,7 +807,8 @@ async function applyDamageDiceTotalOverrideAsAuthority(
 			0,
 			normalized +
 				integer(rollState.strength) +
-				integer(rollState.weaponDamageModifier),
+				integer(rollState.weaponDamageModifier) +
+				integer(rollState.ruleDamageModifier),
 		);
 		rollState.rawAmount = rollState.generatedDamage;
 
@@ -1150,7 +1191,17 @@ function damageDiceLabel(state) {
 }
 
 function armourLabel(armour) {
+	if (armour?.policy === DAMAGE_MITIGATION_POLICY.IGNORE) {
+		return localize("ignored", "pominięty");
+	}
 	const value = nonNegativeInteger(armour?.value);
+	const penetration = nonNegativeInteger(armour?.penetration?.applied);
+	if (penetration > 0) {
+		return localize(
+			`−${value} (penetration ${penetration})`,
+			`−${value} (przebicie ${penetration})`,
+		);
+	}
 	if (armour?.leather?.ignoredByHighDamage === true) {
 		return localize(
 			`−${value} (leather ignored: blow was 4+)`,
@@ -1158,6 +1209,19 @@ function armourLabel(armour) {
 		);
 	}
 	return `−${value}`;
+}
+
+function mitigationLabel(mitigation) {
+	if (mitigation?.policy === DAMAGE_MITIGATION_POLICY.IGNORE) {
+		return localize("ignored", "pominięta");
+	}
+	return `−${nonNegativeInteger(mitigation?.value)}`;
+}
+
+function mitigationPolicy(value) {
+	return value === DAMAGE_MITIGATION_POLICY.IGNORE
+		? DAMAGE_MITIGATION_POLICY.IGNORE
+		: DAMAGE_MITIGATION_POLICY.APPLY;
 }
 
 function detailRow(labelText, valueText) {

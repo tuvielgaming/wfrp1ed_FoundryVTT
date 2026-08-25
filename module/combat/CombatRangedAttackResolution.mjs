@@ -5,6 +5,7 @@ import {
 import {
 	COMBAT_ATTACK_TARGET_MODE,
 } from "./CombatAttackResolution.mjs";
+import { DamageRuleEffects } from "../damage/DamageRuleEffects.mjs";
 import { CombatAttackRangeRules } from "./CombatAttackRangeRules.mjs";
 import { CombatAttackResultChat } from "./CombatAttackResultChat.mjs";
 import { CombatEquipmentState } from "./CombatEquipmentState.mjs";
@@ -87,7 +88,7 @@ export class CombatRangedAttackResolution {
 		const lifecycleCombat = game.combat?.started ? game.combat : null;
 		const cycle = weaponRangedCycleSnapshot(weapon);
 		const attackState = {
-			version: 5,
+			version: 6,
 			family: WEAPON_KIND.RANGED,
 			status: "rolled",
 			managedByCombat: Boolean(before.combatant),
@@ -106,6 +107,9 @@ export class CombatRangedAttackResolution {
 				uuid: weapon.uuid,
 				name: String(weapon.name ?? ""),
 				kind: WEAPON_KIND.RANGED,
+				effects: foundry.utils.deepClone(
+					DamageRuleEffects.activeEffectSnapshots(weapon),
+				),
 				effectiveStrength: nonNegativeInteger(weapon.system?.effectiveStrength),
 				firingCycle: foundry.utils.deepClone(cycle),
 			},

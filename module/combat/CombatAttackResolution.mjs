@@ -6,6 +6,7 @@ import { WfrpRuleSettings } from "../settings/WfrpRuleSettings.mjs";
 import { CombatAttackEconomy } from "./CombatAttackEconomy.mjs";
 import { CombatEquipmentState } from "./CombatEquipmentState.mjs";
 import { CombatAttackResultChat } from "./CombatAttackResultChat.mjs";
+import { DamageRuleEffects } from "../damage/DamageRuleEffects.mjs";
 
 export const COMBAT_ATTACK_TARGET_MODE = Object.freeze({
 	DEFENDER: "defender",
@@ -108,7 +109,7 @@ export class CombatAttackResolution {
 		}
 
 		const attackState = {
-			version: 4,
+			version: 5,
 			family: WEAPON_KIND.MELEE,
 			status: "rolled",
 			managedByCombat: Boolean(combatant),
@@ -127,6 +128,9 @@ export class CombatAttackResolution {
 				uuid: weapon.uuid,
 				name: String(weapon.name ?? ""),
 				kind: WEAPON_KIND.MELEE,
+				effects: foundry.utils.deepClone(
+					DamageRuleEffects.activeEffectSnapshots(weapon),
+				),
 				optionalModifiersApplied: optionalWeaponModifiers,
 				optionalModifiers: weaponModifiers
 					? foundry.utils.deepClone(weaponModifiers)

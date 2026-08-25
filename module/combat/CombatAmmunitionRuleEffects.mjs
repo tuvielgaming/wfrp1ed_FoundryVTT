@@ -1,13 +1,11 @@
 import {
-	decodeRuleEffectChange,
-	RULE_EFFECT_APPLICABILITY,
-	RULE_EFFECT_OPERATIONS,
-	RULE_EFFECT_SIDES,
-} from "../effects/RuleEffectRegistry.mjs";
-import { FormulaResolver } from "../tests/FormulaResolver.mjs";
+	DAMAGE_AMOUNT_MODIFIER_TARGET_ID,
+	DamageRuleEffects,
+	LEGACY_AMMUNITION_DAMAGE_TARGET_ID,
+} from "../damage/DamageRuleEffects.mjs";
 
 export const AMMUNITION_DAMAGE_TARGET_ID =
-	"combat.ranged.ammunition.damage";
+	LEGACY_AMMUNITION_DAMAGE_TARGET_ID;
 
 /**
  * Resolve WFRP Rule Active Effects from the exact ammunition snapshot persisted
@@ -22,10 +20,9 @@ export class CombatAmmunitionRuleEffects {
 	/**
 	 * Resolve the automatic numeric damage modifier contributed by fired ammo.
 	 *
-	 * The first supported ammunition target is intentionally narrow: automatic
-	 * Self-side Add/Subtract changes only. Contextual/manual decisions and other
-	 * mechanics such as armour penetration, poison or bleeding require their own
-	 * explicit consumer contracts rather than being inferred from prose.
+	 * This compatibility facade returns only the numeric ammunition contribution.
+	 * The shared DamageRuleEffects resolver also supports mitigation capabilities
+	 * for integrations which consume its complete result.
 	 *
 	 * `ActiveEffect.transfer` is intentionally irrelevant here. Transfer controls
 	 * whether an Item effect is applied to its owning Actor; this consumer is not
@@ -49,83 +46,20 @@ export class CombatAmmunitionRuleEffects {
 			);
 		}
 
-		const effects = Array.isArray(ammunition?.effects)
-			? ammunition.effects
-			: [];
-		const entries = [];
-		let total = 0;
-
-		for (let effectIndex = 0; effectIndex < effects.length; effectIndex += 1) {
-			const effect = effects[effectIndex];
-			if (!effect || effect.disabled === true) {
-				continue;
-			}
-
-			const changes = ruleChanges(effect);
-			for (let changeIndex = 0; changeIndex < changes.length; changeIndex += 1) {
-				const decoded = decodeRuleEffectChange(changes[changeIndex]);
-				if (!decoded || decoded.targetId !== AMMUNITION_DAMAGE_TARGET_ID) {
-					continue;
-				}
-				if (
-					decoded.applicability !== RULE_EFFECT_APPLICABILITY.AUTOMATIC ||
-					decoded.side !== RULE_EFFECT_SIDES.SELF ||
-					![
-						RULE_EFFECT_OPERATIONS.ADD,
-						RULE_EFFECT_OPERATIONS.SUBTRACT,
-					].includes(decoded.operation)
-				) {
-					continue;
-				}
-
-				const resolved = FormulaResolver.resolve(
-					attacker,
-					decoded.formula,
-					{ target: defender },
-				);
-				if (!Number.isFinite(resolved)) {
-					throw new Error(
-						`Ammunition damage effect '${effect.name ?? "Active Effect"}' did not resolve to a finite number.`,
-					);
-				}
-
-				const value = decoded.operation === RULE_EFFECT_OPERATIONS.SUBTRACT
-					? -resolved
-					: resolved;
-				total += value;
-				entries.push({
-					effectId: String(effect._id ?? effect.id ?? `effect-${effectIndex}`),
-					effectName: String(effect.name ?? "Active Effect"),
-					changeIndex,
-					targetId: decoded.targetId,
-					operation: decoded.operation,
-					formula: decoded.formula,
-					value,
-					condition: decoded.condition,
-				});
-			}
-		}
+		const resolved = DamageRuleEffects.resolve(attacker, defender, [{
+			kind: "ammunition",
+			source: ammunition ?? {},
+		}]);
 
 		return foundry.utils.deepFreeze({
-			total,
-			entries: foundry.utils.deepClone(entries),
+			total: resolved.damageModifier,
+			entries: foundry.utils.deepClone(
+				resolved.entries.filter(
+					(entry) =>
+						entry.resolvedTargetId ===
+						DAMAGE_AMOUNT_MODIFIER_TARGET_ID,
+				),
+			),
 		});
 	}
-}
-
-function ruleChanges(effect) {
-	const flagged = effect?.flags?.wfrp1ed?.ruleChanges;
-	if (Array.isArray(flagged) && flagged.length > 0) {
-		return foundry.utils.deepClone(flagged);
-	}
-
-	if (Array.isArray(effect?.changes) && effect.changes.length > 0) {
-		return foundry.utils.deepClone(effect.changes);
-	}
-
-	if (Array.isArray(effect?.system?.changes)) {
-		return foundry.utils.deepClone(effect.system.changes);
-	}
-
-	return [];
 }

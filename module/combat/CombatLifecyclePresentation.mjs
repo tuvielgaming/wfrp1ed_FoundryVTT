@@ -1,5 +1,6 @@
 import { DamageApplication } from "../damage/DamageApplication.mjs";
 import { DamageChat } from "../damage/DamageChat.mjs";
+import { DAMAGE_MITIGATION_POLICY } from "../damage/DamagePacket.mjs";
 import {
 	resolveDetailedDamageMessageCritical,
 } from "../criticals/DetailedCriticalIntegration.mjs";
@@ -243,6 +244,12 @@ function damageResultContent(damageState, rollState, targetName) {
 			signedInteger(rollState.weaponDamageModifier),
 		));
 	}
+	if (Number(rollState?.ruleDamageModifier) !== 0) {
+		rows.push(rowHtml(
+			localize("WFRP Rule modifier", "Modyfikator Reguł WFRP"),
+			signedInteger(rollState.ruleDamageModifier),
+		));
+	}
 	if (rollState?.additionalDamage?.triggered) {
 		rows.push(rowHtml(
 			localize("Additional Damage", "Obrażenia dodatkowe"),
@@ -257,7 +264,7 @@ function damageResultContent(damageState, rollState, targetName) {
 		),
 		rowHtml(
 			localize("Toughness", "Wytrzymałość"),
-			`−${nonNegativeInteger(toughness.value)}`,
+			mitigationLabel(toughness),
 		),
 		rowHtml(
 			localize("Armour", "Pancerz"),
@@ -764,7 +771,17 @@ function hitLocationLabel(location) {
 }
 
 function armourLabel(armour) {
+	if (armour?.policy === DAMAGE_MITIGATION_POLICY.IGNORE) {
+		return localize("ignored", "pominięty");
+	}
 	const value = nonNegativeInteger(armour?.value);
+	const penetration = nonNegativeInteger(armour?.penetration?.applied);
+	if (penetration > 0) {
+		return localize(
+			`−${value} (penetration ${penetration})`,
+			`−${value} (przebicie ${penetration})`,
+		);
+	}
 	if (armour?.leather?.ignoredByHighDamage === true) {
 		return localize(
 			`−${value} (leather ignored: blow was 4+)`,
@@ -772,6 +789,13 @@ function armourLabel(armour) {
 		);
 	}
 	return `−${value}`;
+}
+
+function mitigationLabel(mitigation) {
+	if (mitigation?.policy === DAMAGE_MITIGATION_POLICY.IGNORE) {
+		return localize("ignored", "pominięta");
+	}
+	return `−${nonNegativeInteger(mitigation?.value)}`;
 }
 
 function actorFromUuidSync(uuid) {

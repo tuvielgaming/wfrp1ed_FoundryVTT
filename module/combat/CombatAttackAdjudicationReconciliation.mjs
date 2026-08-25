@@ -191,17 +191,25 @@ async function rebuildDamageFromPreservedRoll(
 		? DamagePacket.fromJSON(existingDamageState.packet)
 		: null;
 	const parry = rollState.parry ?? {};
-	const specialMitigation =
+	const specialMitigation = {};
+	if (
 		parry.succeeded === true &&
 		Number.isInteger(Number(parry.reduction))
-			? {
-				parry: {
+	) {
+		specialMitigation.parry = {
 					reduction: nonNegativeInteger(parry.reduction),
 					itemName: String(parry.itemName ?? ""),
 					itemUuid: String(parry.itemUuid ?? ""),
-				},
-			}
-			: {};
+				};
+	}
+	const armourPenetration = nonNegativeInteger(
+		rollState.armourPenetration,
+	);
+	if (armourPenetration > 0) {
+		specialMitigation.armourPenetration = {
+			value: armourPenetration,
+		};
+	}
 
 	const packet = new DamagePacket({
 		id: existingPacket?.id ?? null,
@@ -213,8 +221,12 @@ async function rebuildDamageFromPreservedRoll(
 			uuid: String(message.uuid ?? `ChatMessage.${message.id}`),
 			label: String(attack.weapon?.name ?? "Melee attack"),
 		},
-		armour: existingPacket?.mitigation?.armour ?? DAMAGE_MITIGATION_POLICY.APPLY,
-		toughness: existingPacket?.mitigation?.toughness ?? DAMAGE_MITIGATION_POLICY.APPLY,
+		armour: existingPacket?.mitigation?.armour ?? mitigationPolicy(
+			rollState.armourMitigation,
+		),
+		toughness: existingPacket?.mitigation?.toughness ?? mitigationPolicy(
+			rollState.toughnessMitigation,
+		),
 		hitLocation: rollState.hitLocation,
 		specialMitigation,
 		criticalMode: existingPacket?.critical?.mode ?? DAMAGE_CRITICAL_MODE.DETAILED,
@@ -226,7 +238,7 @@ async function rebuildDamageFromPreservedRoll(
 	});
 	const finalized = {
 		...foundry.utils.deepClone(rollState),
-		version: Math.max(4, Number(rollState.version) || 0),
+		version: Math.max(5, Number(rollState.version) || 0),
 		status: "resolved",
 		packetId: packet.id,
 		rawAmount: packet.rawAmount,
@@ -317,6 +329,12 @@ function testStateChanged(changes) {
 function nonNegativeInteger(value) {
 	const number = Number(value);
 	return Number.isFinite(number) ? Math.max(0, Math.trunc(number)) : 0;
+}
+
+function mitigationPolicy(value) {
+	return value === DAMAGE_MITIGATION_POLICY.IGNORE
+		? DAMAGE_MITIGATION_POLICY.IGNORE
+		: DAMAGE_MITIGATION_POLICY.APPLY;
 }
 
 function delay(milliseconds) {
