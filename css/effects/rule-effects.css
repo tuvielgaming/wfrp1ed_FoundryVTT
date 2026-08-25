@@ -59,7 +59,6 @@
 .wfrp1ed-active-effect-sheet .window-content > :is(.sheet-header, nav.tabs, .tab, .form-footer) {
 	box-sizing: border-box;
 	width: 100%;
-	max-width: 780px;
 	margin-inline: auto;
 	min-width: 0;
 }
@@ -75,7 +74,7 @@
 
 .wfrp1ed-active-effect-sheet .tab.active,
 .wfrp1ed-active-effect-sheet [data-tab].active:not(.wfrp1ed-tab) {
-	flex: 1 1 auto;
+	flex: 0 1 auto;
 	min-height: 0;
 	overflow: auto;
 }
