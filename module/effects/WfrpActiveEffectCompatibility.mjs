@@ -39,22 +39,43 @@ Hooks.once("init", () => {
 });
 
 /*
- * wfrp1ed.mjs registers the custom change type during init. Attach the native
- * v14 per-change renderer after initialization is complete, before users can
- * open the world UI. Replacing the config record avoids mutating another
- * package's frozen object if Foundry ever normalizes change-type definitions.
+ * wfrp1ed.mjs registers the custom change type during init. Foundry v14 also
+ * materializes a runtime ActiveEffect.CHANGE_TYPES registry used by the native
+ * sheet renderer. Update both registries when possible; WfrpActiveEffectSheet
+ * additionally contains a narrow DOM fallback for worlds/builds where the
+ * runtime registry is immutable.
  */
 Hooks.once("ready", () => {
-	const current = CONFIG.ActiveEffect.changeTypes[WFRP_RULE_CHANGE_TYPE];
-	if (!current) {
+	const configured = CONFIG.ActiveEffect.changeTypes[WFRP_RULE_CHANGE_TYPE];
+	if (!configured) {
 		console.error(
 			"WFRP1ED | WFRP Rule ActiveEffect change type was not registered.",
 		);
 		return;
 	}
 
-	CONFIG.ActiveEffect.changeTypes[WFRP_RULE_CHANGE_TYPE] = {
-		...current,
+	const rendered = {
+		...configured,
 		render: renderWfrpRuleChange,
 	};
+	CONFIG.ActiveEffect.changeTypes[WFRP_RULE_CHANGE_TYPE] = rendered;
+
+	const runtime = foundry.documents.ActiveEffect.CHANGE_TYPES;
+	if (!runtime || typeof runtime !== "object") return;
+
+	try {
+		const current = runtime[WFRP_RULE_CHANGE_TYPE] ?? rendered;
+		runtime[WFRP_RULE_CHANGE_TYPE] = {
+			...current,
+			render: renderWfrpRuleChange,
+		};
+	} catch (error) {
+		/* Some Foundry builds expose the materialized registry as immutable. The
+		 * custom sheet's render-time fallback still presents a safe editable WFRP
+		 * row, so this is diagnostic rather than a user-facing failure. */
+		console.debug(
+			"WFRP1ED | Runtime ActiveEffect change registry is immutable; using sheet renderer fallback.",
+			error,
+		);
+	}
 });
