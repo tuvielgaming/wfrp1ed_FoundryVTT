@@ -211,7 +211,7 @@
 /* Common buttons                                                 */
 /******************************************************************/
 
-.wfrp1ed-parchment-window .window-content button {
+.wfrp1ed-parchment-window .window-content button:not(.wfrp1ed-tab) {
 	border: 1px solid var(--wfrp-parchment-border);
 	background:
 		linear-gradient(
@@ -226,8 +226,8 @@
 	text-shadow: 0 1px 0 rgb(255 255 255 / 40%);
 }
 
-.wfrp1ed-parchment-window .window-content button:hover,
-.wfrp1ed-parchment-window .window-content button:focus-visible {
+.wfrp1ed-parchment-window .window-content button:not(.wfrp1ed-tab):hover,
+.wfrp1ed-parchment-window .window-content button:not(.wfrp1ed-tab):focus-visible {
 	border-color: var(--wfrp-parchment-focus);
 	background:
 		linear-gradient(
