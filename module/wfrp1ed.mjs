@@ -20,6 +20,9 @@ import {
 	DAMAGE_IGNORE_TOUGHNESS_TARGET_ID,
 	DAMAGE_UNMITIGATED_MODIFIER_TARGET_ID,
 } from "./damage/DamageRuleEffects.mjs";
+import {
+	PERIODIC_DIRECT_DAMAGE_TARGET_ID,
+} from "./damage/PeriodicDirectDamageRule.mjs";
 import { WFRP1ED } from "./helpers/config.mjs";
 import { ClassicActorSheet } from "./sheets/ClassicActorSheet.mjs";
 import { CriticalWoundItemSheet } from "./sheets/CriticalWoundItemSheet.mjs";
@@ -331,6 +334,22 @@ function registerRuleEffectTargets() {
 		metadata: {
 			consumer: "damage",
 			parameter: "toughnessPolicy",
+		},
+	});
+
+	RuleEffectRegistry.registerTarget({
+		id: PERIODIC_DIRECT_DAMAGE_TARGET_ID,
+		category: "damage",
+		label: "Periodic direct damage",
+		labels: {
+			pl: "Okresowe obrażenia bezpośrednie",
+		},
+		sides: [RULE_EFFECT_SIDES.TARGET],
+		operations: [RULE_EFFECT_OPERATIONS.ADD],
+		applicabilities: [RULE_EFFECT_APPLICABILITY.AUTOMATIC],
+		metadata: {
+			consumer: "periodicDirectDamage",
+			parameter: "damagePerRound",
 		},
 	});
 }

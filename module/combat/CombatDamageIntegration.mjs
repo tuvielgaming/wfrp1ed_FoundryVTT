@@ -7,6 +7,7 @@ import {
 } from "../damage/DamagePacket.mjs";
 import { DamageResolver } from "../damage/DamageResolver.mjs";
 import { DamageRuleEffects } from "../damage/DamageRuleEffects.mjs";
+import { PeriodicDirectDamageRule } from "../damage/PeriodicDirectDamageRule.mjs";
 import {
 	damageRuleEffectGroups,
 	damageRuleSourceHeading,
@@ -606,6 +607,9 @@ async function resolveDamageAsAuthority(message, requestingUser) {
 			defender,
 			[{ kind: "weapon", source: weaponRuleSource }],
 		);
+		const periodicDirectDamage = PeriodicDirectDamageRule.collect(
+			[{ kind: "weapon", source: weaponRuleSource }],
+		);
 		const ruleDamageModifier = integer(damageRules.damageModifier);
 		const unmitigatedDamageModifier = nonNegativeInteger(
 			Math.max(0, integer(damageRules.unmitigatedDamageModifier)),
@@ -645,6 +649,7 @@ async function resolveDamageAsAuthority(message, requestingUser) {
 			ruleDamageModifier,
 			unmitigatedDamageModifier,
 			damageRuleEffects: foundry.utils.deepClone(damageRules.entries),
+			periodicDirectDamage: foundry.utils.deepClone(periodicDirectDamage),
 			armourMitigation: damageRules.armourPolicy,
 			toughnessMitigation: damageRules.toughnessPolicy,
 			armourPenetration: nonNegativeInteger(damageRules.armourPenetration),

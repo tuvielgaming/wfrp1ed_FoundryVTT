@@ -7,6 +7,7 @@ import {
 } from "../damage/DamagePacket.mjs";
 import { DamageResolver } from "../damage/DamageResolver.mjs";
 import { DamageRuleEffects } from "../damage/DamageRuleEffects.mjs";
+import { PeriodicDirectDamageRule } from "../damage/PeriodicDirectDamageRule.mjs";
 import { WfrpRuleSettings } from "../settings/WfrpRuleSettings.mjs";
 import { TestResultChat } from "../tests/TestResultChat.mjs";
 import { CombatEquipment } from "./CombatEquipment.mjs";
@@ -348,6 +349,10 @@ async function resolveRangedDamageAsAuthority(message, requestingUser) {
 			...weaponRules.entries,
 			...ammunitionRules.entries,
 		];
+		const periodicDirectDamage = PeriodicDirectDamageRule.collect([
+			{ kind: "weapon", source: attack.weapon ?? {} },
+			{ kind: "ammunition", source: attack.ammunition ?? {} },
+		]);
 		const generatedDamage = Math.max(
 			0,
 			diceTotal + strength + weaponDamageModifier,
@@ -373,6 +378,7 @@ async function resolveRangedDamageAsAuthority(message, requestingUser) {
 			strengthSource: "weapon-effective-strength",
 			rangeDamageModifier,
 			damageRuleEffects: foundry.utils.deepClone(damageRuleEffects),
+			periodicDirectDamage: foundry.utils.deepClone(periodicDirectDamage),
 			armourMitigation,
 			toughnessMitigation,
 			armourPenetration,

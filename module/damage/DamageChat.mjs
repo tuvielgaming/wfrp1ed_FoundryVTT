@@ -1,6 +1,7 @@
 import { DamageApplication } from "./DamageApplication.mjs";
 import { DamagePacket } from "./DamagePacket.mjs";
 import { DamageResolution } from "./DamageResolution.mjs";
+import { PeriodicDirectDamageEngine } from "./PeriodicDirectDamageEngine.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
 const FLAG_KEY = "damageState";
@@ -210,6 +211,12 @@ export class DamageChat {
 			 */
 			const existing = DamageApplication.transactionFor(targetActor, packet.id);
 			if (existing?.state === "applied") {
+				await deliverPeriodicDamageSafely({
+					message,
+					packet,
+					transaction: existing,
+					targetActor,
+				});
 				this.refreshActorCards(targetActor);
 				requestChatRefresh();
 				return foundry.utils.deepFreeze(
@@ -229,6 +236,12 @@ export class DamageChat {
 				targetActor,
 				transaction,
 			);
+			await deliverPeriodicDamageSafely({
+				message,
+				packet,
+				transaction,
+				targetActor,
+			});
 			this.refreshActorCards(targetActor);
 			this.refreshVisibleMessage(message);
 			requestChatRefresh();
@@ -508,6 +521,22 @@ export class DamageChat {
 		return messageId
 			? game.messages?.get(messageId) ?? null
 			: null;
+	}
+}
+
+async function deliverPeriodicDamageSafely(context) {
+	try {
+		await PeriodicDirectDamageEngine.deliverFromAppliedDamage(context);
+	} catch (error) {
+		console.error(
+			"WFRP1ED | Damage applied, but periodic effects could not be delivered.",
+			error,
+		);
+		ui.notifications.error(
+			game.i18n.lang === "pl"
+				? "Obrażenia zastosowano, ale nie udało się przekazać okresowego efektu. Ponowne użycie przycisku zastosowania spróbuje naprawić efekt."
+				: "Damage was applied, but the periodic effect could not be delivered. Using Apply again will retry the effect.",
+		);
 	}
 }
 

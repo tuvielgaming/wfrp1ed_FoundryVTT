@@ -1,6 +1,8 @@
 import { CombatDefenceTransaction } from "./CombatDefenceTransaction.mjs";
 import { DamageApplication } from "../damage/DamageApplication.mjs";
 import { DamageChat } from "../damage/DamageChat.mjs";
+import { DamagePacket } from "../damage/DamagePacket.mjs";
+import { PeriodicDirectDamageEngine } from "../damage/PeriodicDirectDamageEngine.mjs";
 import { synchronizeFatalStatus } from "../criticals/FatalCriticalIntegration.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
@@ -647,6 +649,22 @@ async function revertDamageMessage(message, {
 		[`flags.${FLAG_SCOPE}.${DAMAGE_FLAG_KEY}`]: state,
 	});
 	DamageChat.refreshVisibleMessage(message);
+	try {
+		await PeriodicDirectDamageEngine.handleRevertedDamage({
+			actor,
+			packet: DamagePacket.fromJSON(state.packet),
+		});
+	} catch (error) {
+		console.error(
+			"WFRP1ED | Damage was reverted, but its periodic-effect lifecycle could not be synchronized.",
+			error,
+		);
+		ui.notifications.error(
+			game.i18n.lang === "pl"
+				? "Obrażenia cofnięto, ale nie udało się zsynchronizować powiązanego efektu okresowego."
+				: "Damage was reverted, but its linked periodic effect could not be synchronized.",
+		);
+	}
 
 	return {
 		transaction: reverted,

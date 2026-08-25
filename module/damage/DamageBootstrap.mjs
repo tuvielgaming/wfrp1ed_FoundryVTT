@@ -7,6 +7,7 @@ import {
 } from "./DamagePacket.mjs";
 import { DamageResolution } from "./DamageResolution.mjs";
 import { DamageResolver } from "./DamageResolver.mjs";
+import { PeriodicDirectDamageEngine } from "./PeriodicDirectDamageEngine.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
 const WOUNDS_INITIALIZED_FLAG_KEY = "woundsInitialized";
@@ -34,6 +35,7 @@ Hooks.once("init", () => {
 			Resolver: DamageResolver,
 			Application: DamageApplication,
 			Chat: DamageChat,
+			PeriodicDirectDamage: PeriodicDirectDamageEngine,
 			mitigationPolicy: DAMAGE_MITIGATION_POLICY,
 			criticalMode: DAMAGE_CRITICAL_MODE,
 		}),
