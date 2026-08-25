@@ -40,18 +40,38 @@
 }
 
 .wfrp1e-damage-card__effect-row {
+	display: block;
 	padding-left: 0.45rem;
 	font-size: 0.86rem;
 }
 
 .wfrp1e-damage-card__effect-row > span {
-	min-width: 0;
+	display: block;
+	font-weight: 600;
 	overflow-wrap: anywhere;
 }
 
 .wfrp1e-damage-card__effect-row > strong {
-	flex: 0 0 auto;
-	text-align: right;
+	display: block;
+	margin-top: 0.08rem;
+	font-weight: 500;
+	line-height: 1.25;
+	text-align: left;
+	overflow-wrap: anywhere;
+}
+
+.wfrp1e-damage-card__effect-end {
+	display: block;
+	min-height: 0;
+	margin-top: 0.35rem;
+	padding: 0;
+	border-top: 1px solid rgba(63, 42, 28, 0.18);
+}
+
+.wfrp1e-damage-card__effect-end + .wfrp1e-damage-card__effect-source {
+	margin-top: 0.35rem;
+	padding-top: 0;
+	border-top: 0;
 }
 
 .wfrp1e-damage-card__roll-row {

@@ -17,6 +17,10 @@
 	margin: 0;
 }
 
+.wfrp1ed-rule-effect-dialog .wfrp-rule-effect-field[hidden] {
+	display: none;
+}
+
 .wfrp1ed-rule-effect-dialog .wfrp-rule-effect-field > label {
 	font-weight: 700;
 	line-height: 1.2;

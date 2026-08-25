@@ -366,6 +366,9 @@ function damageRuleRowsHtml(entries) {
 				</div>
 			`);
 		}
+		rows.push(`
+			<div class="wfrp1e-damage-card__row wfrp1e-damage-card__effect-end" data-wfrp-damage-rule-end aria-hidden="true"></div>
+		`);
 	}
 	return rows;
 }

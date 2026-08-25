@@ -950,7 +950,7 @@ function applyRangedDamageAudiencePolicy(message, card, attack) {
 		).trim();
 
 		if (row.matches?.(
-			"[data-wfrp-damage-rule-source], [data-wfrp-damage-rule-effect]",
+			"[data-wfrp-damage-rule-source], [data-wfrp-damage-rule-effect], [data-wfrp-damage-rule-end]",
 		)) {
 			row.hidden = !ownsAttacker;
 		} else if (attackerLabels.has(label)) {

@@ -1,6 +1,8 @@
 import { LootPileService } from "../loot/LootPileService.mjs";
 import { AmmunitionInventory } from "./AmmunitionInventory.mjs";
 
+const pendingActorRefreshes = new WeakSet();
+
 /* Capacity is a document invariant, not only a drag/drop rule. Inventory rows,
  * Item sheets, macros and future editors may all update system.quantity
  * directly, so clamp the edited stack before Foundry persists the change. */
@@ -375,9 +377,14 @@ function setRequestedQuantity(changes, value) {
 
 function refreshQuickContainerActor(item) {
 	const actor = item?.actor ?? item?.parent;
-	if (actor?.documentName === "Actor" && actor.sheet?.rendered) {
-		void actor.sheet.render({ force: true });
-	}
+	if (actor?.documentName !== "Actor" || !actor.sheet?.rendered) return;
+	if (pendingActorRefreshes.has(actor)) return;
+
+	pendingActorRefreshes.add(actor);
+	requestAnimationFrame(() => {
+		pendingActorRefreshes.delete(actor);
+		if (actor.sheet?.rendered) void actor.sheet.render({ force: true });
+	});
 }
 
 function classicSheetRoot(root) {

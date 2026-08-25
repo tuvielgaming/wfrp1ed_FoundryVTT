@@ -186,6 +186,17 @@ export class RuleEffectDialog {
 		formula.defaultValue = initial.formula;
 		formula.placeholder = "10";
 		value.control.append(formula);
+		const initialTarget = targets.find(
+			(entry) => entry.id === initial.targetId,
+		);
+		const formulaRequired = initialTarget?.valueRequired === true;
+		formula.required = formulaRequired;
+		formula.disabled = !formulaRequired;
+		value.root.hidden = !formulaRequired;
+		if (!formulaRequired) {
+			formula.value = "";
+			formula.defaultValue = "";
+		}
 
 		const side = formGroup(
 			localize(
@@ -345,7 +356,17 @@ export class RuleEffectDialog {
 		const formula = root.querySelector('input[name="formula"]');
 
 		if (formula) {
-			formula.required = target.valueRequired;
+			const required = target.valueRequired === true;
+			formula.required = required;
+			formula.disabled = !required;
+			formula.closest(".wfrp-rule-effect-field")?.toggleAttribute(
+				"hidden",
+				!required,
+			);
+			if (!required) {
+				formula.value = "";
+				formula.defaultValue = "";
+			}
 		}
 	}
 

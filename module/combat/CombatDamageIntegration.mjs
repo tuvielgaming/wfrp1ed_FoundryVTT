@@ -1256,6 +1256,11 @@ function appendDamageRuleDetails(root, entries) {
 			row.classList.add("combat-damage-context__effect-row");
 			root.append(row);
 		}
+
+		const end = document.createElement("div");
+		end.className = "combat-damage-context__effect-end";
+		end.setAttribute("aria-hidden", "true");
+		root.append(end);
 	}
 	return groups.length;
 }

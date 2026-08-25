@@ -652,7 +652,7 @@ async function adjustQuantity(item, input, delta) {
 	}
 
 	await item.update({ "system.quantity": next });
-	input.value = String(next);
+	input.value = String(nonNegativeInteger(item.system?.quantity));
 }
 
 async function commitQuantityEdit(item, input) {
@@ -661,6 +661,7 @@ async function commitQuantityEdit(item, input) {
 	input.value = String(next);
 	if (next === current) return;
 	await item.update({ "system.quantity": next });
+	input.value = String(nonNegativeInteger(item.system?.quantity));
 }
 
 async function commitLocationEdit(item, actor, input) {
