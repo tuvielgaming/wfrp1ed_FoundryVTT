@@ -8,6 +8,7 @@ import {
 import { DamageResolver } from "../damage/DamageResolver.mjs";
 import { WfrpRuleSettings } from "../settings/WfrpRuleSettings.mjs";
 import { TestResultChat } from "../tests/TestResultChat.mjs";
+import { CombatAmmunitionRuleEffects } from "./CombatAmmunitionRuleEffects.mjs";
 import { CombatEquipment } from "./CombatEquipment.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
@@ -34,11 +35,17 @@ const queuedAutomaticActions = new Set();
  * Core WFRP 1e missile-damage bridge.
  *
  * The ranged attack already owns the authoritative BS Test, target, weapon
- * Effective Strength and range snapshot. This layer adds the damage procedure
- * without creating a second damage application model:
+ * Effective Strength, range snapshot and the exact ammunition variant fired.
+ * This layer adds the damage procedure without creating a second application
+ * model:
  *
  *   d6 + weapon Effective Strength + range damage modifier
+ *   + configured fired-ammunition rule effects
  *   -> Toughness -> armour -> Wounds
+ *
+ * With no ammunition rule effect configured this is exactly the Core missile
+ * formula. Special-ammunition mechanics are explicit extension points; they are
+ * never inferred from an Item name or prose description.
  *
  * Core p.126 states that hit location and Additional Damage use the same
  * procedure as hand-to-hand combat. Missile fire has no melee Parry damage
@@ -169,8 +176,8 @@ async function decorateRangedDamage(message, html) {
 			"Tylko MG albo Właściciel atakującego może rzucić obrażenia.",
 		)
 		: localize(
-			"Resolve Core missile damage: d6 + Effective Strength + range modifier.",
-			"Rozstrzygnij obrażenia strzeleckie: K6 + Siła efektywna + modyfikator zasięgu.",
+			"Resolve missile damage: d6 + Effective Strength + range modifier, then apply configured effects from the fired ammunition.",
+			"Rozstrzygnij obrażenia strzeleckie: K6 + Siła efektywna + modyfikator zasięgu, a następnie zastosuj skonfigurowane efekty użytej amunicji.",
 		);
 	button.addEventListener("click", (event) => {
 		event.preventDefault();
@@ -289,12 +296,25 @@ async function resolveRangedDamageAsAuthority(message, requestingUser) {
 		const diceTotal = damageDice.reduce((sum, value) => sum + value, 0);
 
 		/*
-		 * Ranged attacks persist Effective Strength and the resolved range damage
-		 * modifier on the attack transaction. Damage therefore never substitutes
-		 * the attacker's Strength or optional melee Weapon Modifiers.
+		 * The attack transaction snapshots both weapon/range data and the exact
+		 * ammunition variant fired. Resolve special-ammunition effects only from
+		 * that snapshot: other carried stacks cannot leak into this shot, and
+		 * later inventory edits cannot rewrite its mechanical history.
+		 *
+		 * `weaponDamageModifier` remains the aggregate non-dice modifier for the
+		 * shared Damage-card manual dice override pipeline. Component values are
+		 * stored separately for ranged presentation and auditability.
 		 */
 		const strength = nonNegativeInteger(attack.weapon?.effectiveStrength);
-		const weaponDamageModifier = integer(attack.range?.damageModifier);
+		const rangeDamageModifier = integer(attack.range?.damageModifier);
+		const ammunitionRules = CombatAmmunitionRuleEffects.damageModifier(
+			attacker,
+			defender,
+			attack.ammunition,
+		);
+		const ammunitionDamageModifier = integer(ammunitionRules.total);
+		const weaponDamageModifier =
+			rangeDamageModifier + ammunitionDamageModifier;
 		const generatedDamage = Math.max(
 			0,
 			diceTotal + strength + weaponDamageModifier,
@@ -302,7 +322,7 @@ async function resolveRangedDamageAsAuthority(message, requestingUser) {
 		const toughness = characteristicValue(defender, "t", "Toughness");
 		const armour = CombatEquipment.armourAt(defender, hitLocation);
 		const baseState = {
-			version: 4,
+			version: 5,
 			family: "ranged",
 			status: "resolved",
 			packetId: null,
@@ -318,8 +338,13 @@ async function resolveRangedDamageAsAuthority(message, requestingUser) {
 			diceTotalOverridden: false,
 			strength,
 			strengthSource: "weapon-effective-strength",
+			rangeDamageModifier,
+			ammunitionDamageModifier,
+			ammunitionRuleEffects: foundry.utils.deepClone(ammunitionRules.entries),
 			weaponDamageModifier,
-			modifierSource: "range",
+			modifierSource: ammunitionRules.entries.length > 0
+				? "range+ammunition"
+				: "range",
 			optionalWeaponModifiersApplied: false,
 			generatedDamage,
 			parry: {
@@ -733,6 +758,10 @@ function decorateRangedDamageResultView(message, html) {
 		ATTACK_FLAG_KEY,
 	);
 	if (attack?.family !== "ranged") return;
+	const rollState = sourceMessage?.getFlag?.(
+		FLAG_SCOPE,
+		COMBAT_DAMAGE_FLAG_KEY,
+	);
 
 	const root = asElement(html);
 	const card = root?.matches?.("[data-wfrp-combat-damage-result-card]")
@@ -745,13 +774,107 @@ function decorateRangedDamageResultView(message, html) {
 		new Set(["Strength", "Siła"]),
 		localize("Effective Strength", "Siła efektywna"),
 	);
-	relabelDamageRow(
-		card,
-		new Set(["Weapon modifier", "Modyfikator broni"]),
-		localize("Range modifier", "Modyfikator zasięgu"),
-	);
+	splitRangedModifierRows(card, rollState, attack);
 
 	applyRangedDamageAudiencePolicy(message, card, attack);
+}
+
+function splitRangedModifierRows(card, rollState, attack) {
+	for (const existing of card.querySelectorAll?.(
+		"[data-wfrp-ranged-modifier-row]",
+	) ?? []) {
+		existing.remove();
+	}
+
+	const hasComponents = Boolean(
+		rollState &&
+		(
+			Object.hasOwn(rollState, "rangeDamageModifier") ||
+			Object.hasOwn(rollState, "ammunitionDamageModifier")
+		),
+	);
+	if (!hasComponents) {
+		relabelDamageRow(
+			card,
+			new Set(["Weapon modifier", "Modyfikator broni"]),
+			localize("Range modifier", "Modyfikator zasięgu"),
+		);
+		return;
+	}
+
+	/* The shared Damage card stores the combined non-dice modifier for safe
+	 * manual dice overrides. Replace that aggregate presentation with explicit
+	 * ranged components so the GM can audit range and ammunition separately. */
+	findDamageRow(
+		card,
+		new Set([
+			"Weapon modifier",
+			"Modyfikator broni",
+			"Range modifier",
+			"Modyfikator zasięgu",
+		]),
+	)?.remove();
+
+	let anchor = findDamageRow(
+		card,
+		new Set(["Effective Strength", "Siła efektywna"]),
+	);
+	if (!anchor) return;
+
+	const range = integer(rollState.rangeDamageModifier);
+	if (range !== 0) {
+		const row = damageBreakdownRow(
+			localize("Range modifier", "Modyfikator zasięgu"),
+			signedInteger(range),
+		);
+		row.dataset.wfrpRangedModifierRow = "range";
+		anchor.insertAdjacentElement("afterend", row);
+		anchor = row;
+	}
+
+	const ammunition = integer(rollState.ammunitionDamageModifier);
+	if (ammunition !== 0) {
+		const row = damageBreakdownRow(
+			localize("Ammunition modifier", "Modyfikator amunicji"),
+			signedInteger(ammunition),
+		);
+		row.dataset.wfrpRangedModifierRow = "ammunition";
+		const ammunitionName = String(attack?.ammunition?.name ?? "").trim();
+		const effectNames = [...new Set(
+			(Array.isArray(rollState.ammunitionRuleEffects)
+				? rollState.ammunitionRuleEffects
+				: [])
+				.map((entry) => String(entry?.effectName ?? "").trim())
+				.filter(Boolean),
+		)];
+		if (ammunitionName || effectNames.length > 0) {
+			row.title = [ammunitionName, ...effectNames].filter(Boolean).join(" · ");
+		}
+		anchor.insertAdjacentElement("afterend", row);
+	}
+}
+
+function findDamageRow(card, labels) {
+	for (const row of card.querySelectorAll?.(
+		".wfrp1e-damage-card__row",
+	) ?? []) {
+		const label = String(
+			row.querySelector?.(":scope > span")?.textContent ?? "",
+		).trim();
+		if (labels.has(label)) return row;
+	}
+	return null;
+}
+
+function damageBreakdownRow(labelText, valueText) {
+	const row = document.createElement("div");
+	row.className = "wfrp1e-damage-card__row";
+	const label = document.createElement("span");
+	label.textContent = labelText;
+	const value = document.createElement("strong");
+	value.textContent = String(valueText ?? "—");
+	row.append(label, value);
+	return row;
 }
 
 function relabelDamageRow(card, currentLabels, nextLabel) {
@@ -792,6 +915,8 @@ function applyRangedDamageAudiencePolicy(message, card, attack) {
 		"Siła efektywna",
 		"Range modifier",
 		"Modyfikator zasięgu",
+		"Ammunition modifier",
+		"Modyfikator amunicji",
 		"Additional Damage",
 		"Obrażenia dodatkowe",
 		"Before Toughness",
@@ -1058,6 +1183,11 @@ function nonNegativeInteger(value) {
 	return Number.isFinite(number)
 		? Math.max(0, Math.trunc(number))
 		: 0;
+}
+
+function signedInteger(value) {
+	const number = integer(value);
+	return number >= 0 ? `+${number}` : String(number);
 }
 
 function cssEscape(value) {
