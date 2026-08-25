@@ -4,7 +4,8 @@
 
 .wfrp1ed.sheet.item,
 .app.window-app.sheet.item-sheet {
-	--wfrp1ed-item-header-image-size: 84px;
+	--wfrp1ed-item-header-image-size: 116px;
+	--wfrp1ed-item-header-image-overhang: 32px;
 }
 
 /* Shared header contract for every compact system-owned Item sheet. Career
@@ -12,7 +13,10 @@
 .wfrp1ed.sheet.item .wfrp1ed-item-header {
 	display: grid;
 	grid-template-columns:
-		var(--wfrp1ed-item-header-image-size)
+		calc(
+			var(--wfrp1ed-item-header-image-size) -
+			var(--wfrp1ed-item-header-image-overhang)
+		)
 		minmax(0, 1fr);
 	align-items: end;
 	gap: 12px;
@@ -22,8 +26,13 @@
 	display: block;
 	width: var(--wfrp1ed-item-header-image-size);
 	height: var(--wfrp1ed-item-header-image-size);
+	max-width: none;
+	max-height: none;
+	margin-block-start: calc(-1 * var(--wfrp1ed-item-header-image-overhang));
+	margin-inline-start: calc(-1 * var(--wfrp1ed-item-header-image-overhang));
 	border-radius: 4px;
 	object-fit: cover;
+	z-index: 1;
 }
 
 /* Trait, Spell and any future unaudited Item types currently use Foundry's

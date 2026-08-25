@@ -1,10 +1,5 @@
 import { RuleEffectDialog } from "../effects/RuleEffectDialog.mjs";
 import {
-	decodeRuleEffectChange,
-	RULE_EFFECT_OPERATIONS,
-	RULE_EFFECT_SIDES,
-	RULE_EFFECT_APPLICABILITY,
-	RuleEffectRegistry,
 	WFRP_RULE_CHANGE_TYPE,
 } from "../effects/RuleEffectRegistry.mjs";
 
@@ -46,6 +41,43 @@ export class WfrpActiveEffectSheet extends ActiveEffectConfig {
 		this.#activateWfrpRuleControls();
 	}
 
+	_onChangeForm(formConfig, event) {
+		super._onChangeForm(formConfig, event);
+
+		const select = event?.target;
+		if (
+			!(select instanceof HTMLSelectElement) ||
+			!select.name.endsWith(".type") ||
+			select.value !== WFRP_RULE_CHANGE_TYPE
+		) {
+			return;
+		}
+
+		const index = nonNegativeInteger(
+			select.closest("li[data-index]")?.dataset?.index,
+			-1,
+		);
+		if (index < 0) return;
+
+		const previousType = String(
+			sourceChanges(this.document)[index]?.type ?? "",
+		);
+		void this.#configureNativeWfrpSelection(
+			index,
+			select,
+			previousType,
+		);
+	}
+
+	_processChangeSubmission(change, index) {
+		if (change?.type === WFRP_RULE_CHANGE_TYPE) {
+			change.value = serializedChangeValue(change.value);
+			return;
+		}
+
+		super._processChangeSubmission(change, index);
+	}
+
 	/**
 	 * Foundry owns the ActiveEffect Details / Duration / Changes markup. Apply
 	 * the shared WFRP tab contract to that native navigation instead of creating
@@ -81,8 +113,7 @@ export class WfrpActiveEffectSheet extends ActiveEffectConfig {
 	 * Foundry materializes its runtime ActiveEffect change-type registry during
 	 * initialization. If a custom renderer is registered too late, Core falls
 	 * back to its raw Attribute Key / Value row. Replace only our own custom rows
-	 * after render so authors always receive the WFRP summary + Edit action.
-	 * The hidden canonical inputs keep Core form submission lossless.
+	 * after render so their technical fields keep the WFRP Edit affordance.
 	 */
 	#replaceNativeWfrpRuleRows() {
 		const root = this.element;
@@ -157,33 +188,44 @@ export class WfrpActiveEffectSheet extends ActiveEffectConfig {
 				void this.#configureWfrpRule(index).catch(reportAuthoringError);
 			});
 		}
+	}
 
+	async #configureNativeWfrpSelection(index, select, previousType) {
+		try {
+			if (await this.#configureWfrpRule(index)) return;
+		}
+		catch (error) {
+			reportAuthoringError(error);
+		}
+
+		if (!select.isConnected) return;
+		select.value = previousType;
+		syncNativePriorityPlaceholder(select);
 	}
 
 	async #configureWfrpRule(index) {
-		if (!this.isEditable) return;
+		if (!this.isEditable) return false;
 		const changes = sourceChanges(this.document);
 		const existing = Number.isInteger(index) && index >= 0
 			? changes[index] ?? null
 			: null;
 		const configured = await RuleEffectDialog.configure(existing);
-		if (!configured) return;
+		if (!configured) return false;
 
 		if (Number.isInteger(index) && index >= 0) changes[index] = configured;
 		else changes.push(configured);
 
 		await this.document.update({ "system.changes": changes });
 		await this.render({ force: true });
+		return true;
 	}
-
 }
 
 /**
  * Foundry v14 native renderer for one custom WFRP ActiveEffect change type.
  *
- * The canonical change fields remain hidden form controls so normal
- * ActiveEffectConfig submission is lossless. The visible row is an authored
- * WFRP rule summary with explicit Edit and Delete actions.
+ * WFRP rules keep Foundry's native technical Key / Value / Priority fields.
+ * Only the Type cell becomes a guided WFRP Edit badge.
  */
 export async function renderWfrpRuleChange(context = {}) {
 	return ruleChangeMarkup(
@@ -194,27 +236,18 @@ export async function renderWfrpRuleChange(context = {}) {
 }
 
 function ruleChangeMarkup(index, change, defaultPriority = 50) {
-	const rule = decodeRuleEffectChange(change);
 	const priority = change.priority ?? defaultPriority ?? 50;
+	const storedValue = serializedChangeValue(change.value);
 	const path = (field) => escapeHtml(String(
 		change[`${field}Path`] ?? `system.changes.${index}.${field}`,
 	));
-	const title = rule
-		? RuleEffectRegistry.label(rule.target)
-		: localize("Unconfigured WFRP Rule", "Nieskonfigurowana reguła WFRP");
-	const summary = rule ? ruleSummary(rule) : localize(
-		"Open Edit to choose the rule target and value.",
-		"Otwórz Edytuj, aby wybrać cel reguły i wartość.",
-	);
 
 	return `
 		<li class="wfrp1ed-rule-change" data-index="${index}" data-wfrp-rule-change-index="${index}">
-			<input type="hidden" name="${path("key")}" value="${escapeHtml(String(change.key ?? ""))}">
 			<input type="hidden" name="${path("type")}" value="${escapeHtml(WFRP_RULE_CHANGE_TYPE)}">
-			<input type="hidden" name="${path("value")}" value="${escapeHtml(String(change.value ?? ""))}">
 			<input type="hidden" name="${path("phase")}" value="${escapeHtml(String(change.phase ?? "final"))}">
 			<div class="key wfrp1ed-rule-change__key">
-				<strong>${escapeHtml(title)}</strong>
+				<input type="text" name="${path("key")}" value="${escapeHtml(String(change.key ?? ""))}" autocomplete="off" spellcheck="false">
 			</div>
 			<div class="type wfrp1ed-rule-change__type">
 				<button type="button" class="wfrp1ed-rule-change__edit" data-wfrp-rule-configure="${index}" title="${escapeHtml(localize("Edit WFRP Rule", "Edytuj regułę WFRP"))}">
@@ -222,7 +255,9 @@ function ruleChangeMarkup(index, change, defaultPriority = 50) {
 					<span>${escapeHtml(localize("WFRP · Edit", "WFRP · Edytuj"))}</span>
 				</button>
 			</div>
-			<div class="value wfrp1ed-rule-change__value">${escapeHtml(summary)}</div>
+			<div class="value wfrp1ed-rule-change__value">
+				<input type="text" name="${path("value")}" value="${escapeHtml(storedValue)}" autocomplete="off" spellcheck="false">
+			</div>
 			<div class="priority wfrp1ed-rule-change__priority">
 				<input type="number" name="${path("priority")}" value="${escapeHtml(String(priority))}" placeholder="${escapeHtml(String(defaultPriority ?? 50))}">
 			</div>
@@ -254,6 +289,16 @@ function syncNativeTabAria(nav) {
 	}
 }
 
+function syncNativePriorityPlaceholder(select) {
+	const priority = select?.closest?.("li")?.querySelector?.(
+		`input[name="${select.name.replace(/\.type$/, ".priority")}"]`,
+	);
+	if (!(priority instanceof HTMLInputElement)) return;
+	priority.placeholder =
+		foundry.documents.ActiveEffect.CHANGE_TYPES[select.value]
+			?.defaultPriority ?? "";
+}
+
 function sourceChanges(effect) {
 	const source = effect?.toObject?.() ?? {};
 	const changes = Array.isArray(source.changes)
@@ -266,51 +311,14 @@ function sourceChanges(effect) {
 	return foundry.utils.deepClone(changes);
 }
 
-function ruleSummary(rule) {
-	return [
-		operationLabel(rule.operation),
-		String(rule.formula ?? "").trim(),
-		sideLabel(rule.side),
-		applicabilityLabel(rule.applicability),
-		stackingLabel(rule.stacking),
-	].filter(Boolean).join(" · ");
-}
+function serializedChangeValue(value) {
+	if (typeof value === "string") return value;
 
-function operationLabel(value) {
-	switch (value) {
-		case RULE_EFFECT_OPERATIONS.ADD: return localize("Add", "Dodaj");
-		case RULE_EFFECT_OPERATIONS.SUBTRACT: return localize("Subtract", "Odejmij");
-		case RULE_EFFECT_OPERATIONS.MULTIPLY: return localize("Multiply", "Pomnóż");
-		case RULE_EFFECT_OPERATIONS.OVERRIDE: return localize("Override", "Zastąp");
-		case RULE_EFFECT_OPERATIONS.GRANT: return localize("Grant", "Przyznaj");
-		default: return String(value ?? "");
+	try {
+		return JSON.stringify(value) ?? "";
 	}
-}
-
-function sideLabel(value) {
-	switch (value) {
-		case RULE_EFFECT_SIDES.SELF: return localize("Self", "Właściciel");
-		case RULE_EFFECT_SIDES.TARGET: return localize("Target", "Cel");
-		case RULE_EFFECT_SIDES.OPPONENT: return localize("Opponent", "Przeciwnik");
-		default: return String(value ?? "");
-	}
-}
-
-function applicabilityLabel(value) {
-	switch (value) {
-		case RULE_EFFECT_APPLICABILITY.AUTOMATIC: return localize("Automatic", "Automatyczny");
-		case RULE_EFFECT_APPLICABILITY.CONTEXTUAL: return localize("Contextual", "Sytuacyjny");
-		case RULE_EFFECT_APPLICABILITY.MANUAL: return localize("Manual", "Ręczny");
-		default: return String(value ?? "");
-	}
-}
-
-function stackingLabel(value) {
-	switch (String(value ?? "")) {
-		case "once": return localize("once", "jednorazowo");
-		case "stack": return localize("stack", "kumuluj");
-		case "per-acquisition": return localize("per acquisition", "za każde nabycie");
-		default: return String(value ?? "");
+	catch (_error) {
+		return String(value ?? "");
 	}
 }
 

@@ -120,7 +120,11 @@
  * stretching the whole editor beyond its useful maximum. */
 .wfrp1ed-active-effect-sheet .tab.changes > header,
 .wfrp1ed-active-effect-sheet .tab.changes > ol[data-changes] {
-	grid-template-columns: 12rem 7rem minmax(7rem, 1fr) 4rem 1rem;
+	grid-template-columns: 12rem 7rem minmax(7rem, 1fr) 4rem 2rem;
+}
+
+.wfrp1ed-active-effect-sheet .tab.changes :is(header, ol[data-changes]) .controls {
+	text-align: center;
 }
 
 .wfrp1ed-active-effect-sheet .wfrp1ed-rule-authoring-toolbar {
@@ -168,21 +172,10 @@
 	color: var(--wfrp-parchment-ink, #211d17);
 }
 
-.wfrp1ed-active-effect-sheet .wfrp1ed-rule-change__key strong {
-	display: block;
-	overflow: hidden;
-	font-size: 12px;
-	line-height: 1.2;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.wfrp1ed-active-effect-sheet .wfrp1ed-rule-change__value {
+.wfrp1ed-active-effect-sheet .wfrp1ed-rule-change :is(.key, .value) input {
+	width: 100%;
+	min-width: 0;
 	font-size: 11px;
-	line-height: 1.25;
-	white-space: normal;
-	overflow-wrap: anywhere;
-	color: var(--wfrp-parchment-ink-soft, #4c4336);
 }
 
 .wfrp1ed-active-effect-sheet .wfrp1ed-rule-change__edit {
