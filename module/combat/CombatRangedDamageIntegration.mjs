@@ -812,12 +812,12 @@ function decorateRangedDamageResultView(message, html) {
 		new Set(["Strength", "Siła"]),
 		localize("Effective Strength", "Siła efektywna"),
 	);
-	splitRangedModifierRows(card, rollState, attack);
+	splitRangedModifierRows(card, rollState);
 
 	applyRangedDamageAudiencePolicy(message, card, attack);
 }
 
-function splitRangedModifierRows(card, rollState, attack) {
+function splitRangedModifierRows(card, rollState) {
 	for (const existing of card.querySelectorAll?.(
 		"[data-wfrp-ranged-modifier-row]",
 	) ?? []) {
@@ -871,81 +871,21 @@ function splitRangedModifierRows(card, rollState, attack) {
 		anchor = row;
 	}
 
-	const weaponRule = integer(rollState.weaponRuleDamageModifier);
-	if (weaponRule !== 0) {
+	/* Current transactions render each Active Effect under its exact weapon or
+	 * ammunition source in the shared Damage card. Retain one readable fallback
+	 * for older saved transactions which predate those audit entries. */
+	const hasRuleEntries = Array.isArray(rollState.damageRuleEffects) &&
+		rollState.damageRuleEffects.length > 0;
+	const legacyRuleModifier = integer(rollState.weaponRuleDamageModifier) +
+		integer(rollState.ammunitionDamageModifier);
+	if (!hasRuleEntries && legacyRuleModifier !== 0) {
 		const row = damageBreakdownRow(
-			localize("Weapon WFRP Rules", "Reguły WFRP broni"),
-			signedInteger(weaponRule),
+			localize("Active Effect (damage)", "Aktywny Efekt (obrażenia)"),
+			signedInteger(legacyRuleModifier),
 		);
-		row.dataset.wfrpRangedModifierRow = "weapon-rule";
-		const effectNames = damageRuleEffectNames(rollState, "weapon");
-		if (effectNames.length > 0) row.title = effectNames.join(" · ");
-		anchor.insertAdjacentElement("afterend", row);
-		anchor = row;
-	}
-
-	const ammunition = integer(rollState.ammunitionDamageModifier);
-	if (ammunition !== 0) {
-		const row = damageBreakdownRow(
-			localize("Ammunition modifier", "Modyfikator amunicji"),
-			signedInteger(ammunition),
-		);
-		row.dataset.wfrpRangedModifierRow = "ammunition";
-		const ammunitionName = String(attack?.ammunition?.name ?? "").trim();
-		const effectNames = [...new Set(
-			(Array.isArray(rollState.ammunitionRuleEffects)
-				? rollState.ammunitionRuleEffects
-				: [])
-				.map((entry) => String(entry?.effectName ?? "").trim())
-				.filter(Boolean),
-		)];
-		if (ammunitionName || effectNames.length > 0) {
-			row.title = [ammunitionName, ...effectNames].filter(Boolean).join(" · ");
-		}
-		anchor.insertAdjacentElement("afterend", row);
-		anchor = row;
-	}
-
-	const mitigation = damageMitigationRuleLabel(rollState);
-	if (mitigation) {
-		const row = damageBreakdownRow(
-			localize("WFRP mitigation", "Mitygacja WFRP"),
-			mitigation,
-		);
-		row.dataset.wfrpRangedModifierRow = "mitigation";
-		const effectNames = damageRuleEffectNames(rollState);
-		if (effectNames.length > 0) row.title = effectNames.join(" · ");
+		row.dataset.wfrpRangedModifierRow = "legacy-rule";
 		anchor.insertAdjacentElement("afterend", row);
 	}
-}
-
-function damageRuleEffectNames(rollState, sourceKind = null) {
-	return [...new Set(
-		(Array.isArray(rollState?.damageRuleEffects)
-			? rollState.damageRuleEffects
-			: [])
-			.filter((entry) => !sourceKind || entry?.sourceKind === sourceKind)
-			.map((entry) => String(entry?.effectName ?? "").trim())
-			.filter(Boolean),
-	)];
-}
-
-function damageMitigationRuleLabel(rollState) {
-	const labels = [];
-	const penetration = nonNegativeInteger(rollState?.armourPenetration);
-	if (penetration > 0) {
-		labels.push(localize(
-			`Armour penetration ${penetration}`,
-			`Przebicie pancerza ${penetration}`,
-		));
-	}
-	if (rollState?.armourMitigation === DAMAGE_MITIGATION_POLICY.IGNORE) {
-		labels.push(localize("ignores Armour", "pomija Pancerz"));
-	}
-	if (rollState?.toughnessMitigation === DAMAGE_MITIGATION_POLICY.IGNORE) {
-		labels.push(localize("ignores Toughness", "pomija Wytrzymałość"));
-	}
-	return labels.join(" · ");
 }
 
 function findDamageRow(card, labels) {
@@ -1009,12 +949,8 @@ function applyRangedDamageAudiencePolicy(message, card, attack) {
 		"Siła efektywna",
 		"Range modifier",
 		"Modyfikator zasięgu",
-		"Ammunition modifier",
-		"Modyfikator amunicji",
-		"Weapon WFRP Rules",
-		"Reguły WFRP broni",
-		"WFRP mitigation",
-		"Mitygacja WFRP",
+		"Active Effect (damage)",
+		"Aktywny Efekt (obrażenia)",
 		"Additional Damage",
 		"Obrażenia dodatkowe",
 		"Before Toughness",
@@ -1036,7 +972,11 @@ function applyRangedDamageAudiencePolicy(message, card, attack) {
 			row.querySelector?.(":scope > span")?.textContent ?? "",
 		).trim();
 
-		if (attackerLabels.has(label)) {
+		if (row.matches?.(
+			"[data-wfrp-damage-rule-source], [data-wfrp-damage-rule-effect]",
+		)) {
+			row.hidden = !ownsAttacker;
+		} else if (attackerLabels.has(label)) {
 			row.hidden = !ownsAttacker;
 		} else if (defenderLabels.has(label)) {
 			row.hidden = !ownsDefender;

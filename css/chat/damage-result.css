@@ -32,6 +32,28 @@
 	margin-top: 0.2rem;
 }
 
+.wfrp1e-damage-card__effect-source {
+	margin-top: 0.4rem;
+	padding-top: 0.3rem;
+	border-top: 1px solid rgba(63, 42, 28, 0.18);
+	font-weight: 700;
+}
+
+.wfrp1e-damage-card__effect-row {
+	padding-left: 0.45rem;
+	font-size: 0.86rem;
+}
+
+.wfrp1e-damage-card__effect-row > span {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.wfrp1e-damage-card__effect-row > strong {
+	flex: 0 0 auto;
+	text-align: right;
+}
+
 .wfrp1e-damage-card__roll-row {
 	align-items: center;
 }

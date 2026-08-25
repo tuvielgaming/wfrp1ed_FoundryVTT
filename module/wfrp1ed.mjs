@@ -335,6 +335,7 @@ function registerRuleEffectTargets() {
 			consumer: "combat-ranged",
 			parameter: "ammunitionDamageModifier",
 			source: "fired-ammunition",
+			authoringHidden: true,
 		},
 	});
 }

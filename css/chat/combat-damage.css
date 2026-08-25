@@ -65,6 +65,18 @@
 	text-align: right;
 }
 
+.combat-damage-context__effect-source {
+	margin-top: 0.35rem;
+	padding-top: 0.25rem;
+	border-top: 1px solid rgb(91 75 50 / 22%);
+	font-weight: 700;
+}
+
+.combat-damage-context__effect-row {
+	padding-left: 0.4rem;
+	font-size: 0.95em;
+}
+
 .combat-damage-context__status {
 	margin-top: 0.3rem;
 	font-style: italic;

@@ -24,7 +24,11 @@ export class RuleEffectDialog {
 	 * @returns {Promise<Object|null>}
 	 */
 	static async configure(existingChange = null) {
-		const targets = RuleEffectRegistry.sorted();
+		const existing = decodeRuleEffectChange(existingChange);
+		const targets = RuleEffectRegistry.sorted().filter((target) =>
+			target.metadata?.authoringHidden !== true ||
+			target.id === existing?.targetId
+		);
 
 		if (targets.length === 0) {
 			throw new Error(
@@ -32,7 +36,6 @@ export class RuleEffectDialog {
 			);
 		}
 
-		const existing = decodeRuleEffectChange(existingChange);
 		const initial = initialState(existing, targets);
 		const content = this.#buildContent(targets, initial);
 
@@ -715,6 +718,12 @@ function categoryLabel(category) {
 				"WFRP1ED.ActiveEffect.CategoryRangedCombat",
 				"Ranged combat",
 				"Walka dystansowa",
+			);
+		case "damage":
+			return localize(
+				"WFRP1ED.ActiveEffect.CategoryDamage",
+				"Damage",
+				"Obrażenia",
 			);
 		default:
 			return category;

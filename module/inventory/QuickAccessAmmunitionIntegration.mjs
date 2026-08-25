@@ -1,6 +1,33 @@
 import { LootPileService } from "../loot/LootPileService.mjs";
 import { AmmunitionInventory } from "./AmmunitionInventory.mjs";
 
+/* Capacity is a document invariant, not only a drag/drop rule. Inventory rows,
+ * Item sheets, macros and future editors may all update system.quantity
+ * directly, so clamp the edited stack before Foundry persists the change. */
+Hooks.on("preUpdateItem", (item, changes) => {
+	if (item?.type !== "equipment") return;
+	const requested = requestedQuantity(changes);
+	if (requested === null) return;
+
+	const actor = item?.actor ?? item?.parent;
+	if (actor?.documentName !== "Actor") return;
+	const containerId = String(item.system?.containerId ?? "").trim();
+	if (!containerId) return;
+	const container = actor.items?.get?.(containerId);
+	const state = AmmunitionInventory.containerState(container);
+	if (!state || !state.ammunition.some((entry) => entry.id === item.id)) return;
+
+	const otherAmmunition = Math.max(0, state.current - quantity(item));
+	const maximum = Math.max(0, state.capacity - otherAmmunition);
+	if (requested <= maximum) return;
+
+	setRequestedQuantity(changes, maximum);
+	ui.notifications.warn(localize(
+		`${item.name}: quantity ${requested} was limited to ${maximum}, because ${container.name} can hold at most ${state.capacity} ammunition.`,
+		`${item.name}: ilość ${requested} ograniczono do ${maximum}, ponieważ ${container.name} może pomieścić najwyżej ${state.capacity} sztuk amunicji.`,
+	));
+});
+
 Hooks.on("renderApplicationV2", (application, element) => {
 	const actor = application?.document;
 	if (actor?.documentName !== "Actor") return;
@@ -325,6 +352,25 @@ async function createActorEquipmentCopy(source, actor) {
 function quantity(item) {
 	const number = Number(item?.system?.quantity ?? 0);
 	return Number.isFinite(number) ? Math.max(0, Math.trunc(number)) : 0;
+}
+
+function requestedQuantity(changes) {
+	const path = "system.quantity";
+	const raw = Object.hasOwn(changes ?? {}, path)
+		? changes[path]
+		: foundry.utils.getProperty(changes, path);
+	if (raw === undefined) return null;
+	const number = Number(raw);
+	return Number.isFinite(number) ? Math.max(0, Math.trunc(number)) : null;
+}
+
+function setRequestedQuantity(changes, value) {
+	const path = "system.quantity";
+	if (Object.hasOwn(changes, path)) {
+		changes[path] = value;
+		return;
+	}
+	foundry.utils.setProperty(changes, path, value);
 }
 
 function refreshQuickContainerActor(item) {

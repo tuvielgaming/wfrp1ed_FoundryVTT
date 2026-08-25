@@ -2,6 +2,10 @@ import { DamageApplication } from "../damage/DamageApplication.mjs";
 import { DamageChat } from "../damage/DamageChat.mjs";
 import { DAMAGE_MITIGATION_POLICY } from "../damage/DamagePacket.mjs";
 import {
+	damageRuleEffectGroups,
+	damageRuleSourceHeading,
+} from "../damage/DamageRulePresentation.mjs";
+import {
 	resolveDetailedDamageMessageCritical,
 } from "../criticals/DetailedCriticalIntegration.mjs";
 import {
@@ -244,9 +248,12 @@ function damageResultContent(damageState, rollState, targetName) {
 			signedInteger(rollState.weaponDamageModifier),
 		));
 	}
-	if (Number(rollState?.ruleDamageModifier) !== 0) {
+	const damageRuleRows = damageRuleRowsHtml(rollState?.damageRuleEffects);
+	if (damageRuleRows.length > 0) {
+		rows.push(...damageRuleRows);
+	} else if (Number(rollState?.ruleDamageModifier) !== 0) {
 		rows.push(rowHtml(
-			localize("WFRP Rule modifier", "Modyfikator Reguł WFRP"),
+			localize("Active Effect (damage)", "Aktywny Efekt (obrażenia)"),
 			signedInteger(rollState.ruleDamageModifier),
 		));
 	}
@@ -341,6 +348,26 @@ function d6IconHtml(value) {
 
 function rowHtml(label, value) {
 	return `<div class="wfrp1e-damage-card__row"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`;
+}
+
+function damageRuleRowsHtml(entries) {
+	const rows = [];
+	for (const group of damageRuleEffectGroups(entries)) {
+		rows.push(`
+			<div class="wfrp1e-damage-card__row wfrp1e-damage-card__effect-source" data-wfrp-damage-rule-source>
+				<span>${escapeHtml(damageRuleSourceHeading(group.sourceName))}</span>
+			</div>
+		`);
+		for (const effect of group.effects) {
+			rows.push(`
+				<div class="wfrp1e-damage-card__row wfrp1e-damage-card__effect-row" data-wfrp-damage-rule-effect>
+					<span>${escapeHtml(effect.effectName)}</span>
+					<strong>${escapeHtml(effect.valueLabel)}</strong>
+				</div>
+			`);
+		}
+	}
+	return rows;
 }
 
 function decorateDamageResultView(message, html) {

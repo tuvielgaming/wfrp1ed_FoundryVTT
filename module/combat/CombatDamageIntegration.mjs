@@ -7,6 +7,10 @@ import {
 } from "../damage/DamagePacket.mjs";
 import { DamageResolver } from "../damage/DamageResolver.mjs";
 import { DamageRuleEffects } from "../damage/DamageRuleEffects.mjs";
+import {
+	damageRuleEffectGroups,
+	damageRuleSourceHeading,
+} from "../damage/DamageRulePresentation.mjs";
 import { WfrpRuleSettings } from "../settings/WfrpRuleSettings.mjs";
 import { TestResultChat } from "../tests/TestResultChat.mjs";
 import { CombatDefenceTransaction } from "./CombatDefenceTransaction.mjs";
@@ -329,9 +333,13 @@ function buildResolvedDamagePanel(message, damageState, rollState, defender) {
 		));
 	}
 
-	if (Number(rollState.ruleDamageModifier) !== 0) {
+	const damageRuleGroups = appendDamageRuleDetails(
+		body,
+		rollState.damageRuleEffects,
+	);
+	if (damageRuleGroups === 0 && Number(rollState.ruleDamageModifier) !== 0) {
 		body.append(detailRow(
-			localize("WFRP Rule modifier", "Modyfikator Reguł WFRP"),
+			localize("Active Effect (damage)", "Aktywny Efekt (obrażenia)"),
 			signedInteger(rollState.ruleDamageModifier),
 		));
 	}
@@ -1233,6 +1241,23 @@ function detailRow(labelText, valueText) {
 	value.textContent = String(valueText ?? "—");
 	row.append(label, value);
 	return row;
+}
+
+function appendDamageRuleDetails(root, entries) {
+	const groups = damageRuleEffectGroups(entries);
+	for (const group of groups) {
+		const heading = document.createElement("div");
+		heading.className = "combat-damage-context__effect-source";
+		heading.textContent = damageRuleSourceHeading(group.sourceName);
+		root.append(heading);
+
+		for (const effect of group.effects) {
+			const row = detailRow(effect.effectName, effect.valueLabel);
+			row.classList.add("combat-damage-context__effect-row");
+			root.append(row);
+		}
+	}
+	return groups.length;
 }
 
 function statusText(text) {
