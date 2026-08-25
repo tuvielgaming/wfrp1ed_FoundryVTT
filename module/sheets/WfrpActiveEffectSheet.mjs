@@ -64,7 +64,7 @@ export class WfrpActiveEffectSheet extends ActiveEffectConfig {
 			const hint = document.createElement("small");
 			hint.textContent = localize(
 				"Use the guided editor. Attribute Key and Value are internal storage and do not need to be entered manually.",
-				"Użyj prowadzonego edytora. Attribute Key i Value są wewnętrznym zapisem systemu i nie trzeba wpisywać ich ręcznie.",
+				"Użyj pomocniczego edytora. Attribute Key i Value są wewnętrznym zapisem systemu i nie trzeba wpisywać ich ręcznie.",
 			);
 			copy.append(heading, hint);
 
