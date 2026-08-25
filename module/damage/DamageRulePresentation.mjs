@@ -89,10 +89,10 @@ function damageRuleChangePresentation(entry) {
 		case DAMAGE_UNMITIGATED_MODIFIER_TARGET_ID:
 			return {
 				label: localize(
-					"Unmitigated damage",
-					"Obrażenia bez redukcji",
+					`Direct damage (${formatNumber(entry.value)})`,
+					`Obrażenia bezpośrednie (${formatNumber(entry.value)})`,
 				),
-				valueLabel: signedNumber(entry.value),
+				valueLabel: "",
 			};
 		case DAMAGE_IGNORE_ARMOUR_TARGET_ID:
 			return {

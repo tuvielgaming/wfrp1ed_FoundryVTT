@@ -284,9 +284,9 @@ function registerRuleEffectTargets() {
 	RuleEffectRegistry.registerTarget({
 		id: DAMAGE_UNMITIGATED_MODIFIER_TARGET_ID,
 		category: "damage",
-		label: "Unmitigated damage",
+		label: "Direct damage",
 		labels: {
-			pl: "Obrażenia bez redukcji",
+			pl: "Obrażenia bezpośrednie",
 		},
 		sides: [RULE_EFFECT_SIDES.SELF],
 		operations: [

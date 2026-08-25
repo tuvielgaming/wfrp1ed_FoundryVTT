@@ -288,7 +288,7 @@ function damageResultContent(damageState, rollState, targetName) {
 	}
 	if (Number(unmitigated.value) > 0) {
 		rows.push(rowHtml(
-			localize("Added after mitigation", "Dodane po redukcjach"),
+			localize("Unavoidable damage", "Nieuchronne obrażenia"),
 			signedInteger(unmitigated.value),
 		));
 	}
