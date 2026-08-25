@@ -36,50 +36,100 @@ export class RuleEffectDialog {
 		const initial = initialState(existing, targets);
 		const content = this.#buildContent(targets, initial);
 
-		const response = await DialogV2.wait({
-			classes: [
-				"wfrp1ed",
-				"wfrp1ed-parchment-window",
-				"wfrp1ed-rule-effect-dialog",
-			],
-			window: {
-				title: localize(
-					"WFRP1ED.ActiveEffect.RuleEditorTitle",
-					"WFRP Rule Effect",
-					"Efekt reguły WFRP",
-				),
-			},
-			content,
-			render: (_event, dialog) =>
-				this.#activate(dialog, targets, initial),
-			buttons: [
-				{
-					action: "save",
-					label: localize(
-						"WFRP1ED.ActiveEffect.Save",
-						"Save",
-						"Zapisz",
-					),
-					icon: "fa-solid fa-floppy-disk",
-					default: true,
-					callback: (_event, _button, dialog) =>
-						this.#readDialog(dialog, targets),
-				},
-				{
-					action: "cancel",
-					label: localize(
-						"WFRP1ED.ActiveEffect.Cancel",
-						"Cancel",
-						"Anuluj",
-					),
-					icon: "fa-solid fa-xmark",
-					callback: () => null,
-				},
-			],
-			rejectClose: false,
-		});
+		/*
+		 * DialogV2.wait resolves on every submission. It also temporarily
+		 * disables all buttons before calling a button callback, so a thrown
+		 * validation error leaves the dialog visibly stuck. Own this small
+		 * lifecycle instead: invalid Save attempts stay open, display their
+		 * error, and Foundry gets to restore both buttons normally.
+		 */
+		return new Promise((resolve, reject) => {
+			let settled = false;
+			const finish = (result, dialog, submitted = false) => {
+				if (settled) return;
+				settled = true;
+				setTimeout(() => {
+					void dialog
+						.close(submitted ? { submitted: true } : {})
+						.then(() => resolve(result), reject);
+				}, 0);
+			};
 
-		return response ?? null;
+			const dialog = new DialogV2({
+				classes: [
+					"wfrp1ed",
+					"wfrp1ed-parchment-window",
+					"wfrp1ed-rule-effect-dialog",
+				],
+				window: {
+					title: localize(
+						"WFRP1ED.ActiveEffect.RuleEditorTitle",
+						"WFRP Rule Effect",
+						"Efekt reguły WFRP",
+					),
+				},
+				form: { closeOnSubmit: false },
+				content,
+				buttons: [
+					{
+						action: "save",
+						label: localize(
+							"WFRP1ED.ActiveEffect.Save",
+							"Save",
+							"Zapisz",
+						),
+						icon: "fa-solid fa-floppy-disk",
+						default: true,
+						disabled: true,
+						callback: (_event, _button, currentDialog) => {
+							const validation = this.#refreshValidation(
+								currentDialog,
+								targets,
+							);
+
+							if (!validation.change) {
+								setTimeout(() => {
+									this.#refreshValidation(currentDialog, targets);
+								}, 0);
+								return null;
+							}
+
+							finish(validation.change, currentDialog, true);
+							return validation.change;
+						},
+					},
+					{
+						action: "cancel",
+						label: localize(
+							"WFRP1ED.ActiveEffect.Cancel",
+							"Cancel",
+							"Anuluj",
+						),
+						icon: "fa-solid fa-xmark",
+						type: "button",
+						callback: (_event, _button, currentDialog) => {
+							finish(null, currentDialog);
+							return null;
+						},
+					},
+				],
+			});
+
+			dialog.addEventListener(
+				"render",
+				() => this.#activate(dialog, targets, initial),
+			);
+			dialog.addEventListener(
+				"close",
+				() => {
+					if (settled) return;
+					settled = true;
+					resolve(null);
+				},
+				{ once: true },
+			);
+			void dialog.render({ force: true }).catch(reject);
+		});
 	}
 
 	static #buildContent(targets, initial) {
@@ -201,6 +251,13 @@ export class RuleEffectDialog {
 		);
 		condition.control.append(conditionInput);
 
+		const validation = document.createElement("p");
+		validation.classList.add("wfrp-rule-effect-validation");
+		validation.dataset.wfrpRuleValidation = "";
+		validation.setAttribute("role", "alert");
+		validation.setAttribute("aria-live", "polite");
+		validation.hidden = true;
+
 		root.append(
 			target.root,
 			operation.root,
@@ -209,6 +266,7 @@ export class RuleEffectDialog {
 			applicability.root,
 			stacking.root,
 			condition.root,
+			validation,
 		);
 
 		content.append(root);
@@ -247,7 +305,7 @@ export class RuleEffectDialog {
 		setControlValue(root, 'select[name="stacking"]', initial.stacking);
 		setControlValue(root, 'input[name="condition"]', initial.condition);
 
-		const refresh = () => {
+		const refreshTarget = () => {
 			const target = targets.find(
 				(entry) => entry.id === targetSelect.value,
 			);
@@ -255,8 +313,15 @@ export class RuleEffectDialog {
 			this.#refreshForTarget(root, target);
 		};
 
-		targetSelect.addEventListener("change", refresh);
-		refresh();
+		root.addEventListener("change", (event) => {
+			if (event.target === targetSelect) refreshTarget();
+			this.#refreshValidation(dialog, targets);
+		});
+		root.addEventListener("input", () => {
+			this.#refreshValidation(dialog, targets);
+		});
+		refreshTarget();
+		this.#refreshValidation(dialog, targets);
 	}
 
 	static #refreshForTarget(root, target) {
@@ -299,21 +364,90 @@ export class RuleEffectDialog {
 			root.querySelector(selector)?.value;
 		const targetId = valueOf('select[name="targetId"]');
 
-		if (!targets.some((target) => target.id === targetId)) {
+		const target = targets.find((entry) => entry.id === targetId);
+
+		if (!target) {
 			throw new Error(
-				`Invalid WFRP rule effect target '${String(targetId)}'.`,
+				localize(
+					"WFRP1ED.ActiveEffect.InvalidTarget",
+					"Select a valid WFRP rule target.",
+					"Wybierz prawidłowy cel reguły WFRP.",
+				),
+			);
+		}
+
+		const formula = String(
+			valueOf('input[name="formula"]') ?? "",
+		).trim();
+
+		if (target.valueRequired && !formula) {
+			const targetLabel = RuleEffectRegistry.label(target);
+			throw new Error(
+				game.i18n.lang === "pl"
+					? `Wprowadź wartość lub formułę dla „${targetLabel}”.`
+					: `Enter a value or formula for “${targetLabel}”.`,
 			);
 		}
 
 		return encodeRuleEffectChange({
 			targetId,
 			operation: valueOf('select[name="operation"]'),
-			formula: valueOf('input[name="formula"]'),
+			formula,
 			side: valueOf('select[name="side"]'),
 			applicability: valueOf('select[name="applicability"]'),
 			stacking: valueOf('select[name="stacking"]'),
 			condition: valueOf('input[name="condition"]'),
 		});
+	}
+
+	static #refreshValidation(dialog, targets) {
+		const root = dialog?.element?.querySelector?.(
+			".wfrp-rule-effect-editor",
+		);
+		const warning = root?.querySelector?.(
+			"[data-wfrp-rule-validation]",
+		);
+		const save = dialog?.element?.querySelector?.(
+			'button[data-action="save"]',
+		);
+		let change = null;
+		let message = "";
+
+		try {
+			change = this.#readDialog(dialog, targets);
+		}
+		catch (error) {
+			message = error instanceof Error && error.message
+				? error.message
+				: localize(
+					"WFRP1ED.ActiveEffect.ValidationFailed",
+					"Correct the highlighted rule data before saving.",
+					"Popraw wyróżnione dane reguły przed zapisaniem.",
+				);
+		}
+
+		if (warning) {
+			warning.textContent = message;
+			warning.hidden = Boolean(change);
+		}
+
+		if (save) save.disabled = !change;
+
+		const formula = root?.querySelector?.('input[name="formula"]');
+		const targetId = root?.querySelector?.(
+			'select[name="targetId"]',
+		)?.value;
+		const target = targets.find((entry) => entry.id === targetId);
+		const formulaInvalid = Boolean(
+			target?.valueRequired && !String(formula?.value ?? "").trim(),
+		);
+
+		if (formula) {
+			if (formulaInvalid) formula.setAttribute("aria-invalid", "true");
+			else formula.removeAttribute("aria-invalid");
+		}
+
+		return { change, message };
 	}
 }
 

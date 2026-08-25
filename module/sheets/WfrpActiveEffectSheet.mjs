@@ -150,6 +150,13 @@ export class WfrpActiveEffectSheet extends ActiveEffectConfig {
 		const changesPanel = changesTabPanel(root);
 		if (!(changesPanel instanceof HTMLElement)) return;
 
+		/* The toolbar below is now the one system-wide add control. */
+		for (const nativeAdd of changesPanel.querySelectorAll(
+			':scope > header [data-action="addChange"]',
+		)) {
+			nativeAdd.remove();
+		}
+
 		if (!changesPanel.querySelector("[data-wfrp-rule-toolbar]")) {
 			const toolbar = document.createElement("section");
 			toolbar.className = "wfrp1ed-rule-authoring-toolbar";
@@ -158,23 +165,22 @@ export class WfrpActiveEffectSheet extends ActiveEffectConfig {
 			const copy = document.createElement("div");
 			copy.className = "wfrp1ed-rule-authoring-toolbar__copy";
 			const heading = document.createElement("strong");
-			heading.textContent = localize("WFRP Rules", "Reguły WFRP");
+			heading.textContent = localize(
+				"Mechanical Changes",
+				"Zmiany mechaniczne",
+			);
 			const hint = document.createElement("small");
 			hint.textContent = localize(
-				"Use the guided editor. Attribute Key and Value are internal storage and do not need to be entered manually.",
-				"Użyj pomocniczego edytora. Attribute Key i Value są wewnętrznym zapisem systemu i nie trzeba wpisywać ich ręcznie.",
+				"Add a Foundry change, then choose its Type. Selecting WFRP Rule opens the guided editor.",
+				"Dodaj zmianę Foundry, a następnie wybierz jej typ. Wybranie Reguły WFRP otworzy pomocniczy edytor.",
 			);
 			copy.append(heading, hint);
 
 			const add = document.createElement("button");
 			add.type = "button";
 			add.className = "wfrp1ed-rule-authoring-toolbar__add";
-			add.dataset.wfrpRuleAdd = "";
-			add.innerHTML = `<i class="fa-solid fa-plus" aria-hidden="true"></i> ${escapeHtml(localize("Add WFRP Rule", "Dodaj regułę WFRP"))}`;
-			add.addEventListener("click", (event) => {
-				event.preventDefault();
-				void this.#configureWfrpRule(null).catch(reportAuthoringError);
-			});
+			add.dataset.action = "addChange";
+			add.innerHTML = `<i class="fa-solid fa-plus" aria-hidden="true"></i> ${escapeHtml(localize("Add Change", "Dodaj zmianę"))}`;
 
 			toolbar.append(copy, add);
 			changesPanel.prepend(toolbar);
