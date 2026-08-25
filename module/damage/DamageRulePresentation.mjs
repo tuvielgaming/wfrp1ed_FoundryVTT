@@ -3,6 +3,7 @@ import {
 	DAMAGE_ARMOUR_PENETRATION_TARGET_ID,
 	DAMAGE_IGNORE_ARMOUR_TARGET_ID,
 	DAMAGE_IGNORE_TOUGHNESS_TARGET_ID,
+	DAMAGE_UNMITIGATED_MODIFIER_TARGET_ID,
 } from "./DamageRuleEffects.mjs";
 
 /**
@@ -83,6 +84,14 @@ function damageRuleChangePresentation(entry) {
 		case DAMAGE_ARMOUR_PENETRATION_TARGET_ID:
 			return {
 				label: localize("Armour penetration", "Przebicie pancerza"),
+				valueLabel: signedNumber(entry.value),
+			};
+		case DAMAGE_UNMITIGATED_MODIFIER_TARGET_ID:
+			return {
+				label: localize(
+					"Unmitigated damage",
+					"Obrażenia bez redukcji",
+				),
 				valueLabel: signedNumber(entry.value),
 			};
 		case DAMAGE_IGNORE_ARMOUR_TARGET_ID:

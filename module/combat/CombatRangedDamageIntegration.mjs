@@ -339,6 +339,11 @@ async function resolveRangedDamageAsAuthority(message, requestingUser) {
 			integer(weaponRules.armourPenetration) +
 				integer(ammunitionRules.armourPenetration),
 		);
+		const unmitigatedDamageModifier = nonNegativeInteger(Math.max(
+			0,
+			integer(weaponRules.unmitigatedDamageModifier) +
+				integer(ammunitionRules.unmitigatedDamageModifier),
+		));
 		const damageRuleEffects = [
 			...weaponRules.entries,
 			...ammunitionRules.entries,
@@ -371,6 +376,7 @@ async function resolveRangedDamageAsAuthority(message, requestingUser) {
 			armourMitigation,
 			toughnessMitigation,
 			armourPenetration,
+			unmitigatedDamageModifier,
 			weaponDamageModifier,
 			modifierSource: damageRuleEffects.length > 0
 				? "range+active-effects"
@@ -405,6 +411,9 @@ async function finalizeRangedDamage(message, rollState, attack, defender) {
 	);
 	const packet = new DamagePacket({
 		rawAmount: nonNegativeInteger(rollState.generatedDamage),
+		unmitigatedAmount: nonNegativeInteger(
+			rollState.unmitigatedDamageModifier,
+		),
 		targetActorUuid: defender.uuid,
 		source: {
 			kind: "combat-attack",
@@ -932,6 +941,8 @@ function applyRangedDamageAudiencePolicy(message, card, attack) {
 		"Obrażenia dodatkowe",
 		"Before Toughness",
 		"Przed Wytrzymałością",
+		"Unmitigated damage",
+		"Obrażenia bez redukcji",
 	]);
 	const defenderLabels = new Set([
 		"Toughness",

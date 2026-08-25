@@ -11,6 +11,8 @@ export const DAMAGE_AMOUNT_MODIFIER_TARGET_ID =
 	"damage.amount.modifier";
 export const DAMAGE_ARMOUR_PENETRATION_TARGET_ID =
 	"damage.armour.penetration";
+export const DAMAGE_UNMITIGATED_MODIFIER_TARGET_ID =
+	"damage.unmitigated.modifier";
 export const DAMAGE_IGNORE_ARMOUR_TARGET_ID =
 	"damage.armour.ignore";
 export const DAMAGE_IGNORE_TOUGHNESS_TARGET_ID =
@@ -19,6 +21,7 @@ export const DAMAGE_IGNORE_TOUGHNESS_TARGET_ID =
 const NUMERIC_TARGETS = new Set([
 	DAMAGE_AMOUNT_MODIFIER_TARGET_ID,
 	DAMAGE_ARMOUR_PENETRATION_TARGET_ID,
+	DAMAGE_UNMITIGATED_MODIFIER_TARGET_ID,
 ]);
 const GRANT_TARGETS = new Set([
 	DAMAGE_IGNORE_ARMOUR_TARGET_ID,
@@ -69,6 +72,7 @@ export class DamageRuleEffects {
 		const entries = [];
 		let damageModifier = 0;
 		let armourPenetration = 0;
+		let unmitigatedDamageModifier = 0;
 		let armourPolicy = DAMAGE_MITIGATION_POLICY.APPLY;
 		let toughnessPolicy = DAMAGE_MITIGATION_POLICY.APPLY;
 
@@ -117,8 +121,10 @@ export class DamageRuleEffects {
 
 						if (targetId === DAMAGE_AMOUNT_MODIFIER_TARGET_ID) {
 							damageModifier += value;
-						} else {
+						} else if (targetId === DAMAGE_ARMOUR_PENETRATION_TARGET_ID) {
 							armourPenetration += value;
+						} else {
+							unmitigatedDamageModifier += value;
 						}
 					} else if (GRANT_TARGETS.has(targetId)) {
 						if (decoded.operation !== RULE_EFFECT_OPERATIONS.GRANT) continue;
@@ -153,6 +159,7 @@ export class DamageRuleEffects {
 		return foundry.utils.deepFreeze({
 			damageModifier,
 			armourPenetration: Math.max(0, armourPenetration),
+			unmitigatedDamageModifier,
 			armourPolicy,
 			toughnessPolicy,
 			entries: foundry.utils.deepClone(entries),

@@ -305,6 +305,7 @@ function buildResolvedDamagePanel(message, damageState, rollState, defender) {
 	const toughness = resolution.breakdown?.toughness ?? {};
 	const armour = resolution.breakdown?.armour ?? {};
 	const parry = resolution.breakdown?.parry ?? {};
+	const unmitigated = resolution.breakdown?.unmitigated ?? {};
 	const transaction = DamageApplication.transactionFor(
 		defender,
 		damageState.packet?.id,
@@ -370,6 +371,12 @@ function buildResolvedDamagePanel(message, damageState, rollState, defender) {
 		body.append(detailRow(
 			localize("Parry", "Parowanie"),
 			`${nonNegativeInteger(parry.absorbed)} (${parry.itemName || "—"})`,
+		));
+	}
+	if (Number(unmitigated.value) > 0) {
+		body.append(detailRow(
+			localize("Unmitigated damage", "Obrażenia bez redukcji"),
+			signedInteger(unmitigated.value),
 		));
 	}
 
@@ -600,6 +607,9 @@ async function resolveDamageAsAuthority(message, requestingUser) {
 			[{ kind: "weapon", source: weaponRuleSource }],
 		);
 		const ruleDamageModifier = integer(damageRules.damageModifier);
+		const unmitigatedDamageModifier = nonNegativeInteger(
+			Math.max(0, integer(damageRules.unmitigatedDamageModifier)),
+		);
 		const generatedDamage = Math.max(
 			0,
 			diceTotal + strength + weaponDamageModifier + ruleDamageModifier,
@@ -633,6 +643,7 @@ async function resolveDamageAsAuthority(message, requestingUser) {
 			strength,
 			weaponDamageModifier,
 			ruleDamageModifier,
+			unmitigatedDamageModifier,
 			damageRuleEffects: foundry.utils.deepClone(damageRules.entries),
 			armourMitigation: damageRules.armourPolicy,
 			toughnessMitigation: damageRules.toughnessPolicy,
@@ -757,6 +768,9 @@ function damagePacketForState(message, rollState, attack, defender, existingPack
 	return new DamagePacket({
 		id: existingPacket?.id ?? null,
 		rawAmount: nonNegativeInteger(rollState.generatedDamage),
+		unmitigatedAmount: nonNegativeInteger(
+			rollState.unmitigatedDamageModifier,
+		),
 		targetActorUuid: defender.uuid,
 		source: existingPacket?.source ?? {
 			kind: "combat-attack",

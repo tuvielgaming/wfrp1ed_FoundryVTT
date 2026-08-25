@@ -18,6 +18,7 @@ import {
 	DAMAGE_ARMOUR_PENETRATION_TARGET_ID,
 	DAMAGE_IGNORE_ARMOUR_TARGET_ID,
 	DAMAGE_IGNORE_TOUGHNESS_TARGET_ID,
+	DAMAGE_UNMITIGATED_MODIFIER_TARGET_ID,
 } from "./damage/DamageRuleEffects.mjs";
 import { WFRP1ED } from "./helpers/config.mjs";
 import { ClassicActorSheet } from "./sheets/ClassicActorSheet.mjs";
@@ -277,6 +278,25 @@ function registerRuleEffectTargets() {
 		metadata: {
 			consumer: "damage",
 			parameter: "armourPenetration",
+		},
+	});
+
+	RuleEffectRegistry.registerTarget({
+		id: DAMAGE_UNMITIGATED_MODIFIER_TARGET_ID,
+		category: "damage",
+		label: "Unmitigated damage",
+		labels: {
+			pl: "Obrażenia bez redukcji",
+		},
+		sides: [RULE_EFFECT_SIDES.SELF],
+		operations: [
+			RULE_EFFECT_OPERATIONS.ADD,
+			RULE_EFFECT_OPERATIONS.SUBTRACT,
+		],
+		applicabilities: [RULE_EFFECT_APPLICABILITY.AUTOMATIC],
+		metadata: {
+			consumer: "damage",
+			parameter: "unmitigatedDamageModifier",
 		},
 	});
 

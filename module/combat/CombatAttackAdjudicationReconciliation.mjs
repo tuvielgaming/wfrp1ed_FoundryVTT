@@ -214,6 +214,9 @@ async function rebuildDamageFromPreservedRoll(
 	const packet = new DamagePacket({
 		id: existingPacket?.id ?? null,
 		rawAmount: nonNegativeInteger(rollState.generatedDamage),
+		unmitigatedAmount: nonNegativeInteger(
+			rollState.unmitigatedDamageModifier,
+		),
 		targetActorUuid: defender.uuid,
 		source: existingPacket?.source ?? {
 			kind: "combat-attack",

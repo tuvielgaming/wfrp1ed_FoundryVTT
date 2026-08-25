@@ -16,7 +16,7 @@ const ARMOUR_PENETRATION_SPECIAL_KEY = "armourPenetration";
  *
  * Core order (Combat, pp. 118, 121-122):
  *   generated damage -> Toughness -> armour at hit location -> successful
- *   Parry reduction -> Wounds.
+ *   Parry reduction -> unmitigated additions declared by the source -> Wounds.
  *
  * The successful Parry step is represented as a registered special mitigation
  * because the Core parry rule stops 1d6 of the damage caused by the blow after
@@ -63,15 +63,31 @@ export class DamageResolver {
 		const parry = resolveParry(special.parry, remaining);
 		remaining = parry.after;
 
+		const unmitigated = resolveUnmitigated(
+			normalized.unmitigatedAmount,
+			remaining,
+		);
+		remaining = unmitigated.after;
+
 		return DamageResolution.forPacket(normalized, {
 			finalAmount: remaining,
 			breakdown: {
 				toughness,
 				armour,
 				parry,
+				unmitigated,
 			},
 		});
 	}
+}
+
+function resolveUnmitigated(value, before) {
+	const amount = nonNegativeInteger(value, "Unmitigated damage");
+	return {
+		before,
+		value: amount,
+		after: before + amount,
+	};
 }
 
 function resolveToughness(policy, snapshot, before) {

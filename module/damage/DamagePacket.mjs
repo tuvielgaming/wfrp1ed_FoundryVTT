@@ -20,8 +20,8 @@ const ALLOWED_CRITICAL_MODES = new Set(
  * Immutable, JSON-safe description of damage calculated by a WFRP action.
  *
  * DamagePacket does not mutate an Actor and does not itself perform WFRP
- * mitigation calculations. It records the raw amount and the rule policies a
- * later DamageResolver must obey.
+ * mitigation calculations. It records the mitigated base amount, any separate
+ * unmitigated addition and the rule policies a later DamageResolver must obey.
  *
  * Critical routing is also source data rather than application logic. A packet
  * may declare whether overflow should later use the detailed Critical Hit
@@ -29,11 +29,12 @@ const ALLOWED_CRITICAL_MODES = new Set(
  * leave the routing explicitly unspecified.
  */
 export class DamagePacket {
-	static VERSION = 2;
+	static VERSION = 3;
 
 	constructor({
 		id = null,
 		rawAmount,
+		unmitigatedAmount = 0,
 		targetActorUuid,
 		source,
 		armour = DAMAGE_MITIGATION_POLICY.APPLY,
@@ -51,6 +52,10 @@ export class DamagePacket {
 		this.rawAmount = nonNegativeInteger(
 			rawAmount,
 			"Raw damage amount",
+		);
+		this.unmitigatedAmount = nonNegativeInteger(
+			unmitigatedAmount,
+			"Unmitigated damage amount",
 		);
 		this.targetActorUuid = normalizeIdentifier(
 			targetActorUuid,
@@ -83,8 +88,9 @@ export class DamagePacket {
 	/**
 	 * Rehydrate a packet stored in ChatMessage flags or other JSON data.
 	 *
-	 * Version 1 packets predate explicit critical routing and therefore
-	 * rehydrate as "unspecified".
+	 * Earlier packets predate explicit unmitigated damage and therefore
+	 * rehydrate that component as zero. Version 1 packets also predate explicit
+	 * critical routing and rehydrate it as "unspecified".
 	 *
 	 * @param {Object} data
 	 * @returns {DamagePacket}
@@ -100,6 +106,7 @@ export class DamagePacket {
 		return new DamagePacket({
 			id: data.id,
 			rawAmount: data.rawAmount,
+			unmitigatedAmount: data.unmitigatedAmount,
 			targetActorUuid: data.targetActorUuid,
 			source: data.source,
 			armour: mitigation.armour,
@@ -123,6 +130,7 @@ export class DamagePacket {
 			version: this.version,
 			id: this.id,
 			rawAmount: this.rawAmount,
+			unmitigatedAmount: this.unmitigatedAmount,
 			targetActorUuid: this.targetActorUuid,
 			source: {
 				kind: this.source.kind,

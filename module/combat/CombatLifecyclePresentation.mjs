@@ -229,6 +229,7 @@ function damageResultContent(damageState, rollState, targetName) {
 	const toughness = resolution.breakdown?.toughness ?? {};
 	const armour = resolution.breakdown?.armour ?? {};
 	const parry = resolution.breakdown?.parry ?? {};
+	const unmitigated = resolution.breakdown?.unmitigated ?? {};
 	const rows = [
 		rowHtml(localize("Target", "Cel"), targetName || "—"),
 		rowHtml(
@@ -283,6 +284,12 @@ function damageResultContent(damageState, rollState, targetName) {
 		rows.push(rowHtml(
 			localize("Parry", "Parowanie"),
 			`${nonNegativeInteger(parry.absorbed)} (${parry.itemName || "—"})`,
+		));
+	}
+	if (Number(unmitigated.value) > 0) {
+		rows.push(rowHtml(
+			localize("Unmitigated damage", "Obrażenia bez redukcji"),
+			signedInteger(unmitigated.value),
 		));
 	}
 
