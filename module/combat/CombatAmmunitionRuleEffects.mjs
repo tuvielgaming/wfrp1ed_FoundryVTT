@@ -27,6 +27,11 @@ export class CombatAmmunitionRuleEffects {
 	 * mechanics such as armour penetration, poison or bleeding require their own
 	 * explicit consumer contracts rather than being inferred from prose.
 	 *
+	 * `ActiveEffect.transfer` is intentionally irrelevant here. Transfer controls
+	 * whether an Item effect is applied to its owning Actor; this consumer is not
+	 * transferring an effect to the attacker. It is reading a mechanical property
+	 * from the ammunition object which was actually fired.
+	 *
 	 * @param {Actor} attacker
 	 * @param {Actor} defender
 	 * @param {Object|null|undefined} ammunition
@@ -52,7 +57,7 @@ export class CombatAmmunitionRuleEffects {
 
 		for (let effectIndex = 0; effectIndex < effects.length; effectIndex += 1) {
 			const effect = effects[effectIndex];
-			if (!effect || effect.disabled === true || effect.transfer === false) {
+			if (!effect || effect.disabled === true) {
 				continue;
 			}
 
