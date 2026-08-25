@@ -272,6 +272,10 @@ export class RuleEffectDialog {
 			root.querySelector('select[name="side"]'),
 			target.sides,
 		);
+		filterSelect(
+			root.querySelector('select[name="applicability"]'),
+			target.applicabilities,
+		);
 
 		const formula = root.querySelector('input[name="formula"]');
 
@@ -571,6 +575,12 @@ function categoryLabel(category) {
 				"WFRP1ED.ActiveEffect.CategoryMovement",
 				"Movement procedures",
 				"Procedury ruchu",
+			);
+		case "combat-ranged":
+			return localize(
+				"WFRP1ED.ActiveEffect.CategoryRangedCombat",
+				"Ranged combat",
+				"Walka dystansowa",
 			);
 		default:
 			return category;
