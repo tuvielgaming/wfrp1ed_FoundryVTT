@@ -6,6 +6,8 @@ import {
 
 const { ItemSheetV2 } = foundry.applications.sheets;
 const { DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
+const EQUIPMENT_TABS = Object.freeze(["details", "effects"]);
+const activeEquipmentTabs = new WeakMap();
 
 /*
  * Equipment has two mutually-exclusive authored roles in the ammunition layer:
@@ -115,6 +117,14 @@ export class EquipmentItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) 
 		context.effects = effectPresentation(this.document);
 
 		return context;
+	}
+
+	_onRender(context, options) {
+		super._onRender(context, options);
+		activateEquipmentTab(
+			this.element,
+			normalizedEquipmentTab(activeEquipmentTabs.get(this)) || "details",
+		);
 	}
 
 	/** @this {EquipmentItemSheet} */
@@ -314,14 +324,32 @@ function effectFromTarget(sheet, target) {
 }
 
 function setTab(sheet, tab, target) {
+	const normalized = normalizedEquipmentTab(tab);
+	if (!normalized) return;
+	activeEquipmentTabs.set(sheet, normalized);
 	const root = target?.closest?.("form") ?? sheet.element;
+	activateEquipmentTab(root, normalized);
+}
+
+function activateEquipmentTab(root, tab) {
 	if (!(root instanceof HTMLElement)) return;
+	const normalized = normalizedEquipmentTab(tab) || "details";
 	for (const panel of root.querySelectorAll("[data-equipment-tab-panel]")) {
-		panel.hidden = panel.dataset.equipmentTabPanel !== tab;
+		const active = panel.dataset.equipmentTabPanel === normalized;
+		panel.hidden = !active;
+		panel.classList.toggle("is-active", active);
 	}
 	for (const button of root.querySelectorAll("[data-equipment-tab-button]")) {
-		button.classList.toggle("is-active", button.dataset.equipmentTabButton === tab);
+		const active = button.dataset.equipmentTabButton === normalized;
+		button.classList.toggle("is-active", active);
+		button.setAttribute("aria-selected", active ? "true" : "false");
+		button.tabIndex = active ? 0 : -1;
 	}
+}
+
+function normalizedEquipmentTab(value) {
+	const normalized = String(value ?? "").trim();
+	return EQUIPMENT_TABS.includes(normalized) ? normalized : "";
 }
 
 function positiveInteger(value, fallback = 1) {
