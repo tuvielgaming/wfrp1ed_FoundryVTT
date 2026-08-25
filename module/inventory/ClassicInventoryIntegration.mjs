@@ -8,6 +8,7 @@ const INVENTORY_SECTION = Object.freeze({
 });
 
 const QUANTITY_CLICK_DELAY_MS = 220;
+const CONTAINER_ROW_CLICK_DELAY_MS = 220;
 const EXPANDED_CONTAINERS = new Set();
 const CASCADE_DELETE_IDS = new Set();
 let closeActiveLocationMenu = null;
@@ -231,14 +232,44 @@ function inventoryRow(
 	const row = document.createElement("div");
 	row.className = "classic-inventory__row";
 	if (depth > 0) row.classList.add("classic-inventory__row--nested");
+	const toggleableContainer = item.system?.isContainer === true && childCount > 0;
+	if (toggleableContainer) {
+		row.classList.add("classic-inventory__row--toggleable");
+	}
 	row.dataset.itemId = String(item.id ?? "");
 	row.style.setProperty("--classic-inventory-depth", String(depth));
-	row.title = localize(
-		`Double-click the item name to open ${item.name}.`,
-		`Kliknij dwukrotnie nazwę, aby otworzyć ${item.name}.`,
-	);
+	row.title = toggleableContainer
+		? localize(
+			`Click the container row to expand or collapse it. Double-click to open ${item.name}.`,
+			`Kliknij wiersz pojemnika, aby go rozwinąć lub zwinąć. Kliknij dwukrotnie, aby otworzyć ${item.name}.`,
+		)
+		: localize(
+			`Double-click the item name to open ${item.name}.`,
+			`Kliknij dwukrotnie nazwę, aby otworzyć ${item.name}.`,
+		);
+
+	let pendingContainerToggle = null;
+	if (toggleableContainer) {
+		row.addEventListener("click", (event) => {
+			if (inventoryRowControl(event.target)) return;
+			if (pendingContainerToggle !== null) {
+				clearTimeout(pendingContainerToggle);
+				pendingContainerToggle = null;
+			}
+			if (event.detail > 1) return;
+
+			pendingContainerToggle = setTimeout(() => {
+				pendingContainerToggle = null;
+				toggleContainer();
+			}, CONTAINER_ROW_CLICK_DELAY_MS);
+		});
+	}
 
 	row.addEventListener("dblclick", (event) => {
+		if (pendingContainerToggle !== null) {
+			clearTimeout(pendingContainerToggle);
+			pendingContainerToggle = null;
+		}
 		event.preventDefault();
 		event.stopPropagation();
 		void item.sheet?.render?.({ force: true });
@@ -293,6 +324,12 @@ function inventoryRow(
 
 	row.append(nameCell, location, encumbranceCell);
 	return row;
+}
+
+function inventoryRowControl(target) {
+	return target instanceof Element && Boolean(target.closest(
+		"button, input, select, textarea, a, [contenteditable='true']",
+	));
 }
 
 function createContainerToggle(item, childCount, expanded, toggleContainer) {

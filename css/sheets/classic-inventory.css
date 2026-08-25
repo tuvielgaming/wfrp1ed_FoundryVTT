@@ -180,6 +180,10 @@
 	background: rgb(105 79 47 / 3%);
 }
 
+.wfrp1ed-classic-sheet .classic-inventory__row--toggleable {
+	cursor: pointer;
+}
+
 .wfrp1ed-classic-sheet .classic-inventory__name-cell {
 	position: relative;
 	display: flex;
