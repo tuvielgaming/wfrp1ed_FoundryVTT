@@ -173,7 +173,11 @@ export class PeriodicDirectDamageEngine {
 			"duration.expired": false,
 			[`flags.${FLAG_SCOPE}.${RUNTIME_FLAG_KEY}`]: next,
 		});
-		return applyTick(actor, effect, next, null, next.lastClockEvent, cycle);
+		return foundry.utils.deepFreeze({
+			rearmed: true,
+			cycle,
+			generation: next.generation,
+		});
 	}
 }
 
