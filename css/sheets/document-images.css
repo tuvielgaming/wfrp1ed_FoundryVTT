@@ -4,8 +4,8 @@
 
 .wfrp1ed.sheet.item,
 .app.window-app.sheet.item-sheet {
-	--wfrp1ed-item-header-image-size: 116px;
-	--wfrp1ed-item-header-image-overhang: 32px;
+	--wfrp1ed-item-header-image-size: 88px;
+	--wfrp1ed-item-header-image-overhang: 31px;
 }
 
 /* Shared header contract for every compact system-owned Item sheet. Career
