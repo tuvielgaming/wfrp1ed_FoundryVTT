@@ -1,26 +1,5 @@
 .equipment-item-sheet .equipment-item-sheet__tabs {
-	display: flex;
-	gap: 4px;
-	padding: 10px 16px 0;
-}
-
-.equipment-item-sheet .equipment-item-sheet__tabs button {
-	width: auto;
-	min-height: 30px;
-	margin: 0;
-	padding: 4px 10px;
-	border: 1px solid rgb(70 51 30 / 34%);
-	border-bottom-color: rgb(70 51 30 / 52%);
-	background: rgb(232 223 204 / 72%);
-	color: #2a1b0d;
-	font-family: "Book Antiqua", "Times New Roman", serif;
-	font-size: 12px;
-	font-weight: 700;
-}
-
-.equipment-item-sheet .equipment-item-sheet__tabs button.is-active {
-	background: #d8c69f;
-	box-shadow: inset 0 -2px 0 #7a0019;
+	margin: 10px 16px 0;
 }
 
 .equipment-item-sheet .equipment-item-sheet__conditional {
@@ -61,6 +40,9 @@
 
 .equipment-item-sheet .equipment-effects-panel__header h3 {
 	font-size: 18px;
+	font-weight: 700;
+	color: #2a1b0d;
+	text-shadow: 0 1px 0 rgb(255 250 231 / 78%);
 }
 
 .equipment-item-sheet .equipment-effects-panel__header p,
