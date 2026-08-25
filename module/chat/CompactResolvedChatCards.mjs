@@ -259,9 +259,9 @@ function compactDamageCard(card) {
 	return details;
 }
 
-/* Applied damage is historical, but an unresolved detailed Critical is still an
- * actionable continuation of that damage. Keep only that action visible below
- * the compact damage header while the full damage audit remains folded. */
+/* Applied damage is historical, but an unresolved Detailed or Sudden Death
+ * Critical is still an actionable continuation of that damage. Keep only that
+ * action visible below the compact header while the full audit remains folded. */
 function syncVisibleCriticalAction(details, transaction) {
 	const existing = persistentCriticalActionHost(details);
 	const unresolved = Boolean(
@@ -277,6 +277,7 @@ function syncVisibleCriticalAction(details, transaction) {
 
 	const button =
 		details.querySelector?.("[data-wfrp-resolve-detailed-critical]") ??
+		details.querySelector?.("[data-wfrp-resolve-critical]") ??
 		details.querySelector?.(
 			"[data-wfrp-damage-result-actions] .wfrp1e-critical-result__action",
 		);
