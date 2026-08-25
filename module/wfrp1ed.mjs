@@ -7,6 +7,7 @@ import { Wfrp1edCombat } from "./documents/Wfrp1edCombat.mjs";
 import { Wfrp1edItem } from "./documents/Wfrp1edItem.mjs";
 import {
 	configureWfrpRuleEffectType,
+	RULE_EFFECT_APPLICABILITY,
 	RULE_EFFECT_OPERATIONS,
 	RULE_EFFECT_SIDES,
 	RuleEffectRegistry,
@@ -232,6 +233,33 @@ function registerRuleEffectTargets() {
 			consumer: "movement",
 			procedureId: "leap",
 			parameter: "distance",
+		},
+	});
+
+	/*
+	 * Special ammunition uses the same declarative Active Effect language as
+	 * Skills and other Items, but this first ranged consumer is intentionally
+	 * automatic-only. The damage layer reads the effect snapshot from the exact
+	 * ammunition variant fired; it never scans unrelated ammunition carried by
+	 * the Actor and never infers mechanics from an Item name or description.
+	 */
+	RuleEffectRegistry.registerTarget({
+		id: "combat.ranged.ammunition.damage",
+		category: "combat-ranged",
+		label: "Ammunition damage modifier",
+		labels: {
+			pl: "Modyfikator obrażeń amunicji",
+		},
+		sides: [RULE_EFFECT_SIDES.SELF],
+		operations: [
+			RULE_EFFECT_OPERATIONS.ADD,
+			RULE_EFFECT_OPERATIONS.SUBTRACT,
+		],
+		applicabilities: [RULE_EFFECT_APPLICABILITY.AUTOMATIC],
+		metadata: {
+			consumer: "combat-ranged",
+			parameter: "ammunitionDamageModifier",
+			source: "fired-ammunition",
 		},
 	});
 }
