@@ -22,7 +22,11 @@ export class WfrpActiveEffectSheet extends ActiveEffectConfig {
 	static DEFAULT_OPTIONS = foundry.utils.mergeObject(
 		ActiveEffectConfig.DEFAULT_OPTIONS,
 		{
-			classes: ["wfrp1ed", "wfrp1ed-active-effect-sheet"],
+			classes: [
+				...(ActiveEffectConfig.DEFAULT_OPTIONS.classes ?? []),
+				"wfrp1ed",
+				"wfrp1ed-active-effect-sheet",
+			],
 			position: {
 				width: 780,
 				height: 560,
