@@ -26,6 +26,7 @@ export class WfrpActiveEffectSheet extends ActiveEffectConfig {
 				...(ActiveEffectConfig.DEFAULT_OPTIONS.classes ?? []),
 				"wfrp1ed",
 				"wfrp1ed-active-effect-sheet",
+				"wfrp1ed-parchment-window",
 			],
 			position: {
 				width: 780,
@@ -40,7 +41,75 @@ export class WfrpActiveEffectSheet extends ActiveEffectConfig {
 
 	_onRender(context, options) {
 		super._onRender(context, options);
+		this.#decorateNativeTabs();
+		this.#replaceNativeWfrpRuleRows();
 		this.#activateWfrpRuleControls();
+	}
+
+	/**
+	 * Foundry owns the ActiveEffect Details / Duration / Changes markup. Apply
+	 * the shared WFRP tab contract to that native navigation instead of creating
+	 * another one-off tab style for this sheet.
+	 */
+	#decorateNativeTabs() {
+		const root = this.element;
+		if (!(root instanceof HTMLElement)) return;
+
+		for (const nav of root.querySelectorAll("nav.tabs, nav.sheet-tabs")) {
+			const controls = [...nav.querySelectorAll("[data-tab]")];
+			if (controls.length < 2) continue;
+			nav.classList.add("wfrp1ed-tabs");
+			nav.setAttribute("role", "tablist");
+
+			for (const control of controls) {
+				control.classList.add("wfrp1ed-tab");
+				control.setAttribute("role", "tab");
+				control.setAttribute(
+					"aria-selected",
+					control.classList.contains("active") ? "true" : "false",
+				);
+				control.addEventListener("click", () => {
+					requestAnimationFrame(() => syncNativeTabAria(nav));
+				});
+			}
+		}
+	}
+
+	/**
+	 * Defensive v14 compatibility path.
+	 *
+	 * Foundry materializes its runtime ActiveEffect change-type registry during
+	 * initialization. If a custom renderer is registered too late, Core falls
+	 * back to its raw Attribute Key / Value row. Replace only our own custom rows
+	 * after render so authors always receive the WFRP summary + Edit action.
+	 * The hidden canonical inputs keep Core form submission lossless.
+	 */
+	#replaceNativeWfrpRuleRows() {
+		const root = this.element;
+		if (!(root instanceof HTMLElement)) return;
+
+		const changes = sourceChanges(this.document);
+		for (let index = 0; index < changes.length; index += 1) {
+			const change = changes[index];
+			if (change?.type !== WFRP_RULE_CHANGE_TYPE) continue;
+			if (root.querySelector(`[data-wfrp-rule-change-index="${index}"]`)) continue;
+
+			const typeControl = root.querySelector(
+				`[name="changes.${index}.type"]`,
+			);
+			if (!(typeControl instanceof HTMLElement)) continue;
+
+			const nativeRow =
+				typeControl.closest("li") ??
+				typeControl.closest(".form-group") ??
+				typeControl.parentElement;
+			if (!(nativeRow instanceof HTMLElement)) continue;
+
+			const replacement = htmlElement(
+				ruleChangeMarkup(index, change, 50),
+			);
+			if (replacement) nativeRow.replaceWith(replacement);
+		}
 	}
 
 	#activateWfrpRuleControls() {
@@ -48,8 +117,8 @@ export class WfrpActiveEffectSheet extends ActiveEffectConfig {
 		if (!(root instanceof HTMLElement)) return;
 
 		const changesPanel =
-			root.querySelector('section[data-tab="changes"]') ??
-			root.querySelector('section[data-tab="effects"]');
+			root.querySelector('[data-tab="changes"]') ??
+			root.querySelector('[data-tab="effects"]');
 		if (!(changesPanel instanceof HTMLElement)) return;
 
 		if (!changesPanel.querySelector("[data-wfrp-rule-toolbar]")) {
@@ -130,21 +199,26 @@ export class WfrpActiveEffectSheet extends ActiveEffectConfig {
 /**
  * Foundry v14 native renderer for one custom WFRP ActiveEffect change type.
  *
- * Core calls CONFIG.ActiveEffect.changeTypes[type].render(context) for custom
- * rows. We keep the canonical change fields as hidden form controls so normal
- * ActiveEffectConfig submission remains lossless, while the visible row shows a
- * readable summary and opens RuleEffectDialog for actual authoring.
+ * The canonical change fields remain hidden form controls so normal
+ * ActiveEffectConfig submission is lossless. The visible row is an authored
+ * WFRP rule summary with explicit Edit and Delete actions.
  */
 export async function renderWfrpRuleChange(context = {}) {
-	const index = nonNegativeInteger(context.index, 0);
-	const change = context.change ?? {};
+	return ruleChangeMarkup(
+		nonNegativeInteger(context.index, 0),
+		context.change ?? {},
+		context.defaultPriority ?? 50,
+	);
+}
+
+function ruleChangeMarkup(index, change, defaultPriority = 50) {
 	const rule = decodeRuleEffectChange(change);
 	const title = rule
 		? RuleEffectRegistry.label(rule.target)
 		: localize("Unconfigured WFRP Rule", "Nieskonfigurowana reguła WFRP");
 	const summary = rule ? ruleSummary(rule) : localize(
-		"Open Configure to choose the rule target and value.",
-		"Otwórz Konfiguruj, aby wybrać cel reguły i wartość.",
+		"Open Edit to choose the rule target and value.",
+		"Otwórz Edytuj, aby wybrać cel reguły i wartość.",
 	);
 
 	return `
@@ -153,15 +227,15 @@ export async function renderWfrpRuleChange(context = {}) {
 			<input type="hidden" name="changes.${index}.type" value="${escapeHtml(WFRP_RULE_CHANGE_TYPE)}">
 			<input type="hidden" name="changes.${index}.value" value="${escapeHtml(String(change.value ?? ""))}">
 			<input type="hidden" name="changes.${index}.phase" value="${escapeHtml(String(change.phase ?? "final"))}">
-			<input type="hidden" name="changes.${index}.priority" value="${escapeHtml(String(change.priority ?? context.defaultPriority ?? 50))}">
+			<input type="hidden" name="changes.${index}.priority" value="${escapeHtml(String(change.priority ?? defaultPriority ?? 50))}">
 			<div class="wfrp1ed-rule-change__body">
 				<strong>${escapeHtml(title)}</strong>
 				<small>${escapeHtml(summary)}</small>
 			</div>
 			<div class="wfrp1ed-rule-change__actions">
-				<button type="button" data-wfrp-rule-configure="${index}" title="${escapeHtml(localize("Configure WFRP Rule", "Konfiguruj regułę WFRP"))}">
-					<i class="fa-solid fa-sliders" aria-hidden="true"></i>
-					<span>${escapeHtml(localize("Configure", "Konfiguruj"))}</span>
+				<button type="button" data-wfrp-rule-configure="${index}" title="${escapeHtml(localize("Edit WFRP Rule", "Edytuj regułę WFRP"))}">
+					<i class="fa-solid fa-pen" aria-hidden="true"></i>
+					<span>${escapeHtml(localize("Edit", "Edytuj"))}</span>
 				</button>
 				<button type="button" data-wfrp-rule-delete="${index}" class="icon" title="${escapeHtml(localize("Delete WFRP Rule", "Usuń regułę WFRP"))}">
 					<i class="fa-solid fa-trash" aria-hidden="true"></i>
@@ -169,6 +243,21 @@ export async function renderWfrpRuleChange(context = {}) {
 			</div>
 		</li>
 	`;
+}
+
+function htmlElement(markup) {
+	const template = document.createElement("template");
+	template.innerHTML = String(markup ?? "").trim();
+	return template.content.firstElementChild ?? null;
+}
+
+function syncNativeTabAria(nav) {
+	for (const control of nav?.querySelectorAll?.("[data-tab]") ?? []) {
+		control.setAttribute(
+			"aria-selected",
+			control.classList.contains("active") ? "true" : "false",
+		);
+	}
 }
 
 function sourceChanges(effect) {
