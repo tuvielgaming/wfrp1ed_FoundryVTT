@@ -1,11 +1,5 @@
 import { LayoutManager } from "./LayoutManager.mjs";
 
-const PHYSICAL_ITEM_TYPES = new Set([
-	"weapon",
-	"armour",
-	"equipment",
-]);
-
 const CLASSIC_PORTRAIT_X_OFFSET = 7;
 const CLASSIC_PORTRAIT_FLAG = "classicPortrait";
 const CLASSIC_PORTRAIT_DRAG_THRESHOLD = 4;
@@ -23,8 +17,8 @@ Hooks.on("renderApplicationV2", (application, element) => {
 	const root = element instanceof HTMLElement ? element : null;
 	if (!root) return;
 
-	if (isPhysicalItemSheet(application)) {
-		activatePhysicalItemImage(application, root);
+	if (application?.document?.documentName === "Item") {
+		activateItemImage(application, root);
 	}
 
 	if (isClassicActorSheet(application)) {
@@ -32,8 +26,8 @@ Hooks.on("renderApplicationV2", (application, element) => {
 	}
 });
 
-function activatePhysicalItemImage(application, root) {
-	const image = root.querySelector(".combat-item-sheet__image");
+function activateItemImage(application, root) {
+	const image = root.querySelector("[data-wfrp1ed-item-image]");
 	if (!(image instanceof HTMLImageElement)) return;
 
 	image.alt = application.document?.name ?? "";
@@ -405,13 +399,6 @@ function clampZoom(value) {
 	return Math.min(
 		CLASSIC_PORTRAIT_MAX_ZOOM,
 		Math.max(CLASSIC_PORTRAIT_MIN_ZOOM, value),
-	);
-}
-
-function isPhysicalItemSheet(application) {
-	return (
-		application?.document?.documentName === "Item" &&
-		PHYSICAL_ITEM_TYPES.has(application.document.type)
 	);
 }
 

@@ -1,6 +1,6 @@
 <section class="combat-item-sheet__content">
-	<header class="combat-item-sheet__header">
-		<img class="combat-item-sheet__image" src="{{item.img}}" alt="{{item.name}}">
+	<header class="combat-item-sheet__header wfrp1ed-item-header">
+		<img class="combat-item-sheet__image wfrp1ed-item-header__image" data-wfrp1ed-item-image src="{{item.img}}" alt="{{item.name}}">
 		<label class="combat-item-sheet__field combat-item-sheet__field--name">
 			<span>{{ui.name}}</span>
 			<input type="text" name="name" value="{{item.name}}" autocomplete="off" required {{#unless editable}}disabled{{/unless}}>

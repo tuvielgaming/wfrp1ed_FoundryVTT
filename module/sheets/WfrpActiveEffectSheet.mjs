@@ -95,7 +95,7 @@ export class WfrpActiveEffectSheet extends ActiveEffectConfig {
 			if (root.querySelector(`[data-wfrp-rule-change-index="${index}"]`)) continue;
 
 			const typeControl = root.querySelector(
-				`[name="changes.${index}.type"]`,
+				`[name="system.changes.${index}.type"], [name="changes.${index}.type"]`,
 			);
 			if (!(typeControl instanceof HTMLElement)) continue;
 
@@ -118,7 +118,6 @@ export class WfrpActiveEffectSheet extends ActiveEffectConfig {
 
 		const changesPanel = changesTabPanel(root);
 		if (!(changesPanel instanceof HTMLElement)) return;
-		markGuidedChangesPanel(changesPanel);
 
 		if (!changesPanel.querySelector("[data-wfrp-rule-toolbar]")) {
 			const toolbar = document.createElement("section");
@@ -159,14 +158,6 @@ export class WfrpActiveEffectSheet extends ActiveEffectConfig {
 			});
 		}
 
-		for (const button of root.querySelectorAll("[data-wfrp-rule-delete]")) {
-			button.addEventListener("click", (event) => {
-				event.preventDefault();
-				const index = nonNegativeInteger(button.dataset.wfrpRuleDelete, -1);
-				if (index < 0) return;
-				void this.#deleteWfrpRule(index).catch(reportAuthoringError);
-			});
-		}
 	}
 
 	async #configureWfrpRule(index) {
@@ -181,18 +172,10 @@ export class WfrpActiveEffectSheet extends ActiveEffectConfig {
 		if (Number.isInteger(index) && index >= 0) changes[index] = configured;
 		else changes.push(configured);
 
-		await this.document.update({ changes });
+		await this.document.update({ "system.changes": changes });
 		await this.render({ force: true });
 	}
 
-	async #deleteWfrpRule(index) {
-		if (!this.isEditable) return;
-		const changes = sourceChanges(this.document);
-		if (changes[index]?.type !== WFRP_RULE_CHANGE_TYPE) return;
-		changes.splice(index, 1);
-		await this.document.update({ changes });
-		await this.render({ force: true });
-	}
 }
 
 /**
@@ -212,6 +195,10 @@ export async function renderWfrpRuleChange(context = {}) {
 
 function ruleChangeMarkup(index, change, defaultPriority = 50) {
 	const rule = decodeRuleEffectChange(change);
+	const priority = change.priority ?? defaultPriority ?? 50;
+	const path = (field) => escapeHtml(String(
+		change[`${field}Path`] ?? `system.changes.${index}.${field}`,
+	));
 	const title = rule
 		? RuleEffectRegistry.label(rule.target)
 		: localize("Unconfigured WFRP Rule", "Nieskonfigurowana reguła WFRP");
@@ -221,24 +208,26 @@ function ruleChangeMarkup(index, change, defaultPriority = 50) {
 	);
 
 	return `
-		<li class="wfrp1ed-rule-change" data-wfrp-rule-change-index="${index}">
-			<input type="hidden" name="changes.${index}.key" value="${escapeHtml(String(change.key ?? ""))}">
-			<input type="hidden" name="changes.${index}.type" value="${escapeHtml(WFRP_RULE_CHANGE_TYPE)}">
-			<input type="hidden" name="changes.${index}.value" value="${escapeHtml(String(change.value ?? ""))}">
-			<input type="hidden" name="changes.${index}.phase" value="${escapeHtml(String(change.phase ?? "final"))}">
-			<input type="hidden" name="changes.${index}.priority" value="${escapeHtml(String(change.priority ?? defaultPriority ?? 50))}">
-			<div class="wfrp1ed-rule-change__body">
+		<li class="wfrp1ed-rule-change" data-index="${index}" data-wfrp-rule-change-index="${index}">
+			<input type="hidden" name="${path("key")}" value="${escapeHtml(String(change.key ?? ""))}">
+			<input type="hidden" name="${path("type")}" value="${escapeHtml(WFRP_RULE_CHANGE_TYPE)}">
+			<input type="hidden" name="${path("value")}" value="${escapeHtml(String(change.value ?? ""))}">
+			<input type="hidden" name="${path("phase")}" value="${escapeHtml(String(change.phase ?? "final"))}">
+			<div class="key wfrp1ed-rule-change__key">
 				<strong>${escapeHtml(title)}</strong>
-				<small>${escapeHtml(summary)}</small>
 			</div>
-			<div class="wfrp1ed-rule-change__actions">
-				<button type="button" data-wfrp-rule-configure="${index}" title="${escapeHtml(localize("Edit WFRP Rule", "Edytuj regułę WFRP"))}">
+			<div class="type wfrp1ed-rule-change__type">
+				<button type="button" class="wfrp1ed-rule-change__edit" data-wfrp-rule-configure="${index}" title="${escapeHtml(localize("Edit WFRP Rule", "Edytuj regułę WFRP"))}">
 					<i class="fa-solid fa-pen" aria-hidden="true"></i>
-					<span>${escapeHtml(localize("Edit", "Edytuj"))}</span>
+					<span>${escapeHtml(localize("WFRP · Edit", "WFRP · Edytuj"))}</span>
 				</button>
-				<button type="button" data-wfrp-rule-delete="${index}" class="icon" title="${escapeHtml(localize("Delete WFRP Rule", "Usuń regułę WFRP"))}">
-					<i class="fa-solid fa-trash" aria-hidden="true"></i>
-				</button>
+			</div>
+			<div class="value wfrp1ed-rule-change__value">${escapeHtml(summary)}</div>
+			<div class="priority wfrp1ed-rule-change__priority">
+				<input type="number" name="${path("priority")}" value="${escapeHtml(String(priority))}" placeholder="${escapeHtml(String(defaultPriority ?? 50))}">
+			</div>
+			<div class="controls wfrp1ed-rule-change__controls">
+				<button type="button" class="inline-control icon fa-solid fa-trash" data-action="deleteChange" title="${escapeHtml(localize("Delete WFRP Rule", "Usuń regułę WFRP"))}" aria-label="${escapeHtml(localize("Delete WFRP Rule", "Usuń regułę WFRP"))}"></button>
 			</div>
 		</li>
 	`;
@@ -256,15 +245,6 @@ function changesTabPanel(root) {
 		null;
 }
 
-function markGuidedChangesPanel(panel) {
-	const list = panel?.querySelector?.("[data-changes]");
-	if (!(list instanceof HTMLElement)) return;
-	const hasNativeRows = [...list.children].some((row) =>
-		row.matches("li") && !row.classList.contains("wfrp1ed-rule-change")
-	);
-	panel.classList.toggle("wfrp1ed-guided-changes", !hasNativeRows);
-}
-
 function syncNativeTabAria(nav) {
 	for (const control of nav?.querySelectorAll?.("[data-tab]") ?? []) {
 		control.setAttribute(
@@ -276,9 +256,14 @@ function syncNativeTabAria(nav) {
 
 function sourceChanges(effect) {
 	const source = effect?.toObject?.() ?? {};
-	return Array.isArray(source.changes)
-		? foundry.utils.deepClone(source.changes)
-		: [];
+	const changes = Array.isArray(source.changes)
+		? source.changes
+		: Array.isArray(source.system?.changes)
+			? source.system.changes
+			: Array.isArray(effect?.changes)
+				? effect.changes
+				: [];
+	return foundry.utils.deepClone(changes);
 }
 
 function ruleSummary(rule) {

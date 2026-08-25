@@ -115,15 +115,12 @@
 	min-width: 0;
 }
 
-/* Core v14 renders changes as a five-column grid and forces each list item to
- * `display: contents`. A guided WFRP summary is one coherent row, so span that
- * native grid and suppress its raw headings only when no native rows remain. */
-.wfrp1ed-active-effect-sheet .tab.changes.wfrp1ed-guided-changes > header {
-	display: none;
-}
-
-.wfrp1ed-active-effect-sheet .tab.changes.wfrp1ed-guided-changes > ol[data-changes] {
-	grid-template-columns: minmax(0, 1fr);
+/* Preserve Foundry's native five-column change table. Only its Value column
+ * consumes spare width, keeping ordinary and WFRP rows readable without
+ * stretching the whole editor beyond its useful maximum. */
+.wfrp1ed-active-effect-sheet .tab.changes > header,
+.wfrp1ed-active-effect-sheet .tab.changes > ol[data-changes] {
+	grid-template-columns: 12rem 7rem minmax(7rem, 1fr) 4rem 1rem;
 }
 
 .wfrp1ed-active-effect-sheet .wfrp1ed-rule-authoring-toolbar {
@@ -163,64 +160,71 @@
 	white-space: nowrap;
 }
 
-.wfrp1ed-active-effect-sheet .tab.changes ol[data-changes] > li.wfrp1ed-rule-change {
-	display: grid;
-	grid-column: 1 / -1;
-	grid-template-columns: minmax(0, 1fr) auto;
-	align-items: center;
-	gap: 12px;
-	width: 100%;
+.wfrp1ed-active-effect-sheet .wfrp1ed-rule-change > :is(.key, .type, .value, .priority, .controls) {
 	min-width: 0;
-	padding: 10px 8px;
-	border-top: 1px solid var(--wfrp-parchment-border-soft, rgb(58 47 33 / 34%));
 	border-bottom: 1px solid var(--wfrp-parchment-border-soft, rgb(58 47 33 / 34%));
+	padding: 7px 3px;
 	background: rgb(255 250 235 / 28%);
-}
-
-.wfrp1ed-active-effect-sheet .wfrp1ed-rule-change__body {
-	display: grid;
-	gap: 4px;
-	min-width: 0;
 	color: var(--wfrp-parchment-ink, #211d17);
 }
 
-.wfrp1ed-active-effect-sheet .wfrp1ed-rule-change__body strong {
-	font-size: 14px;
+.wfrp1ed-active-effect-sheet .wfrp1ed-rule-change__key strong {
+	display: block;
+	overflow: hidden;
+	font-size: 12px;
 	line-height: 1.2;
-}
-
-.wfrp1ed-active-effect-sheet .wfrp1ed-rule-change__body small {
-	line-height: 1.25;
-	white-space: normal;
-	color: var(--wfrp-parchment-ink-soft, #4c4336);
-}
-
-.wfrp1ed-active-effect-sheet .wfrp1ed-rule-change__actions {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-}
-
-.wfrp1ed-active-effect-sheet .wfrp1ed-rule-change__actions button {
-	width: auto;
-	min-width: 34px;
+	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 
+.wfrp1ed-active-effect-sheet .wfrp1ed-rule-change__value {
+	font-size: 11px;
+	line-height: 1.25;
+	white-space: normal;
+	overflow-wrap: anywhere;
+	color: var(--wfrp-parchment-ink-soft, #4c4336);
+}
+
+.wfrp1ed-active-effect-sheet .wfrp1ed-rule-change__edit {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+	width: 100%;
+	min-width: 0;
+	height: 26px;
+	min-height: 26px;
+	margin: 0;
+	padding: 2px 5px;
+	font-size: 10px;
+	line-height: 1;
+	white-space: nowrap;
+}
+
+.wfrp1ed-active-effect-sheet .wfrp1ed-rule-change__priority {
+	text-align: center;
+}
+
+.wfrp1ed-active-effect-sheet .wfrp1ed-rule-change__priority input {
+	text-align: center;
+}
+
+.wfrp1ed-active-effect-sheet .wfrp1ed-rule-change__controls button {
+	width: 1rem;
+	height: 1.5rem;
+	min-height: 0;
+	margin: 0;
+	padding: 0;
+}
+
 @media (max-width: 680px) {
-	.wfrp1ed-active-effect-sheet .wfrp1ed-rule-authoring-toolbar,
-	.wfrp1ed-active-effect-sheet .wfrp1ed-rule-change {
-		grid-template-columns: 1fr;
+	.wfrp1ed-active-effect-sheet .wfrp1ed-rule-authoring-toolbar {
 		flex-direction: column;
 		align-items: stretch;
 	}
 
 	.wfrp1ed-active-effect-sheet .wfrp1ed-rule-authoring-toolbar__add {
 		width: 100%;
-	}
-
-	.wfrp1ed-active-effect-sheet .wfrp1ed-rule-change__actions {
-		justify-content: flex-end;
 	}
 }
 

@@ -37,6 +37,19 @@
 	padding: 16px 16px 10px;
 }
 
+.skill-item-sheet .skill-sheet-header {
+	min-width: 0;
+}
+
+.skill-item-sheet .skill-sheet-image {
+	border: 1px solid var(--skill-sheet-border-color);
+}
+
+.skill-item-sheet .skill-sheet-header .skill-sheet-field--name {
+	grid-template-columns: 1fr;
+	gap: 5px;
+}
+
 /******************************************************************/
 /* Fields                                                         */
 /******************************************************************/

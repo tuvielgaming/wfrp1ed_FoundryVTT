@@ -2,7 +2,40 @@
 /* Foundry document image interaction                              */
 /******************************************************************/
 
-.combat-item-sheet .combat-item-sheet__image.wfrp1ed-document-image--editable,
+.wfrp1ed.sheet.item,
+.app.window-app.sheet.item-sheet {
+	--wfrp1ed-item-header-image-size: 84px;
+}
+
+/* Shared header contract for every compact system-owned Item sheet. Career
+ * Items keep their purpose-built full-page illustration instead. */
+.wfrp1ed.sheet.item .wfrp1ed-item-header {
+	display: grid;
+	grid-template-columns:
+		var(--wfrp1ed-item-header-image-size)
+		minmax(0, 1fr);
+	align-items: end;
+	gap: 12px;
+}
+
+.wfrp1ed.sheet.item .wfrp1ed-item-header__image {
+	display: block;
+	width: var(--wfrp1ed-item-header-image-size);
+	height: var(--wfrp1ed-item-header-image-size);
+	border-radius: 4px;
+	object-fit: cover;
+}
+
+/* Trait, Spell and any future unaudited Item types currently use Foundry's
+ * compact fallback Item sheet. Give that native header the same image size. */
+.app.window-app.sheet.item-sheet .sheet-header > img {
+	flex: 0 0 var(--wfrp1ed-item-header-image-size);
+	width: var(--wfrp1ed-item-header-image-size);
+	height: var(--wfrp1ed-item-header-image-size);
+	object-fit: cover;
+}
+
+.wfrp1ed.sheet.item [data-wfrp1ed-item-image].wfrp1ed-document-image--editable,
 .wfrp1ed-classic-sheet .classic-actor-portrait.wfrp1ed-document-image--editable {
 	cursor: pointer;
 	transition:
@@ -10,7 +43,7 @@
 		outline-color 0.12s ease;
 }
 
-.combat-item-sheet .combat-item-sheet__image.wfrp1ed-document-image--editable:hover {
+.wfrp1ed.sheet.item [data-wfrp1ed-item-image].wfrp1ed-document-image--editable:hover {
 	filter: brightness(1.06);
 	outline: 1px solid rgb(70 51 30 / 55%);
 	outline-offset: 2px;

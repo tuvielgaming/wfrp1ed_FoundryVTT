@@ -1,19 +1,28 @@
 <section class="skill-sheet-content">
-	<div class="skill-sheet-field skill-sheet-field--name">
-		<label for="skill-name-{{item.id}}">
-			{{localize "WFRP1ED.SkillSheet.Name"}}
-		</label>
-
-		<input
-			id="skill-name-{{item.id}}"
-			type="text"
-			name="name"
-			value="{{item.name}}"
-			autocomplete="off"
-			required
-			{{#unless editable}}disabled{{/unless}}
+	<header class="skill-sheet-header wfrp1ed-item-header">
+		<img
+			class="skill-sheet-image wfrp1ed-item-header__image"
+			data-wfrp1ed-item-image
+			src="{{item.img}}"
+			alt="{{item.name}}"
 		>
-	</div>
+
+		<div class="skill-sheet-field skill-sheet-field--name">
+			<label for="skill-name-{{item.id}}">
+				{{localize "WFRP1ED.SkillSheet.Name"}}
+			</label>
+
+			<input
+				id="skill-name-{{item.id}}"
+				type="text"
+				name="name"
+				value="{{item.name}}"
+				autocomplete="off"
+				required
+				{{#unless editable}}disabled{{/unless}}
+			>
+		</div>
+	</header>
 
 	<div class="skill-sheet-field skill-sheet-field--rules-id">
 		<label
