@@ -1,8 +1,8 @@
 # FOUNDRY_V14_GUIDELINES.md
 
-Version: 1.1
+Version: 1.2
 Status: ACTIVE
-Last Updated: 2026-08-21
+Last Updated: 2026-08-25
 
 ===============================================================================
 PURPOSE
@@ -43,7 +43,7 @@ DOCUMENT MODEL
 
 Documents own game data.
 
-Examples:
+Examples
 
 Actor
 
@@ -109,7 +109,7 @@ PREPAREDERIVEDDATA
 
 prepareDerivedData() is responsible for derived game values.
 
-Examples:
+Examples
 
 current characteristics
 
@@ -133,7 +133,7 @@ DISPLAYBUILDER
 
 DisplayBuilder converts game data into presentation data.
 
-Examples:
+Examples
 
 +30
 
@@ -157,7 +157,7 @@ PREPARECONTEXT
 
 _prepareContext() assembles template context.
 
-Typical responsibilities:
+Typical responsibilities
 
 Expose actor.system
 
@@ -179,7 +179,7 @@ Templates render data.
 
 Templates should contain minimal logic.
 
-Avoid:
+Avoid
 
 mathematics
 
@@ -230,7 +230,7 @@ THEMEMANAGER
 
 ThemeManager owns visual assets.
 
-Examples:
+Examples
 
 background images
 
@@ -267,7 +267,7 @@ PARTS
 
 Use PARTS to organize complex applications.
 
-Typical examples:
+Typical examples
 
 header
 
@@ -354,6 +354,58 @@ WFRP checkbox wrapper is a defect and should be fixed before the feature is
 considered complete.
 
 ===============================================================================
+SYSTEM TABS AND NAVIGATION — HARD CONVENTION
+===============================================================================
+
+Tabbed WFRP1ED surfaces must use one shared visual and behavioural contract.
+This applies to current and future:
+
+Actor sheets
+
+Item sheets
+
+ApplicationV2 windows
+
+DialogV2 or modal workflows which genuinely require tabs
+
+system-owned configuration/management windows
+
+Do not invent a new tab font, colour, active marker, or button treatment for an
+individual feature.
+
+System-owned tab markup uses:
+
+.wfrp1ed-tabs
+
+.wfrp1ed-tab
+
+The shared visual contract is defined in:
+
+css/sheets/parchment-window.css
+
+When Foundry owns the native tab markup, a thin system sheet integration may add
+these classes at render time rather than duplicating or replacing Foundry's tab
+controller.
+
+Behavioural contract:
+
+- The first/default tab is selected only when a new application instance opens.
+- Once the user selects another tab, document updates and ordinary rerenders must
+  preserve that selection.
+- A create/update/delete operation inside the current tab must not silently send
+  the user back to the default tab.
+- Application-local ephemeral state should be kept outside Documents (for example
+  WeakMap/application state) unless persistence across closing/reopening is an
+  explicit feature requirement.
+- Tab controls should expose tablist/tab semantics and aria-selected state.
+- Keyboard navigation should be preserved when native Foundry tabs provide it;
+  custom tab controllers should support the same predictable navigation where
+  practical.
+
+A tabbed surface which resets on rerender or uses an unrelated one-off visual
+style is a defect and should not be considered complete.
+
+===============================================================================
 LEGACY CODE
 ===============================================================================
 
@@ -422,6 +474,9 @@ For every feature ask:
 □ Is CSS responsible for appearance?
 
 □ Does every system-owned checkbox use the canonical WFRP checkbox contract?
+
+□ Does every tabbed WFRP surface use the shared tab style and preserve the
+  user's selected tab across rerenders?
 
 If any answer is NO,
 
