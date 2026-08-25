@@ -72,22 +72,27 @@
 	font-weight: 700;
 }
 
-.combat-damage-context__effect-row {
+.combat-damage-context__effect-heading {
 	display: block;
 	padding-left: 0.4rem;
 	font-size: 0.95em;
+	font-weight: 700;
+	overflow-wrap: anywhere;
 }
 
-.combat-damage-context__effect-row > span,
-.combat-damage-context__effect-row > strong {
-	display: block;
-	text-align: left;
+.combat-damage-context__effect-row {
+	grid-template-columns: minmax(0, 1fr) auto;
+	padding-left: 0.8rem;
+}
+
+.combat-damage-context__effect-row > span {
+	min-width: 0;
 	overflow-wrap: anywhere;
 }
 
 .combat-damage-context__effect-row > strong {
-	margin-top: 0.08rem;
-	font-weight: 500;
+	text-align: right;
+	white-space: nowrap;
 }
 
 .combat-damage-context__effect-end {

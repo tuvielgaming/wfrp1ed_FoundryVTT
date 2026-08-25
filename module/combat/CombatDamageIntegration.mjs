@@ -1252,9 +1252,24 @@ function appendDamageRuleDetails(root, entries) {
 		root.append(heading);
 
 		for (const effect of group.effects) {
-			const row = detailRow(effect.effectName, effect.valueLabel);
-			row.classList.add("combat-damage-context__effect-row");
-			root.append(row);
+			const effectHeading = document.createElement("div");
+			effectHeading.className = "combat-damage-context__effect-heading";
+			effectHeading.textContent = effect.effectName;
+			root.append(effectHeading);
+
+			for (const change of effect.changes) {
+				const row = document.createElement("div");
+				row.className = "combat-damage-context__row combat-damage-context__effect-row";
+				const label = document.createElement("span");
+				label.textContent = change.label;
+				row.append(label);
+				if (change.valueLabel) {
+					const value = document.createElement("strong");
+					value.textContent = change.valueLabel;
+					row.append(value);
+				}
+				root.append(row);
+			}
 		}
 
 		const end = document.createElement("div");

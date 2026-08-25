@@ -360,11 +360,21 @@ function damageRuleRowsHtml(entries) {
 		`);
 		for (const effect of group.effects) {
 			rows.push(`
-				<div class="wfrp1e-damage-card__row wfrp1e-damage-card__effect-row" data-wfrp-damage-rule-effect>
+				<div class="wfrp1e-damage-card__row wfrp1e-damage-card__effect-heading" data-wfrp-damage-rule-effect>
 					<span>${escapeHtml(effect.effectName)}</span>
-					<strong>${escapeHtml(effect.valueLabel)}</strong>
 				</div>
 			`);
+			for (const change of effect.changes) {
+				const value = change.valueLabel
+					? `<strong>${escapeHtml(change.valueLabel)}</strong>`
+					: "";
+				rows.push(`
+					<div class="wfrp1e-damage-card__row wfrp1e-damage-card__effect-row" data-wfrp-damage-rule-effect>
+						<span>${escapeHtml(change.label)}</span>
+						${value}
+					</div>
+				`);
+			}
 		}
 		rows.push(`
 			<div class="wfrp1e-damage-card__row wfrp1e-damage-card__effect-end" data-wfrp-damage-rule-end aria-hidden="true"></div>

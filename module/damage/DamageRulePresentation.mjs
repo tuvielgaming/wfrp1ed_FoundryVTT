@@ -21,8 +21,8 @@ export function damageRuleEffectGroups(entries = []) {
 
 	for (const entry of Array.isArray(entries) ? entries : []) {
 		if (!entry || typeof entry !== "object") continue;
-		const result = damageRuleResultLabel(entry);
-		if (!result) continue;
+		const change = damageRuleChangePresentation(entry);
+		if (!change) continue;
 
 		const sourceKind = text(entry.sourceKind) || "item";
 		const sourceName = text(entry.sourceName) || sourceKindLabel(sourceKind);
@@ -44,10 +44,10 @@ export function damageRuleEffectGroups(entries = []) {
 		const effectKey = [text(entry.effectId), effectName].join("|");
 		let effect = source.effects.get(effectKey);
 		if (!effect) {
-			effect = { effectName, results: [] };
+			effect = { effectName, changes: [] };
 			source.effects.set(effectKey, effect);
 		}
-		if (!effect.results.includes(result)) effect.results.push(result);
+		effect.changes.push(change);
 	}
 
 	return Object.freeze([...sources.values()].map((source) => Object.freeze({
@@ -56,7 +56,9 @@ export function damageRuleEffectGroups(entries = []) {
 		effects: Object.freeze([...source.effects.values()].map((effect) =>
 			Object.freeze({
 				effectName: effect.effectName,
-				valueLabel: effect.results.join(" · "),
+				changes: Object.freeze(effect.changes.map((change) =>
+					Object.freeze({ ...change })
+				)),
 			})
 		)),
 	})));
@@ -70,22 +72,31 @@ export function damageRuleSourceHeading(sourceName) {
 	);
 }
 
-function damageRuleResultLabel(entry) {
+function damageRuleChangePresentation(entry) {
 	const targetId = text(entry.resolvedTargetId || entry.targetId);
 	switch (targetId) {
 		case DAMAGE_AMOUNT_MODIFIER_TARGET_ID:
-			return signedNumber(entry.value);
+			return {
+				label: localize("Damage", "Obrażenia"),
+				valueLabel: signedNumber(entry.value),
+			};
 		case DAMAGE_ARMOUR_PENETRATION_TARGET_ID:
-			return localize(
-				`Armour penetration ${formatNumber(entry.value)}`,
-				`Przebicie pancerza ${formatNumber(entry.value)}`,
-			);
+			return {
+				label: localize("Armour penetration", "Przebicie pancerza"),
+				valueLabel: signedNumber(entry.value),
+			};
 		case DAMAGE_IGNORE_ARMOUR_TARGET_ID:
-			return localize("Ignores Armour", "Pomija Pancerz");
+			return {
+				label: localize("Ignores Armour", "Pomija Pancerz"),
+				valueLabel: "",
+			};
 		case DAMAGE_IGNORE_TOUGHNESS_TARGET_ID:
-			return localize("Ignores Toughness", "Pomija Wytrzymałość");
+			return {
+				label: localize("Ignores Toughness", "Pomija Wytrzymałość"),
+				valueLabel: "",
+			};
 		default:
-			return "";
+			return null;
 	}
 }
 

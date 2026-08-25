@@ -39,25 +39,31 @@
 	font-weight: 700;
 }
 
-.wfrp1e-damage-card__effect-row {
+.wfrp1e-damage-card__effect-heading {
 	display: block;
 	padding-left: 0.45rem;
+	font-size: 0.86rem;
+	font-weight: 700;
+	overflow-wrap: anywhere;
+}
+
+.wfrp1e-damage-card__effect-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: baseline;
+	gap: 0.5rem;
+	padding-left: 0.9rem;
 	font-size: 0.86rem;
 }
 
 .wfrp1e-damage-card__effect-row > span {
-	display: block;
-	font-weight: 600;
+	min-width: 0;
 	overflow-wrap: anywhere;
 }
 
 .wfrp1e-damage-card__effect-row > strong {
-	display: block;
-	margin-top: 0.08rem;
-	font-weight: 500;
-	line-height: 1.25;
-	text-align: left;
-	overflow-wrap: anywhere;
+	text-align: right;
+	white-space: nowrap;
 }
 
 .wfrp1e-damage-card__effect-end {
