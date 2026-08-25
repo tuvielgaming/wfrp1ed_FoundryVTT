@@ -177,8 +177,8 @@ export function encodeRuleEffectChange(input = {}) {
 	);
 	const applicability = normalizeAllowed(
 		input.applicability,
-		Object.values(RULE_EFFECT_APPLICABILITY),
-		RULE_EFFECT_APPLICABILITY.CONTEXTUAL,
+		target.applicabilities,
+		defaultApplicability(target),
 		"applicability",
 	);
 	const side = normalizeAllowed(
@@ -269,8 +269,8 @@ export function decodeRuleEffectChange(change) {
 			formula: String(payload.formula ?? "").trim(),
 			applicability: normalizeAllowed(
 				payload.applicability,
-				Object.values(RULE_EFFECT_APPLICABILITY),
-				RULE_EFFECT_APPLICABILITY.CONTEXTUAL,
+				target.applicabilities,
+				defaultApplicability(target),
 				"applicability",
 			),
 			side: normalizeAllowed(
@@ -316,6 +316,12 @@ function normalizeTargetDefinition(definition = {}) {
 		[RULE_EFFECT_OPERATIONS.ADD],
 		"operation",
 	);
+	const applicabilities = normalizeList(
+		definition.applicabilities,
+		Object.values(RULE_EFFECT_APPLICABILITY),
+		Object.values(RULE_EFFECT_APPLICABILITY),
+		"applicability",
+	);
 
 	return Object.freeze({
 		id,
@@ -325,6 +331,7 @@ function normalizeTargetDefinition(definition = {}) {
 		labels,
 		sides: Object.freeze(sides),
 		operations: Object.freeze(operations),
+		applicabilities: Object.freeze(applicabilities),
 		valueRequired: definition.valueRequired !== false,
 		metadata: Object.freeze({
 			...(definition.metadata ?? {}),
@@ -353,6 +360,13 @@ function normalizeLabels(value) {
 	}
 
 	return Object.freeze(labels);
+}
+
+function defaultApplicability(target) {
+	if (target?.applicabilities?.includes(RULE_EFFECT_APPLICABILITY.CONTEXTUAL)) {
+		return RULE_EFFECT_APPLICABILITY.CONTEXTUAL;
+	}
+	return target?.applicabilities?.[0] ?? RULE_EFFECT_APPLICABILITY.CONTEXTUAL;
 }
 
 function normalizeAllowed(value, allowed, fallback, label) {
