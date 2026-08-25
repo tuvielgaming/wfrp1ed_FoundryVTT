@@ -153,8 +153,8 @@ export function configureWfrpRuleEffectType() {
  * Build one JSON-safe Foundry ActiveEffect change record.
  *
  * `key` owns the stable consumer parameter id. `value` stores WFRP metadata as
- * JSON because Foundry's ActiveEffect change schema deliberately provides one
- * string value field for package-defined change types.
+ * JSON. Foundry v14 may deserialize that JSON into an object while preparing an
+ * ActiveEffect, so the decoder below deliberately accepts both representations.
  *
  * @param {Object} input
  * @returns {Object}
@@ -239,13 +239,15 @@ export function decodeRuleEffectChange(change) {
 		return null;
 	}
 
-	let payload;
+	let payload = change.value;
 
-	try {
-		payload = JSON.parse(String(change.value ?? "{}"));
-	}
-	catch (_error) {
-		return null;
+	if (!payload || typeof payload !== "object") {
+		try {
+			payload = JSON.parse(String(payload ?? "{}"));
+		}
+		catch (_error) {
+			return null;
+		}
 	}
 
 	if (
