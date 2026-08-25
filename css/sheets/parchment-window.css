@@ -92,6 +92,84 @@
 }
 
 /******************************************************************/
+/* Shared system tabs                                             */
+/******************************************************************/
+
+/*
+ * HARD visual contract for WFRP-owned tab navigation. Layout owners may add
+ * margins around this component, but must not redefine tab typography, active
+ * state, or colours per sheet. Native Foundry tab controls can receive these
+ * classes at render time when their markup is not owned by the system.
+ */
+.wfrp1ed-tabs {
+	display: flex;
+	align-items: stretch;
+	gap: 0;
+	min-width: 0;
+	border: 1px solid var(--wfrp-parchment-border-soft, rgb(58 47 33 / 42%));
+	border-radius: 4px 4px 0 0;
+	background: rgb(61 51 42 / 10%);
+	overflow: hidden;
+}
+
+.wfrp1ed-tabs > .wfrp1ed-tab {
+	position: relative;
+	display: inline-flex;
+	flex: 1 1 0;
+	align-items: center;
+	justify-content: center;
+	gap: 7px;
+	width: auto;
+	min-width: 0;
+	height: 38px;
+	min-height: 38px;
+	margin: 0;
+	padding: 0 12px;
+	border: 0;
+	border-right: 1px solid rgb(55 43 31 / 28%);
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+	font-family: "Book Antiqua", "Times New Roman", serif;
+	font-size: 15px;
+	font-weight: 700;
+	line-height: 1;
+	text-decoration: none;
+	white-space: nowrap;
+	color: var(--wfrp-parchment-ink-soft, #4c4336);
+	text-shadow: 0 1px 0 rgb(255 255 255 / 30%);
+}
+
+.wfrp1ed-tabs > .wfrp1ed-tab:last-child {
+	border-right: 0;
+}
+
+.wfrp1ed-tabs > .wfrp1ed-tab:hover,
+.wfrp1ed-tabs > .wfrp1ed-tab:focus-visible {
+	background: rgb(255 250 235 / 42%);
+	color: var(--wfrp-parchment-ink, #211d17);
+}
+
+.wfrp1ed-tabs > .wfrp1ed-tab.is-active,
+.wfrp1ed-tabs > .wfrp1ed-tab.active,
+.wfrp1ed-tabs > .wfrp1ed-tab[aria-selected="true"] {
+	background: rgb(255 248 228 / 72%);
+	color: var(--wfrp-parchment-ink, #211d17);
+}
+
+.wfrp1ed-tabs > .wfrp1ed-tab.is-active::after,
+.wfrp1ed-tabs > .wfrp1ed-tab.active::after,
+.wfrp1ed-tabs > .wfrp1ed-tab[aria-selected="true"]::after {
+	content: "";
+	position: absolute;
+	left: 14px;
+	right: 14px;
+	bottom: 0;
+	height: 3px;
+	background: var(--wfrp-parchment-focus, #7a0019);
+}
+
+/******************************************************************/
 /* Common form controls                                           */
 /******************************************************************/
 
