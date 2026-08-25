@@ -107,6 +107,7 @@ function foldDedicatedDamageDetails(message, root) {
 	const details = document.createElement("details");
 	details.className = "wfrp1e-damage-card__details";
 	details.dataset.wfrpDamageFoldedDetails = "";
+	details.dataset.wfrpDisclosureKey = "combat-damage-details";
 	const summary = document.createElement("summary");
 	summary.textContent = localize("Damage details", "Szczegóły obrażeń");
 	details.append(summary);

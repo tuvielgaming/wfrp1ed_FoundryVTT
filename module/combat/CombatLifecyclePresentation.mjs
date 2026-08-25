@@ -288,7 +288,7 @@ function damageResultContent(damageState, rollState, targetName) {
 	}
 	if (Number(unmitigated.value) > 0) {
 		rows.push(rowHtml(
-			localize("Unmitigated damage", "Obrażenia bez redukcji"),
+			localize("Added after mitigation", "Dodane po redukcjach"),
 			signedInteger(unmitigated.value),
 		));
 	}

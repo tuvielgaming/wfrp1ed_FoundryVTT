@@ -941,8 +941,8 @@ function applyRangedDamageAudiencePolicy(message, card, attack) {
 		"Obrażenia dodatkowe",
 		"Before Toughness",
 		"Przed Wytrzymałością",
-		"Unmitigated damage",
-		"Obrażenia bez redukcji",
+		"Added after mitigation",
+		"Dodane po redukcjach",
 	]);
 	const defenderLabels = new Set([
 		"Toughness",

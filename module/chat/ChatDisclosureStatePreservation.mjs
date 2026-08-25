@@ -1,8 +1,12 @@
-const TARGET_DISCLOSURE_SELECTOR = "details.wfrp1e-test-card__target";
+const MANAGED_DISCLOSURE_SELECTOR = [
+	"details.wfrp1e-test-card__target",
+	"details[data-wfrp-disclosure-key]",
+].join(", ");
 const disclosureStates = new Map();
+const boundDisclosures = new WeakSet();
 
 /*
- * Preserve the user's local open/closed state for expandable WFRP test-card
+ * Preserve the user's local open/closed state for expandable WFRP chat-card
  * breakdowns while a ChatMessage is re-rendered.
  *
  * Manual roll/modifier edits update the ChatMessage content. Foundry then
@@ -18,12 +22,17 @@ Hooks.on("renderChatMessageHTML", (message, html) => {
 	const root = asElement(html);
 	if (!root) return;
 
-	const disclosures = targetDisclosures(root);
-	if (disclosures.length === 0) return;
-
 	const messageId = String(message?.id ?? "").trim();
 	if (!messageId) return;
+	preserveDisclosures(messageId, root);
 
+	/* Some shared disclosures are assembled by later presentation hooks. */
+	requestAnimationFrame(() => preserveDisclosures(messageId, root));
+});
+
+function preserveDisclosures(messageId, root) {
+	const disclosures = managedDisclosures(root);
+	if (disclosures.length === 0) return;
 	let state = disclosureStates.get(messageId);
 	if (!state) {
 		state = new Map();
@@ -38,23 +47,25 @@ Hooks.on("renderChatMessageHTML", (message, html) => {
 			state.set(key, details.open === true);
 		}
 
+		if (boundDisclosures.has(details)) continue;
+		boundDisclosures.add(details);
 		details.addEventListener("toggle", () => {
 			const current = disclosureStates.get(messageId) ?? new Map();
 			current.set(key, details.open === true);
 			disclosureStates.set(messageId, current);
 		});
 	}
-});
+}
 
 Hooks.on("deleteChatMessage", (message) => {
 	const messageId = String(message?.id ?? "").trim();
 	if (messageId) disclosureStates.delete(messageId);
 });
 
-function targetDisclosures(root) {
+function managedDisclosures(root) {
 	const results = [];
-	if (root.matches?.(TARGET_DISCLOSURE_SELECTOR)) results.push(root);
-	results.push(...(root.querySelectorAll?.(TARGET_DISCLOSURE_SELECTOR) ?? []));
+	if (root.matches?.(MANAGED_DISCLOSURE_SELECTOR)) results.push(root);
+	results.push(...(root.querySelectorAll?.(MANAGED_DISCLOSURE_SELECTOR) ?? []));
 	return results;
 }
 

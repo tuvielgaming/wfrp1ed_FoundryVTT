@@ -375,7 +375,7 @@ function buildResolvedDamagePanel(message, damageState, rollState, defender) {
 	}
 	if (Number(unmitigated.value) > 0) {
 		body.append(detailRow(
-			localize("Unmitigated damage", "Obrażenia bez redukcji"),
+			localize("Added after mitigation", "Dodane po redukcjach"),
 			signedInteger(unmitigated.value),
 		));
 	}
