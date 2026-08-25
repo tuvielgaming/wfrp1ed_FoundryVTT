@@ -44,6 +44,72 @@
 /* Native Foundry v14 ActiveEffectConfig — WFRP authoring layer   */
 /******************************************************************/
 
+/* The resize handle must resize the useful editor, not only its outer shell.
+ * Neutralize the broad legacy `.tab` sizing rule for this modern v14 sheet and
+ * let the native form/tab panels consume the available width and height. */
+.wfrp1ed-active-effect-sheet .window-content {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+	overflow: hidden;
+	padding: 12px 16px 14px;
+}
+
+.wfrp1ed-active-effect-sheet .window-content > form,
+.wfrp1ed-active-effect-sheet form.standard-form {
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
+	width: 100%;
+	min-width: 0;
+	min-height: 0;
+}
+
+.wfrp1ed-active-effect-sheet .tab {
+	width: 100%;
+	min-width: 0;
+	height: auto;
+	min-height: 0;
+	padding: 10px 0 0;
+	font-size: inherit;
+}
+
+.wfrp1ed-active-effect-sheet .tab.active,
+.wfrp1ed-active-effect-sheet [data-tab].active:not(.wfrp1ed-tab) {
+	flex: 1 1 auto;
+	overflow: auto;
+}
+
+.wfrp1ed-active-effect-sheet nav.wfrp1ed-tabs {
+	flex: 0 0 auto;
+	width: 100%;
+	margin: 0 0 2px;
+}
+
+.wfrp1ed-active-effect-sheet [data-tab="changes"] {
+	width: 100%;
+	max-width: none;
+	min-width: 0;
+}
+
+.wfrp1ed-active-effect-sheet [data-tab="changes"] :is(ol, ul) {
+	box-sizing: border-box;
+	width: 100%;
+	max-width: none;
+	min-width: 0;
+}
+
+.wfrp1ed-active-effect-sheet [data-tab="changes"] :is(li, .form-group) {
+	box-sizing: border-box;
+	max-width: none;
+	min-width: 0;
+}
+
+.wfrp1ed-active-effect-sheet [data-tab="changes"] .form-fields {
+	min-width: 0;
+}
+
 .wfrp1ed-active-effect-sheet .wfrp1ed-rule-authoring-toolbar {
 	display: flex;
 	align-items: center;
@@ -51,9 +117,9 @@
 	gap: 16px;
 	margin: 0 0 12px;
 	padding: 10px 12px;
-	border: 1px solid rgb(216 177 102 / 45%);
+	border: 1px solid var(--wfrp-parchment-border-soft, rgb(58 47 33 / 42%));
 	border-radius: 4px;
-	background: rgb(110 83 43 / 14%);
+	background: rgb(110 83 43 / 10%);
 }
 
 .wfrp1ed-active-effect-sheet .wfrp1ed-rule-authoring-toolbar__copy {
@@ -62,9 +128,14 @@
 	min-width: 0;
 }
 
+.wfrp1ed-active-effect-sheet .wfrp1ed-rule-authoring-toolbar__copy strong {
+	font-size: 16px;
+	color: var(--wfrp-parchment-ink, #211d17);
+}
+
 .wfrp1ed-active-effect-sheet .wfrp1ed-rule-authoring-toolbar__copy small {
-	line-height: 1.25;
-	opacity: 0.78;
+	line-height: 1.3;
+	color: var(--wfrp-parchment-ink-soft, #4c4336);
 }
 
 .wfrp1ed-active-effect-sheet .wfrp1ed-rule-authoring-toolbar__add {
@@ -78,25 +149,30 @@
 	grid-template-columns: minmax(0, 1fr) auto;
 	align-items: center;
 	gap: 12px;
-	padding: 8px 6px;
-	border-bottom: 1px solid rgb(255 255 255 / 12%);
+	width: 100%;
+	min-width: 0;
+	padding: 10px 8px;
+	border-top: 1px solid var(--wfrp-parchment-border-soft, rgb(58 47 33 / 34%));
+	border-bottom: 1px solid var(--wfrp-parchment-border-soft, rgb(58 47 33 / 34%));
+	background: rgb(255 250 235 / 28%);
 }
 
 .wfrp1ed-active-effect-sheet .wfrp1ed-rule-change__body {
 	display: grid;
-	gap: 3px;
+	gap: 4px;
 	min-width: 0;
+	color: var(--wfrp-parchment-ink, #211d17);
 }
 
-.wfrp1ed-active-effect-sheet .wfrp1ed-rule-change__body strong,
-.wfrp1ed-active-effect-sheet .wfrp1ed-rule-change__body small {
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+.wfrp1ed-active-effect-sheet .wfrp1ed-rule-change__body strong {
+	font-size: 14px;
+	line-height: 1.2;
 }
 
 .wfrp1ed-active-effect-sheet .wfrp1ed-rule-change__body small {
-	opacity: 0.78;
+	line-height: 1.25;
+	white-space: normal;
+	color: var(--wfrp-parchment-ink-soft, #4c4336);
 }
 
 .wfrp1ed-active-effect-sheet .wfrp1ed-rule-change__actions {
@@ -121,6 +197,10 @@
 
 	.wfrp1ed-active-effect-sheet .wfrp1ed-rule-authoring-toolbar__add {
 		width: 100%;
+	}
+
+	.wfrp1ed-active-effect-sheet .wfrp1ed-rule-change__actions {
+		justify-content: flex-end;
 	}
 }
 
