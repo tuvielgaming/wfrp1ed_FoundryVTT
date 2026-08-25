@@ -1,5 +1,33 @@
+.equipment-item-sheet .window-content {
+	overflow: hidden;
+}
+
+.equipment-item-sheet .equipment-item-sheet__root {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	min-height: 0;
+}
+
+.equipment-item-sheet .equipment-item-sheet__header {
+	flex: 0 0 auto;
+	margin: 16px 16px 0;
+}
+
 .equipment-item-sheet .equipment-item-sheet__tabs {
+	flex: 0 0 auto;
 	margin: 10px 16px 0;
+}
+
+.equipment-item-sheet .equipment-item-sheet__tab-content {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	scrollbar-gutter: stable;
+}
+
+.equipment-item-sheet [data-equipment-tab-panel][hidden] {
+	display: none;
 }
 
 .equipment-item-sheet .equipment-item-sheet__conditional {

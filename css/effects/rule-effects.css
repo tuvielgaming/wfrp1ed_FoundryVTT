@@ -56,14 +56,12 @@
 	padding: 12px 16px 14px;
 }
 
-.wfrp1ed-active-effect-sheet .window-content > form,
-.wfrp1ed-active-effect-sheet form.standard-form {
-	display: flex;
-	flex: 1 1 auto;
-	flex-direction: column;
+.wfrp1ed-active-effect-sheet .window-content > :is(.sheet-header, nav.tabs, .tab, .form-footer) {
+	box-sizing: border-box;
 	width: 100%;
+	max-width: 780px;
+	margin-inline: auto;
 	min-width: 0;
-	min-height: 0;
 }
 
 .wfrp1ed-active-effect-sheet .tab {
@@ -78,6 +76,7 @@
 .wfrp1ed-active-effect-sheet .tab.active,
 .wfrp1ed-active-effect-sheet [data-tab].active:not(.wfrp1ed-tab) {
 	flex: 1 1 auto;
+	min-height: 0;
 	overflow: auto;
 }
 
@@ -93,11 +92,17 @@
 	min-width: 0;
 }
 
+.wfrp1ed-active-effect-sheet .tab.changes {
+	overflow: hidden;
+}
+
 .wfrp1ed-active-effect-sheet [data-tab="changes"] :is(ol, ul) {
 	box-sizing: border-box;
+	flex: 1 1 auto;
 	width: 100%;
 	max-width: none;
 	min-width: 0;
+	min-height: 0;
 }
 
 .wfrp1ed-active-effect-sheet [data-tab="changes"] :is(li, .form-group) {
@@ -110,8 +115,21 @@
 	min-width: 0;
 }
 
+/* Core v14 renders changes as a five-column grid and forces each list item to
+ * `display: contents`. A guided WFRP summary is one coherent row, so span that
+ * native grid and suppress its raw headings only when no native rows remain. */
+.wfrp1ed-active-effect-sheet .tab.changes.wfrp1ed-guided-changes > header {
+	display: none;
+}
+
+.wfrp1ed-active-effect-sheet .tab.changes.wfrp1ed-guided-changes > ol[data-changes] {
+	grid-template-columns: minmax(0, 1fr);
+}
+
 .wfrp1ed-active-effect-sheet .wfrp1ed-rule-authoring-toolbar {
 	display: flex;
+	flex: 0 0 auto;
+	flex-wrap: wrap;
 	align-items: center;
 	justify-content: space-between;
 	gap: 16px;
@@ -124,6 +142,7 @@
 
 .wfrp1ed-active-effect-sheet .wfrp1ed-rule-authoring-toolbar__copy {
 	display: grid;
+	flex: 1 1 360px;
 	gap: 3px;
 	min-width: 0;
 }
@@ -144,8 +163,9 @@
 	white-space: nowrap;
 }
 
-.wfrp1ed-active-effect-sheet .wfrp1ed-rule-change {
+.wfrp1ed-active-effect-sheet .tab.changes ol[data-changes] > li.wfrp1ed-rule-change {
 	display: grid;
+	grid-column: 1 / -1;
 	grid-template-columns: minmax(0, 1fr) auto;
 	align-items: center;
 	gap: 12px;

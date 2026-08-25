@@ -116,10 +116,9 @@ export class WfrpActiveEffectSheet extends ActiveEffectConfig {
 		const root = this.element;
 		if (!(root instanceof HTMLElement)) return;
 
-		const changesPanel =
-			root.querySelector('[data-tab="changes"]') ??
-			root.querySelector('[data-tab="effects"]');
+		const changesPanel = changesTabPanel(root);
 		if (!(changesPanel instanceof HTMLElement)) return;
+		markGuidedChangesPanel(changesPanel);
 
 		if (!changesPanel.querySelector("[data-wfrp-rule-toolbar]")) {
 			const toolbar = document.createElement("section");
@@ -249,6 +248,21 @@ function htmlElement(markup) {
 	const template = document.createElement("template");
 	template.innerHTML = String(markup ?? "").trim();
 	return template.content.firstElementChild ?? null;
+}
+
+function changesTabPanel(root) {
+	return root?.querySelector?.('.tab[data-tab="changes"]') ??
+		root?.querySelector?.('.tab[data-tab="effects"]') ??
+		null;
+}
+
+function markGuidedChangesPanel(panel) {
+	const list = panel?.querySelector?.("[data-changes]");
+	if (!(list instanceof HTMLElement)) return;
+	const hasNativeRows = [...list.children].some((row) =>
+		row.matches("li") && !row.classList.contains("wfrp1ed-rule-change")
+	);
+	panel.classList.toggle("wfrp1ed-guided-changes", !hasNativeRows);
 }
 
 function syncNativeTabAria(nav) {

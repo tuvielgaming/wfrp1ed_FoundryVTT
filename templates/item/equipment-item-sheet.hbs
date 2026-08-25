@@ -1,4 +1,12 @@
 <div class="equipment-item-sheet__root">
+	<header class="combat-item-sheet__header equipment-item-sheet__header">
+		<img class="combat-item-sheet__image" src="{{item.img}}" alt="">
+		<label class="combat-item-sheet__field combat-item-sheet__field--name">
+			<span>{{ui.name}}</span>
+			<input type="text" name="name" value="{{item.name}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}>
+		</label>
+	</header>
+
 	<nav class="equipment-item-sheet__tabs wfrp1ed-tabs" role="tablist" aria-label="{{ui.name}}">
 		<button type="button" class="wfrp1ed-tab" role="tab" data-action="showDetails" data-equipment-tab-button="details">
 			<i class="fa-solid fa-list"></i>
@@ -10,16 +18,9 @@
 		</button>
 	</nav>
 
-	<section class="combat-item-sheet__content" data-equipment-tab-panel="details">
-		<header class="combat-item-sheet__header">
-			<img class="combat-item-sheet__image" src="{{item.img}}" alt="">
-			<label class="combat-item-sheet__field combat-item-sheet__field--name">
-				<span>{{ui.name}}</span>
-				<input type="text" name="name" value="{{item.name}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}>
-			</label>
-		</header>
-
-		<section class="combat-item-sheet__panel">
+	<div class="equipment-item-sheet__tab-content">
+		<section class="combat-item-sheet__content" data-equipment-tab-panel="details">
+			<section class="combat-item-sheet__panel">
 			<h3 class="equipment-item-sheet__section-title">{{ui.inventory}}</h3>
 
 			<div class="combat-item-sheet__grid combat-item-sheet__grid--3">
@@ -81,42 +82,43 @@
 			{{/if}}
 
 			<label class="combat-item-sheet__field"><span>{{ui.availability}}</span><input type="text" name="system.availability" value="{{system.availability}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}></label>
-		</section>
+			</section>
 
-		<section class="combat-item-sheet__panel">
+			<section class="combat-item-sheet__panel">
 			<h3 class="equipment-item-sheet__section-title">{{ui.price}}</h3>
 			<div class="combat-item-sheet__grid combat-item-sheet__grid--3">
 				<label class="combat-item-sheet__field equipment-item-sheet__currency-field"><span class="equipment-item-sheet__currency-label equipment-item-sheet__currency-label--gold">{{ui.gc}}</span><input type="number" min="0" step="1" name="system.price.gc" value="{{system.price.gc}}" {{#unless editable}}disabled{{/unless}}></label>
 				<label class="combat-item-sheet__field equipment-item-sheet__currency-field"><span class="equipment-item-sheet__currency-label equipment-item-sheet__currency-label--silver">{{ui.ss}}</span><input type="number" min="0" step="1" name="system.price.ss" value="{{system.price.ss}}" {{#unless editable}}disabled{{/unless}}></label>
 				<label class="combat-item-sheet__field equipment-item-sheet__currency-field"><span class="equipment-item-sheet__currency-label equipment-item-sheet__currency-label--copper">{{ui.bp}}</span><input type="number" min="0" step="1" name="system.price.bp" value="{{system.price.bp}}" {{#unless editable}}disabled{{/unless}}></label>
 			</div>
+			</section>
+
+			<label class="combat-item-sheet__field combat-item-sheet__description"><span>{{ui.description}}</span><textarea name="system.description" {{#unless editable}}disabled{{/unless}}>{{system.description}}</textarea></label>
 		</section>
 
-		<label class="combat-item-sheet__field combat-item-sheet__description"><span>{{ui.description}}</span><textarea name="system.description" {{#unless editable}}disabled{{/unless}}>{{system.description}}</textarea></label>
-	</section>
-
-	<section class="equipment-effects-panel" data-equipment-tab-panel="effects" hidden>
-		<header class="equipment-effects-panel__header">
-			<div>
-				<h3>{{ui.effectsTab}}</h3>
-				<p>{{ui.effectsHint}}</p>
+		<section class="equipment-effects-panel" data-equipment-tab-panel="effects" hidden>
+			<header class="equipment-effects-panel__header">
+				<div>
+					<h3>{{ui.effectsTab}}</h3>
+					<p>{{ui.effectsHint}}</p>
+				</div>
+				<button type="button" data-action="createEffect" {{#unless editable}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> {{ui.addEffect}}</button>
+			</header>
+			<div class="equipment-effects-list">
+				{{#each effects as |effect|}}
+					<article class="equipment-effect-card {{#if effect.disabled}}is-disabled{{/if}}" data-effect-id="{{effect.id}}">
+						<img src="{{effect.img}}" alt="">
+						<div class="equipment-effect-card__identity"><strong>{{effect.name}}</strong><span>{{effect.stateLabel}}</span></div>
+						<div class="equipment-effect-card__actions">
+							<button type="button" data-action="toggleEffect" {{#unless ../editable}}disabled{{/unless}}><i class="fa-solid {{#if effect.disabled}}fa-toggle-off{{else}}fa-toggle-on{{/if}}"></i></button>
+							<button type="button" data-action="configureEffect"><i class="fa-solid fa-gear"></i></button>
+							<button type="button" data-action="deleteEffect" {{#unless ../editable}}disabled{{/unless}}><i class="fa-solid fa-trash"></i></button>
+						</div>
+					</article>
+				{{else}}
+					<p class="equipment-effects-panel__empty">{{ui.noEffects}}</p>
+				{{/each}}
 			</div>
-			<button type="button" data-action="createEffect" {{#unless editable}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> {{ui.addEffect}}</button>
-		</header>
-		<div class="equipment-effects-list">
-			{{#each effects as |effect|}}
-				<article class="equipment-effect-card {{#if effect.disabled}}is-disabled{{/if}}" data-effect-id="{{effect.id}}">
-					<img src="{{effect.img}}" alt="">
-					<div class="equipment-effect-card__identity"><strong>{{effect.name}}</strong><span>{{effect.stateLabel}}</span></div>
-					<div class="equipment-effect-card__actions">
-						<button type="button" data-action="toggleEffect" {{#unless ../editable}}disabled{{/unless}}><i class="fa-solid {{#if effect.disabled}}fa-toggle-off{{else}}fa-toggle-on{{/if}}"></i></button>
-						<button type="button" data-action="configureEffect"><i class="fa-solid fa-gear"></i></button>
-						<button type="button" data-action="deleteEffect" {{#unless ../editable}}disabled{{/unless}}><i class="fa-solid fa-trash"></i></button>
-					</div>
-				</article>
-			{{else}}
-				<p class="equipment-effects-panel__empty">{{ui.noEffects}}</p>
-			{{/each}}
-		</div>
-	</section>
+		</section>
+	</div>
 </div>
