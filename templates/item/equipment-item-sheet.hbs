@@ -1,10 +1,10 @@
 <div class="equipment-item-sheet__root">
-	<nav class="equipment-item-sheet__tabs" aria-label="{{ui.name}}">
-		<button type="button" class="is-active" data-action="showDetails" data-equipment-tab-button="details">
+	<nav class="equipment-item-sheet__tabs wfrp1ed-tabs" role="tablist" aria-label="{{ui.name}}">
+		<button type="button" class="wfrp1ed-tab" role="tab" data-action="showDetails" data-equipment-tab-button="details">
 			<i class="fa-solid fa-list"></i>
 			<span>{{ui.detailsTab}}</span>
 		</button>
-		<button type="button" data-action="showEffects" data-equipment-tab-button="effects">
+		<button type="button" class="wfrp1ed-tab" role="tab" data-action="showEffects" data-equipment-tab-button="effects">
 			<i class="fa-solid fa-wand-magic-sparkles"></i>
 			<span>{{ui.effectsTab}}</span>
 		</button>
