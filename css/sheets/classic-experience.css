@@ -69,3 +69,78 @@
 	background: transparent;
 	color: inherit;
 }
+
+/* Magic Points use the same Current/Total ledger language as Experience, but
+ * fit inside the smaller printed Magic Points box on page two. */
+.wfrp1ed-classic-sheet .wfrp1ed-magic-points-panel {
+	display: block !important;
+	padding: 0 !important;
+	overflow: hidden;
+	pointer-events: none;
+}
+
+.wfrp1ed-classic-sheet .wfrp1ed-magic-points-field {
+	position: absolute;
+	top: 42px;
+	width: 96px;
+	height: 45px;
+	margin: 0;
+	padding: 0;
+	pointer-events: auto;
+}
+
+.wfrp1ed-classic-sheet .wfrp1ed-magic-points-field--current {
+	left: 9px;
+}
+
+.wfrp1ed-classic-sheet .wfrp1ed-magic-points-field--total {
+	right: 9px;
+}
+
+.wfrp1ed-classic-sheet .wfrp1ed-magic-points-field__label {
+	display: block;
+	margin-bottom: 2px;
+	font-size: 11px;
+	font-weight: 700;
+	line-height: 1;
+	text-align: center;
+}
+
+.wfrp1ed-classic-sheet .wfrp1ed-magic-points-field input {
+	display: block;
+	width: 100%;
+	height: 27px;
+	margin: 0;
+	padding: 1px 4px;
+	border: 1px solid rgb(25 20 15 / 35%);
+	border-radius: 2px;
+	background: rgb(255 255 255 / 38%);
+	box-shadow: none;
+	font-size: 17px;
+	font-weight: 700;
+	line-height: 1;
+	text-align: center;
+	font-variant-numeric: tabular-nums;
+	appearance: textfield;
+	-moz-appearance: textfield;
+}
+
+.wfrp1ed-classic-sheet .wfrp1ed-magic-points-field input::-webkit-inner-spin-button,
+.wfrp1ed-classic-sheet .wfrp1ed-magic-points-field input::-webkit-outer-spin-button {
+	margin: 0;
+	appearance: none;
+	-webkit-appearance: none;
+}
+
+.wfrp1ed-classic-sheet .wfrp1ed-magic-points-field input:focus {
+	outline: 1px solid var(--focus-color);
+	outline-offset: -1px;
+	background: rgb(255 255 255 / 78%);
+}
+
+.wfrp1ed-classic-sheet .wfrp1ed-magic-points-field--total input,
+.wfrp1ed-classic-sheet .wfrp1ed-magic-points-field input:read-only:not(:focus) {
+	border-color: transparent;
+	background: transparent;
+	color: inherit;
+}
