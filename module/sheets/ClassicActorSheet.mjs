@@ -62,6 +62,15 @@ export class ClassicActorSheet extends HandlebarsApplicationMixin(
 
 			removeSkill:
 				ClassicActorSheet.#onRemoveSkill,
+
+			addSpell:
+				ClassicActorSheet.#onAddSpell,
+
+			openSpell:
+				ClassicActorSheet.#onOpenSpell,
+
+			removeSpell:
+				ClassicActorSheet.#onRemoveSpell,
 		},
 	};
 
@@ -719,6 +728,86 @@ export class ClassicActorSheet extends HandlebarsApplicationMixin(
 			throw new Error(
 				`Embedded Skill Item '${itemId}' was not found.`,
 			);
+		}
+
+		return item;
+	}
+
+	/** @this {ClassicActorSheet} */
+	static async #onAddSpell(event) {
+		event.preventDefault();
+
+		await ClassicActorSheet.#runEditableAction(
+			this,
+			"add a spell",
+			async () => {
+				const [spell] = await this.document.createEmbeddedDocuments(
+					"Item",
+					[{
+						name: game.i18n.localize("WFRP1ED.SpellSheet.NewSpell"),
+						type: "spell",
+					}],
+				);
+
+				if (!spell) {
+					throw new Error("Foundry did not return the created Spell Item.");
+				}
+
+				await spell.sheet.render({ force: true });
+			},
+		);
+	}
+
+	/** @this {ClassicActorSheet} */
+	static async #onOpenSpell(event, target) {
+		event.preventDefault();
+
+		try {
+			const spell = ClassicActorSheet.#spellFromTarget(this, target);
+			await spell.sheet.render({ force: true });
+		} catch (error) {
+			console.error("WFRP1ED | Unable to open spell.", error);
+			ui.notifications.error(error.message ?? "Unable to open the spell.");
+		}
+	}
+
+	/** @this {ClassicActorSheet} */
+	static async #onRemoveSpell(event, target) {
+		event.preventDefault();
+
+		await ClassicActorSheet.#runEditableAction(
+			this,
+			"remove a spell",
+			async () => {
+				const spell = ClassicActorSheet.#spellFromTarget(this, target);
+				const confirmed = await DialogV2.confirm({
+					window: {
+						title: game.i18n.localize("WFRP1ED.SpellSheet.RemoveSpell"),
+					},
+					content: game.i18n.localize("WFRP1ED.SpellSheet.ConfirmRemoveSpell"),
+					rejectClose: false,
+					modal: true,
+				});
+
+				if (!confirmed) return;
+				await this.document.deleteEmbeddedDocuments("Item", [spell.id]);
+			},
+		);
+	}
+
+	/**
+	 * @param {ClassicActorSheet} sheet
+	 * @param {HTMLElement} target
+	 * @returns {Item}
+	 * @protected
+	 */
+	static #spellFromTarget(sheet, target) {
+		const itemId = String(target.dataset.itemId ?? "").trim();
+		if (!itemId) throw new Error("Spell action has no embedded Item id.");
+
+		const item = sheet.document.items.get(itemId);
+		if (!item || item.type !== "spell") {
+			throw new Error(`Embedded Spell Item '${itemId}' was not found.`);
 		}
 
 		return item;

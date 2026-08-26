@@ -22,7 +22,7 @@
 		<section class="combat-item-sheet__content" data-spell-tab-panel="details">
 			<section class="combat-item-sheet__panel">
 				<h3>{{ui.classification}}</h3>
-				<div class="combat-item-sheet__grid combat-item-sheet__grid--3">
+				<div class="combat-item-sheet__grid combat-item-sheet__grid--2">
 					<label class="combat-item-sheet__field">
 						<span>{{ui.tradition}}</span>
 						<select name="system.tradition" {{#unless editable}}disabled{{/unless}}>
@@ -35,7 +35,6 @@
 							{{#each levelOptions as |option|}}<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>{{/each}}
 						</select>
 					</label>
-					<label class="combat-item-sheet__field"><span>{{ui.rulesId}}</span><input type="text" name="system.rulesId" value="{{system.rulesId}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}></label>
 				</div>
 			</section>
 

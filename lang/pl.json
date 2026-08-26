@@ -226,5 +226,11 @@
 	"WFRP1ED.SkillSheet.AddSkill": "Dodaj umiejętność",
 	"WFRP1ED.SkillSheet.OpenSkill": "Otwórz umiejętność",
 	"WFRP1ED.SkillSheet.RemoveSkill": "Usuń umiejętność",
-	"WFRP1ED.SkillSheet.ConfirmRemoveSkill": "Czy na pewno chcesz usunąć tę umiejętność?"
+	"WFRP1ED.SkillSheet.ConfirmRemoveSkill": "Czy na pewno chcesz usunąć tę umiejętność?",
+
+	"WFRP1ED.SpellSheet.NewSpell": "Nowy czar",
+	"WFRP1ED.SpellSheet.AddSpell": "Dodaj czar",
+	"WFRP1ED.SpellSheet.OpenSpell": "Otwórz czar",
+	"WFRP1ED.SpellSheet.RemoveSpell": "Usuń czar",
+	"WFRP1ED.SpellSheet.ConfirmRemoveSpell": "Czy na pewno chcesz usunąć ten czar?"
 }

@@ -34,6 +34,7 @@ WFRP1ED.partialTemplates = [
 	"systems/wfrp1ed/templates/actors/classic/parts/armour-points.hbs",
 	"systems/wfrp1ed/templates/actors/classic/parts/skills-primary.hbs",
 	"systems/wfrp1ed/templates/actors/classic/parts/skills-secondary.hbs",
+	"systems/wfrp1ed/templates/actors/classic/parts/spells.hbs",
 	"systems/wfrp1ed/templates/actors/classic/parts/movement.hbs",
 	"systems/wfrp1ed/templates/actors/classic/parts/equipment.hbs",
 	"systems/wfrp1ed/templates/actors/classic/parts/wealth.hbs",

@@ -226,5 +226,11 @@
 	"WFRP1ED.SkillSheet.AddSkill": "Add skill",
 	"WFRP1ED.SkillSheet.OpenSkill": "Open skill",
 	"WFRP1ED.SkillSheet.RemoveSkill": "Remove skill",
-	"WFRP1ED.SkillSheet.ConfirmRemoveSkill": "Are you sure you want to remove this skill?"
+	"WFRP1ED.SkillSheet.ConfirmRemoveSkill": "Are you sure you want to remove this skill?",
+
+	"WFRP1ED.SpellSheet.NewSpell": "New spell",
+	"WFRP1ED.SpellSheet.AddSpell": "Add spell",
+	"WFRP1ED.SpellSheet.OpenSpell": "Open spell",
+	"WFRP1ED.SpellSheet.RemoveSpell": "Remove spell",
+	"WFRP1ED.SpellSheet.ConfirmRemoveSpell": "Are you sure you want to remove this spell?"
 }

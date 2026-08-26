@@ -111,10 +111,7 @@ export class DisplayBuilder {
 				),
 
 			spells:
-				this.itemsByType(
-					document,
-					"spell",
-				),
+				this.spells(document),
 
 			notes: this.notes(document),
 		});
@@ -759,6 +756,45 @@ export class DisplayBuilder {
 				specialisation
 					? `${item.name ?? ""} (${specialisation})`
 					: item.name ?? "",
+		};
+	}
+
+	/**
+	 * Present embedded WFRP 1e Spell Items in the printed page-two table.
+	 * Executable casting procedures remain separate from this authoring data.
+	 *
+	 * @param {Actor} document
+	 * @returns {Object[]}
+	 */
+	static spells(document) {
+		return this._items(document)
+			.filter((item) => item.type === "spell")
+			.map((item) => this.spell(item));
+	}
+
+	/**
+	 * @param {Item} item
+	 * @returns {Object}
+	 */
+	static spell(item) {
+		const system = item.system ?? {};
+		const spellLevel = this._number(
+			this._unwrap(system.spellLevel) ?? 0,
+			`${item.name}.spellLevel`,
+		);
+
+		return {
+			...this.item(item),
+			spellLevel,
+			spellLevelLabel: spellLevel === 0 ? "P" : String(spellLevel),
+			magicPointCost: this._number(
+				this._unwrap(system.magicPointCost?.amount) ?? 0,
+				`${item.name}.magicPointCost.amount`,
+			),
+			range: this._text(system.range),
+			duration: this._text(system.duration),
+			ingredients: this._text(system.ingredients),
+			description: this._text(system.description),
 		};
 	}
 

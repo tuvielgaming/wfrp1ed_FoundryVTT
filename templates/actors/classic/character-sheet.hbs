@@ -249,6 +249,26 @@
 					</section>
 				{{/if}}
 
+				{{#if page.sections.spells}}
+					<section
+						class="sheet-overlay sheet-overlay--spells"
+						data-section="spells"
+						style="
+							{{page.sections.spells.cssVariables}};
+							position: absolute;
+							left: var(--section-x);
+							top: var(--section-y);
+							width: var(--section-width);
+							height: var(--section-height);
+						"
+					>
+						{{>
+							"systems/wfrp1ed/templates/actors/classic/parts/spells.hbs"
+							@root
+						}}
+					</section>
+				{{/if}}
+
 				{{#if page.sections.fate}}
 					<section
 						class="sheet-overlay sheet-overlay--fate"

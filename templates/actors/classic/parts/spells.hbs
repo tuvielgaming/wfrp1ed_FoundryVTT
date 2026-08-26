@@ -1,0 +1,46 @@
+<section class="sheet-block spells">
+	{{#if editable}}
+		<button
+			type="button"
+			class="spell-control spell-control--add"
+			data-action="addSpell"
+			aria-label="{{localize 'WFRP1ED.SpellSheet.AddSpell'}}"
+			data-tooltip="{{localize 'WFRP1ED.SpellSheet.AddSpell'}}"
+		>
+			<i class="fa-solid fa-plus" aria-hidden="true"></i>
+		</button>
+	{{/if}}
+
+	<ol class="spells-list" role="list">
+		{{#each display.spells as |spell|}}
+			<li class="spell-row" data-item-id="{{spell.id}}" data-item-uuid="{{spell.uuid}}">
+				<div class="spell-cell spell-cell--name">
+					<button
+						type="button"
+						class="spell-name"
+						data-action="openSpell"
+						data-item-id="{{spell.id}}"
+						aria-label="{{localize 'WFRP1ED.SpellSheet.OpenSpell'}}: {{spell.name}}"
+						title="{{spell.name}}"
+					>{{spell.name}}</button>
+					{{#if @root.editable}}
+						<button
+							type="button"
+							class="spell-control spell-control--remove"
+							data-action="removeSpell"
+							data-item-id="{{spell.id}}"
+							aria-label="{{localize 'WFRP1ED.SpellSheet.RemoveSpell'}}: {{spell.name}}"
+							data-tooltip="{{localize 'WFRP1ED.SpellSheet.RemoveSpell'}}"
+						><i class="fa-solid fa-trash" aria-hidden="true"></i></button>
+					{{/if}}
+				</div>
+				<span class="spell-cell spell-cell--compact">{{spell.spellLevelLabel}}</span>
+				<span class="spell-cell spell-cell--compact">{{spell.magicPointCost}}</span>
+				<span class="spell-cell spell-cell--compact" title="{{spell.range}}">{{spell.range}}</span>
+				<span class="spell-cell spell-cell--compact" title="{{spell.duration}}">{{spell.duration}}</span>
+				<span class="spell-cell" title="{{spell.ingredients}}">{{spell.ingredients}}</span>
+				<span class="spell-cell" title="{{spell.description}}">{{spell.description}}</span>
+			</li>
+		{{/each}}
+	</ol>
+</section>

@@ -18,6 +18,7 @@ export const SPELL_TRADITION = Object.freeze({
 
 export const SPELL_COST_INTERVAL = Object.freeze({
 	CAST: "cast",
+	MISSILE: "missile",
 	ROUND: "round",
 	TURN: "turn",
 	MINUTE: "minute",
@@ -37,10 +38,13 @@ export const SPELL_COST_INTERVAL = Object.freeze({
  * Personal, Touch, Until triggered, 1+D6 turns and spell-specific conditions.
  * Consumers must not try to infer executable mechanics from localized prose.
  *
- * Magic Point cost is structured because resource spending is shared casting
- * state: an amount may be paid once when cast or repeatedly per turn/hour/week.
- * Spell-specific outcomes belong to Active Effects or future audited procedure
- * providers identified by the stable, language-neutral `rulesId`.
+	* Magic Point cost is structured because resource spending is shared casting
+	* state: an amount may be paid once when cast, per magical missile, or
+	* repeatedly per turn/hour/week.
+	* Spell-specific outcomes belong to Active Effects or future audited procedure
+	* providers identified by the stable, language-neutral `rulesId`. That internal
+	* field is not exposed for free-text authoring; a future casting registry must
+	* provide the allowed selection before the sheet displays it.
  */
 export class SpellData extends TypeDataModel {
 	static defineSchema() {

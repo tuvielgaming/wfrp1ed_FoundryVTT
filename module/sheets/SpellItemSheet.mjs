@@ -20,6 +20,7 @@ export class SpellItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
 			"wfrp1ed-parchment-window",
 		],
 		position: { width: 660, height: 720 },
+		window: { resizable: true },
 		tag: "form",
 		form: {
 			submitOnChange: true,
@@ -156,6 +157,7 @@ function spellLevelEntries() {
 function costIntervalEntries() {
 	return [
 		[SPELL_COST_INTERVAL.CAST, localize("Once when cast", "Jednorazowo przy rzuceniu")],
+		[SPELL_COST_INTERVAL.MISSILE, localize("Per missile", "Za pocisk")],
 		[SPELL_COST_INTERVAL.ROUND, localize("Per round", "Za rundę")],
 		[SPELL_COST_INTERVAL.TURN, localize("Per turn", "Za turę")],
 		[SPELL_COST_INTERVAL.MINUTE, localize("Per minute", "Za minutę")],
@@ -175,7 +177,6 @@ function spellUi() {
 		classification: localize("Spell", "Czar"),
 		tradition: localize("Type of magic", "Typ magii"),
 		spellLevel: localize("Spell level", "Poziom czaru"),
-		rulesId: localize("Rules ID", "Identyfikator zasad"),
 		casting: localize("Casting data", "Dane rzucania czaru"),
 		magicPointAmount: localize("Magic Points", "Punkty magii"),
 		magicPointInterval: localize("Cost interval", "Naliczanie kosztu"),
