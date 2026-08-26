@@ -2,6 +2,8 @@ import { CareerProgression } from "../careers/CareerProgression.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
 const CAREER_ACQUISITION_FLAG_KEY = "careerAcquisition";
+const OWNER_WOUNDS_EDIT_FLAG_KEY = "allowOwnerWoundsEdit";
+const MAGIC_POINTS_TOTAL_FLAG_KEY = "magicPointsTotal";
 const MAGIC_SECTION_SELECTOR = '[data-section="magicPoints"]';
 const POWER_LEVEL_SECTION_SELECTOR = '[data-section="powerLevel"]';
 
@@ -19,7 +21,7 @@ Hooks.on("renderApplicationV2", (application, element) => {
 
 	const magicSection = element.querySelector(MAGIC_SECTION_SELECTOR);
 	if (magicSection instanceof HTMLElement) {
-		renderMagicPointsLedger(application, actor, magicSection);
+		renderMagicPointsLedger(actor, magicSection);
 	}
 
 	const powerLevelSection = element.querySelector(POWER_LEVEL_SECTION_SELECTOR);
@@ -29,16 +31,21 @@ Hooks.on("renderApplicationV2", (application, element) => {
 });
 
 /**
- * Magic Points are a resource ledger:
- * - current is the mutable number of points remaining;
- * - total is derived from race-specific Magic Point grants recorded when
- *   Careers are acquired.
+ * Magic Points are a two-value resource ledger.
  *
- * The total is deliberately not another editable Actor field. Career
- * acquisition is the authoritative source and some grants are rolled, so the
- * resolved grant has to remain attached to the acquired Career transaction.
+ * Current is the remaining spendable resource stored in Character.status.
+ * Total is persistent Actor ledger state. Before an explicit Total exists it is
+ * reconstructed from recorded Career Magic Point grants; old Characters without
+ * grant metadata temporarily use their existing Current value as the compatible
+ * starting Total. The first manual Current edit freezes that displayed Total so
+ * it no longer follows Current.
+ *
+ * Manual Current editing follows the same permission contract as remaining
+ * Wounds: a GM is always allowed, while a player must be the explicitly assigned
+ * OWNER and the GM must have enabled the existing owner-Wounds edit flag.
+ * Manual Total editing is GM-only.
  */
-function renderMagicPointsLedger(application, actor, section) {
+function renderMagicPointsLedger(actor, section) {
 	const ledger = readMagicLedger(actor);
 
 	const current = buildMagicField(
@@ -57,19 +64,27 @@ function renderMagicPointsLedger(application, actor, section) {
 
 	const currentInput = current.input;
 	const totalInput = total.input;
-	const editable = application?.isEditable === true;
+	const canEditCurrent = canUserManuallyEditMagicPoints(actor, game.user);
+	const canEditTotal = game.user?.isGM === true;
 
-	currentInput.readOnly = !editable;
-	currentInput.tabIndex = editable ? 0 : -1;
-	totalInput.readOnly = true;
-	totalInput.tabIndex = -1;
+	currentInput.readOnly = !canEditCurrent;
+	currentInput.tabIndex = canEditCurrent ? 0 : -1;
+	totalInput.readOnly = !canEditTotal;
+	totalInput.tabIndex = canEditTotal ? 0 : -1;
 
-	if (!editable) return;
+	if (canEditCurrent) {
+		currentInput.addEventListener("change", () => {
+			void persistCurrentMagicPoints(actor, currentInput);
+		});
+		currentInput.addEventListener("keydown", commitOnEnter);
+	}
 
-	currentInput.addEventListener("change", () => {
-		void persistCurrentMagicPoints(actor, currentInput);
-	});
-	currentInput.addEventListener("keydown", commitOnEnter);
+	if (canEditTotal) {
+		totalInput.addEventListener("change", () => {
+			void persistTotalMagicPoints(actor, totalInput);
+		});
+		totalInput.addEventListener("keydown", commitOnEnter);
+	}
 }
 
 function buildMagicField(kind, labelText, value) {
@@ -103,23 +118,75 @@ async function persistCurrentMagicPoints(actor, input) {
 	const ledger = readMagicLedger(actor);
 	const next = nonNegativeInteger(input.value);
 
+	if (!canUserManuallyEditMagicPoints(actor, game.user)) {
+		input.value = String(ledger.current);
+		ui.notifications.warn(localize(
+			"Manual Magic Points editing is locked by the GM.",
+			"Ręczna edycja Punktów Magii jest zablokowana przez MG.",
+		));
+		return;
+	}
+
 	try {
-		if (ledger.hasDerivedTotal && next > ledger.total) {
+		if (next > ledger.total) {
 			throw new Error(localize(
 				"Current Magic Points cannot exceed Total Magic Points.",
 				"Aktualne Punkty Magii nie mogą przekraczać Całkowitych Punktów Magii.",
 			));
 		}
 
-		await actor.update({
+		const update = {
 			"system.status.magicPoints": next,
-		});
+		};
+
+		/* Existing Characters may predate a separate Total. Freeze the Total that
+		 * is currently displayed before changing Current so Total can never begin
+		 * following the remaining resource. */
+		if (!ledger.hasStoredTotal) {
+			update[`flags.${FLAG_SCOPE}.${MAGIC_POINTS_TOTAL_FLAG_KEY}`] = ledger.total;
+		}
+
+		await actor.update(update);
 	} catch (error) {
 		input.value = String(ledger.current);
 		console.error("WFRP1ED | Unable to update current Magic Points.", error);
 		ui.notifications.error(error?.message ?? localize(
 			"Unable to update Magic Points.",
 			"Nie udało się zaktualizować Punktów Magii.",
+		));
+	}
+}
+
+async function persistTotalMagicPoints(actor, input) {
+	const ledger = readMagicLedger(actor);
+	const next = nonNegativeInteger(input.value);
+
+	if (game.user?.isGM !== true) {
+		input.value = String(ledger.total);
+		ui.notifications.warn(localize(
+			"Only a GM can edit Total Magic Points.",
+			"Tylko MG może edytować Całkowite Punkty Magii.",
+		));
+		return;
+	}
+
+	try {
+		if (next < ledger.current) {
+			throw new Error(localize(
+				"Total Magic Points cannot be lower than Current Magic Points.",
+				"Całkowite Punkty Magii nie mogą być niższe od Aktualnych Punktów Magii.",
+			));
+		}
+
+		await actor.update({
+			[`flags.${FLAG_SCOPE}.${MAGIC_POINTS_TOTAL_FLAG_KEY}`]: next,
+		});
+	} catch (error) {
+		input.value = String(ledger.total);
+		console.error("WFRP1ED | Unable to update Total Magic Points.", error);
+		ui.notifications.error(error?.message ?? localize(
+			"Unable to update Total Magic Points.",
+			"Nie udało się zaktualizować Całkowitych Punktów Magii.",
 		));
 	}
 }
@@ -178,13 +245,15 @@ function commitOnEnter(event) {
 }
 
 /**
- * Current points live on Character.status. Total points are reconstructed from
- * immutable Career-acquisition results. Existing characters which predate
- * acquisition metadata temporarily use their current value as a compatibility
- * total so no points disappear merely because the metadata did not exist yet.
+ * Current points live on Character.status. Total prefers the persistent Actor
+ * ledger value, then recorded Career grants, then the legacy Current value as a
+ * compatibility starting point for Characters created before this ledger.
  */
 export function readMagicLedger(actor) {
 	const current = nonNegativeInteger(actor?.system?.status?.magicPoints);
+	const storedTotalRaw = actor?.getFlag?.(FLAG_SCOPE, MAGIC_POINTS_TOTAL_FLAG_KEY);
+	const hasStoredTotal = isNonNegativeInteger(storedTotalRaw);
+
 	let granted = 0;
 	let hasGrantRecord = false;
 
@@ -197,10 +266,17 @@ export function readMagicLedger(actor) {
 		granted += nonNegativeInteger(magic.granted);
 	}
 
+	const total = hasStoredTotal
+		? nonNegativeInteger(storedTotalRaw)
+		: hasGrantRecord
+			? granted
+			: current;
+
 	return Object.freeze({
 		current,
-		total: hasGrantRecord ? granted : current,
-		hasDerivedTotal: hasGrantRecord,
+		total,
+		hasStoredTotal,
+		hasGrantRecord,
 	});
 }
 
@@ -258,14 +334,16 @@ async function grantCareerMagicPoints(actor, career) {
 	const definition = matchingMagicPointDefinition(actor, career);
 	if (!definition?.formula) return null;
 
+	const ledgerBefore = readMagicLedger(actor);
 	const roll = await new Roll(String(definition.formula)).evaluate({
 		allowInteractive: false,
 	});
 	await showDice(roll);
 
 	const granted = nonNegativeInteger(roll.total);
-	const before = nonNegativeInteger(actor.system?.status?.magicPoints);
+	const before = ledgerBefore.current;
 	const after = before + granted;
+	const totalAfter = ledgerBefore.total + granted;
 	const magicPoints = Object.freeze({
 		formula: String(definition.formula),
 		roll: granted,
@@ -287,6 +365,7 @@ async function grantCareerMagicPoints(actor, career) {
 	try {
 		await actor.update({
 			"system.status.magicPoints": after,
+			[`flags.${FLAG_SCOPE}.${MAGIC_POINTS_TOTAL_FLAG_KEY}`]: totalAfter,
 		});
 	} catch (error) {
 		if (previousAcquisition) {
@@ -323,6 +402,38 @@ function matchingMagicPointDefinition(actor, career) {
 	}) ?? entries.find((entry) => !Array.isArray(entry?.races) || entry.races.length === 0) ?? null;
 }
 
+function canUserManuallyEditMagicPoints(actor, user = game.user) {
+	if (
+		!(actor instanceof foundry.documents.Actor) ||
+		actor.type !== "character" ||
+		!user
+	) {
+		return false;
+	}
+
+	if (user.isGM) return true;
+	if (!isExplicitPlayerOwner(actor, user)) return false;
+
+	return actor.getFlag?.(
+		FLAG_SCOPE,
+		OWNER_WOUNDS_EDIT_FLAG_KEY,
+	) === true;
+}
+
+function isExplicitPlayerOwner(actor, user) {
+	if (
+		!(actor instanceof foundry.documents.Actor) ||
+		!user ||
+		user.isGM
+	) {
+		return false;
+	}
+
+	const ownership = actor.ownership ?? actor._source?.ownership ?? {};
+	const level = Number(ownership?.[user.id]);
+	return level === CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER;
+}
+
 async function showDice(roll) {
 	if (!game.dice3d?.showForRoll) return;
 	try {
@@ -338,6 +449,11 @@ function normalizeIdentity(value) {
 		.toLocaleLowerCase()
 		.normalize("NFD")
 		.replace(/[\u0300-\u036f]/g, "");
+}
+
+function isNonNegativeInteger(value) {
+	const numeric = Number(value);
+	return Number.isInteger(numeric) && numeric >= 0;
 }
 
 function nonNegativeInteger(value) {
