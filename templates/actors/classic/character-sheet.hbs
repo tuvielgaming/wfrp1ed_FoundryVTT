@@ -275,7 +275,7 @@
 						data-section="magicPoints"
 						style="{{page.sections.magicPoints.cssVariables}}; position: absolute; left: var(--section-x); top: var(--section-y); width: var(--section-width); height: var(--section-height);"
 					>
-						<input class="classic-magic-resource" type="number" name="system.status.magicPoints" value="{{display.status.magicPoints}}" min="0" step="1" aria-label="Punkty Magii">
+						<input class="classic-magic-resource" type="number" data-wfrp-magic-points value="{{display.status.magicPoints}}" min="0" step="1" aria-label="Punkty Magii">
 					</section>
 				{{/if}}
 
@@ -285,7 +285,7 @@
 						data-section="powerLevel"
 						style="{{page.sections.powerLevel.cssVariables}}; position: absolute; left: var(--section-x); top: var(--section-y); width: var(--section-width); height: var(--section-height);"
 					>
-						<input class="classic-magic-resource" type="number" name="system.status.powerLevel" value="{{display.status.powerLevel}}" min="0" step="1" aria-label="Poziom Mocy">
+						<input class="classic-magic-resource" type="number" data-wfrp-power-level value="{{display.status.powerLevel}}" min="0" step="1" aria-label="Poziom Mocy">
 					</section>
 				{{/if}}
 
