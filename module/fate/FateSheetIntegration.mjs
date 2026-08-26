@@ -14,7 +14,7 @@ Hooks.on("renderApplicationV2", (application, element) => {
 		application,
 		actor,
 		element?.querySelector?.(MAGIC_POINTS_SELECTOR),
-		"system.status.magicPoints",
+		"magicPoints",
 		"Magic Points",
 		"Punkty Magii",
 	);
@@ -22,7 +22,7 @@ Hooks.on("renderApplicationV2", (application, element) => {
 		application,
 		actor,
 		element?.querySelector?.(POWER_LEVEL_SELECTOR),
-		"system.status.powerLevel",
+		"powerLevel",
 		"Power Level",
 		"Poziom Mocy",
 	);
@@ -60,7 +60,7 @@ function configureMagicResourceInput(
 	application,
 	actor,
 	input,
-	path,
+	statusKey,
 	englishLabel,
 	polishLabel,
 ) {
@@ -88,18 +88,14 @@ function configureMagicResourceInput(
 	/*
 	 * These controls deliberately have no `name` attribute in the Classic
 	 * template. ClassicActorSheet uses ApplicationV2 submitOnChange for ordinary
-	 * named controls. A control which also owns explicit persistence must not be
-	 * submitted by that generic form pipeline as well; otherwise blur/change can
-	 * race a second submission and rerender the previous Document value.
-	 *
-	 * This is the same safe explicit-persistence pattern already used by the
-	 * working Experience controls and Career authoring integration.
+	 * named controls. A control which owns explicit persistence must not also
+	 * participate in generic form submission.
 	 */
 	input.addEventListener("change", () => {
 		void persistMagicResource(
 			actor,
 			input,
-			path,
+			statusKey,
 			englishLabel,
 			polishLabel,
 		);
@@ -109,12 +105,15 @@ function configureMagicResourceInput(
 async function persistMagicResource(
 	actor,
 	input,
-	path,
+	statusKey,
 	englishLabel,
 	polishLabel,
 ) {
+	const currentStatus = foundry.utils.deepClone(
+		actor?.system?.status ?? {},
+	);
 	const previous = nonNegativeInteger(
-		foundry.utils.getProperty(actor, path),
+		currentStatus?.[statusKey],
 	);
 	const value = Number(input.value);
 
@@ -130,7 +129,17 @@ async function persistMagicResource(
 	}
 
 	try {
-		await actor.update({ [path]: value });
+		/*
+		 * CharacterData.status is one native SchemaField. A flat update to one
+		 * nested member can be cleaned as a partial SchemaField payload and lose
+		 * sibling state. Now that these inputs are isolated from generic form
+		 * submission, persist one complete status record with only the selected
+		 * resource changed.
+		 */
+		currentStatus[statusKey] = value;
+		await actor.update({
+			"system.status": currentStatus,
+		});
 	} catch (error) {
 		input.value = String(previous);
 		console.error(
@@ -162,11 +171,6 @@ async function persistFateValue(actor, input) {
 	}
 
 	try {
-		/*
-		 * CharacterData still accepts the transitional {value,max} storage.
-		 * WFRP 1e has only one Fate Points resource, so the sheet deliberately
-		 * exposes one value and keeps the compatibility maximum synchronized.
-		 */
 		await actor.update({
 			"system.status.fate.value": value,
 			"system.status.fate.max": value,
