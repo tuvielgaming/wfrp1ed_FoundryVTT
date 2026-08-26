@@ -1,6 +1,6 @@
 const FATE_INPUT_SELECTOR = "[data-wfrp-fate-value]";
-const MAGIC_POINTS_SELECTOR = "input[name=\"system.status.magicPoints\"]";
-const POWER_LEVEL_SELECTOR = "input[name=\"system.status.powerLevel\"]";
+const MAGIC_POINTS_SELECTOR = "[data-wfrp-magic-points]";
+const POWER_LEVEL_SELECTOR = "[data-wfrp-power-level]";
 
 Hooks.on("renderApplicationV2", (application, element) => {
 	const actor = application?.document;
@@ -14,7 +14,7 @@ Hooks.on("renderApplicationV2", (application, element) => {
 		application,
 		actor,
 		element?.querySelector?.(MAGIC_POINTS_SELECTOR),
-		"magicPoints",
+		"system.status.magicPoints",
 		"Magic Points",
 		"Punkty Magii",
 	);
@@ -22,7 +22,7 @@ Hooks.on("renderApplicationV2", (application, element) => {
 		application,
 		actor,
 		element?.querySelector?.(POWER_LEVEL_SELECTOR),
-		"powerLevel",
+		"system.status.powerLevel",
 		"Power Level",
 		"Poziom Mocy",
 	);
@@ -60,7 +60,7 @@ function configureMagicResourceInput(
 	application,
 	actor,
 	input,
-	statusKey,
+	path,
 	englishLabel,
 	polishLabel,
 ) {
@@ -85,12 +85,21 @@ function configureMagicResourceInput(
 		input.blur();
 	});
 
-	input.addEventListener("change", (event) => {
-		event.stopPropagation();
+	/*
+	 * These controls deliberately have no `name` attribute in the Classic
+	 * template. ClassicActorSheet uses ApplicationV2 submitOnChange for ordinary
+	 * named controls. A control which also owns explicit persistence must not be
+	 * submitted by that generic form pipeline as well; otherwise blur/change can
+	 * race a second submission and rerender the previous Document value.
+	 *
+	 * This is the same safe explicit-persistence pattern already used by the
+	 * working Experience controls and Career authoring integration.
+	 */
+	input.addEventListener("change", () => {
 		void persistMagicResource(
 			actor,
 			input,
-			statusKey,
+			path,
 			englishLabel,
 			polishLabel,
 		);
@@ -100,15 +109,12 @@ function configureMagicResourceInput(
 async function persistMagicResource(
 	actor,
 	input,
-	statusKey,
+	path,
 	englishLabel,
 	polishLabel,
 ) {
-	const currentStatus = foundry.utils.deepClone(
-		actor?.system?.status ?? {},
-	);
 	const previous = nonNegativeInteger(
-		currentStatus?.[statusKey],
+		foundry.utils.getProperty(actor, path),
 	);
 	const value = Number(input.value);
 
@@ -124,16 +130,7 @@ async function persistMagicResource(
 	}
 
 	try {
-		/*
-		 * CharacterData.status is a native SchemaField. Updating only one nested
-		 * member can cause Foundry's schema cleaning to rebuild omitted siblings
-		 * from their initial values. Persist the complete current status record
-		 * with just this resource changed, mirroring the existing details guard.
-		 */
-		currentStatus[statusKey] = value;
-		await actor.update({
-			"system.status": currentStatus,
-		});
+		await actor.update({ [path]: value });
 	} catch (error) {
 		input.value = String(previous);
 		console.error(
