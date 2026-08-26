@@ -85,7 +85,16 @@ function configureMagicResourceInput(
 		input.blur();
 	});
 
-	input.addEventListener("change", () => {
+	/*
+	 * ClassicActorSheet uses ApplicationV2 form submitOnChange. These two
+	 * resource fields are persisted explicitly below, so let their change
+	 * event stop here instead of also reaching Foundry's generic form handler.
+	 * Otherwise the generic submit can re-render the sheet from the previous
+	 * Actor value before this asynchronous update completes, which makes the
+	 * edited number appear to reset on blur.
+	 */
+	input.addEventListener("change", (event) => {
+		event.stopPropagation();
 		void persistMagicResource(
 			actor,
 			input,
