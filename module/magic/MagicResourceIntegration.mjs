@@ -3,7 +3,7 @@ import { CareerProgression } from "../careers/CareerProgression.mjs";
 const FLAG_SCOPE = "wfrp1ed";
 const CAREER_ACQUISITION_FLAG_KEY = "careerAcquisition";
 const MAGIC_SECTION_SELECTOR = '[data-section="magicPoints"]';
-const POWER_LEVEL_SELECTOR = "[data-wfrp-power-level]";
+const POWER_LEVEL_SECTION_SELECTOR = '[data-section="powerLevel"]';
 
 installMagicCareerProgression();
 
@@ -22,9 +22,9 @@ Hooks.on("renderApplicationV2", (application, element) => {
 		renderMagicPointsLedger(application, actor, magicSection);
 	}
 
-	const powerLevel = element.querySelector(POWER_LEVEL_SELECTOR);
-	if (powerLevel instanceof HTMLInputElement) {
-		wirePowerLevel(application, actor, powerLevel);
+	const powerLevelSection = element.querySelector(POWER_LEVEL_SECTION_SELECTOR);
+	if (powerLevelSection instanceof HTMLElement) {
+		renderPowerLevel(application, actor, powerLevelSection);
 	}
 });
 
@@ -124,10 +124,24 @@ async function persistCurrentMagicPoints(actor, input) {
 	}
 }
 
-function wirePowerLevel(application, actor, input) {
-	/* Power Level is deliberately owned by this explicit persistence path rather
-	 * than ClassicActorSheet's generic submit-on-change form. */
-	input.removeAttribute("name");
+/**
+ * Power Level uses the same persistence strategy as current Magic Points.
+ * Replace the original Handlebars form control after render so Foundry's
+ * ActorSheetV2 submit-on-change lifecycle cannot race the explicit Actor update.
+ */
+function renderPowerLevel(application, actor, section) {
+	const input = document.createElement("input");
+	input.className = "classic-magic-resource";
+	input.type = "number";
+	input.min = "0";
+	input.step = "1";
+	input.inputMode = "numeric";
+	input.autocomplete = "off";
+	input.value = String(nonNegativeInteger(actor.system?.status?.powerLevel));
+	input.dataset.wfrpPowerLevel = "true";
+	input.setAttribute("aria-label", localize("Power Level", "Poziom Mocy"));
+
+	section.replaceChildren(input);
 
 	const editable = application?.isEditable === true;
 	input.readOnly = !editable;
