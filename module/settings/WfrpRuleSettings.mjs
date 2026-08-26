@@ -10,6 +10,8 @@ const ADVANCED_CAREER_COMPLETION_SETTING_KEY =
 	"requireCareerCompletionForAdvancedTransfer";
 const CLIMBING_HAND_VALIDATION_SETTING_KEY =
 	"validateClimbingHandAvailability";
+const AUTOMATIC_SPELL_TOKEN_DISTANCE_SETTING_KEY =
+	"automaticSpellTokenDistance";
 
 /**
  * Native Foundry settings for explicit WFRP 1e rule interpretations and local
@@ -112,6 +114,23 @@ export class WfrpRuleSettings {
 				default: false,
 			},
 		);
+
+		game.settings.register(
+			game.system.id,
+			AUTOMATIC_SPELL_TOKEN_DISTANCE_SETTING_KEY,
+			{
+				name: game.i18n.lang === "pl"
+					? "Automatyczny dystans tokenów dla czarów"
+					: "Automatic token distance for spells",
+				hint: game.i18n.lang === "pl"
+					? "Jeśli włączone, czary z mechaniką dystansu mogą wstępnie uzupełniać pole Dystans na podstawie położenia tokenów. Wyłączone domyślnie; pozycja tokenów nie blokuje otwarcia okna rzucania czaru."
+					: "When enabled, spells with distance mechanics may prefill their Distance field from token positions. Disabled by default; token positions never block opening the spell-casting dialog.",
+				scope: "world",
+				config: true,
+				type: Boolean,
+				default: false,
+			},
+		);
 	}
 
 	static shieldParryRule() {
@@ -156,6 +175,13 @@ export class WfrpRuleSettings {
 	static validatesClimbingHandAvailability() {
 		return this.#booleanSetting(
 			CLIMBING_HAND_VALIDATION_SETTING_KEY,
+			false,
+		);
+	}
+
+	static usesAutomaticSpellTokenDistance() {
+		return this.#booleanSetting(
+			AUTOMATIC_SPELL_TOKEN_DISTANCE_SETTING_KEY,
 			false,
 		);
 	}
