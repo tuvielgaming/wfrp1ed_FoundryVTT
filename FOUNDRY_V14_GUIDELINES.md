@@ -1,8 +1,8 @@
 # FOUNDRY_V14_GUIDELINES.md
 
-Version: 1.2
+Version: 1.3
 Status: ACTIVE
-Last Updated: 2026-08-25
+Last Updated: 2026-08-26
 
 ===============================================================================
 PURPOSE
@@ -262,6 +262,54 @@ Avoid legacy activateListeners()
 for new functionality.
 
 ===============================================================================
+APPLICATIONV2 FORM PERSISTENCE — HARD CONVENTION
+===============================================================================
+
+Foundry V14 ApplicationV2 forms with `submitOnChange: true` can conflict with
+controls which also implement their own explicit persistence.
+
+The failure mode already encountered in this project is:
+
+named input changes
+→ ApplicationV2 generic form submit runs
++ custom `change` listener also runs
+→ two update paths race or submit overlapping nested data
+→ rerender can restore the previous Document value or replace untouched siblings
+
+This was solved previously in Career authoring by disabling generic
+submit-on-change and persisting exact field paths, and is also avoided by the
+working Experience controls because explicitly persisted controls do not carry a
+`name` attribute.
+
+Hard rule:
+
+- A control is owned by exactly one persistence path.
+- If the surrounding ApplicationV2 form uses generic `submitOnChange`, a control
+  with its own explicit `Document.update()` handler must NOT also participate in
+  generic form submission.
+- For an explicitly persisted control inside such a form, omit the `name`
+  attribute and use a dedicated `data-wfrp-*` selector, then persist the exact
+  canonical Document path in the integration.
+- If an entire sheet requires safe explicit persistence because nested arrays or
+  SchemaFields make generic submission unsafe, set `submitOnChange = false` for
+  that sheet and persist exact flat paths explicitly, as done by Career authoring.
+- Do not try to solve this race only with `stopPropagation()` on the input's
+  `change` event. Foundry's form handling may already own an earlier listener in
+  the event path; removing the control from the generic form contract is the
+  reliable boundary.
+- Do not store edited UI values in application-local state as a substitute for
+  Document persistence.
+
+Canonical working references:
+
+module/careers/CareerItemAuthoringIntegration.mjs
+module/experience/ExperienceSheetIntegration.mjs
+module/fate/FateSheetIntegration.mjs
+
+When an input appears editable but resets when it loses focus, inspect this
+persistence ownership rule before adding new event handlers or schema guards.
+
+===============================================================================
 PARTS
 ===============================================================================
 
@@ -472,6 +520,9 @@ For every feature ask:
 □ Are templates rendering only?
 
 □ Is CSS responsible for appearance?
+
+□ Does every explicitly persisted ApplicationV2 control have exactly one
+  persistence owner and avoid accidental generic form submission?
 
 □ Does every system-owned checkbox use the canonical WFRP checkbox contract?
 
