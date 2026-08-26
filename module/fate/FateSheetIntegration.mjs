@@ -1,6 +1,29 @@
+import { ClassicActorSheet } from "../sheets/ClassicActorSheet.mjs";
+
 const FATE_INPUT_SELECTOR = "[data-wfrp-fate-value]";
 const MAGIC_POINTS_SELECTOR = "[data-wfrp-magic-points]";
 const POWER_LEVEL_SELECTOR = "[data-wfrp-power-level]";
+
+const MAGIC_RESOURCE_FIELDS = Object.freeze(new Map([
+	[
+		MAGIC_POINTS_SELECTOR,
+		Object.freeze({
+			path: "system.status.magicPoints",
+			englishLabel: "Magic Points",
+			polishLabel: "Punkty Magii",
+		}),
+	],
+	[
+		POWER_LEVEL_SELECTOR,
+		Object.freeze({
+			path: "system.status.powerLevel",
+			englishLabel: "Power Level",
+			polishLabel: "Poziom Mocy",
+		}),
+	],
+]));
+
+installMagicResourceFormPersistence();
 
 Hooks.on("renderApplicationV2", (application, element) => {
 	const actor = application?.document;
@@ -12,21 +35,84 @@ Hooks.on("renderApplicationV2", (application, element) => {
 	configureFateInput(actor, element);
 	configureMagicResourceInput(
 		application,
-		actor,
 		element?.querySelector?.(MAGIC_POINTS_SELECTOR),
-		"magicPoints",
-		"Magic Points",
-		"Punkty Magii",
 	);
 	configureMagicResourceInput(
 		application,
-		actor,
 		element?.querySelector?.(POWER_LEVEL_SELECTOR),
-		"powerLevel",
-		"Power Level",
-		"Poziom Mocy",
 	);
 });
+
+/**
+ * Persist the two explicitly-owned magic resources from the native
+ * ApplicationV2 form-change lifecycle.
+ *
+ * ClassicActorSheet uses submitOnChange. The Magic inputs deliberately have no
+ * `name` attribute so they do not participate in generic FormData submission.
+ * Therefore their update must be intercepted here, before the inherited
+ * DocumentSheetV2 change handler submits the rest of the form and rerenders the
+ * Actor sheet.
+ */
+function installMagicResourceFormPersistence() {
+	if (ClassicActorSheet.prototype.__wfrpMagicResourcePersistenceInstalled === true) {
+		return;
+	}
+
+	const originalOnChangeForm = ClassicActorSheet.prototype._onChangeForm;
+	if (typeof originalOnChangeForm !== "function") {
+		throw new Error(
+			"WFRP1ED | ClassicActorSheet has no _onChangeForm method; " +
+				"Magic resource persistence cannot be installed.",
+		);
+	}
+
+	ClassicActorSheet.prototype._onChangeForm = function wfrpMagicResourceChange(
+		formConfig,
+		event,
+	) {
+		const input = event?.target;
+		const field = magicResourceField(input);
+
+		if (!field) {
+			return originalOnChangeForm.call(this, formConfig, event);
+		}
+
+		if (this.isEditable !== true || !(input instanceof HTMLInputElement)) {
+			return;
+		}
+
+		/*
+		 * This control has one persistence owner: this native change handler.
+		 * Do not invoke the inherited generic form submission for it.
+		 */
+		event?.preventDefault?.();
+		event?.stopPropagation?.();
+
+		void persistMagicResource(
+			this.document,
+			input,
+			field.path,
+			field.englishLabel,
+			field.polishLabel,
+		);
+	};
+
+	Object.defineProperty(
+		ClassicActorSheet.prototype,
+		"__wfrpMagicResourcePersistenceInstalled",
+		{ value: true, configurable: false, enumerable: false },
+	);
+}
+
+function magicResourceField(input) {
+	if (!(input instanceof HTMLInputElement)) return null;
+
+	for (const [selector, field] of MAGIC_RESOURCE_FIELDS) {
+		if (input.matches(selector)) return field;
+	}
+
+	return null;
+}
 
 function configureFateInput(actor, element) {
 	const input = element?.querySelector?.(FATE_INPUT_SELECTOR);
@@ -56,14 +142,7 @@ function configureFateInput(actor, element) {
 	});
 }
 
-function configureMagicResourceInput(
-	application,
-	actor,
-	input,
-	statusKey,
-	englishLabel,
-	polishLabel,
-) {
+function configureMagicResourceInput(application, input) {
 	if (!(input instanceof HTMLInputElement)) {
 		return;
 	}
@@ -76,6 +155,7 @@ function configureMagicResourceInput(
 		return;
 	}
 
+	/* Enter commits through the same native change lifecycle as leaving focus. */
 	input.addEventListener("keydown", (event) => {
 		if (event.key !== "Enter") {
 			return;
@@ -84,36 +164,17 @@ function configureMagicResourceInput(
 		event.preventDefault();
 		input.blur();
 	});
-
-	/*
-	 * These controls deliberately have no `name` attribute in the Classic
-	 * template. ClassicActorSheet uses ApplicationV2 submitOnChange for ordinary
-	 * named controls. A control which owns explicit persistence must not also
-	 * participate in generic form submission.
-	 */
-	input.addEventListener("change", () => {
-		void persistMagicResource(
-			actor,
-			input,
-			statusKey,
-			englishLabel,
-			polishLabel,
-		);
-	});
 }
 
 async function persistMagicResource(
 	actor,
 	input,
-	statusKey,
+	path,
 	englishLabel,
 	polishLabel,
 ) {
-	const currentStatus = foundry.utils.deepClone(
-		actor?.system?.status ?? {},
-	);
 	const previous = nonNegativeInteger(
-		currentStatus?.[statusKey],
+		foundry.utils.getProperty(actor, path),
 	);
 	const value = Number(input.value);
 
@@ -130,16 +191,11 @@ async function persistMagicResource(
 
 	try {
 		/*
-		 * CharacterData.status is one native SchemaField. A flat update to one
-		 * nested member can be cleaned as a partial SchemaField payload and lose
-		 * sibling state. Now that these inputs are isolated from generic form
-		 * submission, persist one complete status record with only the selected
-		 * resource changed.
+		 * CharacterPartialMigrationFix makes dotted Character updates safe during
+		 * Foundry's partial data migration, so persist the exact canonical field
+		 * rather than replacing the whole status SchemaField.
 		 */
-		currentStatus[statusKey] = value;
-		await actor.update({
-			"system.status": currentStatus,
-		});
+		await actor.update({ [path]: value });
 	} catch (error) {
 		input.value = String(previous);
 		console.error(
