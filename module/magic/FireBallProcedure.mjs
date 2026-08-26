@@ -190,12 +190,13 @@ async function configureCast({ actor, spell, targets, maximum }) {
 					action: "cancel",
 					label: localize("Cancel", "Anuluj"),
 					icon: "fa-solid fa-xmark",
-					callback: () => null,
+					callback: () => false,
 				},
 			],
 			rejectClose: false,
 		});
-		if (!response) return null;
+		if (response === false || response === null || response === "cancel") return null;
+		if (!response || typeof response !== "object") return null;
 
 		draft = response;
 		try {
@@ -284,14 +285,15 @@ async function chooseGroupTargets(targets, count, ballNumber) {
 					default: true,
 					callback: (_event, button) => [...button.form.querySelectorAll("[data-fire-ball-target]:checked")].map((input) => input.value),
 				},
-				{ action: "cancel", label: localize("Cancel", "Anuluj"), callback: () => null },
+				{ action: "cancel", label: localize("Cancel", "Anuluj"), callback: () => false },
 			],
 			rejectClose: false,
 		});
-		if (!response) return null;
+		if (response === false || response === null || response === "cancel") return null;
+		if (!Array.isArray(response)) return null;
 		if (response.length === count) {
-				const selected = new Set(response);
-				return targets.filter((target) => selected.has(target.key));
+			const selected = new Set(response);
+			return targets.filter((target) => selected.has(target.key));
 		}
 		ui.notifications.warn(localize(
 			`Choose exactly ${count} targets.`,
@@ -354,162 +356,155 @@ async function resolveImpact({ actor, spell, target, ballIndex, flammable }) {
 }
 
 async function publishCastSummary({ actor, spell, configuration, volleys, magicPoints, magicPointsAfter }) {
-	const rollLines = volleys.map((volley, index) => configuration.group
-		? `<li>${escapeHtml(localize("Ball", "Kula"))} ${index + 1}: ${escapeHtml(String(volley.groupRoll.total))} — ${escapeHtml(volley.targets.map((target) => target.name).join(", "))}</li>`
-		: `<li>${escapeHtml(localize("Ball", "Kula"))} ${index + 1}: ${escapeHtml(volley.targets[0].name)}</li>`).join("");
-	const content = `<article class="wfrp-fireball-cast-card">
-		<header><strong>${escapeHtml(spell.name)}</strong><span>${configuration.fireBalls}</span></header>
-		<div>${escapeHtml(localize("Caster", "Rzucający"))}: <strong>${escapeHtml(actor.name)}</strong></div>
-		<div>${escapeHtml(localize("Magic Points", "Punkty Magii"))}: ${magicPoints} → ${magicPointsAfter}</div>
-		<ul>${rollLines}</ul>
-	</article>`;
-	return ChatMessage.create({
+	const groupDetails = volleys.map((volley, index) => ({
+		ballNumber: index + 1,
+		groupRoll: volley.groupRoll ? nonNegativeInteger(volley.groupRoll.total, "Group hits") : null,
+		targets: volley.targets.map((target) => ({ uuid: target.key, name: target.name })),
+	}));
+	const content = `
+		<section class="wfrp1ed fire-ball-cast-summary">
+			<h3>${escapeHtml(spell.name)}</h3>
+			<div><strong>${escapeHtml(localize("Fire Balls", "Ogniste Kule"))}:</strong> ${configuration.fireBalls}</div>
+			<div><strong>${escapeHtml(localize("Magic Points", "Punkty Magii"))}:</strong> ${magicPoints} → ${magicPointsAfter}</div>
+			${configuration.group ? `<div><strong>${escapeHtml(localize("Group hits", "Trafienia grupowe"))}:</strong> ${escapeHtml(groupDetails.map((entry) => `${entry.ballNumber}: ${entry.groupRoll} → ${entry.targets.map((target) => target.name).join(", ")}`).join("; "))}</div>` : ""}
+		</section>
+	`;
+	const message = await ChatMessage.create({
 		speaker: ChatMessage.getSpeaker({ actor }),
 		content,
-		rolls: volleys.map((volley) => volley.groupRoll).filter(Boolean),
-		flags: { [FLAG_SCOPE]: { [CAST_FLAG_KEY]: { version: 1, actorUuid: actor.uuid, spellUuid: spell.uuid } } },
 	});
-}
-
-function decorateImpact(message, html) {
-	const state = message?.getFlag?.(FLAG_SCOPE, IMPACT_FLAG_KEY);
-	if (!state) return;
-	const root = asElement(html);
-	const card = root?.querySelector?.(".wfrp1e-test-card") ?? (root?.matches?.(".wfrp1e-test-card") ? root : null);
-	if (!card || card.querySelector("[data-wfrp-fireball-impact]")) return;
-	const panel = document.createElement("section");
-	panel.className = "wfrp-fireball-impact";
-	panel.dataset.wfrpFireballImpact = "";
-	panel.innerHTML = `
-		<h3>${escapeHtml(state.spellName)} — ${escapeHtml(localize("damage", "obrażenia"))}</h3>
-		<div><span>1d10</span><strong>${state.damageRoll}</strong></div>
-		<div><span>${escapeHtml(localize("Strength", "Siła"))}</span><strong>+${state.strength}</strong></div>
-		${state.flammable ? `<div><span>${escapeHtml(localize("Flammable target", "Cel łatwopalny"))} (1d8)</span><strong>+${state.flammableRoll}</strong></div>` : ""}
-		<div><span>${escapeHtml(localize("Before Initiative", "Przed Inicjatywą"))}</span><strong>${state.fullDamage}</strong></div>
-		<div><span>${escapeHtml(localize("Initiative", "Inicjatywa"))}</span><strong>${escapeHtml(state.initiativeSuccess ? localize("Success — half", "Sukces — połowa") : localize("Failure — full", "Porażka — całość"))}</strong></div>
-		<div><span>${escapeHtml(localize("Before Toughness", "Przed Wytrzymałością"))}</span><strong>${state.afterInitiative}</strong></div>
-		<div><span>${escapeHtml(localize("Armour", "Pancerz"))}</span><strong>${escapeHtml(localize("ignored", "pominięty"))}</strong></div>
-		<div><span>${escapeHtml(localize("Toughness", "Wytrzymałość"))}</span><strong>−${state.toughness}</strong></div>
-		<div class="wfrp-fireball-impact__final"><span>${escapeHtml(localize("Final damage", "Końcowe obrażenia"))}</span><strong>${state.finalDamage}</strong></div>
-	`;
-	card.append(panel);
+	await message.setFlag(FLAG_SCOPE, CAST_FLAG_KEY, {
+		version: 1,
+		casterUuid: actor.uuid,
+		spellUuid: spell.uuid,
+		fireBalls: configuration.fireBalls,
+		magicPointsBefore: magicPoints,
+		magicPointsAfter,
+		group: configuration.group,
+		volleys: groupDetails,
+	});
 }
 
 function selectedTargetsInRange(actor) {
-	if (!canvas?.ready || !canvas.grid) {
+	const casterToken = actor.getActiveTokens?.(true, true)?.[0] ?? actor.getActiveTokens?.()[0] ?? null;
+	if (!casterToken) {
 		throw new Error(localize(
-			"The canvas must be ready to cast a ranged Spell.",
-			"Plansza musi być gotowa, aby rzucić Czar dystansowy.",
+			"Place the caster token on the current Scene before casting Fire Ball.",
+			"Umieść token rzucającego czar na bieżącej Scenie przed rzuceniem Ognistej Kuli.",
 		));
 	}
-	const targets = [...(game.user?.targets ?? [])]
-		.filter((token) => token?.actor?.documentName === "Actor")
-		.map((token) => ({
-			key: String(token.document?.uuid ?? token.id ?? token.actor.uuid),
-			actor: token.actor,
-			token,
-			name: String(token.name ?? token.actor.name ?? ""),
-		}));
-	if (targets.length === 0) return targets;
-
-	const source = casterToken(actor);
-	const outside = targets.filter((target) => {
-		const measured = canvas.grid.measurePath([source.center, target.token.center]);
-		const distance = Number(measured?.distance);
-		if (!Number.isFinite(distance)) {
+	const targets = [...(game.user?.targets ?? [])].map((token) => {
+		const distance = tokenDistance(casterToken, token);
+		if (distance > RANGE) {
 			throw new Error(localize(
-				`Unable to measure the distance to ${target.name}.`,
-				`Nie można zmierzyć odległości do celu ${target.name}.`,
+				`${token.name} is beyond Fire Ball range (${RANGE}).`,
+				`${token.name} znajduje się poza zasięgiem Ognistej Kuli (${RANGE}).`,
 			));
 		}
-		return distance > RANGE;
+		return Object.freeze({
+			key: token.document?.uuid ?? token.uuid,
+			name: token.name,
+			actor: token.actor,
+			distance,
+		});
 	});
-	if (outside.length > 0) {
-		throw new Error(localize(
-			`Fire Ball has a range of ${RANGE}; outside range: ${outside.map((target) => target.name).join(", ")}.`,
-			`Ognista Kula ma zasięg ${RANGE}; poza zasięgiem: ${outside.map((target) => target.name).join(", ")}.`,
-		));
-	}
-	return targets;
+	return Object.freeze(targets);
 }
 
-function casterToken(actor) {
-	const controlled = [...(canvas?.tokens?.controlled ?? [])]
-		.filter((token) => token?.actor?.uuid === actor.uuid);
-	if (controlled.length === 1) return controlled[0];
-
-	const active = [...(actor.getActiveTokens?.() ?? [])]
-		.filter((token) => token?.document?.parent?.id === canvas.scene?.id);
-	if (active.length === 1) return active[0];
-
-	throw new Error(localize(
-		"Place the caster on this Scene. If more than one of its tokens is present, control the casting token first.",
-		"Umieść rzucającego czar na tej Scenie. Jeśli znajduje się na niej więcej niż jeden jego token, najpierw zaznacz token rzucający czar.",
-	));
+function tokenDistance(origin, target) {
+	if (canvas.grid?.measurePath) {
+		const measured = canvas.grid.measurePath([
+			origin.center,
+			target.center,
+		]);
+		const distance = Number(measured?.distance);
+		if (Number.isFinite(distance)) return distance;
+	}
+	const dx = Number(target.center?.x) - Number(origin.center?.x);
+	const dy = Number(target.center?.y) - Number(origin.center?.y);
+	const pixels = Math.hypot(dx, dy);
+	const gridSize = Number(canvas.grid?.size) || 1;
+	const gridDistance = Number(canvas.scene?.grid?.distance) || 1;
+	return (pixels / gridSize) * gridDistance;
 }
 
 function fireBallRoundUsage(actor) {
 	const combat = game.combat;
-	const round = Number(combat?.round);
-	const participant = combat?.started === true &&
-		Number.isInteger(round) && round > 0 &&
-		[...(combat.combatants ?? [])]
-			.some((combatant) => combatant.actor?.uuid === actor.uuid);
-	if (!participant) {
+	if (!combat?.id || !Number.isInteger(Number(combat.round))) {
 		return { managed: false, combatId: null, round: null, used: 0 };
 	}
-
-	const state = actor.getFlag?.(FLAG_SCOPE, ROUND_USAGE_FLAG_KEY) ?? {};
-	const current = String(state.combatId ?? "") === String(combat.id ?? "") &&
-		Number(state.round) === round;
-	return {
-		managed: true,
-		combatId: String(combat.id ?? ""),
-		round,
-		used: current ? nonNegativeInteger(state.used ?? 0, "Fire Ball round usage") : 0,
-	};
+	const stored = actor.getFlag?.(FLAG_SCOPE, ROUND_USAGE_FLAG_KEY);
+	if (stored?.combatId === combat.id && Number(stored?.round) === Number(combat.round)) {
+		return {
+			managed: true,
+			combatId: combat.id,
+			round: Number(combat.round),
+			used: nonNegativeInteger(stored.used, "Fire Ball round usage"),
+		};
+	}
+	return { managed: true, combatId: combat.id, round: Number(combat.round), used: 0 };
 }
 
 function positiveInteger(value, label) {
-	const number = nonNegativeInteger(value, label);
-	if (number < 1) throw new Error(`${label}: ${localize("must be at least 1", "musi wynosić co najmniej 1")}.`);
-	return number;
+	const numeric = Number(value);
+	if (!Number.isFinite(numeric) || !Number.isInteger(numeric) || numeric < 1) {
+		throw new Error(localize(
+			`${label} must be a positive integer.`,
+			`${label} musi być dodatnią liczbą całkowitą.`,
+		));
+	}
+	return numeric;
 }
 
-function nonNegativeInteger(value, label) {
-	const number = Number(value);
-	if (!Number.isInteger(number) || number < 0) throw new Error(`${label}: invalid value.`);
-	return number;
+function nonNegativeInteger(value, label = "Value") {
+	const numeric = Number(value);
+	if (!Number.isFinite(numeric) || !Number.isInteger(numeric) || numeric < 0) {
+		throw new Error(localize(
+			`${label} must be a non-negative integer.`,
+			`${label} musi być nieujemną liczbą całkowitą.`,
+		));
+	}
+	return numeric;
 }
 
 function integerInRange(value, minimum, maximum) {
-	const number = Number(value);
-	if (!Number.isInteger(number) || number < minimum || number > maximum) {
+	const numeric = Number(value);
+	if (!Number.isInteger(numeric) || numeric < minimum || numeric > maximum) {
 		throw new Error(localize(
-			`Choose a whole number from ${minimum} to ${maximum}.`,
+			`Choose an integer from ${minimum} to ${maximum}.`,
 			`Wybierz liczbę całkowitą od ${minimum} do ${maximum}.`,
 		));
 	}
-	return number;
-}
-
-function asElement(value) {
-	if (value?.nodeType === 1) return value;
-	if (value?.[0]?.nodeType === 1) return value[0];
-	return null;
+	return numeric;
 }
 
 function cssEscape(value) {
-	return globalThis.CSS?.escape?.(String(value)) ?? String(value).replace(/[^A-Za-z0-9_-]/g, "\\$&");
+	if (globalThis.CSS?.escape) return CSS.escape(String(value));
+	return String(value).replace(/["\\]/g, "\\$&");
 }
 
 function escapeHtml(value) {
-	return String(value ?? "")
-		.replaceAll("&", "&amp;")
-		.replaceAll("<", "&lt;")
-		.replaceAll(">", "&gt;")
-		.replaceAll('"', "&quot;")
-		.replaceAll("'", "&#039;");
+	const div = document.createElement("div");
+	div.textContent = String(value ?? "");
+	return div.innerHTML;
+}
+
+function decorateImpact(message, html) {
+	const impact = message.getFlag?.(FLAG_SCOPE, IMPACT_FLAG_KEY);
+	if (!impact || !(html instanceof HTMLElement)) return;
+	const messageContent = html.querySelector(".message-content");
+	if (!messageContent || messageContent.querySelector(".wfrp-fire-ball-impact")) return;
+	const section = document.createElement("section");
+	section.className = "wfrp1ed wfrp-fire-ball-impact";
+	section.innerHTML = `
+		<hr>
+		<div><strong>${escapeHtml(localize("Fire Ball", "Ognista Kula"))} ${impact.ballNumber}</strong> — ${escapeHtml(impact.targetName)}</div>
+		<div>${escapeHtml(localize("Damage", "Obrażenia"))}: ${impact.strength} + ${impact.damageRoll}${impact.flammable ? ` + ${impact.flammableRoll}` : ""} = ${impact.fullDamage}</div>
+		<div>${escapeHtml(localize("Initiative", "Inicjatywa"))}: ${impact.initiativeSuccess ? localize("success — damage halved", "sukces — obrażenia o połowę") : localize("failure — full damage", "porażka — pełne obrażenia")}</div>
+		<div>${escapeHtml(localize("Armour", "Pancerz"))}: ${escapeHtml(localize("ignored", "ignorowany"))}; ${escapeHtml(localize("Toughness", "Wytrzymałość"))}: ${impact.toughness}</div>
+		<div><strong>${escapeHtml(localize("Final damage", "Końcowe obrażenia"))}: ${impact.finalDamage}</strong></div>
+	`;
+	messageContent.append(section);
 }
 
 function localize(english, polish) {
