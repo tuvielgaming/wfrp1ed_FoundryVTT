@@ -1,0 +1,86 @@
+<div class="spell-item-sheet__root">
+	<header class="combat-item-sheet__header spell-item-sheet__header wfrp1ed-item-header">
+		<img class="combat-item-sheet__image wfrp1ed-item-header__image" data-wfrp1ed-item-image src="{{item.img}}" alt="{{item.name}}">
+		<label class="combat-item-sheet__field combat-item-sheet__field--name">
+			<span>{{ui.name}}</span>
+			<input type="text" name="name" value="{{item.name}}" autocomplete="off" required {{#unless editable}}disabled{{/unless}}>
+		</label>
+	</header>
+
+	<nav class="spell-item-sheet__tabs wfrp1ed-tabs" role="tablist" aria-label="{{ui.name}}">
+		<button type="button" class="wfrp1ed-tab" role="tab" data-action="showDetails" data-spell-tab-button="details">
+			<i class="fa-solid fa-list"></i>
+			<span>{{ui.detailsTab}}</span>
+		</button>
+		<button type="button" class="wfrp1ed-tab" role="tab" data-action="showEffects" data-spell-tab-button="effects">
+			<i class="fa-solid fa-wand-magic-sparkles"></i>
+			<span>{{ui.effectsTab}}</span>
+		</button>
+	</nav>
+
+	<div class="spell-item-sheet__tab-content">
+		<section class="combat-item-sheet__content" data-spell-tab-panel="details">
+			<section class="combat-item-sheet__panel">
+				<h3>{{ui.classification}}</h3>
+				<div class="combat-item-sheet__grid combat-item-sheet__grid--3">
+					<label class="combat-item-sheet__field">
+						<span>{{ui.tradition}}</span>
+						<select name="system.tradition" {{#unless editable}}disabled{{/unless}}>
+							{{#each traditionOptions as |option|}}<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>{{/each}}
+						</select>
+					</label>
+					<label class="combat-item-sheet__field">
+						<span>{{ui.spellLevel}}</span>
+						<select name="system.spellLevel" {{#unless editable}}disabled{{/unless}}>
+							{{#each levelOptions as |option|}}<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>{{/each}}
+						</select>
+					</label>
+					<label class="combat-item-sheet__field"><span>{{ui.rulesId}}</span><input type="text" name="system.rulesId" value="{{system.rulesId}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}></label>
+				</div>
+			</section>
+
+			<section class="combat-item-sheet__panel">
+				<h3>{{ui.casting}}</h3>
+				<div class="combat-item-sheet__grid combat-item-sheet__grid--2">
+					<label class="combat-item-sheet__field"><span>{{ui.magicPointAmount}}</span><input type="number" min="0" step="1" name="system.magicPointCost.amount" value="{{system.magicPointCost.amount}}" {{#unless editable}}disabled{{/unless}}></label>
+					<label class="combat-item-sheet__field">
+						<span>{{ui.magicPointInterval}}</span>
+						<select name="system.magicPointCost.interval" {{#unless editable}}disabled{{/unless}}>
+							{{#each costIntervalOptions as |option|}}<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>{{/each}}
+						</select>
+					</label>
+					<label class="combat-item-sheet__field"><span>{{ui.range}}</span><input type="text" name="system.range" value="{{system.range}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}></label>
+					<label class="combat-item-sheet__field"><span>{{ui.duration}}</span><input type="text" name="system.duration" value="{{system.duration}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}></label>
+				</div>
+			</section>
+
+			<label class="combat-item-sheet__field spell-item-sheet__ingredients"><span>{{ui.ingredients}}</span><textarea name="system.ingredients" spellcheck="true" {{#unless editable}}disabled{{/unless}}>{{system.ingredients}}</textarea></label>
+			<label class="combat-item-sheet__field combat-item-sheet__description"><span>{{ui.description}}</span><textarea name="system.description" spellcheck="true" {{#unless editable}}disabled{{/unless}}>{{system.description}}</textarea></label>
+		</section>
+
+		<section class="equipment-effects-panel" data-spell-tab-panel="effects" hidden>
+			<header class="equipment-effects-panel__header">
+				<div>
+					<h3>{{ui.effectsTab}}</h3>
+					<p>{{ui.effectsHint}}</p>
+				</div>
+				<button type="button" data-action="createEffect" {{#unless editable}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> {{ui.addEffect}}</button>
+			</header>
+			<div class="equipment-effects-list">
+				{{#each effects as |effect|}}
+					<article class="equipment-effect-card {{#if effect.disabled}}is-disabled{{/if}}" data-effect-id="{{effect.id}}">
+						<img src="{{effect.img}}" alt="">
+						<div class="equipment-effect-card__identity"><strong>{{effect.name}}</strong><span>{{effect.stateLabel}}</span></div>
+						<div class="equipment-effect-card__actions">
+							<button type="button" data-action="toggleEffect" {{#unless ../editable}}disabled{{/unless}}><i class="fa-solid {{#if effect.disabled}}fa-toggle-off{{else}}fa-toggle-on{{/if}}"></i></button>
+							<button type="button" data-action="configureEffect"><i class="fa-solid fa-gear"></i></button>
+							<button type="button" data-action="deleteEffect" {{#unless ../editable}}disabled{{/unless}}><i class="fa-solid fa-trash"></i></button>
+						</div>
+					</article>
+				{{else}}
+					<p class="equipment-effects-panel__empty">{{ui.noEffects}}</p>
+				{{/each}}
+			</div>
+		</section>
+	</div>
+</div>

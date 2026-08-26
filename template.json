@@ -406,11 +406,17 @@
             "specialRules": []
         },
         "spell": {
-            "templates": [
-                "base",
-                "description"
-            ],
-            "spellLevel": 1
+            "rulesId": "",
+            "tradition": "petty",
+            "spellLevel": 0,
+            "magicPointCost": {
+                "amount": 0,
+                "interval": "cast"
+            },
+            "range": "",
+            "duration": "",
+            "ingredients": "",
+            "description": ""
         }
     }
 }

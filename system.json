@@ -13,6 +13,7 @@
 		"module/settings/WfrpRuleSettings.mjs",
 		"module/loot/LootPileBootstrap.mjs",
 		"module/wfrp1ed.mjs",
+		"module/magic/SpellBootstrap.mjs",
 		"module/ui/DialogV2ElementContentCompatibility.mjs",
 		"module/ui/SystemCheckboxIntegration.mjs",
 		"module/chat/GMGameplayNotice.mjs",

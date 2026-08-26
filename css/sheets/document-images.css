@@ -35,7 +35,7 @@
 	z-index: 1;
 }
 
-/* Trait, Spell and any future unaudited Item types currently use Foundry's
+/* Trait and any future unaudited Item types currently use Foundry's
  * compact fallback Item sheet. Give that native header the same image size. */
 .app.window-app.sheet.item-sheet .sheet-header > img {
 	flex: 0 0 var(--wfrp1ed-item-header-image-size);
