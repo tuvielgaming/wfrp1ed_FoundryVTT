@@ -5,6 +5,7 @@ import {
 	DamagePacket,
 } from "../damage/DamagePacket.mjs";
 import { DamageResolver } from "../damage/DamageResolver.mjs";
+import { WfrpRuleSettings } from "../settings/WfrpRuleSettings.mjs";
 import { SPELL_PROCEDURE_ID } from "./SpellProcedureRegistry.mjs";
 
 const { DialogV2 } = foundry.applications.api;
@@ -38,7 +39,7 @@ async function executeFireBall(actor, spell) {
 		actor.system?.status?.magicPoints,
 		localize("Magic Points", "Punkty Magii"),
 	);
-	const targets = selectedTargetsInRange(actor);
+	const targets = selectedTargets(actor);
 	if (targets.length === 0) {
 		throw new Error(localize(
 			"Target at least one token before casting Fire Ball.",
@@ -110,8 +111,10 @@ async function executeFireBall(actor, spell) {
 }
 
 async function configureCast({ actor, spell, targets, maximum }) {
+	const automaticDistance = initialAutomaticDistance(targets);
 	const draft = {
 		fireBalls: 1,
+		distance: automaticDistance,
 		conditions: Object.fromEntries(targets.map((target) => [
 			target.key,
 			{ flammable: false, fearOfFire: false },
@@ -131,6 +134,14 @@ async function configureCast({ actor, spell, targets, maximum }) {
 			<label>${escapeHtml(localize("Fire Balls", "Liczba kul"))}</label>
 			<div class="form-fields"><input type="number" name="fireBalls" min="1" max="${maximum}" step="1" value="${draft.fireBalls}" required></div>
 		</div>
+		<div class="form-group">
+			<label>${escapeHtml(localize("Distance", "Dystans"))}</label>
+			<div class="form-fields"><input type="number" name="distance" min="0" max="${RANGE}" step="1" value="${draft.distance ?? ""}" required></div>
+		</div>
+		<p class="notes">${escapeHtml(localize(
+			`Fire Ball maximum range is ${RANGE}. Distance is part of this spell's own rules; token position does not block opening this dialog.`,
+			`Maksymalny zasięg Ognistej Kuli wynosi ${RANGE}. Dystans jest elementem zasad tego czaru; położenie tokenów nie blokuje otwarcia tego okna.`,
+		))}</p>
 		<p class="notes">${escapeHtml(targets.length === 1
 			? localize("One selected token: individual target.", "Jeden wskazany token: cel pojedynczy.")
 			: localize("Multiple selected tokens: target group.", "Wiele wskazanych tokenów: grupa celów."))}</p>
@@ -179,6 +190,7 @@ async function configureCast({ actor, spell, targets, maximum }) {
 		try {
 			return {
 				fireBalls: integerInRange(response.fireBalls, 1, maximum),
+				distance: numberInRange(response.distance, 0, RANGE),
 				conditions: response.conditions,
 				group: targets.length > 1,
 			};
@@ -197,6 +209,7 @@ function isCastConfiguration(response) {
 		response &&
 		typeof response === "object" &&
 		Object.hasOwn(response, "fireBalls") &&
+		Object.hasOwn(response, "distance") &&
 		response.conditions &&
 		typeof response.conditions === "object",
 	);
@@ -214,6 +227,7 @@ function conditionLabel(kind, text, checked = false) {
 
 function readConfiguration(form, targets) {
 	const fireBalls = Number(form?.elements?.fireBalls?.value);
+	const distance = Number(form?.elements?.distance?.value);
 	const conditions = {};
 	for (const target of targets) {
 		const row = form?.querySelector?.(`[data-target-uuid="${cssEscape(target.key)}"]`);
@@ -222,7 +236,7 @@ function readConfiguration(form, targets) {
 			fearOfFire: row?.querySelector?.('[data-fire-ball-condition="fearOfFire"]')?.checked === true,
 		};
 	}
-	return { fireBalls, conditions };
+	return { fireBalls, distance, conditions };
 }
 
 async function resolveVolleyTargets(configuration, targets, powerLevel) {
@@ -356,6 +370,7 @@ async function publishCastSummary({ actor, spell, configuration, volleys, magicP
 		<section class="wfrp1ed fire-ball-cast-summary">
 			<h3>${escapeHtml(spell.name)}</h3>
 			<div><strong>${escapeHtml(localize("Fire Balls", "Ogniste Kule"))}:</strong> ${configuration.fireBalls}</div>
+			<div><strong>${escapeHtml(localize("Distance", "Dystans"))}:</strong> ${configuration.distance} / ${RANGE}</div>
 			<div><strong>${escapeHtml(localize("Magic Points", "Punkty Magii"))}:</strong> ${magicPoints} → ${magicPointsAfter}</div>
 			${configuration.group ? `<div><strong>${escapeHtml(localize("Group hits", "Trafienia grupowe"))}:</strong> ${escapeHtml(groupDetails.map((entry) => `${entry.ballNumber}: ${entry.groupRoll} → ${entry.targets.map((target) => target.name).join(", ")}`).join("; "))}</div>` : ""}
 		</section>
@@ -369,6 +384,7 @@ async function publishCastSummary({ actor, spell, configuration, volleys, magicP
 		casterUuid: actor.uuid,
 		spellUuid: spell.uuid,
 		fireBalls: configuration.fireBalls,
+		distance: configuration.distance,
 		magicPointsBefore: magicPoints,
 		magicPointsAfter,
 		group: configuration.group,
@@ -376,59 +392,48 @@ async function publishCastSummary({ actor, spell, configuration, volleys, magicP
 	});
 }
 
-function selectedTargetsInRange(actor) {
-	const casterToken = actor.getActiveTokens?.(true, true)?.[0] ?? actor.getActiveTokens?.()[0] ?? null;
-	if (!casterToken) {
-		throw new Error(localize(
-			"Place the caster token on the current Scene before casting Fire Ball.",
-			"Umieść token rzucającego czar na bieżącej Scenie przed rzuceniem Ognistej Kuli.",
-		));
-	}
-	const targets = [...(game.user?.targets ?? [])].map((token) => {
-		const distance = tokenDistance(casterToken, token);
-		if (distance > RANGE) {
-			throw new Error(localize(
-				`${token.name} is beyond Fire Ball range (${RANGE}).`,
-				`${token.name} znajduje się poza zasięgiem Ognistej Kuli (${RANGE}).`,
-			));
-		}
-		return Object.freeze({
-			key: token.document?.uuid ?? token.uuid,
-			name: token.name,
-			actor: token.actor,
-			distance,
-		});
-	});
+function selectedTargets(actor) {
+	const automaticDistance = WfrpRuleSettings.usesAutomaticSpellTokenDistance();
+	const casterToken = automaticDistance ? activeCasterToken(actor) : null;
+	const targets = [...(game.user?.targets ?? [])].map((token) => Object.freeze({
+		key: token.document?.uuid ?? token.uuid,
+		name: token.name,
+		actor: token.actor,
+		distance: casterToken ? tokenDistance(casterToken, token) : null,
+	}));
 	return Object.freeze(targets);
 }
 
-function tokenDistance(origin, target) {
-	const originCenter = origin?.center;
-	const targetCenter = target?.center;
-	if (
-		!originCenter ||
-		!targetCenter ||
-		!Number.isFinite(Number(originCenter.x)) ||
-		!Number.isFinite(Number(originCenter.y)) ||
-		!Number.isFinite(Number(targetCenter.x)) ||
-		!Number.isFinite(Number(targetCenter.y))
-	) {
-		throw new Error(localize(
-			"Unable to determine token distance on the current Scene.",
-			"Nie można określić odległości między tokenami na bieżącej Scenie.",
-		));
-	}
+function activeCasterToken(actor) {
+	const tokens = actor.getActiveTokens?.() ?? [];
+	return tokens.find((token) => tokenCenter(token)) ?? null;
+}
 
-	/* Foundry v14 SquareGrid.measurePath expects grid-offset path data rather than
-	 * raw canvas points. Passing Token.center points makes SquareGrid.getOffset
-	 * dereference a missing {i, j} offset. Fire Ball only needs straight-line
-	 * range in Scene units, so compute that directly from token centres. */
+function initialAutomaticDistance(targets) {
+	if (!WfrpRuleSettings.usesAutomaticSpellTokenDistance()) return null;
+	const measured = targets
+		.map((target) => Number(target.distance))
+		.filter((distance) => Number.isFinite(distance));
+	return measured.length > 0 ? Math.max(...measured) : null;
+}
+
+function tokenDistance(origin, target) {
+	const originCenter = tokenCenter(origin);
+	const targetCenter = tokenCenter(target);
+	if (!originCenter || !targetCenter) return null;
+
 	const dx = Number(targetCenter.x) - Number(originCenter.x);
 	const dy = Number(targetCenter.y) - Number(originCenter.y);
+	if (!Number.isFinite(dx) || !Number.isFinite(dy)) return null;
+
 	const pixels = Math.hypot(dx, dy);
 	const gridSize = Number(canvas.grid?.size) || 1;
 	const gridDistance = Number(canvas.scene?.grid?.distance) || 1;
 	return (pixels / gridSize) * gridDistance;
+}
+
+function tokenCenter(token) {
+	return token?.center ?? token?.object?.center ?? null;
 }
 
 function fireBallRoundUsage(actor) {
@@ -476,6 +481,17 @@ function integerInRange(value, minimum, maximum) {
 		throw new Error(localize(
 			`Choose an integer from ${minimum} to ${maximum}.`,
 			`Wybierz liczbę całkowitą od ${minimum} do ${maximum}.`,
+		));
+	}
+	return numeric;
+}
+
+function numberInRange(value, minimum, maximum) {
+	const numeric = Number(value);
+	if (!Number.isFinite(numeric) || numeric < minimum || numeric > maximum) {
+		throw new Error(localize(
+			`Enter a distance from ${minimum} to ${maximum}.`,
+			`Wprowadź dystans od ${minimum} do ${maximum}.`,
 		));
 	}
 	return numeric;
