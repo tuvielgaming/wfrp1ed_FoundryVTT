@@ -1,13 +1,15 @@
 import { CombatAttackLauncher } from "./CombatAttackLauncher.mjs";
 
 const ATTACK_CLICK_DELAY_MS = 220;
-const COMBAT_ROW_SELECTOR = ".melee-row, .ranged-row, .armour-row";
+const ITEM_ROW_SELECTOR = ".melee-row, .ranged-row, .armour-row, .spell-row";
 const pendingAttacks = new WeakMap();
 
 /**
- * Make physical Item opening consistent across the Classic sheet:
+ * Make Item opening consistent across the Classic sheet:
  * - Equipment/Wealth already use double-click;
  * - melee/ranged/armour now use double-click as well;
+ * - spells use double-click for editing while single-click remains reserved
+ *   for the future casting procedure;
  * - Shift+click is deliberately left unused for future interactions.
  *
  * Melee keeps its normal left-click attack. The attack is delayed by a short
@@ -31,7 +33,7 @@ function installInteractionHandlers(sheet, actor) {
 	sheet.dataset.wfrpCombatItemOpenConsistency = "true";
 
 	sheet.addEventListener("click", (event) => {
-		const row = combatRowFromEvent(event, sheet);
+		const row = itemRowFromEvent(event, sheet);
 		if (!row || isInteractiveOrigin(event.target, row)) return;
 
 		/* Explicitly consume Shift+click so the older row listener cannot use it
@@ -66,7 +68,7 @@ function installInteractionHandlers(sheet, actor) {
 	}, true);
 
 	sheet.addEventListener("dblclick", (event) => {
-		const row = combatRowFromEvent(event, sheet);
+		const row = itemRowFromEvent(event, sheet);
 		if (!row || isInteractiveOrigin(event.target, row)) return;
 
 		event.preventDefault();
@@ -80,10 +82,16 @@ function installInteractionHandlers(sheet, actor) {
 }
 
 function refreshInteractionTitles(sheet) {
-	for (const row of sheet.querySelectorAll(COMBAT_ROW_SELECTOR)) {
+	for (const row of sheet.querySelectorAll(ITEM_ROW_SELECTOR)) {
 		if (!(row instanceof HTMLElement)) continue;
 		const attackable = row.classList.contains("combat-sheet-attack-rollable");
-		const title = attackable
+		const spell = row.classList.contains("spell-row");
+		const title = spell
+			? localize(
+				"Left-click is reserved for casting. Double-click to open Spell details.",
+				"Lewy klik jest zarezerwowany dla rzucania czaru. Dwuklik: otwórz szczegóły Czaru.",
+			)
+			: attackable
 			? localize(
 				"Left-click to attack. Double-click to open Item details.",
 				"Lewy klik: atak. Dwuklik: otwórz szczegóły przedmiotu.",
@@ -94,16 +102,16 @@ function refreshInteractionTitles(sheet) {
 			);
 		row.title = title;
 		const nameCell = row.querySelector(
-			".melee-cell--name, .ranged-cell--name, .armour-cell--name",
+			".melee-cell--name, .ranged-cell--name, .armour-cell--name, .spell-cell--name",
 		);
 		if (nameCell instanceof HTMLElement) nameCell.title = title;
 	}
 }
 
-function combatRowFromEvent(event, sheet) {
+function itemRowFromEvent(event, sheet) {
 	const target = event.target;
 	if (!(target instanceof Element)) return null;
-	const row = target.closest(COMBAT_ROW_SELECTOR);
+	const row = target.closest(ITEM_ROW_SELECTOR);
 	return row instanceof HTMLElement && sheet.contains(row) ? row : null;
 }
 

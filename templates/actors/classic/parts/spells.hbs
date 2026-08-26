@@ -15,14 +15,7 @@
 		{{#each display.spells as |spell|}}
 			<li class="spell-row" data-item-id="{{spell.id}}" data-item-uuid="{{spell.uuid}}">
 				<div class="spell-cell spell-cell--name">
-					<button
-						type="button"
-						class="spell-name"
-						data-action="openSpell"
-						data-item-id="{{spell.id}}"
-						aria-label="{{localize 'WFRP1ED.SpellSheet.OpenSpell'}}: {{spell.name}}"
-						title="{{spell.name}}"
-					>{{spell.name}}</button>
+					<span class="spell-name">{{spell.name}}</span>
 					{{#if @root.editable}}
 						<button
 							type="button"

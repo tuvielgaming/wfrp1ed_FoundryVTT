@@ -1496,6 +1496,8 @@
 }
 
 .wfrp1ed-classic-sheet .spell-name {
+	display: flex;
+	align-items: center;
 	width: 100%;
 	min-width: 0;
 	height: 100%;

@@ -66,9 +66,6 @@ export class ClassicActorSheet extends HandlebarsApplicationMixin(
 			addSpell:
 				ClassicActorSheet.#onAddSpell,
 
-			openSpell:
-				ClassicActorSheet.#onOpenSpell,
-
 			removeSpell:
 				ClassicActorSheet.#onRemoveSpell,
 		},
@@ -756,19 +753,6 @@ export class ClassicActorSheet extends HandlebarsApplicationMixin(
 				await spell.sheet.render({ force: true });
 			},
 		);
-	}
-
-	/** @this {ClassicActorSheet} */
-	static async #onOpenSpell(event, target) {
-		event.preventDefault();
-
-		try {
-			const spell = ClassicActorSheet.#spellFromTarget(this, target);
-			await spell.sheet.render({ force: true });
-		} catch (error) {
-			console.error("WFRP1ED | Unable to open spell.", error);
-			ui.notifications.error(error.message ?? "Unable to open the spell.");
-		}
 	}
 
 	/** @this {ClassicActorSheet} */
