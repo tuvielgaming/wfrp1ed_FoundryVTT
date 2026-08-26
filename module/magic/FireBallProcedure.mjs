@@ -14,6 +14,7 @@ const CAST_FLAG_KEY = "fireBallCast";
 const ROUND_USAGE_FLAG_KEY = "fireBallRoundUsage";
 const STRENGTH = 3;
 const RANGE = 48;
+const CANCEL_DIALOG_RESULT = Object.freeze({ cancelled: true });
 
 /** Audited WFRP 1e Fire Ball casting and damage procedure. */
 export const FireBallProcedure = Object.freeze({
@@ -59,19 +60,10 @@ async function executeFireBall(actor, spell) {
 		));
 	}
 
-	const configuration = await configureCast({
-		actor,
-		spell,
-		targets,
-		maximum,
-	});
+	const configuration = await configureCast({ actor, spell, targets, maximum });
 	if (!configuration) return null;
 
-	const volleys = await resolveVolleyTargets(
-		configuration,
-		targets,
-		powerLevel,
-	);
+	const volleys = await resolveVolleyTargets(configuration, targets, powerLevel);
 	if (!volleys) return null;
 
 	const magicPointsAfter = magicPoints - configuration.fireBalls;
@@ -85,14 +77,7 @@ async function executeFireBall(actor, spell) {
 		};
 	}
 	await actor.update(resourceUpdate);
-	await publishCastSummary({
-		actor,
-		spell,
-		configuration,
-		volleys,
-		magicPoints,
-		magicPointsAfter,
-	});
+	await publishCastSummary({ actor, spell, configuration, volleys, magicPoints, magicPointsAfter });
 
 	const affected = new Map(
 		volleys.flatMap((volley) => volley.targets)
@@ -125,7 +110,7 @@ async function executeFireBall(actor, spell) {
 }
 
 async function configureCast({ actor, spell, targets, maximum }) {
-	let draft = {
+	const draft = {
 		fireBalls: 1,
 		conditions: Object.fromEntries(targets.map((target) => [
 			target.key,
@@ -160,16 +145,8 @@ async function configureCast({ actor, spell, targets, maximum }) {
 			legend.textContent = target.name;
 			row.append(
 				legend,
-				conditionLabel(
-					"flammable",
-					localize("Flammable", "Łatwopalny"),
-					draft.conditions[target.key]?.flammable,
-				),
-				conditionLabel(
-					"fearOfFire",
-					localize("Subject to fear of fire", "Podatny na strach przed ogniem"),
-					draft.conditions[target.key]?.fearOfFire,
-				),
+				conditionLabel("flammable", localize("Flammable", "Łatwopalny"), draft.conditions[target.key]?.flammable),
+				conditionLabel("fearOfFire", localize("Subject to fear of fire", "Podatny na strach przed ogniem"), draft.conditions[target.key]?.fearOfFire),
 			);
 			list.append(row);
 		}
@@ -190,25 +167,39 @@ async function configureCast({ actor, spell, targets, maximum }) {
 					action: "cancel",
 					label: localize("Cancel", "Anuluj"),
 					icon: "fa-solid fa-xmark",
-					callback: () => false,
+					callback: () => CANCEL_DIALOG_RESULT,
 				},
 			],
 			rejectClose: false,
 		});
-		if (response === false || response === null || response === "cancel") return null;
-		if (!response || typeof response !== "object") return null;
 
-		draft = response;
+		if (isCancelledDialogResult(response)) return null;
+		if (!isCastConfiguration(response)) return null;
+
 		try {
 			return {
-				...response,
 				fireBalls: integerInRange(response.fireBalls, 1, maximum),
+				conditions: response.conditions,
 				group: targets.length > 1,
 			};
 		} catch (error) {
 			ui.notifications.warn(error.message);
 		}
 	}
+}
+
+function isCancelledDialogResult(response) {
+	return response === null || response === "cancel" || response?.cancelled === true;
+}
+
+function isCastConfiguration(response) {
+	return Boolean(
+		response &&
+		typeof response === "object" &&
+		Object.hasOwn(response, "fireBalls") &&
+		response.conditions &&
+		typeof response.conditions === "object",
+	);
 }
 
 function conditionLabel(kind, text, checked = false) {
@@ -285,11 +276,11 @@ async function chooseGroupTargets(targets, count, ballNumber) {
 					default: true,
 					callback: (_event, button) => [...button.form.querySelectorAll("[data-fire-ball-target]:checked")].map((input) => input.value),
 				},
-				{ action: "cancel", label: localize("Cancel", "Anuluj"), callback: () => false },
+				{ action: "cancel", label: localize("Cancel", "Anuluj"), callback: () => CANCEL_DIALOG_RESULT },
 			],
 			rejectClose: false,
 		});
-		if (response === false || response === null || response === "cancel") return null;
+		if (isCancelledDialogResult(response)) return null;
 		if (!Array.isArray(response)) return null;
 		if (response.length === count) {
 			const selected = new Set(response);
