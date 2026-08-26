@@ -68,6 +68,7 @@
 		"module/loot/LootPileChatIntegration.mjs",
 		"module/sheets/ClassicSheetScrollPreservation.mjs",
 		"module/sheets/CharacterDetailsUpdateGuard.mjs",
+		"module/sheets/CharacterStatusUpdateGuard.mjs",
 		"module/sheets/DocumentImageIntegration.mjs",
 		"module/sheets/CareerImageIntegration.mjs",
 		"module/damage/DamageBootstrap.mjs",
