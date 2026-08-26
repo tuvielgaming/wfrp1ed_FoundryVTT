@@ -4,6 +4,11 @@ import {
 	SpellData,
 } from "../data-models/item/SpellData.mjs";
 import { SpellItemSheet } from "../sheets/SpellItemSheet.mjs";
+import {
+	FireBallProcedure,
+	installFireBallPresentation,
+} from "./FireBallProcedure.mjs";
+import { SpellProcedureRegistry } from "./SpellProcedureRegistry.mjs";
 
 const { DocumentSheetConfig } = foundry.applications.apps;
 const { Item } = foundry.documents;
@@ -11,6 +16,8 @@ const { Item } = foundry.documents;
 /** Register the rulebook-backed Spell document and its authoring sheet. */
 Hooks.once("init", () => {
 	CONFIG.Item.dataModels.spell = SpellData;
+	SpellProcedureRegistry.register(FireBallProcedure);
+	installFireBallPresentation();
 
 	DocumentSheetConfig.registerSheet(
 		Item,
@@ -28,6 +35,7 @@ Hooks.once("init", () => {
 			...(game.WFRP1ED?.magic ?? {}),
 			spellTradition: SPELL_TRADITION,
 			spellCostInterval: SPELL_COST_INTERVAL,
+			spellProcedures: SpellProcedureRegistry,
 		}),
 	});
 });

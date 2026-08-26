@@ -2,6 +2,7 @@ import {
 	SPELL_COST_INTERVAL,
 	SPELL_TRADITION,
 } from "../data-models/item/SpellData.mjs";
+import { SpellProcedureRegistry } from "../magic/SpellProcedureRegistry.mjs";
 
 const { ItemSheetV2 } = foundry.applications.sheets;
 const { DialogV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -62,6 +63,7 @@ export class SpellItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
 			costIntervalEntries(),
 			system?.magicPointCost?.interval,
 		);
+		context.rulesOptions = spellProcedureOptions(system?.rulesId);
 		context.effects = effectPresentation(this.document);
 
 		return context;
@@ -177,6 +179,11 @@ function spellUi() {
 		classification: localize("Spell", "Czar"),
 		tradition: localize("Type of magic", "Typ magii"),
 		spellLevel: localize("Spell level", "Poziom czaru"),
+		rulesId: localize("Rules link", "Powiązanie z zasadami"),
+		rulesIdHint: localize(
+			"Select an implemented casting procedure. Leave unlinked for descriptive or not-yet-automated Spells.",
+			"Wybierz zaimplementowaną procedurę rzucania. Pozostaw bez powiązania dla Czarów opisowych lub jeszcze niezautomatyzowanych.",
+		),
 		casting: localize("Casting data", "Dane rzucania czaru"),
 		magicPointAmount: localize("Magic Points", "Punkty magii"),
 		magicPointInterval: localize("Cost interval", "Naliczanie kosztu"),
@@ -193,6 +200,21 @@ function spellUi() {
 			"Efekty mechaniczne zapisane na tym Czarze. Nie przenoszą się tylko dlatego, że postać zna Czar.",
 		),
 	});
+}
+
+function spellProcedureOptions(selectedValue) {
+	const selected = String(selectedValue ?? "").trim();
+	const entries = [["", localize("None — descriptive Spell", "Brak — Czar opisowy")]];
+	for (const procedure of SpellProcedureRegistry.all()) {
+		entries.push([
+			procedure.id,
+			typeof procedure.label === "function" ? procedure.label() : procedure.id,
+		]);
+	}
+	if (selected && !SpellProcedureRegistry.get(selected)) {
+		entries.push([selected, localize(`Unknown rules link: ${selected}`, `Nieznane powiązanie: ${selected}`)]);
+	}
+	return selectOptions(entries, selected);
 }
 
 function effectPresentation(item) {

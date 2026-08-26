@@ -1,15 +1,16 @@
 import { CombatAttackLauncher } from "./CombatAttackLauncher.mjs";
+import { SpellCastingLauncher } from "../magic/SpellCastingLauncher.mjs";
 
 const ATTACK_CLICK_DELAY_MS = 220;
 const ITEM_ROW_SELECTOR = ".melee-row, .ranged-row, .armour-row, .spell-row";
-const pendingAttacks = new WeakMap();
+const pendingActions = new WeakMap();
 
 /**
  * Make Item opening consistent across the Classic sheet:
  * - Equipment/Wealth already use double-click;
  * - melee/ranged/armour now use double-click as well;
- * - spells use double-click for editing while single-click remains reserved
- *   for the future casting procedure;
+ * - spells use double-click for editing and single-click dispatches their
+ *   registered casting procedure;
  * - Shift+click is deliberately left unused for future interactions.
  *
  * Melee keeps its normal left-click attack. The attack is delayed by a short
@@ -45,7 +46,8 @@ function installInteractionHandlers(sheet, actor) {
 			return;
 		}
 
-		if (!row.classList.contains("combat-sheet-attack-rollable")) return;
+		const spellRow = row.classList.contains("spell-row");
+		if (!spellRow && !row.classList.contains("combat-sheet-attack-rollable")) return;
 
 		event.preventDefault();
 		event.stopImmediatePropagation();
@@ -59,12 +61,12 @@ function installInteractionHandlers(sheet, actor) {
 
 		cancelPendingAttack(row);
 		const timer = setTimeout(() => {
-			pendingAttacks.delete(row);
+			pendingActions.delete(row);
 			const item = itemForRow(actor, row);
 			if (!(item instanceof foundry.documents.Item)) return;
-			void launchAttack(actor, item);
+			void (spellRow ? launchSpell(actor, item) : launchAttack(actor, item));
 		}, ATTACK_CLICK_DELAY_MS);
-		pendingAttacks.set(row, timer);
+		pendingActions.set(row, timer);
 	}, true);
 
 	sheet.addEventListener("dblclick", (event) => {
@@ -88,8 +90,8 @@ function refreshInteractionTitles(sheet) {
 		const spell = row.classList.contains("spell-row");
 		const title = spell
 			? localize(
-				"Left-click is reserved for casting. Double-click to open Spell details.",
-				"Lewy klik jest zarezerwowany dla rzucania czaru. Dwuklik: otwórz szczegóły Czaru.",
+				"Left-click to cast. Double-click to open Spell details.",
+				"Lewy klik: rzuć czar. Dwuklik: otwórz szczegóły Czaru.",
 			)
 			: attackable
 			? localize(
@@ -127,9 +129,20 @@ function itemForRow(actor, row) {
 }
 
 function cancelPendingAttack(row) {
-	const timer = pendingAttacks.get(row);
+	const timer = pendingActions.get(row);
 	if (timer) clearTimeout(timer);
-	pendingAttacks.delete(row);
+	pendingActions.delete(row);
+}
+
+async function launchSpell(actor, spell) {
+	try {
+		await SpellCastingLauncher.launch(actor, spell);
+	} catch (error) {
+		console.error("WFRP1ED | Unable to cast Spell.", error);
+		ui.notifications.error(
+			error?.message ?? localize("Unable to cast the Spell.", "Nie udało się rzucić Czaru."),
+		);
+	}
 }
 
 async function launchAttack(actor, item) {

@@ -22,7 +22,7 @@
 		<section class="combat-item-sheet__content" data-spell-tab-panel="details">
 			<section class="combat-item-sheet__panel">
 				<h3>{{ui.classification}}</h3>
-				<div class="combat-item-sheet__grid combat-item-sheet__grid--2">
+				<div class="combat-item-sheet__grid combat-item-sheet__grid--3">
 					<label class="combat-item-sheet__field">
 						<span>{{ui.tradition}}</span>
 						<select name="system.tradition" {{#unless editable}}disabled{{/unless}}>
@@ -33,6 +33,12 @@
 						<span>{{ui.spellLevel}}</span>
 						<select name="system.spellLevel" {{#unless editable}}disabled{{/unless}}>
 							{{#each levelOptions as |option|}}<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>{{/each}}
+						</select>
+					</label>
+					<label class="combat-item-sheet__field" title="{{ui.rulesIdHint}}">
+						<span>{{ui.rulesId}}</span>
+						<select name="system.rulesId" {{#unless editable}}disabled{{/unless}}>
+							{{#each rulesOptions as |option|}}<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>{{/each}}
 						</select>
 					</label>
 				</div>

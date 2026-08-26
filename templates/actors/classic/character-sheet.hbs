@@ -269,6 +269,26 @@
 					</section>
 				{{/if}}
 
+				{{#if page.sections.magicPoints}}
+					<section
+						class="sheet-overlay sheet-overlay--magic-points"
+						data-section="magicPoints"
+						style="{{page.sections.magicPoints.cssVariables}}; position: absolute; left: var(--section-x); top: var(--section-y); width: var(--section-width); height: var(--section-height);"
+					>
+						<input class="classic-magic-resource" type="number" name="system.status.magicPoints" value="{{display.status.magicPoints}}" min="0" step="1" aria-label="Punkty Magii" {{#unless editable}}disabled{{/unless}}>
+					</section>
+				{{/if}}
+
+				{{#if page.sections.powerLevel}}
+					<section
+						class="sheet-overlay sheet-overlay--power-level"
+						data-section="powerLevel"
+						style="{{page.sections.powerLevel.cssVariables}}; position: absolute; left: var(--section-x); top: var(--section-y); width: var(--section-width); height: var(--section-height);"
+					>
+						<input class="classic-magic-resource" type="number" name="system.status.powerLevel" value="{{display.status.powerLevel}}" min="0" step="1" aria-label="Poziom Mocy" {{#unless editable}}disabled{{/unless}}>
+					</section>
+				{{/if}}
+
 				{{#if page.sections.fate}}
 					<section
 						class="sheet-overlay sheet-overlay--fate"

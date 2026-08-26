@@ -43,8 +43,8 @@ export const SPELL_COST_INTERVAL = Object.freeze({
 	* repeatedly per turn/hour/week.
 	* Spell-specific outcomes belong to Active Effects or future audited procedure
 	* providers identified by the stable, language-neutral `rulesId`. That internal
-	* field is not exposed for free-text authoring; a future casting registry must
-	* provide the allowed selection before the sheet displays it.
+	* field is not exposed for free-text authoring; the casting registry provides
+	* the allowed selections displayed by the sheet.
  */
 export class SpellData extends TypeDataModel {
 	static defineSchema() {

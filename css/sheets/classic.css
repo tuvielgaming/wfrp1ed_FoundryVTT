@@ -1438,6 +1438,31 @@
 /* Spells                                                         */
 /******************************************************************/
 
+.wfrp1ed-classic-sheet .sheet-overlay--magic-points,
+.wfrp1ed-classic-sheet .sheet-overlay--power-level {
+	display: flex;
+	align-items: flex-end;
+	justify-content: center;
+	padding-bottom: 13px;
+}
+
+.wfrp1ed-classic-sheet .classic-magic-resource {
+	width: 82px;
+	height: 34px;
+	margin: 0;
+	padding: 1px 5px;
+	border: 0;
+	background: transparent;
+	font-size: 24px;
+	font-weight: 700;
+	text-align: center;
+}
+
+.wfrp1ed-classic-sheet .classic-magic-resource:focus {
+	outline: 1px solid var(--focus-color);
+	background: rgb(255 255 255 / 68%);
+}
+
 .wfrp1ed-classic-sheet .spells {
 	position: relative;
 	width: 100%;
