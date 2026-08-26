@@ -1,3 +1,5 @@
+import "../sheets/CharacterStatusUpdateGuard.mjs";
+
 const FATE_INPUT_SELECTOR = "[data-wfrp-fate-value]";
 const MAGIC_POINTS_SELECTOR = "[data-wfrp-magic-points]";
 const POWER_LEVEL_SELECTOR = "[data-wfrp-power-level]";
@@ -55,12 +57,9 @@ function configureFateInput(actor, element) {
  *
  * ClassicActorSheet uses submitOnChange. These controls must therefore have
  * their canonical `name` attributes so every form submission carries their
- * current values. Leaving them unnamed makes an unrelated sheet submission
- * omit the fields and allows CharacterData's required NumberFields to fall back
- * to their initial value of 0 during cleaning.
- *
- * Persistence itself belongs to ActorSheetV2's normal form lifecycle; this
- * integration only supplies editability and the missing canonical field name.
+ * current values. Persistence itself belongs to ActorSheetV2's normal form
+ * lifecycle. CharacterStatusUpdateGuard preserves the complete native status
+ * SchemaField while Foundry applies each partial form update.
  */
 function configureMagicResourceInput(application, input, fieldName) {
 	if (!(input instanceof HTMLInputElement)) {
