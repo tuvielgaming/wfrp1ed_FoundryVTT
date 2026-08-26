@@ -14,7 +14,7 @@ Hooks.on("renderApplicationV2", (application, element) => {
 		application,
 		actor,
 		element?.querySelector?.(MAGIC_POINTS_SELECTOR),
-		"system.status.magicPoints",
+		"magicPoints",
 		"Magic Points",
 		"Punkty Magii",
 	);
@@ -22,7 +22,7 @@ Hooks.on("renderApplicationV2", (application, element) => {
 		application,
 		actor,
 		element?.querySelector?.(POWER_LEVEL_SELECTOR),
-		"system.status.powerLevel",
+		"powerLevel",
 		"Power Level",
 		"Poziom Mocy",
 	);
@@ -60,7 +60,7 @@ function configureMagicResourceInput(
 	application,
 	actor,
 	input,
-	path,
+	statusKey,
 	englishLabel,
 	polishLabel,
 ) {
@@ -85,20 +85,12 @@ function configureMagicResourceInput(
 		input.blur();
 	});
 
-	/*
-	 * ClassicActorSheet uses ApplicationV2 form submitOnChange. These two
-	 * resource fields are persisted explicitly below, so let their change
-	 * event stop here instead of also reaching Foundry's generic form handler.
-	 * Otherwise the generic submit can re-render the sheet from the previous
-	 * Actor value before this asynchronous update completes, which makes the
-	 * edited number appear to reset on blur.
-	 */
 	input.addEventListener("change", (event) => {
 		event.stopPropagation();
 		void persistMagicResource(
 			actor,
 			input,
-			path,
+			statusKey,
 			englishLabel,
 			polishLabel,
 		);
@@ -108,12 +100,15 @@ function configureMagicResourceInput(
 async function persistMagicResource(
 	actor,
 	input,
-	path,
+	statusKey,
 	englishLabel,
 	polishLabel,
 ) {
+	const currentStatus = foundry.utils.deepClone(
+		actor?.system?.status ?? {},
+	);
 	const previous = nonNegativeInteger(
-		foundry.utils.getProperty(actor, path),
+		currentStatus?.[statusKey],
 	);
 	const value = Number(input.value);
 
@@ -129,7 +124,16 @@ async function persistMagicResource(
 	}
 
 	try {
-		await actor.update({ [path]: value });
+		/*
+		 * CharacterData.status is a native SchemaField. Updating only one nested
+		 * member can cause Foundry's schema cleaning to rebuild omitted siblings
+		 * from their initial values. Persist the complete current status record
+		 * with just this resource changed, mirroring the existing details guard.
+		 */
+		currentStatus[statusKey] = value;
+		await actor.update({
+			"system.status": currentStatus,
+		});
 	} catch (error) {
 		input.value = String(previous);
 		console.error(
