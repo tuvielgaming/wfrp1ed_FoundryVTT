@@ -403,16 +403,28 @@ function selectedTargetsInRange(actor) {
 }
 
 function tokenDistance(origin, target) {
-	if (canvas.grid?.measurePath) {
-		const measured = canvas.grid.measurePath([
-			origin.center,
-			target.center,
-		]);
-		const distance = Number(measured?.distance);
-		if (Number.isFinite(distance)) return distance;
+	const originCenter = origin?.center;
+	const targetCenter = target?.center;
+	if (
+		!originCenter ||
+		!targetCenter ||
+		!Number.isFinite(Number(originCenter.x)) ||
+		!Number.isFinite(Number(originCenter.y)) ||
+		!Number.isFinite(Number(targetCenter.x)) ||
+		!Number.isFinite(Number(targetCenter.y))
+	) {
+		throw new Error(localize(
+			"Unable to determine token distance on the current Scene.",
+			"Nie można określić odległości między tokenami na bieżącej Scenie.",
+		));
 	}
-	const dx = Number(target.center?.x) - Number(origin.center?.x);
-	const dy = Number(target.center?.y) - Number(origin.center?.y);
+
+	/* Foundry v14 SquareGrid.measurePath expects grid-offset path data rather than
+	 * raw canvas points. Passing Token.center points makes SquareGrid.getOffset
+	 * dereference a missing {i, j} offset. Fire Ball only needs straight-line
+	 * range in Scene units, so compute that directly from token centres. */
+	const dx = Number(targetCenter.x) - Number(originCenter.x);
+	const dy = Number(targetCenter.y) - Number(originCenter.y);
 	const pixels = Math.hypot(dx, dy);
 	const gridSize = Number(canvas.grid?.size) || 1;
 	const gridDistance = Number(canvas.scene?.grid?.distance) || 1;
