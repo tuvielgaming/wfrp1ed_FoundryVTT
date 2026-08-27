@@ -123,8 +123,8 @@ export class WfrpRuleSettings {
 					? "Automatyczny dystans tokenów dla czarów"
 					: "Automatic token distance for spells",
 				hint: game.i18n.lang === "pl"
-					? "Jeśli włączone, czary z mechaniką dystansu mogą wstępnie uzupełniać pole Dystans na podstawie położenia tokenów. Wyłączone domyślnie; pozycja tokenów nie blokuje otwarcia okna rzucania czaru."
-					: "When enabled, spells with distance mechanics may prefill their Distance field from token positions. Disabled by default; token positions never block opening the spell-casting dialog.",
+					? "Jeśli włączone, czary mogą automatycznie sprawdzać zasięg i geometrię grupy na podstawie położenia tokenów. MG może rozstrzygnąć wynik inaczej albo wyłączyć sprawdzanie tylko dla pojedynczego rzucenia czaru. Wyłączone domyślnie."
+					: "When enabled, spells may automatically validate range and group geometry from token positions. The GM may override the result or disable the check for one specific cast. Disabled by default.",
 				scope: "world",
 				config: true,
 				type: Boolean,
