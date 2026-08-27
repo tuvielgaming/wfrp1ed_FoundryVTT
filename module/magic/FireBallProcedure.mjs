@@ -111,10 +111,9 @@ async function executeFireBall(actor, spell) {
 }
 
 async function configureCast({ actor, spell, targets, maximum }) {
-	const automaticDistance = initialAutomaticDistance(targets);
 	const draft = {
-		fireBalls: 1,
-		distance: automaticDistance,
+		fireBalls: "1",
+		errors: {},
 		conditions: Object.fromEntries(targets.map((target) => [
 			target.key,
 			{ flammable: false, fearOfFire: false },
@@ -130,18 +129,11 @@ async function configureCast({ actor, spell, targets, maximum }) {
 			"Fire Balls automatically hit. One Magic Point is spent per ball.",
 			"Ogniste Kule trafiają automatycznie. Każda kula kosztuje 1 Punkt Magii.",
 		))}</p>
-		<div class="form-group">
+		<div class="form-group${draft.errors.fireBalls ? " has-error" : ""}">
 			<label>${escapeHtml(localize("Fire Balls", "Liczba kul"))}</label>
-			<div class="form-fields"><input type="number" name="fireBalls" min="1" max="${maximum}" step="1" value="${draft.fireBalls}" required></div>
+			<div class="form-fields"><input type="number" name="fireBalls" step="1" value="${escapeHtml(draft.fireBalls)}"></div>
+			${draft.errors.fireBalls ? `<div class="wfrp-fireball-dialog__validation" role="alert">${escapeHtml(draft.errors.fireBalls)}</div>` : ""}
 		</div>
-		<div class="form-group">
-			<label>${escapeHtml(localize("Distance", "Dystans"))}</label>
-			<div class="form-fields"><input type="number" name="distance" min="0" max="${RANGE}" step="1" value="${draft.distance ?? ""}" required></div>
-		</div>
-		<p class="notes">${escapeHtml(localize(
-			`Fire Ball maximum range is ${RANGE}. Distance is part of this spell's own rules; token position does not block opening this dialog.`,
-			`Maksymalny zasięg Ognistej Kuli wynosi ${RANGE}. Dystans jest elementem zasad tego czaru; położenie tokenów nie blokuje otwarcia tego okna.`,
-		))}</p>
 		<p class="notes">${escapeHtml(targets.length === 1
 			? localize("One selected token: individual target.", "Jeden wskazany token: cel pojedynczy.")
 			: localize("Multiple selected tokens: target group.", "Wiele wskazanych tokenów: grupa celów."))}</p>
@@ -187,17 +179,35 @@ async function configureCast({ actor, spell, targets, maximum }) {
 		if (isCancelledDialogResult(response)) return null;
 		if (!isCastConfiguration(response)) return null;
 
-		try {
+		const validation = validateConfiguration(response, maximum);
+		if (validation.valid) {
 			return {
-				fireBalls: integerInRange(response.fireBalls, 1, maximum),
-				distance: numberInRange(response.distance, 0, RANGE),
+				fireBalls: validation.fireBalls,
 				conditions: response.conditions,
 				group: targets.length > 1,
 			};
-		} catch (error) {
-			ui.notifications.warn(error.message);
 		}
+
+		draft.fireBalls = String(response.fireBalls ?? "");
+		draft.conditions = response.conditions;
+		draft.errors = validation.errors;
 	}
+}
+
+function validateConfiguration(response, maximum) {
+	const errors = {};
+	const fireBalls = Number(response.fireBalls);
+	if (!Number.isInteger(fireBalls) || fireBalls < 1 || fireBalls > maximum) {
+		errors.fireBalls = localize(
+			`Enter a whole number from 1 to ${maximum}.`,
+			`Wprowadź liczbę całkowitą od 1 do ${maximum}.`,
+		);
+	}
+	return {
+		valid: Object.keys(errors).length === 0,
+		errors,
+		fireBalls,
+	};
 }
 
 function isCancelledDialogResult(response) {
@@ -209,7 +219,6 @@ function isCastConfiguration(response) {
 		response &&
 		typeof response === "object" &&
 		Object.hasOwn(response, "fireBalls") &&
-		Object.hasOwn(response, "distance") &&
 		response.conditions &&
 		typeof response.conditions === "object",
 	);
@@ -226,8 +235,7 @@ function conditionLabel(kind, text, checked = false) {
 }
 
 function readConfiguration(form, targets) {
-	const fireBalls = Number(form?.elements?.fireBalls?.value);
-	const distance = Number(form?.elements?.distance?.value);
+	const fireBalls = String(form?.elements?.fireBalls?.value ?? "").trim();
 	const conditions = {};
 	for (const target of targets) {
 		const row = form?.querySelector?.(`[data-target-uuid="${cssEscape(target.key)}"]`);
@@ -236,7 +244,7 @@ function readConfiguration(form, targets) {
 			fearOfFire: row?.querySelector?.('[data-fire-ball-condition="fearOfFire"]')?.checked === true,
 		};
 	}
-	return { fireBalls, distance, conditions };
+	return { fireBalls, conditions };
 }
 
 async function resolveVolleyTargets(configuration, targets, powerLevel) {
@@ -370,7 +378,6 @@ async function publishCastSummary({ actor, spell, configuration, volleys, magicP
 		<section class="wfrp1ed fire-ball-cast-summary">
 			<h3>${escapeHtml(spell.name)}</h3>
 			<div><strong>${escapeHtml(localize("Fire Balls", "Ogniste Kule"))}:</strong> ${configuration.fireBalls}</div>
-			<div><strong>${escapeHtml(localize("Distance", "Dystans"))}:</strong> ${configuration.distance} / ${RANGE}</div>
 			<div><strong>${escapeHtml(localize("Magic Points", "Punkty Magii"))}:</strong> ${magicPoints} → ${magicPointsAfter}</div>
 			${configuration.group ? `<div><strong>${escapeHtml(localize("Group hits", "Trafienia grupowe"))}:</strong> ${escapeHtml(groupDetails.map((entry) => `${entry.ballNumber}: ${entry.groupRoll} → ${entry.targets.map((target) => target.name).join(", ")}`).join("; "))}</div>` : ""}
 		</section>
@@ -384,7 +391,6 @@ async function publishCastSummary({ actor, spell, configuration, volleys, magicP
 		casterUuid: actor.uuid,
 		spellUuid: spell.uuid,
 		fireBalls: configuration.fireBalls,
-		distance: configuration.distance,
 		magicPointsBefore: magicPoints,
 		magicPointsAfter,
 		group: configuration.group,
@@ -395,26 +401,27 @@ async function publishCastSummary({ actor, spell, configuration, volleys, magicP
 function selectedTargets(actor) {
 	const automaticDistance = WfrpRuleSettings.usesAutomaticSpellTokenDistance();
 	const casterToken = automaticDistance ? activeCasterToken(actor) : null;
-	const targets = [...(game.user?.targets ?? [])].map((token) => Object.freeze({
-		key: token.document?.uuid ?? token.uuid,
-		name: token.name,
-		actor: token.actor,
-		distance: casterToken ? tokenDistance(casterToken, token) : null,
-	}));
+	const targets = [...(game.user?.targets ?? [])].map((token) => {
+		const distance = casterToken ? tokenDistance(casterToken, token) : null;
+		if (automaticDistance && Number.isFinite(distance) && distance > RANGE) {
+			throw new Error(localize(
+				`${token.name} is beyond Fire Ball range (${RANGE}).`,
+				`${token.name} znajduje się poza zasięgiem Ognistej Kuli (${RANGE}).`,
+			));
+		}
+		return Object.freeze({
+			key: token.document?.uuid ?? token.uuid,
+			name: token.name,
+			actor: token.actor,
+			distance,
+		});
+	});
 	return Object.freeze(targets);
 }
 
 function activeCasterToken(actor) {
 	const tokens = actor.getActiveTokens?.() ?? [];
 	return tokens.find((token) => tokenCenter(token)) ?? null;
-}
-
-function initialAutomaticDistance(targets) {
-	if (!WfrpRuleSettings.usesAutomaticSpellTokenDistance()) return null;
-	const measured = targets
-		.map((target) => Number(target.distance))
-		.filter((distance) => Number.isFinite(distance));
-	return measured.length > 0 ? Math.max(...measured) : null;
 }
 
 function tokenDistance(origin, target) {
@@ -470,28 +477,6 @@ function nonNegativeInteger(value, label = "Value") {
 		throw new Error(localize(
 			`${label} must be a non-negative integer.`,
 			`${label} musi być nieujemną liczbą całkowitą.`,
-		));
-	}
-	return numeric;
-}
-
-function integerInRange(value, minimum, maximum) {
-	const numeric = Number(value);
-	if (!Number.isInteger(numeric) || numeric < minimum || numeric > maximum) {
-		throw new Error(localize(
-			`Choose an integer from ${minimum} to ${maximum}.`,
-			`Wybierz liczbę całkowitą od ${minimum} do ${maximum}.`,
-		));
-	}
-	return numeric;
-}
-
-function numberInRange(value, minimum, maximum) {
-	const numeric = Number(value);
-	if (!Number.isFinite(numeric) || numeric < minimum || numeric > maximum) {
-		throw new Error(localize(
-			`Enter a distance from ${minimum} to ${maximum}.`,
-			`Wprowadź dystans od ${minimum} do ${maximum}.`,
 		));
 	}
 	return numeric;
