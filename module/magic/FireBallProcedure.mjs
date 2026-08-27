@@ -130,8 +130,7 @@ async function configureCast({ actor, spell, powerLevel, maximum }) {
 		fireBalls: "1",
 		errors: {},
 		conditions: conditionsForTargets({}, targets),
-		disableAutomaticDistance: false,
-		overrideAutomaticDistance: false,
+		ignoreCastingRestrictions: false,
 	};
 
 	while (true) {
@@ -159,7 +158,7 @@ async function configureCast({ actor, spell, powerLevel, maximum }) {
 					${game.user?.isGM ? `<button type="button" data-fire-ball-choose-actor><i class="fa-solid fa-user-plus" aria-hidden="true"></i>${escapeHtml(localize("Add Actor", "Dodaj Aktora"))}</button>` : ""}
 				</div>
 			</div>
-			${game.user?.isGM ? `<div class="wfrp-fireball-dialog__drop-hint">${escapeHtml(localize("GM: you may also drop Actors from the sidebar here.", "MG: możesz również upuszczać tutaj Aktorów z panelu bocznego."))}</div>` : ""}
+			${game.user?.isGM ? `<div class="wfrp-fireball-dialog__drop-hint">${escapeHtml(localize("You may also drop Actors from the sidebar here.", "Możesz również upuszczać tutaj Aktorów z panelu bocznego."))}</div>` : ""}
 			<div class="wfrp-fireball-dialog__target-mode" data-fire-ball-target-mode></div>
 			${draft.errors.targets ? `<div class="wfrp-fireball-dialog__validation" role="alert">${escapeHtml(draft.errors.targets)}</div>` : ""}
 			${automaticDistanceSetting ? distancePolicyMarkup(draft) : ""}
@@ -181,10 +180,8 @@ async function configureCast({ actor, spell, powerLevel, maximum }) {
 					const form = dialogRoot.querySelector("form") ?? dialogRoot.closest("form");
 					draft.fireBalls = String(form?.elements?.fireBalls?.value ?? draft.fireBalls);
 					draft.conditions = readConditions(form, targets);
-					draft.disableAutomaticDistance = game.user?.isGM === true &&
-						form?.elements?.disableAutomaticDistance?.checked === true;
-					draft.overrideAutomaticDistance = game.user?.isGM === true &&
-						form?.elements?.overrideAutomaticDistance?.checked === true;
+					draft.ignoreCastingRestrictions = game.user?.isGM === true &&
+						form?.elements?.ignoreCastingRestrictions?.checked === true;
 				};
 
 				const refresh = dialogRoot.querySelector("[data-fire-ball-refresh-targets]");
@@ -290,8 +287,7 @@ async function configureCast({ actor, spell, powerLevel, maximum }) {
 
 		draft.fireBalls = String(response.fireBalls ?? "");
 		draft.conditions = response.conditions;
-		draft.disableAutomaticDistance = response.distanceControl?.disabledForCast === true;
-		draft.overrideAutomaticDistance = response.distanceControl?.override === true;
+		draft.ignoreCastingRestrictions = response.distanceControl?.ignoreRestrictions === true;
 		draft.errors = validation.errors;
 	}
 }
@@ -300,13 +296,9 @@ function distancePolicyMarkup(draft) {
 	if (!game.user?.isGM) return "";
 	return `
 		<div class="wfrp-fireball-dialog__distance-policy">
-			<label><input type="checkbox" name="disableAutomaticDistance" ${draft.disableAutomaticDistance ? "checked" : ""}> ${escapeHtml(localize(
-				"GM: disable automatic token-distance checks for this cast",
-				"MG: wyłącz automatyczne sprawdzanie dystansu tokenów dla tego rzucenia czaru",
-			))}</label>
-			<label><input type="checkbox" name="overrideAutomaticDistance" ${draft.overrideAutomaticDistance ? "checked" : ""}> ${escapeHtml(localize(
-				"GM: override a failed/unmeasurable automatic check for this cast",
-				"MG: zaakceptuj nieudane/niemożliwe automatyczne sprawdzenie dla tego rzucenia czaru",
+			<label class="wfrp1ed-checkbox"><input type="checkbox" name="ignoreCastingRestrictions" ${draft.ignoreCastingRestrictions ? "checked" : ""}> ${escapeHtml(localize(
+				"Ignore casting restrictions for this spell",
+				"Zignoruj ograniczenia rzucania dla tego czaru",
 			))}</label>
 		</div>
 	`;
@@ -396,16 +388,15 @@ function validateConfiguration({
 			"Wskaż co najmniej jeden cel.",
 		);
 	} else if (automaticDistanceSetting) {
-		const disabledForCast = response.distanceControl?.disabledForCast === true && game.user?.isGM === true;
-		const override = response.distanceControl?.override === true && game.user?.isGM === true;
+		const ignoreRestrictions = response.distanceControl?.ignoreRestrictions === true && game.user?.isGM === true;
 
-		if (disabledForCast) {
+		if (ignoreRestrictions) {
 			distanceValidation = Object.freeze({
-				mode: "gm-manual",
+				mode: "gm-override",
 				settingEnabled: true,
 				result: "skipped",
-				disabledForCast: true,
-				overridden: false,
+				ignoreRestrictions: true,
+				overridden: true,
 				adjudicatedBy: String(game.user?.id ?? ""),
 				adjudicatedAt: Date.now(),
 				diagnostics: [],
@@ -413,19 +404,17 @@ function validateConfiguration({
 		} else {
 			const assessment = automaticDistanceAssessment(actor, targets);
 			distanceValidation = Object.freeze({
-				mode: assessment.result === "valid" ? "automatic" : override ? "gm-override" : "automatic",
+				mode: "automatic",
 				settingEnabled: true,
 				result: assessment.result,
-				disabledForCast: false,
-				overridden: override && assessment.result !== "valid",
-				adjudicatedBy: override && assessment.result !== "valid"
-					? String(game.user?.id ?? "")
-					: null,
-				adjudicatedAt: override && assessment.result !== "valid" ? Date.now() : null,
+				ignoreRestrictions: false,
+				overridden: false,
+				adjudicatedBy: null,
+				adjudicatedAt: null,
 				diagnostics: assessment.diagnostics,
 			});
 
-			if (assessment.result !== "valid" && !distanceValidation.overridden) {
+			if (assessment.result !== "valid") {
 				errors.targets = distanceValidationError(assessment, game.user?.isGM === true);
 			}
 		}
@@ -503,7 +492,7 @@ function manualDistanceSnapshot(settingEnabled) {
 		mode: "gm-manual",
 		settingEnabled: settingEnabled === true,
 		result: settingEnabled === true ? "pending" : "not-checked",
-		disabledForCast: false,
+		ignoreRestrictions: false,
 		overridden: false,
 		adjudicatedBy: settingEnabled === true ? null : String(game.user?.id ?? ""),
 		adjudicatedAt: settingEnabled === true ? null : Date.now(),
@@ -515,8 +504,8 @@ function distanceValidationError(assessment, gmCanOverride) {
 	const details = assessment.diagnostics.join(" ");
 	const action = gmCanOverride
 		? localize(
-			" GM may override this result or disable automatic distance checks for this cast.",
-			" MG może zaakceptować wynik mimo tego albo wyłączyć automatyczne sprawdzanie dystansu dla tego rzucenia czaru.",
+			" Select ‘Ignore casting restrictions for this spell’ to continue anyway.",
+			" Zaznacz „Zignoruj ograniczenia rzucania dla tego czaru”, aby mimo tego kontynuować.",
 		)
 		: localize(
 			" A GM must adjudicate this automatic distance result.",
@@ -564,6 +553,7 @@ function isCastConfiguration(response) {
 
 function conditionLabel(kind, text, checked = false) {
 	const label = document.createElement("label");
+	label.className = "wfrp1ed-checkbox";
 	const input = document.createElement("input");
 	input.type = "checkbox";
 	input.dataset.fireBallCondition = kind;
@@ -578,10 +568,8 @@ function readConfiguration(form, targets, automaticDistanceSetting) {
 		conditions: readConditions(form, targets),
 		distanceControl: {
 			settingEnabled: automaticDistanceSetting === true,
-			disabledForCast: game.user?.isGM === true &&
-				form?.elements?.disableAutomaticDistance?.checked === true,
-			override: game.user?.isGM === true &&
-				form?.elements?.overrideAutomaticDistance?.checked === true,
+			ignoreRestrictions: game.user?.isGM === true &&
+				form?.elements?.ignoreCastingRestrictions?.checked === true,
 		},
 	};
 }
