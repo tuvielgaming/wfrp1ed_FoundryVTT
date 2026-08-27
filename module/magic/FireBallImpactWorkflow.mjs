@@ -285,8 +285,12 @@ function buildResolvedDamage(message, state, target, caster) {
 	body.className = "wfrp1e-damage-card__details-body combat-damage-context__details-body";
 	body.append(
 		detailRow(localize("Strength", "Siła"), `+${STRENGTH}`),
-		detailRow(localize("Before Initiative", "Przed Inicjatywą"), String(damage.fullDamage)),
-		detailRow(localize("After Initiative", "Po Inicjatywie"), String(damage.afterInitiative)),
+		detailRow(
+			localize("Initiative", "Inicjatywa"),
+			state.initiative?.success
+				? localize("success — half damage", "sukces — połowa obrażeń")
+				: localize("failure — full damage", "porażka — pełne obrażenia"),
+		),
 		detailRow(localize("Armour", "Pancerz"), localize("ignored", "pominięty")),
 		detailRow(localize("Toughness", "Wytrzymałość"), `−${damage.toughness}`),
 		detailRow(localize("Final damage", "Końcowe obrażenia"), String(damage.finalDamage)),
