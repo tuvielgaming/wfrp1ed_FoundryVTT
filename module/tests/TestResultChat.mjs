@@ -1,3 +1,4 @@
+import { ActorRollPolicy } from "../core/ActorRollPolicy.mjs";
 import {
 	TEST_RESULT_VISIBILITY,
 	normalizeTestResultVisibility,
@@ -14,17 +15,17 @@ const GENERAL_MODIFIER_ID = "general";
  *
  * Mechanical test resolution happens before this controller receives a result.
  * The persisted chat snapshot stores the resolved base target, original d100
- * roll and modifier contributions. A later GM edit changes only the general
- * adjudication modifier and re-evaluates target/success/margin against that
- * original snapshot; Actor data and formula inputs are never re-read.
+ * roll and modifier contributions. A later adjudication edit changes only the
+ * general modifier and re-evaluates target/success/margin against that original
+ * snapshot; Actor data and formula inputs are never re-read.
  *
- * Each result also stores whether non-GM users may expand the detailed target
- * calculation. That visibility can be changed by the GM after the roll without
- * changing any mechanical result data.
+ * Mechanical adjudication belongs to the GM or an OWNER of the Actor whose roll
+ * this is. Result-detail visibility remains a separate GM-only presentation
+ * decision.
  */
 export class TestResultChat {
 	/**
-	 * Publish one TestResult with an editable-GM chat snapshot.
+	 * Publish one TestResult with an editable persistent chat snapshot.
 	 *
 	 * @param {TestResult} result
 	 * @returns {Promise<ChatMessage>}
@@ -58,7 +59,7 @@ export class TestResultChat {
 	}
 
 	/**
-	 * Attach GM-only editing behavior to one rendered result card.
+	 * Attach GM-or-Actor-OWNER adjudication behavior to one result card.
 	 *
 	 * @param {ChatMessage} message
 	 * @param {HTMLElement|Object} html
@@ -86,14 +87,14 @@ export class TestResultChat {
 			return;
 		}
 
-		if (!game.user?.isGM) {
+		if (!this._canAdjudicate(state)) {
 			input.readOnly = true;
 			input.tabIndex = -1;
 			input.classList.add("is-readonly");
 			input.title = this._localize(
 				"WFRP1ED.TestResult.GMModifierReadOnly",
-				"The GM can adjust this modifier.",
-				"Ten modyfikator może zmienić MG.",
+				"The GM or an OWNER of this Actor can adjust this modifier.",
+				"Ten modyfikator może zmienić MG albo Właściciel tego Aktora.",
 			);
 			return;
 		}
@@ -102,8 +103,8 @@ export class TestResultChat {
 		input.classList.add("is-editable");
 		input.title = this._localize(
 			"WFRP1ED.TestResult.GMModifierEdit",
-			"GM: edit the modifier, then press Enter or leave the field.",
-			"MG: zmień modyfikator, a następnie naciśnij Enter lub opuść pole.",
+			"Edit the modifier, then press Enter or leave the field.",
+			"Zmień modyfikator, a następnie naciśnij Enter lub opuść pole.",
 		);
 
 		input.addEventListener("keydown", (event) => {
@@ -335,7 +336,7 @@ export class TestResultChat {
 	}
 
 	/**
-	 * Persist a GM modifier edit and replace the card content with the
+	 * Persist an adjudication modifier edit and replace the card content with the
 	 * re-evaluated view.
 	 *
 	 * @param {ChatMessage} message
@@ -345,12 +346,6 @@ export class TestResultChat {
 	 */
 	static async _updateGeneralModifier(message, input) {
 		try {
-			if (!game.user?.isGM) {
-				throw new Error(
-					"Only a GM can change a resolved test modifier.",
-				);
-			}
-
 			const state = message?.getFlag?.(
 				FLAG_SCOPE,
 				FLAG_KEY,
@@ -359,6 +354,12 @@ export class TestResultChat {
 			if (!state) {
 				throw new Error(
 					"This chat message has no editable test snapshot.",
+				);
+			}
+
+			if (!this._canAdjudicate(state)) {
+				throw new Error(
+					"Only the GM or an OWNER of the rolling Actor can change a resolved test modifier.",
 				);
 			}
 
@@ -432,7 +433,8 @@ export class TestResultChat {
 		);
 
 		return {
-			version: 2,
+			version: 3,
+			actorUuid: String(result.actor?.uuid ?? ""),
 			testName: String(result.test.name ?? result.test.id ?? "Test"),
 			roll: this._finiteNumber(result.roll, "roll"),
 			baseTarget: this._finiteNumber(
@@ -685,6 +687,13 @@ export class TestResultChat {
 			signed: this._signed(value),
 			enabled: modifier?.enabled !== false,
 		};
+	}
+
+	/** Resolve whether the current user may adjudicate this Actor-owned roll. */
+	static _canAdjudicate(state) {
+		if (game.user?.isGM) return true;
+		const actor = ActorRollPolicy.actorFromUuidSync(state?.actorUuid);
+		return ActorRollPolicy.canAdjudicate(actor, game.user);
 	}
 
 	/**
