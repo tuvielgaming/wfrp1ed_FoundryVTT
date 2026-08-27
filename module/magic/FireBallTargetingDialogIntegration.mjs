@@ -42,7 +42,7 @@ function enhanceDialog(root) {
 	if (refresh instanceof HTMLButtonElement) {
 		refresh.hidden = true;
 		refresh.setAttribute("aria-hidden", "true");
-		trefreshTabIndex(refresh);
+		refresh.tabIndex = -1;
 	}
 
 	if (actions) {
@@ -160,10 +160,6 @@ function fireBallRoot(element) {
 	if (!(element instanceof HTMLElement)) return null;
 	if (element.matches(".wfrp-fireball-dialog")) return element;
 	return element.querySelector(".wfrp-fireball-dialog");
-}
-
-function trefreshTabIndex(button) {
-	button.tabIndex = -1;
 }
 
 function localize(english, polish) {
