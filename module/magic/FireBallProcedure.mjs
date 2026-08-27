@@ -15,6 +15,7 @@ const CAST_FLAG_KEY = "fireBallCast";
 const ROUND_USAGE_FLAG_KEY = "fireBallRoundUsage";
 const STRENGTH = 3;
 const RANGE = 48;
+const GROUP_SPACING = 3;
 const CANCEL_DIALOG_RESULT = Object.freeze({ cancelled: true });
 
 /** Audited WFRP 1e Fire Ball casting and damage procedure. */
@@ -39,46 +40,56 @@ async function executeFireBall(actor, spell) {
 		actor.system?.status?.magicPoints,
 		localize("Magic Points", "Punkty Magii"),
 	);
-	const targets = selectedTargets(actor);
-	if (targets.length === 0) {
-		throw new Error(localize(
-			"Target at least one token before casting Fire Ball.",
-			"Przed rzuceniem Ognistej Kuli wskaż co najmniej jeden token.",
-		));
-	}
 	if (magicPoints < 1) {
 		throw new Error(localize(
 			"The caster has no Magic Points available.",
 			"Osoba rzucająca czar nie ma dostępnych Punktów Magii.",
 		));
 	}
+
 	const roundUsage = fireBallRoundUsage(actor);
-	const maximum = Math.min(powerLevel - roundUsage.used, magicPoints);
-	if (maximum < 1) {
+	if (roundUsage.cast) {
 		throw new Error(localize(
-			"This caster has already thrown the maximum number of Fire Balls allowed this combat round.",
-			"Ta postać rzuciła już maksymalną liczbę Ognistych Kul dozwoloną w tej rundzie walki.",
+			"Fire Ball has already been cast by this character in the current combat round.",
+			"Ta postać rzuciła już Ognistą Kulę w bieżącej rundzie walki.",
 		));
 	}
 
-	const configuration = await configureCast({ actor, spell, targets, maximum });
+	const maximum = Math.min(powerLevel, magicPoints);
+	const configuration = await configureCast({
+		actor,
+		spell,
+		powerLevel,
+		maximum,
+	});
 	if (!configuration) return null;
 
-	const volleys = await resolveVolleyTargets(configuration, targets, powerLevel);
-	if (!volleys) return null;
+	const volleys = await resolveVolleyTargets(
+		configuration,
+		configuration.targets,
+		powerLevel,
+	);
 
 	const magicPointsAfter = magicPoints - configuration.fireBalls;
 	const resourceUpdate = { "system.status.magicPoints": magicPointsAfter };
 	if (roundUsage.managed) {
 		resourceUpdate[`flags.${FLAG_SCOPE}.${ROUND_USAGE_FLAG_KEY}`] = {
-			version: 1,
+			version: 2,
 			combatId: roundUsage.combatId,
 			round: roundUsage.round,
-			used: roundUsage.used + configuration.fireBalls,
+			cast: true,
+			fireBalls: configuration.fireBalls,
 		};
 	}
 	await actor.update(resourceUpdate);
-	await publishCastSummary({ actor, spell, configuration, volleys, magicPoints, magicPointsAfter });
+	await publishCastSummary({
+		actor,
+		spell,
+		configuration,
+		volleys,
+		magicPoints,
+		magicPointsAfter,
+	});
 
 	const affected = new Map(
 		volleys.flatMap((volley) => volley.targets)
@@ -110,14 +121,12 @@ async function executeFireBall(actor, spell) {
 	});
 }
 
-async function configureCast({ actor, spell, targets, maximum }) {
+async function configureCast({ actor, spell, powerLevel, maximum }) {
+	let targets = selectedTargets(actor);
 	const draft = {
 		fireBalls: "1",
 		errors: {},
-		conditions: Object.fromEntries(targets.map((target) => [
-			target.key,
-			{ flammable: false, fearOfFire: false },
-		])),
+		conditions: conditionsForTargets({}, targets),
 	};
 
 	while (true) {
@@ -134,30 +143,41 @@ async function configureCast({ actor, spell, targets, maximum }) {
 			<div class="form-fields"><input type="number" name="fireBalls" step="1" value="${escapeHtml(draft.fireBalls)}"></div>
 			${draft.errors.fireBalls ? `<div class="wfrp-fireball-dialog__validation" role="alert">${escapeHtml(draft.errors.fireBalls)}</div>` : ""}
 		</div>
-		<p class="notes">${escapeHtml(targets.length === 1
-			? localize("One selected token: individual target.", "Jeden wskazany token: cel pojedynczy.")
-			: localize("Multiple selected tokens: target group.", "Wiele wskazanych tokenów: grupa celów."))}</p>
-		<div class="wfrp-fireball-dialog__targets"></div>
+		<section class="wfrp-fireball-dialog__target-section${draft.errors.targets ? " has-error" : ""}">
+			<div class="wfrp-fireball-dialog__target-heading">
+				<strong>${escapeHtml(localize("Target", "Cel"))}</strong>
+				<button type="button" data-fire-ball-refresh-targets>
+					<i class="fa-solid fa-bullseye" aria-hidden="true"></i>
+					${escapeHtml(localize("Use current targets", "Użyj aktualnie wskazanych celów"))}
+				</button>
+			</div>
+			<div class="wfrp-fireball-dialog__target-mode" data-fire-ball-target-mode></div>
+			${draft.errors.targets ? `<div class="wfrp-fireball-dialog__validation" role="alert">${escapeHtml(draft.errors.targets)}</div>` : ""}
+			<div class="wfrp-fireball-dialog__targets" data-fire-ball-target-list></div>
+		</section>
 	`;
 		content.append(root);
-		const list = root.querySelector(".wfrp-fireball-dialog__targets");
-		for (const target of targets) {
-			const row = document.createElement("fieldset");
-			row.dataset.targetUuid = target.key;
-			const legend = document.createElement("legend");
-			legend.textContent = target.name;
-			row.append(
-				legend,
-				conditionLabel("flammable", localize("Flammable", "Łatwopalny"), draft.conditions[target.key]?.flammable),
-				conditionLabel("fearOfFire", localize("Subject to fear of fire", "Podatny na strach przed ogniem"), draft.conditions[target.key]?.fearOfFire),
-			);
-			list.append(row);
-		}
+		renderTargetList(root, targets, draft.conditions);
 
 		const response = await DialogV2.wait({
 			classes: ["wfrp1ed", "wfrp1ed-parchment-window", "wfrp-fireball-cast-dialog"],
 			window: { title: `${spell.name} — ${actor.name}` },
 			content,
+			render: (_event, dialog) => {
+				const dialogRoot = dialog?.element;
+				const refresh = dialogRoot?.querySelector?.("[data-fire-ball-refresh-targets]");
+				if (!refresh) return;
+				refresh.addEventListener("click", (event) => {
+					event.preventDefault();
+					const form = refresh.closest("form");
+					draft.fireBalls = String(form?.elements?.fireBalls?.value ?? draft.fireBalls);
+					draft.conditions = readConditions(form, targets);
+					targets = selectedTargets(actor);
+					draft.conditions = conditionsForTargets(draft.conditions, targets);
+					draft.errors.targets = null;
+					renderTargetList(dialogRoot, targets, draft.conditions);
+				});
+			},
 			buttons: [
 				{
 					action: "cast",
@@ -179,13 +199,20 @@ async function configureCast({ actor, spell, targets, maximum }) {
 		if (isCancelledDialogResult(response)) return null;
 		if (!isCastConfiguration(response)) return null;
 
-		const validation = validateConfiguration(response, maximum);
+		const validation = validateConfiguration({
+			response,
+			maximum,
+			targets,
+			actor,
+		});
 		if (validation.valid) {
-			return {
+			return Object.freeze({
 				fireBalls: validation.fireBalls,
 				conditions: response.conditions,
 				group: targets.length > 1,
-			};
+				targets: Object.freeze([...targets]),
+				powerLevel,
+			});
 		}
 
 		draft.fireBalls = String(response.fireBalls ?? "");
@@ -194,7 +221,54 @@ async function configureCast({ actor, spell, targets, maximum }) {
 	}
 }
 
-function validateConfiguration(response, maximum) {
+function renderTargetList(root, targets, conditions) {
+	const list = root?.querySelector?.("[data-fire-ball-target-list]");
+	const mode = root?.querySelector?.("[data-fire-ball-target-mode]");
+	if (!list || !mode) return;
+
+	list.replaceChildren();
+	mode.textContent = targets.length === 0
+		? localize("No targets selected.", "Nie wskazano celów.")
+		: targets.length === 1
+			? localize("Individual target", "Cel pojedynczy")
+			: localize(
+				`Target group — ${targets.length} creatures`,
+				`Grupa celów — ${targets.length} istot`,
+			);
+
+	for (const target of targets) {
+		const row = document.createElement("fieldset");
+		row.dataset.targetUuid = target.key;
+		const legend = document.createElement("legend");
+		legend.textContent = target.name;
+		row.append(
+			legend,
+			conditionLabel(
+				"flammable",
+				localize("Flammable", "Łatwopalny"),
+				conditions[target.key]?.flammable,
+			),
+			conditionLabel(
+				"fearOfFire",
+				localize("Subject to fear of fire", "Podatny na strach przed ogniem"),
+				conditions[target.key]?.fearOfFire,
+			),
+		);
+		list.append(row);
+	}
+}
+
+function conditionsForTargets(previous, targets) {
+	return Object.fromEntries(targets.map((target) => [
+		target.key,
+		{
+			flammable: previous?.[target.key]?.flammable === true,
+			fearOfFire: previous?.[target.key]?.fearOfFire === true,
+		},
+	]));
+}
+
+function validateConfiguration({ response, maximum, targets, actor }) {
 	const errors = {};
 	const fireBalls = Number(response.fireBalls);
 	if (!Number.isInteger(fireBalls) || fireBalls < 1 || fireBalls > maximum) {
@@ -203,11 +277,62 @@ function validateConfiguration(response, maximum) {
 			`Wprowadź liczbę całkowitą od 1 do ${maximum}.`,
 		);
 	}
+
+	if (targets.length === 0) {
+		errors.targets = localize(
+			"Select at least one target.",
+			"Wskaż co najmniej jeden cel.",
+		);
+	} else if (WfrpRuleSettings.usesAutomaticSpellTokenDistance()) {
+		const rangeFailures = targets
+			.filter((target) => Number.isFinite(target.distance) && target.distance > RANGE)
+			.map((target) => target.name);
+		if (rangeFailures.length > 0) {
+			errors.targets = localize(
+				`Outside Fire Ball range (${RANGE}): ${rangeFailures.join(", ")}.`,
+				`Poza zasięgiem Ognistej Kuli (${RANGE}): ${rangeFailures.join(", ")}.`,
+			);
+		}
+
+		if (!errors.targets && targets.length > 1) {
+			const connected = groupConnectivity(targets);
+			if (connected === false) {
+				errors.targets = localize(
+					`The selected tokens do not form one spell group: every member must be connected to the group through creatures no more than ${GROUP_SPACING} yards apart.`,
+					`Wskazane tokeny nie tworzą jednej grupy: każdy członek musi być połączony z grupą przez istoty oddalone od siebie o nie więcej niż ${GROUP_SPACING} jardy.`,
+				);
+			}
+		}
+	}
+
 	return {
 		valid: Object.keys(errors).length === 0,
 		errors,
 		fireBalls,
 	};
+}
+
+function groupConnectivity(targets) {
+	if (targets.length < 2) return true;
+	if (targets.some((target) => !target.token || !tokenCenter(target.token))) {
+		return null;
+	}
+
+	const visited = new Set([0]);
+	const queue = [0];
+	while (queue.length > 0) {
+		const current = queue.shift();
+		for (let index = 0; index < targets.length; index += 1) {
+			if (visited.has(index)) continue;
+			const distance = tokenDistance(targets[current].token, targets[index].token);
+			if (!Number.isFinite(distance)) return null;
+			if (distance <= GROUP_SPACING) {
+				visited.add(index);
+				queue.push(index);
+			}
+		}
+	}
+	return visited.size === targets.length;
 }
 
 function isCancelledDialogResult(response) {
@@ -235,7 +360,13 @@ function conditionLabel(kind, text, checked = false) {
 }
 
 function readConfiguration(form, targets) {
-	const fireBalls = String(form?.elements?.fireBalls?.value ?? "").trim();
+	return {
+		fireBalls: String(form?.elements?.fireBalls?.value ?? "").trim(),
+		conditions: readConditions(form, targets),
+	};
+}
+
+function readConditions(form, targets) {
 	const conditions = {};
 	for (const target of targets) {
 		const row = form?.querySelector?.(`[data-target-uuid="${cssEscape(target.key)}"]`);
@@ -244,7 +375,7 @@ function readConfiguration(form, targets) {
 			fearOfFire: row?.querySelector?.('[data-fire-ball-condition="fearOfFire"]')?.checked === true,
 		};
 	}
-	return { fireBalls, conditions };
+	return conditions;
 }
 
 async function resolveVolleyTargets(configuration, targets, powerLevel) {
@@ -254,65 +385,27 @@ async function resolveVolleyTargets(configuration, targets, powerLevel) {
 			volleys.push({ targets: [targets[0]], groupRoll: null });
 			continue;
 		}
+
 		const groupRoll = await new Roll(`${powerLevel}d3`).evaluate();
-		const count = Math.min(nonNegativeInteger(groupRoll.total, "Group hits"), targets.length);
-		const selected = count >= targets.length
-			? targets
-			: await chooseGroupTargets(targets, count, index + 1);
-		if (!selected) return null;
+		const count = Math.min(
+			nonNegativeInteger(groupRoll.total, "Group hits"),
+			targets.length,
+		);
+		const selected = await randomTargets(targets, count);
 		volleys.push({ targets: selected, groupRoll });
 	}
-	return volleys;
+	return Object.freeze(volleys);
 }
 
-async function chooseGroupTargets(targets, count, ballNumber) {
-	while (true) {
-		const content = document.createElement("div");
-		const root = document.createElement("div");
-		root.className = "wfrp-fireball-target-dialog";
-		const instruction = document.createElement("p");
-		instruction.textContent = localize(
-			`Fire Ball ${ballNumber} hits ${count} creatures. Choose exactly ${count}.`,
-			`Ognista Kula ${ballNumber} trafia ${count} istot. Wybierz dokładnie ${count}.`,
-		);
-		root.append(instruction);
-		for (let index = 0; index < targets.length; index += 1) {
-			const label = document.createElement("label");
-			const input = document.createElement("input");
-			input.type = "checkbox";
-			input.value = targets[index].key;
-			input.dataset.fireBallTarget = "";
-			input.checked = index < count;
-			label.append(input, document.createTextNode(targets[index].name));
-			root.append(label);
-		}
-		content.append(root);
-		const response = await DialogV2.wait({
-			classes: ["wfrp1ed", "wfrp1ed-parchment-window", "wfrp-fireball-target-dialog-window"],
-			window: { title: localize("Fire Ball targets", "Cele Kuli Ognia") },
-			content,
-			buttons: [
-				{
-					action: "choose",
-					label: localize("Choose", "Wybierz"),
-					default: true,
-					callback: (_event, button) => [...button.form.querySelectorAll("[data-fire-ball-target]:checked")].map((input) => input.value),
-				},
-				{ action: "cancel", label: localize("Cancel", "Anuluj"), callback: () => CANCEL_DIALOG_RESULT },
-			],
-			rejectClose: false,
-		});
-		if (isCancelledDialogResult(response)) return null;
-		if (!Array.isArray(response)) return null;
-		if (response.length === count) {
-			const selected = new Set(response);
-			return targets.filter((target) => selected.has(target.key));
-		}
-		ui.notifications.warn(localize(
-			`Choose exactly ${count} targets.`,
-			`Wybierz dokładnie ${count} celów.`,
-		));
+async function randomTargets(targets, count) {
+	const pool = [...targets];
+	const selected = [];
+	while (selected.length < count && pool.length > 0) {
+		const roll = await new Roll(`1d${pool.length}`).evaluate();
+		const index = Math.max(0, Math.min(pool.length - 1, Number(roll.total) - 1));
+		selected.push(pool.splice(index, 1)[0]);
 	}
+	return Object.freeze(selected);
 }
 
 async function resolveImpact({ actor, spell, target, ballIndex, flammable }) {
@@ -365,14 +458,30 @@ async function resolveImpact({ actor, spell, target, ballIndex, flammable }) {
 		toughness,
 		finalDamage: resolution.finalAmount,
 	});
-	return Object.freeze({ packetId: packet.id, targetUuid: targetActor.uuid, finalDamage: resolution.finalAmount });
+	return Object.freeze({
+		packetId: packet.id,
+		targetUuid: targetActor.uuid,
+		finalDamage: resolution.finalAmount,
+	});
 }
 
-async function publishCastSummary({ actor, spell, configuration, volleys, magicPoints, magicPointsAfter }) {
+async function publishCastSummary({
+	actor,
+	spell,
+	configuration,
+	volleys,
+	magicPoints,
+	magicPointsAfter,
+}) {
 	const groupDetails = volleys.map((volley, index) => ({
 		ballNumber: index + 1,
-		groupRoll: volley.groupRoll ? nonNegativeInteger(volley.groupRoll.total, "Group hits") : null,
-		targets: volley.targets.map((target) => ({ uuid: target.key, name: target.name })),
+		groupRoll: volley.groupRoll
+			? nonNegativeInteger(volley.groupRoll.total, "Group hits")
+			: null,
+		targets: volley.targets.map((target) => ({
+			uuid: target.key,
+			name: target.name,
+		})),
 	}));
 	const content = `
 		<section class="wfrp1ed fire-ball-cast-summary">
@@ -387,13 +496,17 @@ async function publishCastSummary({ actor, spell, configuration, volleys, magicP
 		content,
 	});
 	await message.setFlag(FLAG_SCOPE, CAST_FLAG_KEY, {
-		version: 1,
+		version: 2,
 		casterUuid: actor.uuid,
 		spellUuid: spell.uuid,
 		fireBalls: configuration.fireBalls,
 		magicPointsBefore: magicPoints,
 		magicPointsAfter,
 		group: configuration.group,
+		targets: configuration.targets.map((target) => ({
+			uuid: target.key,
+			name: target.name,
+		})),
 		volleys: groupDetails,
 	});
 }
@@ -401,22 +514,15 @@ async function publishCastSummary({ actor, spell, configuration, volleys, magicP
 function selectedTargets(actor) {
 	const automaticDistance = WfrpRuleSettings.usesAutomaticSpellTokenDistance();
 	const casterToken = automaticDistance ? activeCasterToken(actor) : null;
-	const targets = [...(game.user?.targets ?? [])].map((token) => {
-		const distance = casterToken ? tokenDistance(casterToken, token) : null;
-		if (automaticDistance && Number.isFinite(distance) && distance > RANGE) {
-			throw new Error(localize(
-				`${token.name} is beyond Fire Ball range (${RANGE}).`,
-				`${token.name} znajduje się poza zasięgiem Ognistej Kuli (${RANGE}).`,
-			));
-		}
-		return Object.freeze({
+	return Object.freeze([...(game.user?.targets ?? [])].map((token) =>
+		Object.freeze({
 			key: token.document?.uuid ?? token.uuid,
 			name: token.name,
 			actor: token.actor,
-			distance,
-		});
-	});
-	return Object.freeze(targets);
+			token,
+			distance: casterToken ? tokenDistance(casterToken, token) : null,
+		}),
+	));
 }
 
 function activeCasterToken(actor) {
@@ -446,18 +552,26 @@ function tokenCenter(token) {
 function fireBallRoundUsage(actor) {
 	const combat = game.combat;
 	if (!combat?.id || !Number.isInteger(Number(combat.round))) {
-		return { managed: false, combatId: null, round: null, used: 0 };
-	}
-	const stored = actor.getFlag?.(FLAG_SCOPE, ROUND_USAGE_FLAG_KEY);
-	if (stored?.combatId === combat.id && Number(stored?.round) === Number(combat.round)) {
 		return {
-			managed: true,
-			combatId: combat.id,
-			round: Number(combat.round),
-			used: nonNegativeInteger(stored.used, "Fire Ball round usage"),
+			managed: false,
+			combatId: null,
+			round: null,
+			cast: false,
 		};
 	}
-	return { managed: true, combatId: combat.id, round: Number(combat.round), used: 0 };
+
+	const stored = actor.getFlag?.(FLAG_SCOPE, ROUND_USAGE_FLAG_KEY);
+	const sameRound = stored?.combatId === combat.id &&
+		Number(stored?.round) === Number(combat.round);
+	return {
+		managed: true,
+		combatId: combat.id,
+		round: Number(combat.round),
+		cast: sameRound && (
+			stored?.cast === true ||
+			nonNegativeInteger(stored?.used ?? 0, "Fire Ball round usage") > 0
+		),
+	};
 }
 
 function positiveInteger(value, label) {
@@ -497,7 +611,9 @@ function decorateImpact(message, html) {
 	const impact = message.getFlag?.(FLAG_SCOPE, IMPACT_FLAG_KEY);
 	if (!impact || !(html instanceof HTMLElement)) return;
 	const messageContent = html.querySelector(".message-content");
-	if (!messageContent || messageContent.querySelector(".wfrp-fire-ball-impact")) return;
+	if (!messageContent || messageContent.querySelector(".wfrp-fire-ball-impact")) {
+		return;
+	}
 	const section = document.createElement("section");
 	section.className = "wfrp1ed wfrp-fire-ball-impact";
 	section.innerHTML = `
