@@ -1,5 +1,6 @@
 import "./CombatAttackSheetStatus.mjs";
 import "./CombatAttackTargetCanvasIntegration.mjs";
+import "./CombatDefenceAdjudicationReconciliation.mjs";
 import { CombatAttackLauncher } from "./CombatAttackLauncher.mjs";
 import { CombatAttackRangeRules } from "./CombatAttackRangeRules.mjs";
 import { CombatAttackResultChat } from "./CombatAttackResultChat.mjs";
