@@ -8,13 +8,16 @@ import {
 } from "../damage/DamagePacket.mjs";
 import { DamageResolution } from "../damage/DamageResolution.mjs";
 import { DamageResolver } from "../damage/DamageResolver.mjs";
-import { ActorTestRequestWorkflow } from "../tests/ActorTestRequestWorkflow.mjs";
+import { TestResultChat } from "../tests/TestResultChat.mjs";
+import { TestResultModifierToggle } from "../tests/TestResultModifierToggle.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
 const IMPACT_FLAG_KEY = "fireBallImpactWorkflow";
 const DAMAGE_FLAG_KEY = "damageState";
 const VIEW_FLAG_KEY = "fireBallDamageResultView";
 const ACTOR_TEST_FLAG_KEY = "actorTestRequest";
+const TEST_FLAG_KEY = "testResultState";
+const INLINE_TEST_FLAG_KEY = "fireBallInlineTest";
 const SOCKET_CHANNEL = "system.wfrp1ed";
 const REQUEST_TYPE = "fire-ball-damage-view-action-request";
 const RESPONSE_TYPE = "fire-ball-damage-view-action-response";
@@ -22,43 +25,55 @@ const TIMEOUT_MS = 30000;
 const STRENGTH = 3;
 const pending = new Map();
 const active = new Set();
+const reconcilingSources = new Set();
 let installed = false;
 
 /**
- * Fire Ball extension for the system-wide DamageChat result card.
+ * Fire Ball presentation/adjudication bridge.
  *
- * DamageChat and the normal combat lifecycle remain responsible for the card
- * shell, Apply Damage, applied/reverted status and the Damage transaction.
- * This module contributes only Fire Ball-specific adjudication: Initiative,
- * d10/d8 dice and situational fire/psychology vulnerabilities.
+ * The impact ChatMessage is the permanent spell-resolution transaction. It owns
+ * target/vulnerability state and mirrors the linked Initiative/Fear Tests. It
+ * must never disappear merely because a derived damage value changes.
+ *
+ * The dedicated Damage ChatMessage is a derived view of the same DamagePacket.
+ * It intentionally contains damage only: Fire Ball d10, optional ignition d8,
+ * folded calculation detail and the system-wide DamageChat application state.
+ * This mirrors the melee/ranged split between the attack/defence transaction
+ * and its dedicated damage result instead of implementing a second damage card.
  */
 export function installFireBallDamageResultView() {
 	if (installed) return;
 	installed = true;
 
-	Hooks.on("updateChatMessage", (message) => {
-		if (message?.getFlag?.(FLAG_SCOPE, IMPACT_FLAG_KEY)) {
-			void ensureDamageView(message).catch(reportError);
-		}
-	});
 	Hooks.on("createChatMessage", (message) => {
 		if (message?.getFlag?.(FLAG_SCOPE, IMPACT_FLAG_KEY)) {
 			void ensureDamageView(message).catch(reportError);
 		}
 	});
+
+	Hooks.on("updateChatMessage", (message, changes) => {
+		if (message?.getFlag?.(FLAG_SCOPE, IMPACT_FLAG_KEY)) {
+			void ensureDamageView(message).catch(reportError);
+		}
+		if (testStateChanged(changes)) {
+			void reconcileLinkedTest(message).catch(reportError);
+		}
+	});
+
 	Hooks.on("renderChatMessageHTML", (message, html) => {
 		requestAnimationFrame(() => {
 			decorateDamageView(message, html);
-			hideResolvedImpactSource(message, html);
+			decorateImpactSource(message, html);
+			hideFireBallTestPlumbing(message, html);
 		});
 	});
+
 	Hooks.once("ready", () => {
 		game.socket?.on?.(SOCKET_CHANNEL, (payload) => void handleSocket(payload));
-		if (ActorRollPolicy.isPrimaryActiveGM()) {
-			for (const message of game.messages ?? []) {
-				if (message?.getFlag?.(FLAG_SCOPE, IMPACT_FLAG_KEY)) {
-					void ensureDamageView(message).catch(reportError);
-				}
+		if (!ActorRollPolicy.isPrimaryActiveGM()) return;
+		for (const message of game.messages ?? []) {
+			if (message?.getFlag?.(FLAG_SCOPE, IMPACT_FLAG_KEY)) {
+				void ensureDamageView(message).catch(reportError);
 			}
 		}
 	});
@@ -67,8 +82,22 @@ export function installFireBallDamageResultView() {
 async function ensureDamageView(sourceMessage) {
 	if (!ActorRollPolicy.isPrimaryActiveGM()) return null;
 	const impact = sourceMessage?.getFlag?.(FLAG_SCOPE, IMPACT_FLAG_KEY);
+	if (!impact) return null;
+
+	const existing = findView(sourceMessage.id);
+	if (!impact.damage) {
+		if (existing && existing.canUserModify?.(game.user, "delete")) {
+			const transaction = transactionForView(existing);
+			if (!transaction || transaction.state !== "applied") await existing.delete();
+		}
+		return null;
+	}
+
 	const damageState = sourceMessage?.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG_KEY);
-	if (!impact?.damage || !damageState?.packet || !damageState?.resolution) return null;
+	/* DamageChat.attach and the impact flag are two Document updates. During the
+	 * short interval between them keep the current view rather than deleting and
+	 * recreating it. */
+	if (!damageState?.packet || !damageState?.resolution) return existing ?? null;
 
 	const target = ActorRollPolicy.actorFromUuidSync(impact.targetUuid);
 	if (!target) return null;
@@ -78,23 +107,23 @@ async function ensureDamageView(sourceMessage) {
 	const standalone = DamageChat._state(packet, resolution, "standalone", target.name);
 	standalone.application = transaction ? foundry.utils.deepClone(transaction) : null;
 	const baseContent = await DamageChat._render(standalone, target, transaction);
-	const content = fireBallContent(baseContent, impact, damageState);
-	const existing = findView(sourceMessage.id);
+	const content = fireBallDamageContent(baseContent, impact, damageState);
+	const previousView = existing?.getFlag?.(FLAG_SCOPE, VIEW_FLAG_KEY);
 	const viewState = {
-		version: 1,
+		version: 2,
 		sourceImpactMessageId: String(sourceMessage.id),
 		packetId: String(packet.id),
 		targetActorUuid: String(target.uuid),
-		createdAt: existing?.getFlag?.(FLAG_SCOPE, VIEW_FLAG_KEY)?.createdAt ?? Date.now(),
+		createdAt: previousView?.createdAt ?? Date.now(),
+		updatedAt: Date.now(),
 	};
 
 	if (existing) {
-		const changes = {
+		await existing.update({
 			content,
 			[`flags.${FLAG_SCOPE}.${DAMAGE_FLAG_KEY}`]: standalone,
 			[`flags.${FLAG_SCOPE}.${VIEW_FLAG_KEY}`]: viewState,
-		};
-		await existing.update(changes);
+		});
 		return existing;
 	}
 
@@ -112,34 +141,33 @@ async function ensureDamageView(sourceMessage) {
 	});
 }
 
-function fireBallContent(baseContent, impact, damageState) {
+function fireBallDamageContent(baseContent, impact, damageState) {
 	const template = document.createElement("template");
 	template.innerHTML = String(baseContent ?? "").trim();
 	const card = template.content.querySelector("[data-wfrp-damage-card]");
 	if (!card) return String(baseContent ?? "");
 
-	for (const row of card.querySelectorAll(":scope > .wfrp1e-damage-card__row, :scope > .wfrp1e-damage-card__mitigation")) {
-		row.remove();
-	}
+	/* DamageChat supplies the shell/status. Replace only the generic body with
+	 * the two spell damage components requested by the spell transaction. */
+	for (const element of card.querySelectorAll(
+		":scope > .wfrp1e-damage-card__row, :scope > .wfrp1e-damage-card__mitigation",
+	)) element.remove();
 
 	const status = card.querySelector("[data-wfrp-damage-status]");
 	const hint = card.querySelector(".wfrp1e-damage-card__hint");
 	const before = status ?? hint ?? null;
 
-	insertBefore(card, targetRow(impact), before);
-	insertBefore(card, vulnerabilityRow(impact), before);
-	insertBefore(card, initiativeOutcomeRow(impact), before);
-	insertBefore(card, initiativeRollRow(impact), before);
 	insertBefore(card, damageDieRow({
 		kind: "d10",
-		label: localize("Fire Ball damage", "Obrażenia Ognistej Kuli"),
+		label: localize("Fire Ball", "Ognista Kula"),
 		faces: 10,
 		value: impact.damage?.damageRoll,
 	}), before);
-	if (impact.flammable && Number.isInteger(Number(impact.damage?.flammableRoll))) {
+
+	if (impact.flammable && isDieValue(impact.damage?.flammableRoll, 8)) {
 		insertBefore(card, damageDieRow({
 			kind: "d8",
-			label: localize("Flammable damage", "Obrażenia za łatwopalność"),
+			label: localize("Ignition", "Podpalenie"),
 			faces: 8,
 			value: impact.damage.flammableRoll,
 		}), before);
@@ -154,13 +182,24 @@ function fireBallContent(baseContent, impact, damageState) {
 	body.className = "wfrp1e-damage-card__details-body combat-damage-context__details-body";
 	body.append(
 		detailRow(localize("Strength", "Siła"), `+${STRENGTH}`),
+		detailRow(
+			localize("Damage Reduction - Initiative", "Redukcja obrażeń — Inicjatywa"),
+			currentInitiativeOutcome(impact).success
+				? localize("success — half", "sukces — połowa")
+				: localize("failure — full", "porażka — pełne"),
+		),
 		detailRow(localize("Armour", "Pancerz"), localize("ignored", "pominięty")),
-		detailRow(localize("Toughness", "Wytrzymałość"), `−${nonNegativeInteger(impact.damage?.toughness)}`),
-		detailRow(localize("Final damage", "Końcowe obrażenia"), String(damageState?.resolution?.finalAmount ?? impact.damage?.finalDamage ?? 0)),
+		detailRow(
+			localize("Toughness", "Wytrzymałość"),
+			`−${nonNegativeInteger(impact.damage?.toughness)}`,
+		),
+		detailRow(
+			localize("Final", "Wynik końcowy"),
+			String(damageState?.resolution?.finalAmount ?? impact.damage?.finalDamage ?? 0),
+		),
 	);
 	details.append(summary, body);
 	insertBefore(card, details, before);
-
 	return template.innerHTML;
 }
 
@@ -176,57 +215,182 @@ function decorateDamageView(message, html) {
 		: root?.querySelector?.("[data-wfrp-damage-card]");
 	if (!card) return;
 
-	bindInitiative(card, source, impact);
 	bindDamageDie(card, source, impact, "d10");
 	bindDamageDie(card, source, impact, "d8");
-	bindVulnerabilities(card, source, impact);
-
-	if (impact.status === "awaiting-flammable-damage") {
-		const apply = card.querySelector("[data-wfrp-inline-apply-damage]");
-		apply?.remove();
-		const status = card.querySelector("[data-wfrp-damage-status]");
-		if (status) {
-			status.hidden = false;
-			status.textContent = localize(
-				"Fire vulnerability was added — roll only the missing d8 damage.",
-				"Dodano łatwopalność — rzuć tylko brakujące obrażenia k8.",
-			);
-		}
-		if (!card.querySelector("[data-fire-ball-roll-missing-d8]")) {
-			const button = document.createElement("button");
-			button.type = "button";
-			button.className = "combat-damage-roll-button";
-			button.dataset.fireBallRollMissingD8 = "";
-			button.textContent = localize("Roll flammable damage (d8)", "Rzuć obrażenia za łatwopalność (k8)");
-			const caster = ActorRollPolicy.actorFromUuidSync(impact.casterUuid);
-			button.disabled = !ActorRollPolicy.canAdjudicate(caster, game.user);
-			button.addEventListener("click", () => void requestMutation(source, "roll-d8").catch(reportError));
-			card.append(button);
-		}
-	}
 }
 
-function hideResolvedImpactSource(message, html) {
+/** Keep the Fire Ball source card as the permanent resolution record. */
+function decorateImpactSource(message, html) {
 	const impact = message?.getFlag?.(FLAG_SCOPE, IMPACT_FLAG_KEY);
-	if (!impact?.damage || !findView(message.id)) return;
+	if (!impact) return;
 	const root = asElement(html);
-	const entry = root?.closest?.(".chat-message, li.message, li.chat-message") ?? null;
-	if (entry instanceof HTMLElement) {
-		entry.style.display = "none";
-		return;
+	const panel = root?.matches?.("[data-wfrp-fireball-impact-workflow]")
+		? root
+		: root?.querySelector?.("[data-wfrp-fireball-impact-workflow]");
+	if (!(panel instanceof HTMLElement)) return;
+
+	/* Final damage belongs to the dedicated Damage card, not the spell header. */
+	panel.querySelector(":scope > .wfrp1e-damage-card__header .wfrp1e-damage-card__amount")?.remove();
+
+	if (impact.status === "awaiting-initiative") {
+		compactPendingInitiative(panel, message, impact);
+	} else if (impact.initiative) {
+		compactInitiativeRow(panel, message, impact);
 	}
-	const panel = root?.querySelector?.("[data-wfrp-fireball-impact-workflow]");
-	if (panel instanceof HTMLElement) panel.hidden = true;
+
+	if (impact.fearOfFire) appendFearRow(panel, message, impact);
+
+	if (impact.damage) {
+		/* The source transaction must not duplicate the damage result. */
+		for (const row of panel.querySelectorAll(":scope > .wfrp-fireball-die-row")) row.remove();
+		for (const details of panel.querySelectorAll(
+			":scope > details.combat-damage-context__resolved, :scope > details.wfrp1e-damage-card__details",
+		)) details.remove();
+		for (const button of panel.querySelectorAll(":scope > .wfrp1e-damage-card__apply")) button.remove();
+	}
 }
 
-function bindInitiative(card, source, impact) {
-	const input = card.querySelector("[data-fire-ball-initiative-roll]");
-	if (!(input instanceof HTMLInputElement)) return;
-	const target = ActorRollPolicy.actorFromUuidSync(impact.targetUuid);
-	input.disabled = !ActorRollPolicy.canAdjudicate(target, game.user) || hasAppliedDamage(source, target);
-	input.addEventListener("change", () => {
-		void requestMutation(source, "initiative", { value: input.value }).catch(reportError);
+function compactPendingInitiative(panel, source, impact) {
+	for (const status of panel.querySelectorAll(":scope > .combat-damage-context__status")) {
+		status.remove();
+	}
+	const original = [...panel.querySelectorAll(":scope > button.combat-damage-roll-button")]
+		.find((button) => /initiative|inicjatyw/i.test(String(button.textContent ?? "")));
+	if (!original) return;
+
+	const button = original.cloneNode(true);
+	button.textContent = localize("Roll", "Rzuć");
+	button.disabled = !ActorRollPolicy.canAdjudicate(
+		ActorRollPolicy.actorFromUuidSync(impact.targetUuid),
+		game.user,
+	);
+	button.addEventListener("click", (event) => {
+		event.preventDefault();
+		event.stopPropagation();
+		button.disabled = true;
+		void requestMutation(source, "initiative-roll")
+			.catch(reportError)
+			.finally(() => {
+				if (button.isConnected) button.disabled = false;
+			});
 	});
+
+	const row = document.createElement("div");
+	row.className = "wfrp1e-damage-card__row wfrp-fireball-initiative-row";
+	row.dataset.fireBallCompactInitiative = "";
+	const label = document.createElement("span");
+	label.textContent = localize(
+		"Damage Reduction - Initiative",
+		"Redukcja obrażeń — Inicjatywa",
+	);
+	row.append(label, button);
+	original.replaceWith(row);
+}
+
+function compactInitiativeRow(panel, source, impact) {
+	const row = panel.querySelector(":scope > .wfrp-fireball-initiative-row");
+	if (!(row instanceof HTMLElement)) return;
+	const label = row.querySelector(":scope > span:first-child");
+	if (label) {
+		label.textContent = localize(
+			"Damage Reduction - Initiative",
+			"Redukcja obrażeń — Inicjatywa",
+		);
+	}
+
+	const outcome = currentInitiativeOutcome(impact);
+	const editor = row.querySelector(".wfrp-fireball-inline-roll");
+	const oldInput = editor?.querySelector("input[type='number']");
+	if (oldInput instanceof HTMLInputElement) {
+		const input = oldInput.cloneNode(true);
+		input.value = String(outcome.roll ?? "");
+		const target = ActorRollPolicy.actorFromUuidSync(impact.targetUuid);
+		input.disabled = !ActorRollPolicy.canAdjudicate(target, game.user) || hasAppliedDamage(source, target);
+		input.addEventListener("keydown", (event) => {
+			if (event.key === "Enter") input.blur();
+		});
+		input.addEventListener("change", () => {
+			void requestMutation(source, "initiative", { value: input.value }).catch(reportError);
+		});
+		oldInput.replaceWith(input);
+	}
+	const strong = editor?.querySelector("strong");
+	if (strong) strong.textContent = testOutcomeLabel(outcome);
+}
+
+function appendFearRow(panel, source, impact) {
+	panel.querySelector(":scope > [data-fire-ball-fear-test-row]")?.remove();
+	const target = ActorRollPolicy.actorFromUuidSync(impact.targetUuid);
+	if (!target) return;
+	const resultMessage = fearResultMessage(impact);
+	const testState = resultMessage?.getFlag?.(FLAG_SCOPE, TEST_FLAG_KEY);
+
+	const row = document.createElement("div");
+	row.className = "wfrp1e-damage-card__row";
+	row.dataset.fireBallFearTestRow = "";
+	const label = document.createElement("span");
+	label.textContent = localize("Fear Test", "Test Strachu");
+
+	if (testState) {
+		const outcome = TestResultChat._templateContext(testState).result;
+		const editor = document.createElement("span");
+		editor.className = "wfrp-fireball-inline-roll";
+		const input = document.createElement("input");
+		input.type = "number";
+		input.min = "1";
+		input.max = "100";
+		input.step = "1";
+		input.inputMode = "numeric";
+		input.value = String(outcome.roll ?? testState.roll ?? "");
+		input.className = "wfrp-fireball-inline-roll__input";
+		input.disabled = !ActorRollPolicy.canAdjudicate(target, game.user);
+		input.addEventListener("keydown", (event) => {
+			if (event.key === "Enter") input.blur();
+		});
+		input.addEventListener("change", () => {
+			void requestMutation(source, "fear", { value: input.value }).catch(reportError);
+		});
+		const result = document.createElement("strong");
+		result.textContent = testOutcomeLabel(outcome);
+		editor.append(input, result);
+		row.append(label, editor);
+	} else {
+		const button = document.createElement("button");
+		button.type = "button";
+		button.className = "combat-damage-roll-button";
+		button.textContent = localize("Roll", "Rzuć");
+		button.disabled = !ActorRollPolicy.canAdjudicate(target, game.user);
+		button.addEventListener("click", () => {
+			button.disabled = true;
+			void requestMutation(source, "fear-roll")
+				.catch(reportError)
+				.finally(() => {
+					if (button.isConnected) button.disabled = false;
+				});
+		});
+		row.append(label, button);
+	}
+
+	const initiative = panel.querySelector(":scope > .wfrp-fireball-initiative-row");
+	if (initiative) initiative.after(row);
+	else panel.append(row);
+}
+
+/**
+ * ActorTestRequest is plumbing for assigning the Fear roll to the target owner;
+ * once Fire Ball presents that action on its own transaction card the request
+ * card would be redundant. The actual Fear TestResult remains visible as the
+ * canonical result/audit card.
+ */
+function hideFireBallTestPlumbing(message, html) {
+	const request = message?.getFlag?.(FLAG_SCOPE, ACTOR_TEST_FLAG_KEY);
+	const inline = message?.getFlag?.(FLAG_SCOPE, INLINE_TEST_FLAG_KEY);
+	const shouldHide = request?.source?.kind === "spell-fire-ball" || inline?.role === "initiative";
+	if (!shouldHide) return;
+	const root = asElement(html);
+	const entry = root?.closest?.(".chat-message, li.message, li.chat-message");
+	if (entry instanceof HTMLElement) entry.style.display = "none";
+	else if (root instanceof HTMLElement) root.hidden = true;
 }
 
 function bindDamageDie(card, source, impact, kind) {
@@ -235,47 +399,43 @@ function bindDamageDie(card, source, impact, kind) {
 	const caster = ActorRollPolicy.actorFromUuidSync(impact.casterUuid);
 	const target = ActorRollPolicy.actorFromUuidSync(impact.targetUuid);
 	input.disabled = !ActorRollPolicy.canAdjudicate(caster, game.user) || hasAppliedDamage(source, target);
+	input.addEventListener("keydown", (event) => {
+		if (event.key === "Enter") input.blur();
+	});
 	input.addEventListener("change", () => {
 		void requestMutation(source, kind, { value: input.value }).catch(reportError);
 	});
 }
 
-function bindVulnerabilities(card, source, impact) {
-	for (const input of card.querySelectorAll("[data-fire-ball-view-vulnerability]")) {
-		if (!(input instanceof HTMLInputElement)) continue;
-		const target = ActorRollPolicy.actorFromUuidSync(impact.targetUuid);
-		input.disabled = !game.user?.isGM || hasAppliedDamage(source, target);
-		input.addEventListener("change", () => {
-			void requestMutation(source, "vulnerability", {
-				kind: String(input.dataset.fireBallViewVulnerability ?? ""),
-				value: input.checked === true,
-			}).catch(reportError);
-		});
-	}
-}
-
 async function requestMutation(source, action, extra = {}) {
 	const impact = source?.getFlag?.(FLAG_SCOPE, IMPACT_FLAG_KEY);
 	if (!impact) throw new Error("This Fire Ball impact is no longer available.");
-	const actor = action === "initiative"
+	const targetOwnedActions = new Set(["initiative-roll", "initiative", "fear-roll", "fear"]);
+	const actor = targetOwnedActions.has(action)
 		? ActorRollPolicy.actorFromUuidSync(impact.targetUuid)
 		: ActorRollPolicy.actorFromUuidSync(impact.casterUuid);
-	if (action !== "vulnerability" && !ActorRollPolicy.canAdjudicate(actor, game.user)) {
-		throw new Error(localize("You may not edit this roll.", "Nie masz uprawnień do edycji tego rzutu."));
-	}
-	if (action === "vulnerability" && !game.user?.isGM) {
-		throw new Error(localize("Only the GM may adjudicate vulnerabilities.", "Tylko MG może rozstrzygać podatności."));
+	if (!ActorRollPolicy.canAdjudicate(actor, game.user)) {
+		throw new Error(localize(
+			"You may not adjudicate this roll.",
+			"Nie masz uprawnień do rozstrzygnięcia tego rzutu.",
+		));
 	}
 	if (ActorRollPolicy.isPrimaryActiveGM()) {
 		return mutateAsAuthority(source, action, game.user, extra);
 	}
 	const gm = ActorRollPolicy.primaryActiveGM();
-	if (!gm || !game.socket) throw new Error(localize("An active GM is required.", "Wymagany jest aktywny MG."));
+	if (!gm || !game.socket) {
+		throw new Error(localize("An active GM is required.", "Wymagany jest aktywny MG."));
+	}
+
 	const requestId = foundry.utils.randomID();
 	return new Promise((resolve, reject) => {
 		const timeout = setTimeout(() => {
 			pending.delete(requestId);
-			reject(new Error(localize("The GM did not resolve the edit in time.", "MG nie rozstrzygnął zmiany w wymaganym czasie.")));
+			reject(new Error(localize(
+				"The GM did not resolve the edit in time.",
+				"MG nie rozstrzygnął zmiany w wymaganym czasie.",
+			)));
 		}, TIMEOUT_MS);
 		pending.set(requestId, { resolve, reject, timeout });
 		game.socket.emit(SOCKET_CHANNEL, {
@@ -298,10 +458,11 @@ async function handleSocket(payload) {
 		pending.delete(String(payload.requestId ?? ""));
 		clearTimeout(entry.timeout);
 		if (payload.ok) entry.resolve(payload.result ?? null);
-		else entry.reject(new Error(String(payload.error ?? "Unable to edit Fire Ball damage.")));
+		else entry.reject(new Error(String(payload.error ?? "Unable to edit Fire Ball resolution.")));
 		return;
 	}
 	if (payload.type !== REQUEST_TYPE || !ActorRollPolicy.isPrimaryActiveGM()) return;
+
 	const requester = game.users?.get(String(payload.requestUserId ?? ""));
 	const source = game.messages?.get(String(payload.sourceMessageId ?? ""));
 	const response = {
@@ -313,11 +474,16 @@ async function handleSocket(payload) {
 		error: null,
 	};
 	try {
-		if (!requester || !source) throw new Error("The Fire Ball edit source is unavailable.");
-		response.result = await mutateAsAuthority(source, String(payload.action ?? ""), requester, payload.extra ?? {});
+		if (!requester || !source) throw new Error("The Fire Ball source is unavailable.");
+		response.result = await mutateAsAuthority(
+			source,
+			String(payload.action ?? ""),
+			requester,
+			payload.extra ?? {},
+		);
 		response.ok = true;
 	} catch (error) {
-		response.error = error?.message ?? "Unable to edit Fire Ball damage.";
+		response.error = error?.message ?? "Unable to edit Fire Ball resolution.";
 	}
 	game.socket.emit(SOCKET_CHANNEL, response);
 }
@@ -325,100 +491,138 @@ async function handleSocket(payload) {
 async function mutateAsAuthority(source, action, requester, extra = {}) {
 	const key = `${source.id}:${action}`;
 	if (active.has(key)) return null;
-	const impact = foundry.utils.deepClone(source.getFlag?.(FLAG_SCOPE, IMPACT_FLAG_KEY) ?? {});
+	const impact = foundry.utils.deepClone(
+		source.getFlag?.(FLAG_SCOPE, IMPACT_FLAG_KEY) ?? {},
+	);
 	const target = ActorRollPolicy.actorFromUuidSync(impact.targetUuid);
 	const caster = ActorRollPolicy.actorFromUuidSync(impact.casterUuid);
-	if (!target || !caster) throw new Error("The caster or target is unavailable.");
+	if (!target || !caster) throw new Error("The Fire Ball caster or target is unavailable.");
+
+	const targetOwnedActions = new Set(["initiative-roll", "initiative", "fear-roll", "fear"]);
+	const ownedActor = targetOwnedActions.has(action) ? target : caster;
+	if (!ActorRollPolicy.canAdjudicate(ownedActor, requester)) {
+		throw new Error("The requesting user does not own this roll.");
+	}
 	if (hasAppliedDamage(source, target)) {
 		throw new Error(localize(
-			"Revert applied damage before editing this Fire Ball result.",
-			"Cofnij zastosowane obrażenia przed edycją tego wyniku Ognistej Kuli.",
+			"Revert applied Fire Ball damage before changing this resolution.",
+			"Cofnij zastosowane obrażenia Ognistej Kuli przed zmianą tego rozstrzygnięcia.",
 		));
-	}
-	if (action === "initiative" && !ActorRollPolicy.canAdjudicate(target, requester)) {
-		throw new Error("The requesting user does not own the Initiative roll.");
-	}
-	if (!["initiative", "vulnerability"].includes(action) && !ActorRollPolicy.canAdjudicate(caster, requester)) {
-		throw new Error("The requesting user does not own the damage roll.");
-	}
-	if (action === "vulnerability" && !requester?.isGM) {
-		throw new Error("Only a GM may adjudicate vulnerabilities.");
 	}
 
 	active.add(key);
 	try {
+		if (action === "initiative-roll") {
+			if (impact.status !== "awaiting-initiative") return impact;
+			const result = await target.rollTest("i", { modifier: 0 });
+			if (!result?.chatMessage) throw new Error("Initiative Test did not produce a ChatMessage.");
+			await result.chatMessage.setFlag(FLAG_SCOPE, INLINE_TEST_FLAG_KEY, {
+				version: 1,
+				role: "initiative",
+				sourceImpactMessageId: String(source.id),
+			});
+			impact.initiative = initiativeSnapshotFromMessage(result.chatMessage, impact.initiative);
+			impact.initiative.testMessageId = String(result.chatMessage.id);
+			impact.status = "awaiting-damage";
+			impact.updatedBy = String(requester?.id ?? "");
+			impact.updatedAt = Date.now();
+			await source.setFlag(FLAG_SCOPE, IMPACT_FLAG_KEY, impact);
+			requestChatRefresh();
+			return impact;
+		}
+
 		if (action === "initiative") {
-			if (!impact.initiative) throw new Error("Initiative has not been resolved yet.");
 			const roll = boundedInteger(extra.value, 1, 100, "Initiative d100");
-			impact.initiative.roll = roll;
-			impact.initiative.success = roll <= Number(impact.initiative.target);
-			return recalculate(source, impact, target, caster, requester);
+			const testMessage = initiativeTestMessage(impact);
+			if (testMessage) {
+				await TestResultModifierToggle.commitRollValue(testMessage, roll, requester);
+				impact.initiative = initiativeSnapshotFromMessage(testMessage, impact.initiative);
+				impact.initiative.testMessageId = String(testMessage.id);
+			} else {
+				/* Compatibility for casts made before Initiative became a linked Test. */
+				if (!impact.initiative) throw new Error("Initiative has not been resolved yet.");
+				impact.initiative.roll = roll;
+				impact.initiative.success = roll <= Number(impact.initiative.target);
+			}
+			return persistInitiativeChange(source, impact, target, caster, requester);
 		}
-		if (action === "d10") {
+
+		if (action === "fear-roll") {
+			if (!impact.fearOfFire) throw new Error("Fear of Fire is not active for this target.");
+			const request = fearRequestMessage(impact);
+			const existingResult = fearResultMessage(impact);
+			if (existingResult) return impact;
+			const result = await target.rollTest("fear", { modifier: 0 });
+			if (!result?.chatMessage) throw new Error("Fear Test did not produce a ChatMessage.");
+			if (request?.canUserModify?.(game.user, "update")) {
+				const state = foundry.utils.deepClone(
+					request.getFlag?.(FLAG_SCOPE, ACTOR_TEST_FLAG_KEY) ?? {},
+				);
+				state.status = "resolved";
+				state.resultMessageId = String(result.chatMessage.id);
+				state.resolvedBy = String(requester?.id ?? "");
+				state.resolvedAt = Date.now();
+				await request.setFlag(FLAG_SCOPE, ACTOR_TEST_FLAG_KEY, state);
+			}
+			requestChatRefresh();
+			return impact;
+		}
+
+		if (action === "fear") {
+			const resultMessage = fearResultMessage(impact);
+			if (!resultMessage) throw new Error("Fear Test has not been resolved yet.");
+			const roll = boundedInteger(extra.value, 1, 100, "Fear d100");
+			await TestResultModifierToggle.commitRollValue(resultMessage, roll, requester);
+			requestChatRefresh();
+			return impact;
+		}
+
+		if (action === "d10" || action === "d8") {
 			if (!impact.damage) throw new Error("Fire Ball damage has not been rolled yet.");
-			impact.damage.damageRoll = boundedInteger(extra.value, 1, 10, "Fire Ball d10");
-			return recalculate(source, impact, target, caster, requester);
-		}
-		if (action === "d8") {
-			if (!impact.flammable || !impact.damage) throw new Error("Flammable damage is not active.");
-			impact.damage.flammableRoll = boundedInteger(extra.value, 1, 8, "Flammable d8");
-			return recalculate(source, impact, target, caster, requester);
-		}
-		if (action === "roll-d8") {
-			if (!impact.flammable || !impact.damage || !impact.initiative) throw new Error("Flammable damage is not ready.");
-			const roll = await new Roll("1d8").evaluate({ allowInteractive: false });
-			await showRollAnimation(roll, requester);
-			impact.damage.flammableRoll = boundedInteger(roll.total, 1, 8, "Flammable d8");
-			return recalculate(source, impact, target, caster, requester);
-		}
-		if (action === "vulnerability") {
-			const kind = String(extra.kind ?? "");
-			const value = extra.value === true;
-			if (kind === "fearOfFire") {
-				await reconcileFear(impact, target, value);
-				impact.fearOfFire = value;
-				await source.setFlag(FLAG_SCOPE, IMPACT_FLAG_KEY, impact);
-				return impact;
+			if (action === "d10") {
+				impact.damage.damageRoll = boundedInteger(extra.value, 1, 10, "Fire Ball d10");
+			} else {
+				if (!impact.flammable) throw new Error("Ignition damage is not active.");
+				impact.damage.flammableRoll = boundedInteger(extra.value, 1, 8, "Ignition d8");
 			}
-			if (kind !== "flammable") throw new Error("Unknown Fire Ball vulnerability.");
-			if (impact.flammable === value) return impact;
-			impact.flammable = value;
-			if (!impact.damage) {
-				await source.setFlag(FLAG_SCOPE, IMPACT_FLAG_KEY, impact);
-				return impact;
-			}
-			if (value) {
-				impact.status = "awaiting-flammable-damage";
-				impact.damage.flammableRoll = null;
-				impact.damage.finalDamage = null;
-				await source.setFlag(FLAG_SCOPE, IMPACT_FLAG_KEY, impact);
-				await ensureDamageView(source);
-				return impact;
-			}
-			impact.damage.flammableRoll = 0;
-			return recalculate(source, impact, target, caster, requester);
+			return recalculateDamage(source, impact, target, caster, requester);
 		}
+
 		throw new Error(`Unknown Fire Ball damage-view action '${action}'.`);
 	} finally {
 		active.delete(key);
 	}
 }
 
-async function recalculate(source, impact, target, caster, requester) {
-	if (!impact.initiative || !impact.damage) throw new Error("Initiative and base damage must already exist.");
+async function persistInitiativeChange(source, impact, target, caster, requester) {
+	if (impact.damage) {
+		return recalculateDamage(source, impact, target, caster, requester);
+	}
+	impact.updatedBy = String(requester?.id ?? "");
+	impact.updatedAt = Date.now();
+	await source.setFlag(FLAG_SCOPE, IMPACT_FLAG_KEY, impact);
+	requestChatRefresh();
+	return impact;
+}
+
+async function recalculateDamage(source, impact, target, caster, requester) {
+	if (!impact.initiative || !impact.damage) {
+		throw new Error("Initiative and Fire Ball damage must already exist.");
+	}
+	const initiative = currentInitiativeOutcome(impact);
 	const d10 = boundedInteger(impact.damage.damageRoll, 1, 10, "Fire Ball d10");
 	const d8 = impact.flammable
-		? boundedInteger(impact.damage.flammableRoll, 1, 8, "Flammable d8")
+		? boundedInteger(impact.damage.flammableRoll, 1, 8, "Ignition d8")
 		: 0;
 	const fullDamage = STRENGTH + d10 + d8;
-	const afterInitiative = impact.initiative.success ? Math.floor(fullDamage / 2) : fullDamage;
+	const afterInitiative = initiative.success ? Math.floor(fullDamage / 2) : fullDamage;
 	const toughness = nonNegativeInteger(target.getCharacteristicValue("t"));
-	const current = source.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG_KEY);
+	const existingState = source.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG_KEY);
 	const packet = new DamagePacket({
-		id: current?.packet?.id ?? null,
+		id: existingState?.packet?.id ?? impact.damage?.packetId ?? null,
 		rawAmount: afterInitiative,
 		targetActorUuid: target.uuid,
-		source: current?.packet?.source ?? {
+		source: existingState?.packet?.source ?? {
 			kind: "spell-fire-ball",
 			id: `${impact.castId || impact.spellUuid}-ball-${impact.ballNumber}-${target.id}`,
 			uuid: String(impact.spellUuid ?? ""),
@@ -428,9 +632,18 @@ async function recalculate(source, impact, target, caster, requester) {
 		toughness: DAMAGE_MITIGATION_POLICY.APPLY,
 		criticalMode: DAMAGE_CRITICAL_MODE.DETAILED,
 	});
-	const resolution = DamageResolver.resolve(packet, { toughness: { value: toughness } });
+	const resolution = DamageResolver.resolve(packet, {
+		toughness: { value: toughness },
+	});
 	await DamageChat.attach(source, { packet, resolution });
 	impact.status = "resolved";
+	impact.initiative = {
+		...impact.initiative,
+		roll: initiative.roll,
+		target: initiative.target,
+		success: initiative.success,
+		margin: initiative.margin,
+	};
 	impact.damage = {
 		...impact.damage,
 		packetId: packet.id,
@@ -440,96 +653,127 @@ async function recalculate(source, impact, target, caster, requester) {
 		afterInitiative,
 		toughness,
 		finalDamage: resolution.finalAmount,
-		updatedAt: Date.now(),
 		updatedBy: String(requester?.id ?? ""),
+		updatedAt: Date.now(),
 	};
+	impact.updatedBy = String(requester?.id ?? "");
+	impact.updatedAt = Date.now();
 	await source.setFlag(FLAG_SCOPE, IMPACT_FLAG_KEY, impact);
 	await ensureDamageView(source);
-	void ui.chat?.render?.({ force: true });
+	requestChatRefresh();
 	return impact;
 }
 
-async function reconcileFear(impact, target, nextValue) {
-	const existing = fearRequest(impact);
-	if (nextValue) {
-		if (existing) return;
-		const message = await ActorTestRequestWorkflow.create({
-			actor: target,
-			testId: "fear",
-			title: localize("Fear of Fire", "Strach przed ogniem"),
-			description: localize(
-				`${target.name} is subject to fear of fire from ${impact.spellName}.`,
-				`${target.name} podlega strachowi przed ogniem wywołanemu przez ${impact.spellName}.`,
-			),
-			source: {
-				kind: "spell-fire-ball",
-				spellUuid: String(impact.spellUuid ?? ""),
-				castId: String(impact.castId ?? ""),
-				targetUuid: String(target.uuid ?? ""),
-			},
-		});
-		impact.fearRequestMessageId = String(message?.id ?? "");
+async function reconcileLinkedTest(testMessage) {
+	const testId = String(testMessage?.id ?? "").trim();
+	if (!testId) return;
+	const source = sourceForLinkedTest(testId);
+	if (!source) return;
+	const impact = source.getFlag?.(FLAG_SCOPE, IMPACT_FLAG_KEY);
+	if (!impact) return;
+
+	/* Fear changes only affect psychology presentation. */
+	if (String(fearResultMessage(impact)?.id ?? "") === testId) {
+		requestChatRefresh();
 		return;
 	}
-	if (!existing) {
-		impact.fearRequestMessageId = null;
+	if (String(initiativeTestMessage(impact)?.id ?? "") !== testId) return;
+	if (!ActorRollPolicy.isPrimaryActiveGM()) {
+		requestChatRefresh();
 		return;
 	}
-	const state = existing.getFlag?.(FLAG_SCOPE, ACTOR_TEST_FLAG_KEY);
-	if (state?.status === "resolved") {
-		throw new Error(localize(
-			"Fear of Fire has already been resolved and cannot be removed from this cast.",
-			"Strach przed ogniem został już rozstrzygnięty i nie można go usunąć z tego czaru.",
-		));
+	if (reconcilingSources.has(source.id)) return;
+
+	reconcilingSources.add(source.id);
+	try {
+		const updated = foundry.utils.deepClone(impact);
+		updated.initiative = initiativeSnapshotFromMessage(testMessage, updated.initiative);
+		updated.initiative.testMessageId = testId;
+		const target = ActorRollPolicy.actorFromUuidSync(updated.targetUuid);
+		const caster = ActorRollPolicy.actorFromUuidSync(updated.casterUuid);
+		if (!target || !caster) return;
+		if (updated.damage && !hasAppliedDamage(source, target)) {
+			await recalculateDamage(source, updated, target, caster, game.user);
+		} else {
+			updated.updatedAt = Date.now();
+			await source.setFlag(FLAG_SCOPE, IMPACT_FLAG_KEY, updated);
+		}
+	} finally {
+		reconcilingSources.delete(source.id);
+		requestChatRefresh();
 	}
-	await existing.delete();
-	impact.fearRequestMessageId = null;
 }
 
-function fearRequest(impact) {
-	const id = String(impact?.fearRequestMessageId ?? "").trim();
+function currentInitiativeOutcome(impact) {
+	const testMessage = initiativeTestMessage(impact);
+	const testState = testMessage?.getFlag?.(FLAG_SCOPE, TEST_FLAG_KEY);
+	if (testState) {
+		const result = TestResultChat._templateContext(testState).result;
+		return {
+			roll: Number(result.roll),
+			target: Number(result.target),
+			success: result.success === true,
+			margin: Number(result.margin),
+		};
+	}
+	const initiative = impact?.initiative ?? {};
+	return {
+		roll: Number(initiative.roll),
+		target: Number(initiative.target),
+		success: initiative.success === true,
+		margin: Number(initiative.margin),
+	};
+}
+
+function initiativeSnapshotFromMessage(message, previous = null) {
+	const state = message?.getFlag?.(FLAG_SCOPE, TEST_FLAG_KEY);
+	if (!state) throw new Error("Linked Initiative Test has no TestResult snapshot.");
+	const result = TestResultChat._templateContext(state).result;
+	return {
+		...(previous ?? {}),
+		roll: Number(result.roll),
+		originalRoll: Number(previous?.originalRoll ?? state.originalRoll ?? state.roll ?? result.roll),
+		target: Number(result.target),
+		success: result.success === true,
+		margin: Number(result.margin),
+		testMessageId: String(message.id ?? ""),
+	};
+}
+
+function sourceForLinkedTest(testMessageId) {
+	for (const message of game.messages ?? []) {
+		const impact = message.getFlag?.(FLAG_SCOPE, IMPACT_FLAG_KEY);
+		if (!impact) continue;
+		if (String(impact.initiative?.testMessageId ?? "") === testMessageId) return message;
+		if (String(fearResultMessage(impact)?.id ?? "") === testMessageId) return message;
+	}
+	return null;
+}
+
+function initiativeTestMessage(impact) {
+	const id = String(impact?.initiative?.testMessageId ?? "").trim();
 	return id ? game.messages?.get(id) ?? null : null;
 }
 
-function targetRow(impact) {
-	return htmlRow(localize("Target", "Cel"), String(impact.targetName ?? "—"), true);
+function fearRequestMessage(impact) {
+	const id = String(impact?.fearRequestMessageId ?? "").trim();
+	if (id) return game.messages?.get(id) ?? null;
+	for (const message of game.messages ?? []) {
+		const request = message.getFlag?.(FLAG_SCOPE, ACTOR_TEST_FLAG_KEY);
+		if (
+			request?.source?.kind === "spell-fire-ball" &&
+			String(request.source?.castId ?? "") === String(impact?.castId ?? "") &&
+			String(request.actorUuid ?? "") === String(impact?.targetUuid ?? "")
+		) return message;
+	}
+	return null;
 }
 
-function vulnerabilityRow(impact) {
-	const row = document.createElement("div");
-	row.className = "wfrp-fireball-vulnerability-row";
-	row.append(
-		checkbox(localize("Flammable", "Łatwopalny"), "flammable", impact.flammable === true),
-		checkbox(localize("Fear of Fire", "Strach przed ogniem"), "fearOfFire", impact.fearOfFire === true),
-	);
-	return row;
-}
-
-function initiativeOutcomeRow(impact) {
-	return htmlRow(
-		localize("Initiative", "Inicjatywa"),
-		impact.initiative?.success
-			? localize("success — half damage", "sukces — połowa obrażeń")
-			: localize("failure — full damage", "porażka — pełne obrażenia"),
-		true,
-	);
-}
-
-function initiativeRollRow(impact) {
-	const row = document.createElement("div");
-	row.className = "wfrp1e-damage-card__row";
-	const label = document.createElement("span");
-	label.textContent = localize("Initiative Test", "Test Inicjatywy");
-	const input = document.createElement("input");
-	input.type = "number";
-	input.min = "1";
-	input.max = "100";
-	input.step = "1";
-	input.value = String(impact.initiative?.roll ?? "");
-	input.className = "wfrp1e-damage-roll__total";
-	input.dataset.fireBallInitiativeRoll = "";
-	row.append(label, input);
-	return row;
+function fearResultMessage(impact) {
+	const request = fearRequestMessage(impact);
+	const state = request?.getFlag?.(FLAG_SCOPE, ACTOR_TEST_FLAG_KEY);
+	const id = String(state?.resultMessageId ?? "").trim();
+	return id ? game.messages?.get(id) ?? null : null;
 }
 
 function damageDieRow({ kind, label, faces, value }) {
@@ -539,14 +783,7 @@ function damageDieRow({ kind, label, faces, value }) {
 	text.textContent = label;
 	const roll = document.createElement("div");
 	roll.className = "wfrp1e-damage-roll";
-	const dice = document.createElement("ol");
-	dice.className = "dice-rolls wfrp-fireball-native-die";
-	const die = document.createElement("li");
-	die.className = `roll die d${faces}`;
-	die.textContent = String(value ?? "—");
-	die.title = `d${faces}: ${value}`;
-	die.setAttribute("aria-label", `d${faces}: ${value}`);
-	dice.append(die);
+	roll.append(nativeDieResult(faces, value));
 	const equals = document.createElement("span");
 	equals.className = "wfrp1e-damage-roll__operator";
 	equals.textContent = "=";
@@ -555,34 +792,42 @@ function damageDieRow({ kind, label, faces, value }) {
 	input.min = "1";
 	input.max = String(faces);
 	input.step = "1";
+	input.inputMode = "numeric";
 	input.value = String(value ?? "");
 	input.className = "wfrp1e-damage-roll__total";
 	input.dataset.fireBallDamageDie = kind;
-	roll.append(dice, equals, input);
+	roll.append(equals, input);
 	row.append(text, roll);
 	return row;
 }
 
-function checkbox(labelText, kind, checked) {
-	const label = document.createElement("label");
-	label.className = "wfrp1ed-checkbox";
-	const input = document.createElement("input");
-	input.type = "checkbox";
-	input.checked = checked;
-	input.dataset.fireBallViewVulnerability = kind;
-	label.append(input, document.createTextNode(labelText));
-	return label;
+/** Use Foundry's native .dice-tooltip/.dice-rolls/.roll.die.dN contract. */
+function nativeDieResult(faces, value) {
+	const tooltip = document.createElement("div");
+	tooltip.className = "dice-tooltip wfrp-fireball-native-die-tooltip";
+	/* Core normally expands this container from a roll card. Here one physical
+	 * result is always visible, so only the container visibility is overridden;
+	 * the die artwork itself remains Foundry's native d8/d10 rendering. */
+	tooltip.style.display = "inline-block";
+	tooltip.style.flex = "0 0 auto";
+	const dice = document.createElement("ol");
+	dice.className = "dice-rolls wfrp-fireball-native-die";
+	const die = document.createElement("li");
+	die.className = `roll die d${faces}`;
+	die.textContent = String(value ?? "—");
+	die.title = `d${faces}: ${value}`;
+	die.setAttribute("aria-label", `d${faces}: ${value}`);
+	dice.append(die);
+	tooltip.append(dice);
+	return tooltip;
 }
 
-function htmlRow(labelText, valueText, strong = false) {
-	const row = document.createElement("div");
-	row.className = "wfrp1e-damage-card__row";
-	const label = document.createElement("span");
-	label.textContent = labelText;
-	const value = document.createElement(strong ? "strong" : "span");
-	value.textContent = valueText;
-	row.append(label, value);
-	return row;
+function testOutcomeLabel(outcome) {
+	const roll = Number.isFinite(Number(outcome?.roll)) ? Number(outcome.roll) : "—";
+	const target = Number.isFinite(Number(outcome?.target)) ? Number(outcome.target) : "—";
+	return `${roll} / ${target} — ${outcome?.success
+		? localize("success", "sukces")
+		: localize("failure", "porażka")}`;
 }
 
 function detailRow(labelText, valueText) {
@@ -591,7 +836,7 @@ function detailRow(labelText, valueText) {
 	const label = document.createElement("span");
 	label.textContent = labelText;
 	const value = document.createElement("strong");
-	value.textContent = valueText;
+	value.textContent = String(valueText ?? "—");
 	row.append(label, value);
 	return row;
 }
@@ -608,6 +853,14 @@ function findView(sourceMessageId) {
 	) ?? null;
 }
 
+function transactionForView(viewMessage) {
+	const view = viewMessage?.getFlag?.(FLAG_SCOPE, VIEW_FLAG_KEY);
+	const actor = ActorRollPolicy.actorFromUuidSync(view?.targetActorUuid);
+	return actor && view?.packetId
+		? DamageApplication.transactionFor(actor, view.packetId)
+		: null;
+}
+
 function hasAppliedDamage(source, target) {
 	const damage = source?.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG_KEY);
 	return Boolean(
@@ -617,13 +870,11 @@ function hasAppliedDamage(source, target) {
 	);
 }
 
-async function showRollAnimation(roll, user) {
-	if (!roll || typeof game.dice3d?.showForRoll !== "function") return;
-	try {
-		await game.dice3d.showForRoll(roll, user ?? game.user, true);
-	} catch (_error) {
-		/* Dice animation is presentation-only. */
-	}
+function testStateChanged(changes) {
+	if (!changes || typeof changes !== "object") return false;
+	const path = `flags.${FLAG_SCOPE}.${TEST_FLAG_KEY}`;
+	return Object.hasOwn(changes, path) ||
+		foundry.utils.getProperty?.(changes, path) !== undefined;
 }
 
 function boundedInteger(value, minimum, maximum, label) {
@@ -636,20 +887,32 @@ function boundedInteger(value, minimum, maximum, label) {
 
 function nonNegativeInteger(value) {
 	const number = Number(value);
-	return Number.isInteger(number) && number >= 0 ? number : 0;
+	return Number.isFinite(number) ? Math.max(0, Math.trunc(number)) : 0;
 }
 
-function asElement(html) {
-	if (html instanceof HTMLElement) return html;
-	if (html?.[0] instanceof HTMLElement) return html[0];
+function isDieValue(value, faces) {
+	const number = Number(value);
+	return Number.isInteger(number) && number >= 1 && number <= faces;
+}
+
+function asElement(value) {
+	if (value instanceof HTMLElement) return value;
+	if (value?.[0] instanceof HTMLElement) return value[0];
 	return null;
 }
 
+function requestChatRefresh() {
+	requestAnimationFrame(() => {
+		void ui.chat?.render?.({ force: true });
+		setTimeout(() => void ui.chat?.render?.({ force: true }), 0);
+	});
+}
+
 function reportError(error) {
-	console.error("WFRP1ED | Fire Ball shared damage result failed.", error);
+	console.error("WFRP1ED | Unable to resolve Fire Ball damage presentation.", error);
 	ui.notifications.error(error?.message ?? localize(
-		"Unable to update the Fire Ball damage result.",
-		"Nie udało się zaktualizować wyniku obrażeń Ognistej Kuli.",
+		"Unable to update the Fire Ball resolution.",
+		"Nie udało się zaktualizować rozstrzygnięcia Ognistej Kuli.",
 	));
 }
 
