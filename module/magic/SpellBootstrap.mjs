@@ -6,6 +6,7 @@ import {
 import { SpellItemSheet } from "../sheets/SpellItemSheet.mjs";
 import "../tests/TestResultOwnerAdjudicationIntegration.mjs";
 import "./FireBallVulnerabilitySync.mjs";
+import { installFireBallImpactCardEnhancement } from "./FireBallImpactCardEnhancement.mjs";
 import {
 	FireBallProcedure,
 	installFireBallPresentation,
@@ -22,6 +23,7 @@ Hooks.once("init", () => {
 	SpellProcedureRegistry.register(FireBallProcedure);
 	installFireBallPresentation();
 	installFireBallTargetingDialogIntegration();
+	installFireBallImpactCardEnhancement();
 
 	DocumentSheetConfig.registerSheet(
 		Item,
