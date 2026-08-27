@@ -3,6 +3,18 @@
 	margin: 0 0 10px;
 }
 
+.wfrp-fireball-dialog__validation {
+	grid-column: 1 / -1;
+	margin-top: 4px;
+	color: var(--color-level-error, #9b1c1c);
+	font-size: 0.9em;
+	font-weight: 600;
+}
+
+.wfrp-fireball-dialog .form-group.has-error input {
+	border-color: var(--color-level-error, #9b1c1c);
+}
+
 .wfrp-fireball-dialog__targets,
 .wfrp-fireball-target-dialog {
 	display: grid;
