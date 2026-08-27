@@ -29,15 +29,17 @@
 }
 
 .wfrp-fireball-dialog__target-heading {
-	display: flex;
+	display: grid;
+	grid-template-columns: 155px minmax(0, 1fr);
 	align-items: center;
+	gap: 10px;
 	width: 100%;
 	min-width: 0;
 }
 
-/* Target state below the buttons already identifies this section. */
 .wfrp-fireball-dialog__target-heading > strong {
-	display: none;
+	display: block;
+	align-self: center;
 }
 
 .wfrp-fireball-dialog__target-actions {
@@ -50,8 +52,11 @@
 	min-width: 0;
 }
 
+.wfrp-fireball-dialog__target-actions > [data-fire-ball-refresh-targets] {
+	display: none !important;
+}
+
 .wfrp-fireball-dialog__target-heading button {
-	flex: 1 1 auto !important;
 	width: auto !important;
 	min-width: max-content !important;
 	margin: 0;
@@ -59,11 +64,91 @@
 	white-space: nowrap;
 }
 
+.wfrp-fireball-dialog__target-actions > [data-fire-ball-choose-actor] {
+	flex: 0 0 auto !important;
+	min-width: 126px !important;
+}
+
+.wfrp-fireball-dialog__scene-picker {
+	position: relative;
+	flex: 1 1 auto;
+	min-width: 0;
+	margin: 0;
+}
+
+.wfrp-fireball-dialog__scene-picker > summary {
+	box-sizing: border-box;
+	display: flex;
+	align-items: center;
+	width: 100%;
+	min-width: 0;
+	height: 32px;
+	padding: 4px 26px 4px 8px;
+	border: 1px solid var(--color-border-light-tertiary, #7a6a56);
+	border-radius: 3px;
+	background: rgb(255 255 255 / 12%);
+	cursor: pointer;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	list-style: none;
+}
+
+.wfrp-fireball-dialog__scene-picker > summary::-webkit-details-marker {
+	display: none;
+}
+
+.wfrp-fireball-dialog__scene-picker > summary::after {
+	content: "⌄";
+	position: absolute;
+	right: 8px;
+	font-size: 14px;
+}
+
+.wfrp-fireball-dialog__scene-picker[open] > summary::after {
+	content: "⌃";
+}
+
+.wfrp-fireball-dialog__scene-options {
+	position: absolute;
+	z-index: 100;
+	top: calc(100% + 2px);
+	left: 0;
+	box-sizing: border-box;
+	display: grid;
+	gap: 3px;
+	width: max(100%, 230px);
+	max-width: min(360px, calc(100vw - 64px));
+	max-height: 230px;
+	padding: 6px;
+	overflow: auto;
+	border: 1px solid rgb(70 51 30 / 55%);
+	border-radius: 3px;
+	background: #e5d6b5;
+	box-shadow: 0 3px 9px rgb(0 0 0 / 28%);
+}
+
+.wfrp-fireball-dialog__scene-option {
+	box-sizing: border-box;
+	width: 100%;
+	padding: 3px 4px;
+}
+
+.wfrp-fireball-dialog__scene-option:hover {
+	background: rgb(90 62 35 / 10%);
+}
+
+.wfrp-fireball-dialog__scene-empty {
+	padding: 5px 6px;
+	font-style: italic;
+	opacity: 0.8;
+}
+
 .wfrp-fireball-dialog__target-mode {
 	min-width: 0;
 	max-width: 100%;
-	font-size: 1em;
-	font-weight: 700;
+	font-size: 0.95em;
+	font-weight: 600;
 	white-space: normal;
 	overflow-wrap: break-word;
 }
