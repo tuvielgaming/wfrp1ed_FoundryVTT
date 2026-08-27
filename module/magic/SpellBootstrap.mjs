@@ -8,7 +8,7 @@ import "../tests/TestResultOwnerAdjudicationIntegration.mjs";
 import {
 	FireBallProcedure,
 	installFireBallPresentation,
-} from "./FireBallProcedure.mjs";
+} from "./FireBallProcedureV2.mjs";
 import { installFireBallTargetingDialogIntegration } from "./FireBallTargetingDialogIntegration.mjs";
 import { SpellProcedureRegistry } from "./SpellProcedureRegistry.mjs";
 
