@@ -6,6 +6,8 @@ import {
 } from "../damage/DamagePacket.mjs";
 import { DamageResolver } from "../damage/DamageResolver.mjs";
 import { WfrpRuleSettings } from "../settings/WfrpRuleSettings.mjs";
+import { ActorTargetResolver } from "../targets/ActorTargetResolver.mjs";
+import { TargetRowInteraction } from "../targets/TargetRowInteraction.mjs";
 import { SPELL_PROCEDURE_ID } from "./SpellProcedureRegistry.mjs";
 
 const { DialogV2 } = foundry.applications.api;
@@ -123,10 +125,13 @@ async function executeFireBall(actor, spell) {
 
 async function configureCast({ actor, spell, powerLevel, maximum }) {
 	let targets = selectedTargets(actor);
+	const automaticDistanceSetting = WfrpRuleSettings.usesAutomaticSpellTokenDistance();
 	const draft = {
 		fireBalls: "1",
 		errors: {},
 		conditions: conditionsForTargets({}, targets),
+		disableAutomaticDistance: false,
+		overrideAutomaticDistance: false,
 	};
 
 	while (true) {
@@ -143,16 +148,21 @@ async function configureCast({ actor, spell, powerLevel, maximum }) {
 			<div class="form-fields"><input type="number" name="fireBalls" step="1" value="${escapeHtml(draft.fireBalls)}"></div>
 			${draft.errors.fireBalls ? `<div class="wfrp-fireball-dialog__validation" role="alert">${escapeHtml(draft.errors.fireBalls)}</div>` : ""}
 		</div>
-		<section class="wfrp-fireball-dialog__target-section${draft.errors.targets ? " has-error" : ""}">
+		<section class="wfrp-fireball-dialog__target-section${draft.errors.targets ? " has-error" : ""}" data-fire-ball-drop-zone>
 			<div class="wfrp-fireball-dialog__target-heading">
 				<strong>${escapeHtml(localize("Target", "Cel"))}</strong>
-				<button type="button" data-fire-ball-refresh-targets>
-					<i class="fa-solid fa-bullseye" aria-hidden="true"></i>
-					${escapeHtml(localize("Use current targets", "Użyj aktualnie wskazanych celów"))}
-				</button>
+				<div class="wfrp-fireball-dialog__target-actions">
+					<button type="button" data-fire-ball-refresh-targets>
+						<i class="fa-solid fa-bullseye" aria-hidden="true"></i>
+						${escapeHtml(localize("Use current targets", "Użyj aktualnie wskazanych celów"))}
+					</button>
+					${game.user?.isGM ? `<button type="button" data-fire-ball-choose-actor><i class="fa-solid fa-user-plus" aria-hidden="true"></i>${escapeHtml(localize("Add Actor", "Dodaj Aktora"))}</button>` : ""}
+				</div>
 			</div>
+			${game.user?.isGM ? `<div class="wfrp-fireball-dialog__drop-hint">${escapeHtml(localize("GM: you may also drop Actors from the sidebar here.", "MG: możesz również upuszczać tutaj Aktorów z panelu bocznego."))}</div>` : ""}
 			<div class="wfrp-fireball-dialog__target-mode" data-fire-ball-target-mode></div>
 			${draft.errors.targets ? `<div class="wfrp-fireball-dialog__validation" role="alert">${escapeHtml(draft.errors.targets)}</div>` : ""}
+			${automaticDistanceSetting ? distancePolicyMarkup(draft) : ""}
 			<div class="wfrp-fireball-dialog__targets" data-fire-ball-target-list></div>
 		</section>
 	`;
@@ -165,14 +175,71 @@ async function configureCast({ actor, spell, powerLevel, maximum }) {
 			content,
 			render: (_event, dialog) => {
 				const dialogRoot = dialog?.element;
-				const refresh = dialogRoot?.querySelector?.("[data-fire-ball-refresh-targets]");
-				if (!refresh) return;
-				refresh.addEventListener("click", (event) => {
-					event.preventDefault();
-					const form = refresh.closest("form");
+				if (!(dialogRoot instanceof HTMLElement)) return;
+
+				const saveDraft = () => {
+					const form = dialogRoot.querySelector("form") ?? dialogRoot.closest("form");
 					draft.fireBalls = String(form?.elements?.fireBalls?.value ?? draft.fireBalls);
 					draft.conditions = readConditions(form, targets);
-					targets = selectedTargets(actor);
+					draft.disableAutomaticDistance = game.user?.isGM === true &&
+						form?.elements?.disableAutomaticDistance?.checked === true;
+					draft.overrideAutomaticDistance = game.user?.isGM === true &&
+						form?.elements?.overrideAutomaticDistance?.checked === true;
+				};
+
+				const refresh = dialogRoot.querySelector("[data-fire-ball-refresh-targets]");
+				refresh?.addEventListener("click", (event) => {
+					event.preventDefault();
+					saveDraft();
+					targets = mergeTargets([], selectedTargets(actor));
+					draft.conditions = conditionsForTargets(draft.conditions, targets);
+					draft.errors.targets = null;
+					renderTargetList(dialogRoot, targets, draft.conditions);
+				});
+
+				const chooseActor = dialogRoot.querySelector("[data-fire-ball-choose-actor]");
+				if (chooseActor && game.user?.isGM) {
+					chooseActor.addEventListener("click", (event) => {
+						event.preventDefault();
+						saveDraft();
+						void ActorTargetResolver.chooseActor().then((chosen) => {
+							if (!chosen) return;
+							targets = mergeTargets(targets, [targetFromActor(chosen)]);
+							draft.conditions = conditionsForTargets(draft.conditions, targets);
+							draft.errors.targets = null;
+							renderTargetList(dialogRoot, targets, draft.conditions);
+						});
+					});
+				}
+
+				const dropZone = dialogRoot.querySelector("[data-fire-ball-drop-zone]");
+				if (dropZone && game.user?.isGM) {
+					dropZone.addEventListener("dragover", (event) => {
+						event.preventDefault();
+						dropZone.classList.add("is-dragover");
+					});
+					dropZone.addEventListener("dragleave", () => dropZone.classList.remove("is-dragover"));
+					dropZone.addEventListener("drop", (event) => {
+						event.preventDefault();
+						dropZone.classList.remove("is-dragover");
+						saveDraft();
+						void ActorTargetResolver.actorFromDropEvent(event).then((dropped) => {
+							if (!dropped) return;
+							targets = mergeTargets(targets, [targetFromActor(dropped)]);
+							draft.conditions = conditionsForTargets(draft.conditions, targets);
+							draft.errors.targets = null;
+							renderTargetList(dialogRoot, targets, draft.conditions);
+						}).catch(reportTargetError);
+					});
+				}
+
+				dialogRoot.addEventListener("click", (event) => {
+					const remove = event.target?.closest?.("[data-fire-ball-remove-target]");
+					if (!(remove instanceof HTMLButtonElement)) return;
+					event.preventDefault();
+					saveDraft();
+					const key = String(remove.dataset.fireBallRemoveTarget ?? "");
+					targets = Object.freeze(targets.filter((target) => target.key !== key));
 					draft.conditions = conditionsForTargets(draft.conditions, targets);
 					draft.errors.targets = null;
 					renderTargetList(dialogRoot, targets, draft.conditions);
@@ -184,7 +251,11 @@ async function configureCast({ actor, spell, powerLevel, maximum }) {
 					label: localize("Cast", "Rzuć czar"),
 					icon: "fa-solid fa-wand-sparkles",
 					default: true,
-					callback: (_event, button) => readConfiguration(button.form, targets),
+					callback: (_event, button) => readConfiguration(
+						button.form,
+						targets,
+						automaticDistanceSetting,
+					),
 				},
 				{
 					action: "cancel",
@@ -204,6 +275,7 @@ async function configureCast({ actor, spell, powerLevel, maximum }) {
 			maximum,
 			targets,
 			actor,
+			automaticDistanceSetting,
 		});
 		if (validation.valid) {
 			return Object.freeze({
@@ -212,13 +284,32 @@ async function configureCast({ actor, spell, powerLevel, maximum }) {
 				group: targets.length > 1,
 				targets: Object.freeze([...targets]),
 				powerLevel,
+				distanceValidation: Object.freeze(validation.distanceValidation),
 			});
 		}
 
 		draft.fireBalls = String(response.fireBalls ?? "");
 		draft.conditions = response.conditions;
+		draft.disableAutomaticDistance = response.distanceControl?.disabledForCast === true;
+		draft.overrideAutomaticDistance = response.distanceControl?.override === true;
 		draft.errors = validation.errors;
 	}
+}
+
+function distancePolicyMarkup(draft) {
+	if (!game.user?.isGM) return "";
+	return `
+		<div class="wfrp-fireball-dialog__distance-policy">
+			<label><input type="checkbox" name="disableAutomaticDistance" ${draft.disableAutomaticDistance ? "checked" : ""}> ${escapeHtml(localize(
+				"GM: disable automatic token-distance checks for this cast",
+				"MG: wyłącz automatyczne sprawdzanie dystansu tokenów dla tego rzucenia czaru",
+			))}</label>
+			<label><input type="checkbox" name="overrideAutomaticDistance" ${draft.overrideAutomaticDistance ? "checked" : ""}> ${escapeHtml(localize(
+				"GM: override a failed/unmeasurable automatic check for this cast",
+				"MG: zaakceptuj nieudane/niemożliwe automatyczne sprawdzenie dla tego rzucenia czaru",
+			))}</label>
+		</div>
+	`;
 }
 
 function renderTargetList(root, targets, conditions) {
@@ -240,7 +331,20 @@ function renderTargetList(root, targets, conditions) {
 		const row = document.createElement("fieldset");
 		row.dataset.targetUuid = target.key;
 		const legend = document.createElement("legend");
-		legend.textContent = target.name;
+		const name = document.createElement("span");
+		name.dataset.wfrpTargetIdentity = "";
+		name.textContent = target.name;
+		legend.append(name);
+
+		const remove = document.createElement("button");
+		remove.type = "button";
+		remove.dataset.fireBallRemoveTarget = target.key;
+		remove.className = "wfrp-fireball-dialog__remove-target";
+		remove.setAttribute("aria-label", localize("Remove target", "Usuń cel"));
+		remove.title = localize("Remove target", "Usuń cel");
+		remove.innerHTML = '<i class="fa-solid fa-xmark" aria-hidden="true"></i>';
+		legend.append(remove);
+
 		row.append(
 			legend,
 			conditionLabel(
@@ -254,6 +358,7 @@ function renderTargetList(root, targets, conditions) {
 				conditions[target.key]?.fearOfFire,
 			),
 		);
+		TargetRowInteraction.bind(row, target);
 		list.append(row);
 	}
 }
@@ -268,7 +373,13 @@ function conditionsForTargets(previous, targets) {
 	]));
 }
 
-function validateConfiguration({ response, maximum, targets, actor }) {
+function validateConfiguration({
+	response,
+	maximum,
+	targets,
+	actor,
+	automaticDistanceSetting,
+}) {
 	const errors = {};
 	const fireBalls = Number(response.fireBalls);
 	if (!Number.isInteger(fireBalls) || fireBalls < 1 || fireBalls > maximum) {
@@ -278,29 +389,44 @@ function validateConfiguration({ response, maximum, targets, actor }) {
 		);
 	}
 
+	let distanceValidation = manualDistanceSnapshot(automaticDistanceSetting);
 	if (targets.length === 0) {
 		errors.targets = localize(
 			"Select at least one target.",
 			"Wskaż co najmniej jeden cel.",
 		);
-	} else if (WfrpRuleSettings.usesAutomaticSpellTokenDistance()) {
-		const rangeFailures = targets
-			.filter((target) => Number.isFinite(target.distance) && target.distance > RANGE)
-			.map((target) => target.name);
-		if (rangeFailures.length > 0) {
-			errors.targets = localize(
-				`Outside Fire Ball range (${RANGE}): ${rangeFailures.join(", ")}.`,
-				`Poza zasięgiem Ognistej Kuli (${RANGE}): ${rangeFailures.join(", ")}.`,
-			);
-		}
+	} else if (automaticDistanceSetting) {
+		const disabledForCast = response.distanceControl?.disabledForCast === true && game.user?.isGM === true;
+		const override = response.distanceControl?.override === true && game.user?.isGM === true;
 
-		if (!errors.targets && targets.length > 1) {
-			const connected = groupConnectivity(targets);
-			if (connected === false) {
-				errors.targets = localize(
-					`The selected tokens do not form one spell group: every member must be connected to the group through creatures no more than ${GROUP_SPACING} yards apart.`,
-					`Wskazane tokeny nie tworzą jednej grupy: każdy członek musi być połączony z grupą przez istoty oddalone od siebie o nie więcej niż ${GROUP_SPACING} jardy.`,
-				);
+		if (disabledForCast) {
+			distanceValidation = Object.freeze({
+				mode: "gm-manual",
+				settingEnabled: true,
+				result: "skipped",
+				disabledForCast: true,
+				overridden: false,
+				adjudicatedBy: String(game.user?.id ?? ""),
+				adjudicatedAt: Date.now(),
+				diagnostics: [],
+			});
+		} else {
+			const assessment = automaticDistanceAssessment(actor, targets);
+			distanceValidation = Object.freeze({
+				mode: assessment.result === "valid" ? "automatic" : override ? "gm-override" : "automatic",
+				settingEnabled: true,
+				result: assessment.result,
+				disabledForCast: false,
+				overridden: override && assessment.result !== "valid",
+				adjudicatedBy: override && assessment.result !== "valid"
+					? String(game.user?.id ?? "")
+					: null,
+				adjudicatedAt: override && assessment.result !== "valid" ? Date.now() : null,
+				diagnostics: assessment.diagnostics,
+			});
+
+			if (assessment.result !== "valid" && !distanceValidation.overridden) {
+				errors.targets = distanceValidationError(assessment, game.user?.isGM === true);
 			}
 		}
 	}
@@ -309,7 +435,94 @@ function validateConfiguration({ response, maximum, targets, actor }) {
 		valid: Object.keys(errors).length === 0,
 		errors,
 		fireBalls,
+		distanceValidation,
 	};
+}
+
+function automaticDistanceAssessment(actor, targets) {
+	const diagnostics = [];
+	const casterToken = activeCasterToken(actor);
+	if (!casterToken) {
+		diagnostics.push(localize(
+			"The caster has no measurable token on the active Scene.",
+			"Rzucający czar nie ma mierzalnego tokenu na aktywnej Scenie.",
+		));
+		return { result: "unmeasurable", diagnostics };
+	}
+
+	const unmeasurable = [];
+	const outside = [];
+	for (const target of targets) {
+		if (!target.token || !tokenCenter(target.token)) {
+			unmeasurable.push(target.name);
+			continue;
+		}
+		const distance = tokenDistance(casterToken, target.token);
+		if (!Number.isFinite(distance)) unmeasurable.push(target.name);
+		else if (distance > RANGE) outside.push(`${target.name} (${formatDistance(distance)})`);
+	}
+	if (unmeasurable.length > 0) {
+		diagnostics.push(localize(
+			`No measurable Scene token: ${unmeasurable.join(", ")}.`,
+			`Brak mierzalnego tokenu na Scenie: ${unmeasurable.join(", ")}.`,
+		));
+	}
+	if (outside.length > 0) {
+		diagnostics.push(localize(
+			`Outside Fire Ball range ${RANGE}: ${outside.join(", ")}.`,
+			`Poza zasięgiem Ognistej Kuli ${RANGE}: ${outside.join(", ")}.`,
+		));
+	}
+
+	if (unmeasurable.length > 0) return { result: "unmeasurable", diagnostics };
+	if (outside.length > 0) return { result: "invalid", diagnostics };
+
+	if (targets.length > 1) {
+		const connected = groupConnectivity(targets);
+		if (connected === null) {
+			diagnostics.push(localize(
+				"The selected group spacing cannot be measured on the active Scene.",
+				"Nie można zmierzyć odstępów w wybranej grupie na aktywnej Scenie.",
+			));
+			return { result: "unmeasurable", diagnostics };
+		}
+		if (!connected) {
+			diagnostics.push(localize(
+				`The selected tokens are not one connected spell group (maximum ${GROUP_SPACING} yards between connected members).`,
+				`Wskazane tokeny nie tworzą jednej połączonej grupy czaru (maksymalnie ${GROUP_SPACING} jardy pomiędzy połączonymi członkami).`,
+			));
+			return { result: "invalid", diagnostics };
+		}
+	}
+
+	return { result: "valid", diagnostics };
+}
+
+function manualDistanceSnapshot(settingEnabled) {
+	return Object.freeze({
+		mode: "gm-manual",
+		settingEnabled: settingEnabled === true,
+		result: settingEnabled === true ? "pending" : "not-checked",
+		disabledForCast: false,
+		overridden: false,
+		adjudicatedBy: settingEnabled === true ? null : String(game.user?.id ?? ""),
+		adjudicatedAt: settingEnabled === true ? null : Date.now(),
+		diagnostics: [],
+	});
+}
+
+function distanceValidationError(assessment, gmCanOverride) {
+	const details = assessment.diagnostics.join(" ");
+	const action = gmCanOverride
+		? localize(
+			" GM may override this result or disable automatic distance checks for this cast.",
+			" MG może zaakceptować wynik mimo tego albo wyłączyć automatyczne sprawdzanie dystansu dla tego rzucenia czaru.",
+		)
+		: localize(
+			" A GM must adjudicate this automatic distance result.",
+			" Ten wynik automatycznego pomiaru musi rozstrzygnąć MG.",
+		);
+	return `${details}${action}`.trim();
 }
 
 function groupConnectivity(targets) {
@@ -359,10 +572,17 @@ function conditionLabel(kind, text, checked = false) {
 	return label;
 }
 
-function readConfiguration(form, targets) {
+function readConfiguration(form, targets, automaticDistanceSetting) {
 	return {
 		fireBalls: String(form?.elements?.fireBalls?.value ?? "").trim(),
 		conditions: readConditions(form, targets),
+		distanceControl: {
+			settingEnabled: automaticDistanceSetting === true,
+			disabledForCast: game.user?.isGM === true &&
+				form?.elements?.disableAutomaticDistance?.checked === true,
+			override: game.user?.isGM === true &&
+				form?.elements?.overrideAutomaticDistance?.checked === true,
+		},
 	};
 }
 
@@ -446,7 +666,7 @@ async function resolveImpact({ actor, spell, target, ballIndex, flammable }) {
 		spellName: spell.name,
 		ballNumber: ballIndex + 1,
 		targetUuid: targetActor.uuid,
-		targetTokenUuid: target.key,
+		targetTokenUuid: target.tokenUuid || target.key,
 		targetName: target.name,
 		strength: STRENGTH,
 		damageRoll: nonNegativeInteger(damageRoll.total, "Fire Ball damage"),
@@ -480,6 +700,8 @@ async function publishCastSummary({
 			: null,
 		targets: volley.targets.map((target) => ({
 			uuid: target.key,
+			actorUuid: target.actorUuid,
+			tokenUuid: target.tokenUuid,
 			name: target.name,
 		})),
 	}));
@@ -496,15 +718,18 @@ async function publishCastSummary({
 		content,
 	});
 	await message.setFlag(FLAG_SCOPE, CAST_FLAG_KEY, {
-		version: 2,
+		version: 3,
 		casterUuid: actor.uuid,
 		spellUuid: spell.uuid,
 		fireBalls: configuration.fireBalls,
 		magicPointsBefore: magicPoints,
 		magicPointsAfter,
 		group: configuration.group,
+		distanceValidation: foundry.utils.deepClone(configuration.distanceValidation),
 		targets: configuration.targets.map((target) => ({
 			uuid: target.key,
+			actorUuid: target.actorUuid,
+			tokenUuid: target.tokenUuid,
 			name: target.name,
 		})),
 		volleys: groupDetails,
@@ -512,17 +737,61 @@ async function publishCastSummary({
 }
 
 function selectedTargets(actor) {
-	const automaticDistance = WfrpRuleSettings.usesAutomaticSpellTokenDistance();
-	const casterToken = automaticDistance ? activeCasterToken(actor) : null;
-	return Object.freeze([...(game.user?.targets ?? [])].map((token) =>
-		Object.freeze({
-			key: token.document?.uuid ?? token.uuid,
-			name: token.name,
-			actor: token.actor,
-			token,
-			distance: casterToken ? tokenDistance(casterToken, token) : null,
-		}),
-	));
+	const casterToken = WfrpRuleSettings.usesAutomaticSpellTokenDistance()
+		? activeCasterToken(actor)
+		: null;
+	return Object.freeze([...(game.user?.targets ?? [])]
+		.map((token) => targetFromToken(token, casterToken))
+		.filter(Boolean));
+}
+
+function targetFromToken(token, casterToken = null) {
+	if (!token?.actor) return null;
+	const tokenUuid = String(token.document?.uuid ?? token.uuid ?? "").trim();
+	const actorUuid = String(token.actor?.uuid ?? "").trim();
+	if (!tokenUuid || !actorUuid) return null;
+	return Object.freeze({
+		key: tokenUuid,
+		actorUuid,
+		tokenUuid,
+		name: String(token.name ?? token.actor.name ?? "—"),
+		actor: token.actor,
+		token,
+		distance: casterToken ? tokenDistance(casterToken, token) : null,
+	});
+}
+
+function targetFromActor(actor) {
+	if (!(actor instanceof foundry.documents.Actor)) return null;
+	return Object.freeze({
+		key: String(actor.uuid),
+		actorUuid: String(actor.uuid),
+		tokenUuid: "",
+		name: String(actor.name ?? "—"),
+		actor,
+		token: null,
+		distance: null,
+	});
+}
+
+function mergeTargets(existing, incoming) {
+	const merged = [...(existing ?? [])].filter(Boolean);
+	for (const candidate of incoming ?? []) {
+		if (!candidate) continue;
+		if (candidate.tokenUuid) {
+			if (merged.some((target) => target.tokenUuid === candidate.tokenUuid)) continue;
+			for (let index = merged.length - 1; index >= 0; index -= 1) {
+				if (!merged[index].tokenUuid && merged[index].actorUuid === candidate.actorUuid) {
+					merged.splice(index, 1);
+				}
+			}
+			merged.push(candidate);
+			continue;
+		}
+		if (merged.some((target) => target.actorUuid === candidate.actorUuid)) continue;
+		merged.push(candidate);
+	}
+	return Object.freeze(merged);
 }
 
 function activeCasterToken(actor) {
@@ -547,6 +816,12 @@ function tokenDistance(origin, target) {
 
 function tokenCenter(token) {
 	return token?.center ?? token?.object?.center ?? null;
+}
+
+function formatDistance(value) {
+	const numeric = Number(value);
+	if (!Number.isFinite(numeric)) return "?";
+	return Number.isInteger(numeric) ? String(numeric) : numeric.toFixed(1);
 }
 
 function fireBallRoundUsage(actor) {
@@ -625,6 +900,14 @@ function decorateImpact(message, html) {
 		<div><strong>${escapeHtml(localize("Final damage", "Końcowe obrażenia"))}: ${impact.finalDamage}</strong></div>
 	`;
 	messageContent.append(section);
+}
+
+function reportTargetError(error) {
+	console.error("WFRP1ED | Unable to add Fire Ball target.", error);
+	ui.notifications.error(error?.message ?? localize(
+		"Unable to add the selected target.",
+		"Nie udało się dodać wybranego celu.",
+	));
 }
 
 function localize(english, polish) {
