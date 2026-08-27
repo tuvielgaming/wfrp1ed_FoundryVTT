@@ -183,16 +183,16 @@ async function configureCast({ actor, spell, powerLevel, maximum }) {
 					dropZone.addEventListener("dragleave", () => dropZone.classList.remove("is-dragover"));
 					dropZone.addEventListener("drop", (event) => {
 						event.preventDefault();
-						dropZone.classList.remove("is-dragover");
-						saveDraft();
-						void ActorTargetResolver.actorFromDropEvent(event).then((dropped) => {
-							if (!dropped) return;
-							targets = mergeTargets(targets, [targetFromActor(dropped)]);
-							draft.conditions = conditionsForTargets(draft.conditions, targets);
-							draft.errors.targets = null;
-							renderTargetList(dialogRoot, targets, draft.conditions);
-						}).catch(reportTargetError);
-					});
+					dropZone.classList.remove("is-dragover");
+					saveDraft();
+					void ActorTargetResolver.actorFromDropEvent(event).then((dropped) => {
+						if (!dropped) return;
+						targets = mergeTargets(targets, [targetFromActor(dropped)]);
+						draft.conditions = conditionsForTargets(draft.conditions, targets);
+						draft.errors.targets = null;
+						renderTargetList(dialogRoot, targets, draft.conditions);
+					}).catch(reportTargetError);
+				});
 				}
 
 				dialogRoot.addEventListener("click", (event) => {
@@ -460,7 +460,7 @@ async function resolveVolleyTargets(configuration, targets, powerLevel) {
 	const volleys = [];
 	for (let index = 0; index < configuration.fireBalls; index += 1) {
 		if (!configuration.group) { volleys.push({ targets: [targets[0]], groupRoll: null }); continue; }
-		const groupRoll = await new Roll(`${powerLevel}d3`).evaluate({ allowInteractive: false });
+		const groupRoll = await new Roll("1d3").evaluate({ allowInteractive: false });
 		const count = Math.min(nonNegativeInteger(groupRoll.total, "Group hits"), targets.length);
 		volleys.push({ targets: await randomTargets(targets, count), groupRoll });
 	}
