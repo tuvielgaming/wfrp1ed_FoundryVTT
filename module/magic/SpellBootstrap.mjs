@@ -8,6 +8,7 @@ import {
 	FireBallProcedure,
 	installFireBallPresentation,
 } from "./FireBallProcedure.mjs";
+import { installFireBallTargetingDialogIntegration } from "./FireBallTargetingDialogIntegration.mjs";
 import { SpellProcedureRegistry } from "./SpellProcedureRegistry.mjs";
 
 const { DocumentSheetConfig } = foundry.applications.apps;
@@ -18,6 +19,7 @@ Hooks.once("init", () => {
 	CONFIG.Item.dataModels.spell = SpellData;
 	SpellProcedureRegistry.register(FireBallProcedure);
 	installFireBallPresentation();
+	installFireBallTargetingDialogIntegration();
 
 	DocumentSheetConfig.registerSheet(
 		Item,
