@@ -153,9 +153,6 @@
 	overflow-wrap: break-word;
 }
 
-/* The targeting instructions live on the highlighted empty-target state below.
- * Keep the older dynamic help node hidden so the dialog never renders the same
- * guidance twice. */
 .wfrp-fireball-dialog__target-help {
 	display: none !important;
 }
@@ -251,4 +248,79 @@ html[lang="pl"]
 	margin-top: 4px;
 	padding-top: 4px;
 	border-top: 1px solid rgb(70 51 30 / 25%);
+}
+
+/* Fire Ball impact cards intentionally mirror the normal Damage card hierarchy. */
+.wfrp-fireball-damage-card {
+	display: grid;
+	gap: 7px;
+}
+
+.wfrp-fireball-vulnerability-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 5px 14px;
+	padding: 5px 0;
+	border-top: 1px solid rgb(70 51 30 / 18%);
+	border-bottom: 1px solid rgb(70 51 30 / 18%);
+}
+
+.wfrp-fireball-vulnerability-row .wfrp1ed-checkbox {
+	margin: 0;
+}
+
+.wfrp-fireball-inline-roll,
+.wfrp-fireball-die-editor {
+	display: inline-flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 5px;
+}
+
+.wfrp-fireball-inline-roll__input,
+.wfrp-fireball-die-editor input {
+	box-sizing: border-box;
+	width: 46px;
+	height: 27px;
+	padding: 2px 4px;
+	text-align: center;
+}
+
+.wfrp-fireball-inline-roll strong {
+	font-size: 0.92em;
+}
+
+.wfrp-fireball-die-badge {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 28px;
+	height: 24px;
+	padding: 0 4px;
+	border: 1px solid rgb(35 29 22 / 65%);
+	border-radius: 4px;
+	background: rgb(35 29 22 / 92%);
+	color: #f4ead4;
+	font-size: 0.78em;
+	font-weight: 700;
+	line-height: 1;
+}
+
+.wfrp-fireball-die-row,
+.wfrp-fireball-initiative-row {
+	align-items: center;
+}
+
+.wfrp-fireball-damage-card > details {
+	margin-top: 1px;
+}
+
+.wfrp-fireball-damage-card > details > summary {
+	font-weight: 700;
+	cursor: pointer;
+}
+
+.wfrp-fireball-damage-card > .wfrp1e-damage-card__apply {
+	width: 100%;
+	margin-top: 1px;
 }
