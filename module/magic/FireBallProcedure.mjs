@@ -150,16 +150,17 @@ async function configureCast({ actor, spell, powerLevel, maximum }) {
 		<section class="wfrp-fireball-dialog__target-section${draft.errors.targets ? " has-error" : ""}" data-fire-ball-drop-zone>
 			<div class="wfrp-fireball-dialog__target-heading">
 				<strong>${escapeHtml(localize("Target", "Cel"))}</strong>
-				<div class="wfrp-fireball-dialog__target-actions">
-					<button type="button" data-fire-ball-refresh-targets>
+				<div class="wfrp-fireball-dialog__target-actions" style="display:flex; gap:8px; align-items:stretch; flex-wrap:nowrap; width:100%;">
+					<button type="button" data-fire-ball-refresh-targets style="flex:1 1 0; min-width:0; white-space:nowrap;">
 						<i class="fa-solid fa-bullseye" aria-hidden="true"></i>
 						${escapeHtml(localize("Use current targets", "Użyj aktualnie wskazanych celów"))}
 					</button>
-					${game.user?.isGM ? `<button type="button" data-fire-ball-choose-actor><i class="fa-solid fa-user-plus" aria-hidden="true"></i>${escapeHtml(localize("Add Actor", "Dodaj Aktora"))}</button>` : ""}
+					${game.user?.isGM ? `<button type="button" data-fire-ball-choose-actor style="flex:1 1 0; min-width:0; white-space:nowrap;"><i class="fa-solid fa-user-plus" aria-hidden="true"></i>${escapeHtml(localize("Add Actor", "Dodaj Aktora"))}</button>` : ""}
 				</div>
 			</div>
 			${game.user?.isGM ? `<div class="wfrp-fireball-dialog__drop-hint">${escapeHtml(localize("You may also drop Actors from the sidebar here.", "Możesz również upuszczać tutaj Aktorów z panelu bocznego."))}</div>` : ""}
 			<div class="wfrp-fireball-dialog__target-mode" data-fire-ball-target-mode></div>
+			<div class="wfrp-fireball-dialog__target-help" data-fire-ball-target-help></div>
 			${draft.errors.targets ? `<div class="wfrp-fireball-dialog__validation" role="alert">${escapeHtml(draft.errors.targets)}</div>` : ""}
 			${automaticDistanceSetting ? distancePolicyMarkup(draft) : ""}
 			<div class="wfrp-fireball-dialog__targets" data-fire-ball-target-list></div>
@@ -307,17 +308,38 @@ function distancePolicyMarkup(draft) {
 function renderTargetList(root, targets, conditions) {
 	const list = root?.querySelector?.("[data-fire-ball-target-list]");
 	const mode = root?.querySelector?.("[data-fire-ball-target-mode]");
+	const help = root?.querySelector?.("[data-fire-ball-target-help]");
 	if (!list || !mode) return;
 
 	list.replaceChildren();
-	mode.textContent = targets.length === 0
-		? localize("No targets selected.", "Nie wskazano celów.")
+	const noTargets = targets.length === 0;
+	mode.textContent = noTargets
+		? localize("No targets selected", "Nie wskazano celów")
 		: targets.length === 1
 			? localize("Individual target", "Cel pojedynczy")
 			: localize(
 				`Target group — ${targets.length} creatures`,
 				`Grupa celów — ${targets.length} istot`,
 			);
+	mode.style.fontWeight = noTargets ? "700" : "400";
+	mode.style.color = noTargets ? "#7c2626" : "";
+	mode.style.marginTop = "4px";
+	mode.style.marginBottom = noTargets ? "2px" : "6px";
+
+	if (help) {
+		help.hidden = !noTargets;
+		help.style.fontSize = "0.88em";
+		help.style.fontStyle = "italic";
+		help.style.opacity = "0.82";
+		help.style.lineHeight = "1.25";
+		help.style.marginBottom = "7px";
+		help.textContent = noTargets
+			? localize(
+				"Click the canvas to return focus to it. Hover a token and press T to target or untarget it. For a group, use the Select Targets tool: Shift+click adds/removes individual targets, or drag a rectangle around several tokens. Then press ‘Use current targets’.",
+				"Kliknij planszę, aby przywrócić jej fokus. Najedź na token i naciśnij T, aby go wskazać lub odznaczyć. Dla grupy użyj narzędzia Cele: Shift+klik dodaje/usuwa pojedyncze cele, a przeciągnięcie prostokąta wskazuje wszystkie tokeny w obszarze. Następnie kliknij „Użyj aktualnie wskazanych celów”.",
+			)
+			: "";
+	}
 
 	for (const target of targets) {
 		const row = document.createElement("fieldset");
