@@ -4,6 +4,7 @@ import {
 	SpellData,
 } from "../data-models/item/SpellData.mjs";
 import { SpellItemSheet } from "../sheets/SpellItemSheet.mjs";
+import "../tests/TestResultOwnerAdjudicationIntegration.mjs";
 import {
 	FireBallProcedure,
 	installFireBallPresentation,
