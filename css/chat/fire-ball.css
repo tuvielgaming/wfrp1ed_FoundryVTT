@@ -15,6 +15,35 @@
 	border-color: var(--color-level-error, #9b1c1c);
 }
 
+.wfrp-fireball-dialog__target-section {
+	display: grid;
+	gap: 6px;
+	margin-top: 8px;
+}
+
+.wfrp-fireball-dialog__target-heading {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+}
+
+.wfrp-fireball-dialog__target-heading button {
+	width: auto;
+	min-width: 0;
+	margin: 0;
+	padding: 4px 8px;
+}
+
+.wfrp-fireball-dialog__target-mode {
+	font-size: 0.9em;
+}
+
+.wfrp-fireball-dialog__target-section.has-error {
+	outline: 1px solid var(--color-level-error, #9b1c1c);
+	outline-offset: 3px;
+}
+
 .wfrp-fireball-dialog__targets,
 .wfrp-fireball-target-dialog {
 	display: grid;
