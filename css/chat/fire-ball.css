@@ -3,6 +3,11 @@
 	margin: 0 0 10px;
 }
 
+.wfrp-fireball-dialog {
+	width: min(520px, calc(100vw - 48px));
+	max-width: 100%;
+}
+
 .wfrp-fireball-dialog__validation {
 	grid-column: 1 / -1;
 	margin-top: 4px;
@@ -18,34 +23,49 @@
 .wfrp-fireball-dialog__target-section {
 	display: grid;
 	gap: 6px;
+	min-width: 0;
+	max-width: 100%;
 	margin-top: 8px;
 }
 
 .wfrp-fireball-dialog__target-heading {
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
-	gap: 10px;
+	width: 100%;
+	min-width: 0;
+}
+
+/* Target state below the buttons already identifies this section. */
+.wfrp-fireball-dialog__target-heading > strong {
+	display: none;
 }
 
 .wfrp-fireball-dialog__target-actions {
-	display: flex;
-	flex-flow: row nowrap;
-	align-items: center;
-	justify-content: flex-end;
-	gap: 6px;
+	display: flex !important;
+	flex-flow: row nowrap !important;
+	align-items: stretch !important;
+	justify-content: stretch !important;
+	gap: 8px !important;
+	width: 100% !important;
+	min-width: 0;
 }
 
 .wfrp-fireball-dialog__target-heading button {
-	width: auto;
-	min-width: 0;
+	flex: 1 1 auto !important;
+	width: auto !important;
+	min-width: max-content !important;
 	margin: 0;
 	padding: 4px 8px;
 	white-space: nowrap;
 }
 
 .wfrp-fireball-dialog__target-mode {
-	font-size: 0.9em;
+	min-width: 0;
+	max-width: 100%;
+	font-size: 1em;
+	font-weight: 700;
+	white-space: normal;
+	overflow-wrap: break-word;
 }
 
 /* The targeting instructions live on the highlighted empty-target state below.
@@ -68,10 +88,15 @@
 	.wfrp-fireball-dialog__target-mode::after {
 	content: "Targeting: activate the canvas, hover a token and press T. For a group, use the Select Targets tool: Shift+click adds or removes individual targets, or drag a rectangle around several tokens.";
 	display: block;
+	width: 100%;
+	max-width: 100%;
 	margin-top: 4px;
 	font-size: 0.9em;
 	font-style: normal;
 	font-weight: 400;
+	line-height: 1.3;
+	white-space: normal;
+	overflow-wrap: break-word;
 	color: #4b4034;
 }
 
@@ -109,7 +134,7 @@ html[lang="pl"]
 }
 
 .wfrp-fireball-cast-card,
-.wfrp-fireball-impact {
+.wfrp-fire-ball-impact {
 	margin-top: 8px;
 	padding: 8px;
 	border-top: 1px solid rgb(70 51 30 / 35%);
@@ -117,7 +142,7 @@ html[lang="pl"]
 }
 
 .wfrp-fireball-cast-card header,
-.wfrp-fireball-impact > div {
+.wfrp-fire-ball-impact > div {
 	display: flex;
 	justify-content: space-between;
 	gap: 10px;
@@ -132,12 +157,12 @@ html[lang="pl"]
 	padding-left: 20px;
 }
 
-.wfrp-fireball-impact h3 {
+.wfrp-fire-ball-impact h3 {
 	margin: 0 0 5px;
 	font-size: 13px;
 }
 
-.wfrp-fireball-impact__final {
+.wfrp-fire-ball-impact__final {
 	margin-top: 4px;
 	padding-top: 4px;
 	border-top: 1px solid rgb(70 51 30 / 25%);
