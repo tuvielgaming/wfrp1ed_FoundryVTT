@@ -54,6 +54,7 @@ export function inventorySchema({
 			ss: nonNegativeIntegerField(),
 			bp: nonNegativeIntegerField(),
 		}),
+		priceFormula: textField(),
 		availability: textField(),
 		storageLocation: textField(),
 		state: new SchemaField({
@@ -111,6 +112,7 @@ export function migrateInventoryData(
 		ss: toNonNegativeInteger(unwrapValue(price.ss)),
 		bp: toNonNegativeInteger(unwrapValue(price.bp)),
 	};
+	migrated.priceFormula = unwrapText(migrated.priceFormula);
 	migrated.availability = unwrapText(migrated.availability);
 	migrated.storageLocation = unwrapText(
 		migrated.storageLocation ?? migrated.location,

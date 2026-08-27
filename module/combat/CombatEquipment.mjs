@@ -1,6 +1,7 @@
 import {
 	ARMOUR_CLASS,
 	ARMOUR_LOCATIONS,
+	ARMOUR_PIECE,
 } from "../data-models/item/ArmourData.mjs";
 import {
 	INVENTORY_MODE,
@@ -102,8 +103,12 @@ export class CombatEquipment {
 		const location = normalizeHitLocation(hitLocation);
 		const sources = [];
 		let total = 0;
+		const activeArmour = this.activeArmour(actor);
+		const hasMailCoif = location === "head" && activeArmour.some(
+			(item) => item.system?.piece === ARMOUR_PIECE.MAIL_COIF,
+		);
 
-		for (const item of this.activeArmour(actor)) {
+		for (const item of activeArmour) {
 			if (
 				includeShields !== true &&
 				item.system?.armourClass === ARMOUR_CLASS.SHIELD
@@ -113,8 +118,11 @@ export class CombatEquipment {
 
 			if (item.system?.coverage?.[location] !== true) continue;
 
-			const points = nonNegativeInteger(item.system?.armourPoints);
-			if (points <= 0) continue;
+			const authoredPoints = nonNegativeInteger(item.system?.armourPoints);
+			if (authoredPoints <= 0) continue;
+			const suppressed = hasMailCoif &&
+				item.system?.piece === ARMOUR_PIECE.POT_HELMET;
+			const points = suppressed ? 0 : authoredPoints;
 
 			total += points;
 			sources.push(Object.freeze({
@@ -122,6 +130,8 @@ export class CombatEquipment {
 				itemName: String(item.name ?? ""),
 				armourClass: String(item.system?.armourClass ?? ""),
 				points,
+				authoredPoints,
+				suppressed,
 			}));
 		}
 

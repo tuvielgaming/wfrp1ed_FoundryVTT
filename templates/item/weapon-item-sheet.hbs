@@ -39,6 +39,17 @@
 			<label class="combat-item-sheet__field"><span>{{ui.quantity}}</span><input type="number" min="0" step="1" name="system.quantity" value="{{system.quantity}}" {{#unless editable}}disabled{{/unless}}></label>
 			<label class="combat-item-sheet__field"><span>{{ui.encumbrance}}</span><input type="number" min="0" step="any" name="system.encumbrance" value="{{system.encumbrance}}" {{#unless editable}}disabled{{/unless}}></label>
 		</div>
+		<label class="combat-item-sheet__field"><span>{{ui.availability}}</span><input type="text" name="system.availability" value="{{system.availability}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}></label>
+	</section>
+
+	<section class="combat-item-sheet__panel">
+		<h3>{{ui.price}}</h3>
+		<div class="combat-item-sheet__grid combat-item-sheet__grid--3">
+			<label class="combat-item-sheet__field equipment-item-sheet__currency-field"><span class="equipment-item-sheet__currency-label equipment-item-sheet__currency-label--gold">{{ui.gc}}</span><input type="number" min="0" step="1" name="system.price.gc" value="{{system.price.gc}}" {{#unless editable}}disabled{{/unless}}></label>
+			<label class="combat-item-sheet__field equipment-item-sheet__currency-field"><span class="equipment-item-sheet__currency-label equipment-item-sheet__currency-label--silver">{{ui.ss}}</span><input type="number" min="0" step="1" name="system.price.ss" value="{{system.price.ss}}" {{#unless editable}}disabled{{/unless}}></label>
+			<label class="combat-item-sheet__field equipment-item-sheet__currency-field"><span class="equipment-item-sheet__currency-label equipment-item-sheet__currency-label--copper">{{ui.bp}}</span><input type="number" min="0" step="1" name="system.price.bp" value="{{system.price.bp}}" {{#unless editable}}disabled{{/unless}}></label>
+		</div>
+		<label class="combat-item-sheet__field"><span>{{ui.priceFormula}}</span><input type="text" name="system.priceFormula" value="{{system.priceFormula}}" autocomplete="off" placeholder="{{ui.priceFormulaHint}}" {{#unless editable}}disabled{{/unless}}></label>
 	</section>
 
 	<section class="combat-item-sheet__panel">
@@ -72,11 +83,12 @@
 	{{#if isRanged}}
 		<section class="combat-item-sheet__panel">
 			<h3>{{ui.rangedDetails}}</h3>
-			<div class="combat-item-sheet__grid combat-item-sheet__grid--4">
+			<div class="combat-item-sheet__grid combat-item-sheet__grid--5">
 				<label class="combat-item-sheet__field"><span>{{ui.shortRange}}</span><input type="text" inputmode="numeric" pattern="(?:-|[0-9]+)" name="system.range.short" value="{{system.range.short}}" {{#unless editable}}disabled{{/unless}}></label>
 				<label class="combat-item-sheet__field"><span>{{ui.longRange}}</span><input type="text" inputmode="numeric" pattern="(?:-|[0-9]+)" name="system.range.long" value="{{system.range.long}}" {{#unless editable}}disabled{{/unless}}></label>
 				<label class="combat-item-sheet__field"><span>{{ui.maximumRange}}</span><input type="text" inputmode="numeric" pattern="(?:-|[0-9]+)" name="system.range.max" value="{{system.range.max}}" {{#unless editable}}disabled{{/unless}}></label>
-				<label class="combat-item-sheet__field"><span>{{ui.effectiveStrength}}</span><input type="number" min="0" step="1" name="system.effectiveStrength" value="{{system.effectiveStrength}}" {{#unless editable}}disabled{{/unless}}></label>
+				<label class="combat-item-sheet__field"><span>{{ui.effectiveStrengthMode}}</span><select name="system.effectiveStrengthMode" {{#unless editable}}disabled{{/unless}}>{{#each effectiveStrengthModeOptions as |option|}}<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>{{/each}}</select></label>
+				{{#unless usesCharacterStrength}}<label class="combat-item-sheet__field"><span>{{ui.effectiveStrength}}</span><input type="number" min="0" step="1" name="system.effectiveStrength" value="{{system.effectiveStrength}}" {{#unless editable}}disabled{{/unless}}></label>{{/unless}}
 			</div>
 
 			<div class="combat-item-sheet__grid combat-item-sheet__grid--2">

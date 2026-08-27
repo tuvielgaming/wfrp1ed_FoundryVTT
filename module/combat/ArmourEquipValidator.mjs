@@ -13,6 +13,7 @@ const ALLOWED_LAYER_PAIRS = Object.freeze(new Set([
 	pairKey(ARMOUR_PIECE.BREASTPLATE, ARMOUR_PIECE.MAIL_COAT),
 	pairKey(ARMOUR_PIECE.BREASTPLATE, ARMOUR_PIECE.SLEEVED_MAIL_COAT),
 	pairKey(ARMOUR_PIECE.HELMET, ARMOUR_PIECE.MAIL_COIF),
+	pairKey(ARMOUR_PIECE.POT_HELMET, ARMOUR_PIECE.MAIL_COIF),
 	pairKey(ARMOUR_PIECE.PLATE_ARM_BRACER, ARMOUR_PIECE.SLEEVED_MAIL_SHIRT),
 	pairKey(ARMOUR_PIECE.PLATE_ARM_BRACER, ARMOUR_PIECE.SLEEVED_MAIL_COAT),
 	pairKey(ARMOUR_PIECE.PLATE_ARM_BRACER, ARMOUR_PIECE.MAIL_ARM_BRACER),
@@ -37,8 +38,17 @@ const MAIL_PIECES = Object.freeze(new Set([
 
 const PLATE_PIECES = Object.freeze(new Set([
 	ARMOUR_PIECE.BREASTPLATE,
+	ARMOUR_PIECE.BACK_PLATE,
 	ARMOUR_PIECE.PLATE_ARM_BRACER,
+	ARMOUR_PIECE.GAUNTLETS,
 	ARMOUR_PIECE.HELMET,
+	ARMOUR_PIECE.POT_HELMET,
+]));
+
+const LEATHER_PIECES = Object.freeze(new Set([
+	ARMOUR_PIECE.LEATHER_COIF,
+	ARMOUR_PIECE.LEATHER_JERKIN,
+	ARMOUR_PIECE.LEATHER_JACKET,
 ]));
 
 /**
@@ -47,7 +57,9 @@ const PLATE_PIECES = Object.freeze(new Set([
  * Core p.121 does not define a generic material-layer hierarchy. It lists only
  * four families of legal overlap: leggings under a mail coat, breastplate over
  * mail body armour, helmet over mail coif, and plate arm bracers over sleeved
- * mail or mail arm bracers. All other overlapping armour is illegal.
+ * mail or mail arm bracers. The Consumer Guide adds the Pot Helmet exception:
+ * it may be worn over a Mail Coif but contributes no additional Armour Point.
+ * All other overlapping armour is illegal.
  *
  * The result is rule data only. Callers decide how to present errors/warnings.
  */
@@ -220,6 +232,12 @@ function coreIdentityProblem(item) {
 
 	if (PLATE_PIECES.has(armourPiece)) {
 		return armourClass === ARMOUR_CLASS.PLATE
+			? ""
+			: identityMessage(item);
+	}
+
+	if (LEATHER_PIECES.has(armourPiece)) {
+		return armourClass === ARMOUR_CLASS.LEATHER
 			? ""
 			: identityMessage(item);
 	}

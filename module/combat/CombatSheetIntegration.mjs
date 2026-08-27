@@ -3,7 +3,10 @@ import {
 	ARMOUR_LOCATIONS,
 } from "../data-models/item/ArmourData.mjs";
 import { INVENTORY_HAND } from "../data-models/item/InventoryItemFields.mjs";
-import { WEAPON_KIND } from "../data-models/item/WeaponData.mjs";
+import {
+	EFFECTIVE_STRENGTH_MODE,
+	WEAPON_KIND,
+} from "../data-models/item/WeaponData.mjs";
 import { CombatAttackLauncher } from "./CombatAttackLauncher.mjs";
 import { CombatEquipment } from "./CombatEquipment.mjs";
 import { CombatEquipmentState } from "./CombatEquipmentState.mjs";
@@ -161,12 +164,19 @@ function rangedRow(item, editable) {
 		cell("ranged-cell ranged-cell--maximum-range", nonNegativeInteger(range.max)),
 		cell(
 			"ranged-cell ranged-cell--effective-strength",
-			nonNegativeInteger(item.system?.effectiveStrength),
+			effectiveStrengthDisplay(item),
 		),
 		cell("ranged-cell ranged-cell--reload", nonNegativeInteger(item.system?.reload)),
 	);
 
 	return row;
+}
+
+function effectiveStrengthDisplay(item) {
+	return item.system?.effectiveStrengthMode ===
+		EFFECTIVE_STRENGTH_MODE.CHARACTER
+		? "C"
+		: nonNegativeInteger(item.system?.effectiveStrength);
 }
 
 function armourRow(item, editable) {
@@ -516,7 +526,12 @@ function armourPointTooltip(location, protection) {
 	}
 
 	const details = sources
-		.map((source) => `${source.itemName} +${source.points}`)
+		.map((source) => source.suppressed === true
+			? localize(
+				`${source.itemName} +0 (no bonus over Mail Coif)`,
+				`${source.itemName} +0 (brak premii na czepcu kolczym)`,
+			)
+			: `${source.itemName} +${source.points}`)
 		.join(", ");
 
 	return `${label}: ${protection.total} (${details})`;

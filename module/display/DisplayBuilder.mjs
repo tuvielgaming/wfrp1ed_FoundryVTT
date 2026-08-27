@@ -598,10 +598,12 @@ export class DisplayBuilder {
 			),
 
 			effectiveStrength:
-				this._displayValue(
-					system.effectiveStrength ??
-						system.damage,
-				),
+				system.effectiveStrengthMode === "character"
+					? "C"
+					: this._displayValue(
+						system.effectiveStrength ??
+							system.damage,
+					),
 
 			initiative:
 				this._displayValue(

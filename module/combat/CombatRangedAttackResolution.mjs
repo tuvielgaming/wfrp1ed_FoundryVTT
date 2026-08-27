@@ -1,4 +1,5 @@
 import {
+	EFFECTIVE_STRENGTH_MODE,
 	WEAPON_KIND,
 	weaponRangedCycleSnapshot,
 } from "../data-models/item/WeaponData.mjs";
@@ -110,7 +111,10 @@ export class CombatRangedAttackResolution {
 				effects: foundry.utils.deepClone(
 					DamageRuleEffects.activeEffectSnapshots(weapon),
 				),
-				effectiveStrength: nonNegativeInteger(weapon.system?.effectiveStrength),
+				effectiveStrengthMode: String(
+					weapon.system?.effectiveStrengthMode ?? EFFECTIVE_STRENGTH_MODE.FIXED,
+				),
+				effectiveStrength: resolvedEffectiveStrength(actor, weapon),
 				firingCycle: foundry.utils.deepClone(cycle),
 			},
 			targetMode,
@@ -242,6 +246,21 @@ function positiveRound(value) {
 function nonNegativeInteger(value) {
 	const number = Number(value);
 	return Number.isFinite(number) ? Math.max(0, Math.trunc(number)) : 0;
+}
+
+function resolvedEffectiveStrength(actor, weapon) {
+	if (
+		weapon.system?.effectiveStrengthMode ===
+		EFFECTIVE_STRENGTH_MODE.CHARACTER
+	) {
+		const source = actor.system?.characteristics?.s?.current;
+		const value = source && typeof source === "object" && "value" in source
+			? source.value
+			: source;
+		return nonNegativeInteger(value);
+	}
+
+	return nonNegativeInteger(weapon.system?.effectiveStrength);
 }
 
 function finiteNumber(value, label) {

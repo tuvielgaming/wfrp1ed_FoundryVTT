@@ -228,11 +228,11 @@
 	min-height: 24px;
 }
 
-.equipment-item-sheet .equipment-item-sheet__currency-field {
+.combat-item-sheet .equipment-item-sheet__currency-field {
 	align-content: start;
 }
 
-.equipment-item-sheet .equipment-item-sheet__currency-label {
+.combat-item-sheet .equipment-item-sheet__currency-label {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -254,15 +254,15 @@
 		0 1px 1px rgb(55 39 22 / 12%);
 }
 
-.equipment-item-sheet .equipment-item-sheet__currency-label--gold {
+.combat-item-sheet .equipment-item-sheet__currency-label--gold {
 	background: #d9ba63;
 }
 
-.equipment-item-sheet .equipment-item-sheet__currency-label--silver {
+.combat-item-sheet .equipment-item-sheet__currency-label--silver {
 	background: #c9c6bd;
 }
 
-.equipment-item-sheet .equipment-item-sheet__currency-label--copper {
+.combat-item-sheet .equipment-item-sheet__currency-label--copper {
 	background: #bf8055;
 }
 

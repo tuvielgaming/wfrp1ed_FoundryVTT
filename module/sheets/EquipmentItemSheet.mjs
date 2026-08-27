@@ -261,6 +261,8 @@ function equipmentUi() {
 		encumbrance: localize("Encumbrance", "Obciążenie"),
 		availability: localize("Availability", "Dostępność"),
 		price: localize("Price", "Cena"),
+		priceFormula: localize("Variable / formula price", "Cena zmienna / formuła"),
+		priceFormulaHint: localize("Optional, for example 2D8 + 2 GC", "Opcjonalnie, np. 2K8 + 2 ZK"),
 		gc: localize("GC", "ZK"),
 		ss: "SS",
 		bp: "BP",

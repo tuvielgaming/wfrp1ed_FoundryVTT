@@ -36,16 +36,22 @@ export const ARMOUR_CLASS = Object.freeze({
  */
 export const ARMOUR_PIECE = Object.freeze({
 	SHIELD: "shield",
+	LEATHER_COIF: "leatherCoif",
+	LEATHER_JERKIN: "leatherJerkin",
+	LEATHER_JACKET: "leatherJacket",
 	MAIL_SHIRT: "mailShirt",
 	SLEEVED_MAIL_SHIRT: "sleevedMailShirt",
 	MAIL_COAT: "mailCoat",
 	SLEEVED_MAIL_COAT: "sleevedMailCoat",
 	MAIL_COIF: "mailCoif",
 	BREASTPLATE: "breastplate",
+	BACK_PLATE: "backPlate",
 	MAIL_ARM_BRACER: "mailArmBracer",
 	PLATE_ARM_BRACER: "plateArmBracer",
+	GAUNTLETS: "gauntlets",
 	LEGGINGS: "leggings",
 	HELMET: "helmet",
+	POT_HELMET: "potHelmet",
 	CUSTOM: "custom",
 });
 
@@ -164,6 +170,16 @@ function inferCorePiece(system) {
 
 	if (armourClass === ARMOUR_CLASS.SHIELD) {
 		return ARMOUR_PIECE.SHIELD;
+	}
+
+	if (armourClass === ARMOUR_CLASS.LEATHER) {
+		switch (key) {
+			case "head": return ARMOUR_PIECE.LEATHER_COIF;
+			case "body": return ARMOUR_PIECE.LEATHER_JERKIN;
+			case "body|leftArm|rightArm": return ARMOUR_PIECE.LEATHER_JACKET;
+			default:
+				break;
+		}
 	}
 
 	if (armourClass === ARMOUR_CLASS.MAIL) {

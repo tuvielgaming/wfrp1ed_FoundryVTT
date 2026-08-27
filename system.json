@@ -203,11 +203,13 @@
 		{"name":"core-critical-wounds-en","label":"WFRP 1e Core — Critical Wounds (English)","path":"packs/core-critical-wounds-en","type":"Item","system":"wfrp1ed"},
 		{"name":"core-critical-wounds-pl","label":"WFRP 1e Core — Rany krytyczne (Polski)","path":"packs/core-critical-wounds-pl","type":"Item","system":"wfrp1ed"},
 		{"name":"core-critical-tables-en","label":"WFRP 1e Core — Critical Tables (English)","path":"packs/core-critical-tables-en","type":"RollTable","system":"wfrp1ed"},
-		{"name":"core-critical-tables-pl","label":"WFRP 1e Core — Tabele krytyczne (Polski)","path":"packs/core-critical-tables-pl","type":"RollTable","system":"wfrp1ed"}
+		{"name":"core-critical-tables-pl","label":"WFRP 1e Core — Tabele krytyczne (Polski)","path":"packs/core-critical-tables-pl","type":"RollTable","system":"wfrp1ed"},
+		{"name":"core-equipment-en","label":"WFRP 1e Core — Equipment (English)","path":"packs/core-equipment-en","type":"Item","system":"wfrp1ed"},
+		{"name":"core-equipment-pl","label":"WFRP 1e Core — Ekwipunek (Polski)","path":"packs/core-equipment-pl","type":"Item","system":"wfrp1ed"}
 	],
 	"packFolders": [
-		{"name":"WFRP 1e Core — English","sorting":"a","packs":["core-skills-en","core-critical-wounds-en","core-critical-tables-en"]},
-		{"name":"WFRP 1e Core — Polski","sorting":"a","packs":["core-skills-pl","core-critical-wounds-pl","core-critical-tables-pl"]}
+		{"name":"WFRP 1e Core — English","sorting":"a","packs":["core-skills-en","core-critical-wounds-en","core-critical-tables-en","core-equipment-en"]},
+		{"name":"WFRP 1e Core — Polski","sorting":"a","packs":["core-skills-pl","core-critical-wounds-pl","core-critical-tables-pl","core-equipment-pl"]}
 	],
 	"languages": [
 		{"lang":"en","name":"English","path":"lang/en.json"},

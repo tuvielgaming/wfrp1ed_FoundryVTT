@@ -1,10 +1,12 @@
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ClassicLevel } from "classic-level";
 import { coreCriticalTableSources } from "../module/core/CoreCriticalTableCatalog.mjs";
 import { coreCriticalWoundItemSources } from "../module/core/CoreCriticalWoundCatalog.mjs";
+import { coreEquipmentItemSources } from "../module/core/CoreEquipmentCatalog.mjs";
 import { coreSkillItemSources } from "../module/core/CoreSkillCatalog.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -17,6 +19,8 @@ const PACKS = Object.freeze([
 	pack("core-critical-wounds-pl", "Item", 64, () => coreCriticalWoundItemSources("pl")),
 	pack("core-critical-tables-en", "RollTable", 16, () => coreCriticalTableSources("en")),
 	pack("core-critical-tables-pl", "RollTable", 16, () => coreCriticalTableSources("pl")),
+	pack("core-equipment-en", "Item", 170, () => coreEquipmentItemSources("en")),
+	pack("core-equipment-pl", "Item", 172, () => coreEquipmentItemSources("pl")),
 ]);
 
 await mkdir(PACK_ROOT, { recursive: true });
@@ -179,6 +183,33 @@ function validatePack(definition, documents) {
 
 		validateEmbeddedIds(definition, document, "effects");
 		validateEmbeddedIds(definition, document, "results");
+
+		if (document.flags?.wfrp1ed?.coreCatalog?.kind === "equipment") {
+			validateEquipmentDocument(definition, document);
+		}
+	}
+}
+
+function validateEquipmentDocument(definition, document) {
+	if (!["equipment", "weapon", "armour"].includes(document.type)) {
+		throw new Error(
+			`${definition.name} document '${document._id}' has unsupported equipment type '${document.type}'.`,
+		);
+	}
+
+	const image = String(document.img ?? "");
+	const prefix = "systems/wfrp1ed/";
+	if (!image.startsWith(`${prefix}assets/core-equipment/`) || !image.endsWith(".webp")) {
+		throw new Error(
+			`${definition.name} document '${document._id}' has invalid equipment image '${image}'.`,
+		);
+	}
+
+	const localImage = join(ROOT, image.slice(prefix.length));
+	if (!existsSync(localImage)) {
+		throw new Error(
+			`${definition.name} document '${document._id}' references missing image '${image}'.`,
+		);
 	}
 }
 
@@ -231,6 +262,9 @@ function documentIdentity(packDefinition, document, index) {
 	}
 	if (core?.kind === "criticalWound") {
 		return `${packDefinition.name}:critical:${core.location}:${core.effectNumber}`;
+	}
+	if (core?.kind === "equipment") {
+		return `${packDefinition.name}:equipment:${core.catalogId || index}`;
 	}
 	if (document._id) return `${packDefinition.name}:${document._id}`;
 	return `${packDefinition.name}:${document.name}:${index}`;

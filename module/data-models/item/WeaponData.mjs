@@ -41,6 +41,11 @@ export const WEAPON_HANDEDNESS = Object.freeze({
 	EITHER: "either",
 });
 
+export const EFFECTIVE_STRENGTH_MODE = Object.freeze({
+	FIXED: "fixed",
+	CHARACTER: "character",
+});
+
 const WEAPON_MODIFIER_KEYS = Object.freeze([
 	"initiative",
 	"toHit",
@@ -110,6 +115,7 @@ export class WeaponData extends TypeDataModel {
 				long: rangeField(),
 				max: rangeField(),
 			}),
+			effectiveStrengthMode: textField(EFFECTIVE_STRENGTH_MODE.FIXED),
 			effectiveStrength: nonNegativeIntegerField(),
 			ammunitionType: textField(AMMUNITION_TYPE.NONE),
 			ammunitionCustomId: textField(),
@@ -191,6 +197,11 @@ export class WeaponData extends TypeDataModel {
 			long: normalizeRangeValue(range.long),
 			max: normalizeRangeValue(range.max),
 		};
+		migrated.effectiveStrengthMode = normalizeAllowed(
+			sourceObject.effectiveStrengthMode,
+			Object.values(EFFECTIVE_STRENGTH_MODE),
+			EFFECTIVE_STRENGTH_MODE.FIXED,
+		);
 		migrated.effectiveStrength = toNonNegativeInteger(
 			unwrapValue(
 				Object.hasOwn(sourceObject, "effectiveStrength")

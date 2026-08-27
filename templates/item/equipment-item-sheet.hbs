@@ -91,6 +91,7 @@
 				<label class="combat-item-sheet__field equipment-item-sheet__currency-field"><span class="equipment-item-sheet__currency-label equipment-item-sheet__currency-label--silver">{{ui.ss}}</span><input type="number" min="0" step="1" name="system.price.ss" value="{{system.price.ss}}" {{#unless editable}}disabled{{/unless}}></label>
 				<label class="combat-item-sheet__field equipment-item-sheet__currency-field"><span class="equipment-item-sheet__currency-label equipment-item-sheet__currency-label--copper">{{ui.bp}}</span><input type="number" min="0" step="1" name="system.price.bp" value="{{system.price.bp}}" {{#unless editable}}disabled{{/unless}}></label>
 			</div>
+			<label class="combat-item-sheet__field"><span>{{ui.priceFormula}}</span><input type="text" name="system.priceFormula" value="{{system.priceFormula}}" autocomplete="off" placeholder="{{ui.priceFormulaHint}}" {{#unless editable}}disabled{{/unless}}></label>
 			</section>
 
 			<label class="combat-item-sheet__field combat-item-sheet__description"><span>{{ui.description}}</span><textarea name="system.description" {{#unless editable}}disabled{{/unless}}>{{system.description}}</textarea></label>

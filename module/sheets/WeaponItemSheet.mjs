@@ -6,6 +6,7 @@ import {
 	AMMUNITION_TYPE,
 } from "../data-models/item/AmmunitionTypes.mjs";
 import {
+	EFFECTIVE_STRENGTH_MODE,
 	WEAPON_GROUP,
 	WEAPON_HANDEDNESS,
 	WEAPON_KIND,
@@ -67,6 +68,15 @@ export class WeaponItemSheet extends HandlebarsApplicationMixin(
 		context.editable = this.isEditable;
 		context.ui = weaponUi();
 		context.isRanged = system?.kind === WEAPON_KIND.RANGED;
+		context.usesCharacterStrength =
+			system?.effectiveStrengthMode === EFFECTIVE_STRENGTH_MODE.CHARACTER;
+		context.effectiveStrengthModeOptions = selectOptions(
+			[
+				[EFFECTIVE_STRENGTH_MODE.FIXED, localize("Fixed", "Stała")],
+				[EFFECTIVE_STRENGTH_MODE.CHARACTER, localize("Thrower's Strength", "Siła rzucającego")],
+			],
+			system?.effectiveStrengthMode,
+		);
 		context.isCustomAmmunition = system?.ammunitionType === AMMUNITION_TYPE.CUSTOM;
 		context.ammunitionTypeOptions = selectOptions(
 			ammunitionTypeEntries(true),
@@ -212,6 +222,13 @@ function weaponUi() {
 		hand: localize("Preferred hand", "Preferowana dłoń"),
 		quantity: localize("Quantity", "Ilość"),
 		encumbrance: localize("Encumbrance", "Obciążenie"),
+		availability: localize("Availability", "Dostępność"),
+		price: localize("Price", "Cena"),
+		priceFormula: localize("Variable / formula price", "Cena zmienna / formuła"),
+		priceFormulaHint: localize("Optional, for example 2D8 + 2 GC", "Opcjonalnie, np. 2K8 + 2 ZK"),
+		gc: localize("GC", "ZK"),
+		ss: "SS",
+		bp: "BP",
 		parry: localize("Parrying", "Parowanie"),
 		parrySuitable: localize("Suitable for parrying", "Nadaje się do parowania"),
 		parryBonus: localize("Main-rule parry bonus", "Premia do parowania z zasad podstawowych"),
@@ -220,6 +237,7 @@ function weaponUi() {
 		longRange: localize("Long range", "Daleki zasięg"),
 		maximumRange: localize("Extreme range", "Maksymalny zasięg"),
 		effectiveStrength: localize("Effective Strength", "Siła efektywna"),
+		effectiveStrengthMode: localize("Effective Strength source", "Źródło Siły efektywnej"),
 		ammunitionType: localize("Ammunition type", "Typ amunicji"),
 		ammunitionCustomId: localize("Custom ammunition ID", "Identyfikator własnej amunicji"),
 		firingCycle: localize("Reload / firing cycle", "Przeładowanie / cykl strzału"),

@@ -257,6 +257,10 @@ function migrateSparseInventoryFields(migrated, source) {
 		migrated.price = migratedPrice;
 	}
 
+	if (Object.hasOwn(source, "priceFormula")) {
+		migrated.priceFormula = unwrapText(source.priceFormula);
+	}
+
 	if (Object.hasOwn(source, "availability")) {
 		migrated.availability = unwrapText(source.availability);
 	}
@@ -333,6 +337,7 @@ function shouldSeedLegacyReferenceQuantity(source) {
 		"encumbrance",
 		"weight",
 		"price",
+		"priceFormula",
 		"availability",
 		"storageLocation",
 		"location",
