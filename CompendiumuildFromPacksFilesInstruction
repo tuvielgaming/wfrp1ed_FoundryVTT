@@ -1,0 +1,3 @@
+Run in terminal:
+npm install - only if npm wasn't installed before
+npm run build:packs
