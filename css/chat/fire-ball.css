@@ -48,6 +48,13 @@
 	font-size: 0.9em;
 }
 
+/* The targeting instructions live on the highlighted empty-target state below.
+ * Keep the older dynamic help node hidden so the dialog never renders the same
+ * guidance twice. */
+.wfrp-fireball-dialog__target-help {
+	display: none !important;
+}
+
 .wfrp-fireball-dialog__target-section:has(.wfrp-fireball-dialog__targets:empty)
 	.wfrp-fireball-dialog__target-mode {
 	padding: 5px 7px;
@@ -59,7 +66,7 @@
 
 .wfrp-fireball-dialog__target-section:has(.wfrp-fireball-dialog__targets:empty)
 	.wfrp-fireball-dialog__target-mode::after {
-	content: "Targeting: activate the canvas, hover a token and press T. Use Shift+T to add or remove more targets. You can also use the Select Targets tool and drag a rectangle around a group.";
+	content: "Targeting: activate the canvas, hover a token and press T. For a group, use the Select Targets tool: Shift+click adds or removes individual targets, or drag a rectangle around several tokens.";
 	display: block;
 	margin-top: 4px;
 	font-size: 0.9em;
@@ -71,7 +78,7 @@
 html[lang="pl"]
 	.wfrp-fireball-dialog__target-section:has(.wfrp-fireball-dialog__targets:empty)
 	.wfrp-fireball-dialog__target-mode::after {
-	content: "Celowanie: aktywuj mapę, najedź na token i naciśnij T. Shift+T dodaje lub usuwa kolejne cele. Możesz też użyć narzędzia Wskaż cele i przeciągnąć prostokąt wokół grupy.";
+	content: "Celowanie: aktywuj mapę, najedź na token i naciśnij T. Dla grupy użyj narzędzia Wskaż cele: Shift+klik dodaje lub usuwa pojedyncze cele, a przeciągnięcie prostokąta wskazuje wszystkie tokeny w obszarze.";
 }
 
 .wfrp-fireball-dialog__target-section.has-error {
