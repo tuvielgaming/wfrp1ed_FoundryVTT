@@ -101,6 +101,14 @@ function psychologyRow(castId, target) {
 	checkbox.disabled = !game.user?.isGM;
 	checkbox.title = localize("Fear of Fire", "Strach przed ogniem");
 	checkbox.setAttribute("aria-label", `${target.name}: ${localize("Fear of Fire", "Strach przed ogniem")}`);
+	/* Foundry's themed checkbox skin could briefly paint a checked control with
+	 * the UI accent colour on the initial injected DOM and then fall back to the
+	 * browser checkbox after a later card rebuild. Force the native checkbox
+	 * presentation from the start so the control does not visually change after
+	 * an unrelated Initiative/Test refresh. */
+	checkbox.style.setProperty("appearance", "auto", "important");
+	checkbox.style.setProperty("-webkit-appearance", "checkbox", "important");
+	checkbox.style.setProperty("accent-color", "auto", "important");
 
 	const label = document.createElement("span");
 	label.textContent = target.name;
