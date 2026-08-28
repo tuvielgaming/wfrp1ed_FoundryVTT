@@ -1,5 +1,8 @@
+import { adjudicateFireBallCastFear } from "./FireBallVulnerabilitySync.mjs";
+
 const FLAG_SCOPE = "wfrp1ed";
 const CAST_FLAG = "fireBallCast";
+const IMPACT_FLAG = "fireBallImpactWorkflow";
 const ACTOR_TEST_FLAG = "actorTestRequest";
 const TEST_RESULT_FLAG = "testResultState";
 const SECTION_ATTR = "data-wfrp-fireball-cast-psychology";
@@ -7,23 +10,20 @@ const SECTION_ATTR = "data-wfrp-fireball-cast-psychology";
 let refreshQueued = false;
 
 /**
- * Fire Ball Fear belongs to the casting/encounter target, not to an individual
- * projectile. Present one Psychology summary on the cast card and let Ball cards
- * focus on the per-projectile Initiative + Damage chain.
- *
- * Canonical ActorTestRequest/TestResult messages remain untouched and visible at
- * this stage, so rolling, Luck and later adjudication continue to use their
- * existing mechanics. This module is presentation-only.
+ * Fire Ball Fear belongs to the casting target, not to an individual projectile.
+ * The cast summary therefore owns the visible vulnerability checkbox and one
+ * result row per creature actually hit by at least one Ball. Canonical impact,
+ * ActorTestRequest and TestResult messages remain the mechanical source of truth.
  */
 Hooks.on("renderChatMessageHTML", (message, html) => {
 	requestAnimationFrame(() => decorateCastPsychology(message, html));
 });
 
 Hooks.on("createChatMessage", (message) => {
-	if (isFireBallFearMessage(message)) requestRefresh();
+	if (isRelated(message)) requestRefresh();
 });
 Hooks.on("updateChatMessage", (message) => {
-	if (isFireBallFearMessage(message) || isFireBallFearResult(message)) requestRefresh();
+	if (isRelated(message)) requestRefresh();
 });
 
 function decorateCastPsychology(message, html) {
@@ -35,14 +35,18 @@ function decorateCastPsychology(message, html) {
 		: root?.querySelector?.(".fire-ball-cast-summary");
 	if (!(summary instanceof HTMLElement)) return;
 
-	summary.querySelector(`[${SECTION_ATTR}]`)?.remove();
-	const requests = fearRequestsForCast(cast.castId);
-	if (!requests.length) return;
+	const previous = summary.querySelector(`[${SECTION_ATTR}]`);
+	const wasOpen = previous instanceof HTMLDetailsElement && previous.open;
+	previous?.remove();
+
+	const targets = psychologyTargetsForCast(cast.castId);
+	if (!targets.length) return;
 
 	const section = document.createElement("details");
 	section.setAttribute(SECTION_ATTR, "");
 	section.className = "wfrp-fireball-cast-psychology";
 	section.style.marginTop = "0.45rem";
+	section.open = wasOpen;
 
 	const heading = document.createElement("summary");
 	Object.assign(heading.style, {
@@ -54,12 +58,12 @@ function decorateCastPsychology(message, html) {
 		listStyle: "none",
 	});
 	const arrow = document.createElement("span");
-	arrow.textContent = "▸";
+	arrow.textContent = section.open ? "▾" : "▸";
 	arrow.setAttribute("aria-hidden", "true");
 	const label = document.createElement("strong");
 	label.textContent = localize("Psychology", "Psychologia");
 	const compact = document.createElement("span");
-	compact.textContent = psychologyCompact(requests);
+	compact.textContent = psychologyCompact(targets);
 	compact.style.textAlign = "right";
 	compact.style.whiteSpace = "nowrap";
 	heading.append(arrow, label, compact);
@@ -71,7 +75,7 @@ function decorateCastPsychology(message, html) {
 		paddingTop: "0.35rem",
 		borderTop: "1px solid rgba(74, 52, 31, 0.22)",
 	});
-	for (const request of requests) body.append(psychologyRow(request));
+	for (const target of targets) body.append(psychologyRow(cast.castId, target));
 	section.append(body);
 
 	section.addEventListener("toggle", () => {
@@ -81,37 +85,65 @@ function decorateCastPsychology(message, html) {
 	summary.append(section);
 }
 
-function psychologyRow(message) {
-	const state = message.getFlag?.(FLAG_SCOPE, ACTOR_TEST_FLAG) ?? {};
+function psychologyRow(castId, target) {
 	const row = document.createElement("div");
 	Object.assign(row.style, {
 		display: "grid",
-		gridTemplateColumns: "minmax(0, 1fr) max-content",
+		gridTemplateColumns: "max-content minmax(0, 1fr) max-content",
 		alignItems: "center",
-		gap: "0.6rem",
-		minHeight: "1.45rem",
+		gap: "0.5rem",
+		minHeight: "1.65rem",
 	});
-	const actor = documentFromUuid(state.actorUuid);
+
+	const checkbox = document.createElement("input");
+	checkbox.type = "checkbox";
+	checkbox.checked = target.enabled;
+	checkbox.disabled = !game.user?.isGM;
+	checkbox.title = localize("Fear of Fire", "Strach przed ogniem");
+	checkbox.setAttribute("aria-label", `${target.name}: ${localize("Fear of Fire", "Strach przed ogniem")}`);
+
 	const label = document.createElement("span");
-	label.textContent = String(state.actorName ?? actor?.name ?? "—");
-	const outcome = fearOutcome(message);
+	label.textContent = target.name;
+
+	const outcome = fearOutcome(target);
 	const value = document.createElement("strong");
 	value.textContent = outcome.text;
 	value.style.whiteSpace = "nowrap";
+	value.style.textAlign = "right";
 	if (outcome.kind === "success") value.style.color = "#31542f";
 	if (outcome.kind === "failure") value.style.color = "#7b2626";
-	row.append(label, value);
+
+	checkbox.addEventListener("change", () => {
+		if (!game.user?.isGM) return;
+		const requested = checkbox.checked === true;
+		checkbox.disabled = true;
+		void adjudicateFireBallCastFear(castId, target.actorUuid, requested)
+			.catch((error) => {
+				checkbox.checked = !requested;
+				reportError(error);
+			})
+			.finally(() => {
+				if (checkbox.isConnected) checkbox.disabled = !game.user?.isGM;
+			});
+	});
+
+	row.append(checkbox, label, value);
 	return row;
 }
 
-function psychologyCompact(requests) {
-	const outcomes = requests.map(fearOutcome);
-	const resolved = outcomes.filter((entry) => entry.kind === "success" || entry.kind === "failure").length;
-	return `${resolved}/${outcomes.length} ${localize("resolved", "rozstrzygnięto")}`;
+function psychologyCompact(targets) {
+	const applicable = targets.filter((target) => target.enabled);
+	const resolved = applicable
+		.map(fearOutcome)
+		.filter((entry) => entry.kind === "success" || entry.kind === "failure")
+		.length;
+	return `${resolved}/${applicable.length} ${localize("resolved", "rozstrzygnięto")}`;
 }
 
-function fearOutcome(requestMessage) {
-	const state = requestMessage?.getFlag?.(FLAG_SCOPE, ACTOR_TEST_FLAG);
+function fearOutcome(target) {
+	if (!target.enabled) return { text: localize("Not applicable", "Nie dotyczy"), kind: "neutral" };
+	const request = target.requestMessage;
+	const state = request?.getFlag?.(FLAG_SCOPE, ACTOR_TEST_FLAG);
 	if (state?.status !== "resolved" || !state?.resultMessageId) {
 		return { text: localize("Pending", "Oczekuje"), kind: "neutral" };
 	}
@@ -124,17 +156,38 @@ function fearOutcome(requestMessage) {
 	};
 }
 
-function fearRequestsForCast(castId) {
+function psychologyTargetsForCast(castId) {
 	const id = String(castId ?? "").trim();
 	if (!id) return [];
-	const requests = [];
+	const byActor = new Map();
 	for (const message of game.messages ?? []) {
-		const state = message.getFlag?.(FLAG_SCOPE, ACTOR_TEST_FLAG);
-		if (state?.source?.kind !== "spell-fire-ball") continue;
-		if (String(state.source?.castId ?? "") !== id) continue;
-		requests.push(message);
+		const impact = message.getFlag?.(FLAG_SCOPE, IMPACT_FLAG);
+		if (String(impact?.castId ?? "") !== id) continue;
+		const actorUuid = String(impact?.targetUuid ?? "").trim();
+		if (!actorUuid) continue;
+		let entry = byActor.get(actorUuid);
+		if (!entry) {
+			entry = {
+				actorUuid,
+				name: String(impact?.targetName ?? documentFromUuid(actorUuid)?.name ?? "—"),
+				enabled: false,
+				requestMessage: null,
+			};
+			byActor.set(actorUuid, entry);
+		}
+		if (impact?.fearOfFire === true) entry.enabled = true;
+		const requestId = String(impact?.fearRequestMessageId ?? "").trim();
+		if (requestId && !entry.requestMessage) {
+			entry.requestMessage = game.messages?.get(requestId) ?? null;
+		}
 	}
-	return requests.sort((a, b) => String(a.id).localeCompare(String(b.id)));
+	return [...byActor.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function isRelated(message) {
+	if (message?.getFlag?.(FLAG_SCOPE, IMPACT_FLAG)) return true;
+	if (isFireBallFearMessage(message)) return true;
+	return isFireBallFearResult(message);
 }
 
 function isFireBallFearMessage(message) {
@@ -179,11 +232,8 @@ function requestRefresh() {
 }
 
 function documentFromUuid(uuid) {
-	try {
-		return foundry.utils.fromUuidSync(String(uuid ?? "").trim()) ?? null;
-	} catch (_error) {
-		return null;
-	}
+	try { return foundry.utils.fromUuidSync(String(uuid ?? "").trim()) ?? null; }
+	catch (_error) { return null; }
 }
 
 function cssEscape(value) {
@@ -194,6 +244,14 @@ function asElement(value) {
 	if (value instanceof HTMLElement) return value;
 	if (value?.[0] instanceof HTMLElement) return value[0];
 	return null;
+}
+
+function reportError(error) {
+	console.error("WFRP1ED | Unable to adjudicate cast Psychology.", error);
+	ui.notifications.error(error?.message ?? localize(
+		"Unable to update Fear of Fire.",
+		"Nie udało się zaktualizować Strachu przed ogniem.",
+	));
 }
 
 function localize(english, polish) {
