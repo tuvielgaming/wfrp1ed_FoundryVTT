@@ -39,7 +39,7 @@ function decorateCastPsychology(message, html) {
 	const wasOpen = previous instanceof HTMLDetailsElement && previous.open;
 	previous?.remove();
 
-	const targets = psychologyTargetsForCast(cast.castId);
+	const targets = psychologyTargetsForCast(cast);
 	if (!targets.length) return;
 
 	const section = document.createElement("details");
@@ -156,13 +156,36 @@ function fearOutcome(target) {
 	};
 }
 
-function psychologyTargetsForCast(castId) {
-	const id = String(castId ?? "").trim();
-	if (!id) return [];
+/**
+ * Build the cast-level Psychology roster from the cast's authoritative volley
+ * targets first. Impact messages and Fear requests then overlay vulnerability
+ * and result state. This keeps every creature hit by at least one Ball visible
+ * even when one impact has not yet linked its Fear request.
+ */
+function psychologyTargetsForCast(cast) {
+	const castId = String(cast?.castId ?? "").trim();
+	if (!castId) return [];
 	const byActor = new Map();
+
+	for (const volley of cast?.volleys ?? []) {
+		for (const target of volley?.targets ?? []) {
+			const actorUuid = String(target?.actorUuid ?? target?.uuid ?? "").trim();
+			if (!actorUuid) continue;
+			if (!byActor.has(actorUuid)) {
+				byActor.set(actorUuid, {
+					actorUuid,
+					name: String(target?.name ?? documentFromUuid(actorUuid)?.name ?? "—"),
+					enabled: false,
+					explicitlyDisabled: false,
+					requestMessage: null,
+				});
+			}
+		}
+	}
+
 	for (const message of game.messages ?? []) {
 		const impact = message.getFlag?.(FLAG_SCOPE, IMPACT_FLAG);
-		if (String(impact?.castId ?? "") !== id) continue;
+		if (String(impact?.castId ?? "") !== castId) continue;
 		const actorUuid = String(impact?.targetUuid ?? "").trim();
 		if (!actorUuid) continue;
 		let entry = byActor.get(actorUuid);
@@ -171,17 +194,47 @@ function psychologyTargetsForCast(castId) {
 				actorUuid,
 				name: String(impact?.targetName ?? documentFromUuid(actorUuid)?.name ?? "—"),
 				enabled: false,
+				explicitlyDisabled: false,
 				requestMessage: null,
 			};
 			byActor.set(actorUuid, entry);
 		}
-		if (impact?.fearOfFire === true) entry.enabled = true;
-		const requestId = String(impact?.fearRequestMessageId ?? "").trim();
-		if (requestId && !entry.requestMessage) {
-			entry.requestMessage = game.messages?.get(requestId) ?? null;
+		if (impact?.fearManuallyDisabled === true) {
+			entry.explicitlyDisabled = true;
+			entry.enabled = false;
+		} else if (impact?.fearOfFire === true) {
+			entry.enabled = true;
 		}
+		const requestId = String(impact?.fearRequestMessageId ?? "").trim();
+		if (requestId && !entry.requestMessage) entry.requestMessage = game.messages?.get(requestId) ?? null;
 	}
-	return [...byActor.values()].sort((a, b) => a.name.localeCompare(b.name));
+
+	for (const message of game.messages ?? []) {
+		const request = message.getFlag?.(FLAG_SCOPE, ACTOR_TEST_FLAG);
+		if (request?.source?.kind !== "spell-fire-ball") continue;
+		if (String(request?.source?.castId ?? "") !== castId) continue;
+		const actorUuid = String(request?.actorUuid ?? request?.source?.targetUuid ?? "").trim();
+		if (!actorUuid) continue;
+		let entry = byActor.get(actorUuid);
+		if (!entry) {
+			entry = {
+				actorUuid,
+				name: String(request?.actorName ?? documentFromUuid(actorUuid)?.name ?? "—"),
+				enabled: false,
+				explicitlyDisabled: false,
+				requestMessage: null,
+			};
+			byActor.set(actorUuid, entry);
+		}
+		entry.requestMessage = message;
+		/* A linked request means Fear was enabled for the cast unless an impact
+		 * explicitly records a later GM disable. */
+		if (!entry.explicitlyDisabled) entry.enabled = true;
+	}
+
+	return [...byActor.values()]
+		.map(({ explicitlyDisabled, ...entry }) => entry)
+		.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function isRelated(message) {
