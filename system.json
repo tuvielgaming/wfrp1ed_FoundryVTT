@@ -58,6 +58,7 @@
 		"module/combat/CombatDamagePhysicalDiceIntegration.mjs",
 		"module/combat/CombatDamageSocketTransportGuard.mjs",
 		"module/combat/CombatAdjudicationReconciliation.mjs",
+		"module/combat/CombatParryReductionMemory.mjs",
 		"module/combat/CombatAttackAdjudicationReconciliation.mjs",
 		"module/inventory/ClassicInventoryIntegration.mjs",
 		"module/inventory/InventoryEncumbranceIntegration.mjs",
