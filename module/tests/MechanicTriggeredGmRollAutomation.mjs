@@ -34,7 +34,7 @@ function maybeAutomateDependentRoll(message, html) {
 	const state = movementState(message);
 	if (!state) return;
 	const actor = ActorRollPolicy.actorFromUuidSync(state.actorUuid);
-	if (!ActorRollPolicy.shouldAutomaticallyRoll(actor, game.user)) return;
+	if (!ActorRollPolicy.shouldAutomaticallyRollMechanicTest(actor, game.user)) return;
 
 	const root = asElement(html);
 	if (!(root instanceof HTMLElement)) return;
