@@ -6,6 +6,7 @@ import {
 import { SpellItemSheet } from "../sheets/SpellItemSheet.mjs";
 import "../tests/TestResultOwnerAdjudicationIntegration.mjs";
 import "./CoreCastingFailureWorkflow.mjs";
+import "./SpellCastLinkage.mjs";
 import "./FireBallDamageLabels.mjs";
 import { installFireBallGroupHitDiceAnimation } from "./FireBallGroupHitDiceAnimation.mjs";
 import { installFireBallPresentationConsistency } from "./FireBallPresentationConsistency.mjs";
