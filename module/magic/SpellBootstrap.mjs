@@ -11,6 +11,7 @@ import "./SpellCastLinkage.mjs";
 import "./FireBallBallGroupPresentation.mjs";
 import "./FireBallBallGroupAutoCreate.mjs";
 import "./FireBallBallGroupDisclosureIndicator.mjs";
+import "./FireBallCastPsychologyPresentation.mjs";
 import "./FireBallCriticalFallback.mjs";
 import "./FireBallDamageLabels.mjs";
 import { installFireBallGroupHitDiceAnimation } from "./FireBallGroupHitDiceAnimation.mjs";
