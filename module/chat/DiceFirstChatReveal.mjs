@@ -27,7 +27,13 @@ Hooks.on("renderChatMessageHTML", (message, html) => {
 
 Hooks.on("createChatMessage", (message) => {
 	const id = String(message?.id ?? "").trim();
-	if (!id || !pendingReveal.has(id) || revealing.has(id)) return;
+	if (!id || !isWfrpRollMessage(message, null)) return;
+
+	/* Some Foundry creation paths allocate the final message id only after the
+	 * preCreate hook. createChatMessage still fires before the normal chat render,
+	 * so register the id here as a compatibility fallback. */
+	pendingReveal.add(id);
+	if (revealing.has(id)) return;
 	revealing.add(id);
 	queueMicrotask(() => void revealAfterDice(message));
 });
