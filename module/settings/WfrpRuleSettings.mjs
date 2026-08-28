@@ -24,14 +24,20 @@ const AUTOMATIC_SPELL_TOKEN_DISTANCE_SETTING_KEY =
  * localization is ready and before `setup`, when Settings initialization occurs.
  * Keep future localized World/User/Client settings on the same lifecycle.
  *
- * Automatic damage/parry dice are intentionally limited to GM-controlled Actors
- * which have no player OWNER. Player-owned Actors always keep these rolls as an
- * explicit player/GM action so physical dice can be entered before adjudication.
+ * The historical `autoRollDamageForGmActors` World key now defines one common
+ * GM-only automation boundary. For Actors which have no non-GM OWNER it covers
+ * attack damage/parry dice as before and mechanic-triggered dependent Tests such
+ * as Psychology resistance, damage-reduction Tests, Risk and drop checks. Those
+ * dependent Tests must still use their normal ChatMessage workflows so their
+ * values remain auditable and editable. The setting key is intentionally kept
+ * stable so existing Worlds retain their preference after this extension.
+ *
+ * Player-owned Actors always keep these rolls as an explicit player/GM action so
+ * physical dice can be entered before adjudication.
  *
  * Damage automation may be suspended transiently while an already-resolved Test
- * is being adjudicated. This is runtime-only state: it prevents an automatic
- * reroll from racing the reconciliation of the original, already-rolled damage
- * dice and is never persisted as a world/user preference.
+ * is being adjudicated. This runtime-only suspension applies only to combat
+ * damage/parry generation; it must not suppress unrelated dependent Tests.
  */
 export class WfrpRuleSettings {
 	static #damageAutomationSuspensions = new Set();
@@ -151,9 +157,15 @@ export class WfrpRuleSettings {
 		return this.#booleanSetting(WEAPON_MODIFIERS_SETTING_KEY, true);
 	}
 
+	/** Shared World preference for all automatic rolls belonging to GM-only Actors. */
+	static autoRollMechanicTestsForGmActors() {
+		return this.#booleanSetting(GM_DAMAGE_AUTOMATION_SETTING_KEY, true);
+	}
+
+	/** Combat damage keeps its transient reconciliation suspension. */
 	static autoRollDamageForGmActors() {
 		return !this.damageAutomationSuspended() &&
-			this.#booleanSetting(GM_DAMAGE_AUTOMATION_SETTING_KEY, true);
+			this.autoRollMechanicTestsForGmActors();
 	}
 
 	/**
