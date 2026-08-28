@@ -11,21 +11,24 @@ const TEST_RESULT_FLAG = "testResultState";
 let refreshQueued = false;
 
 /**
- * First visible Fire Ball grouping stage.
+ * Visible Fire Ball grouping layer.
  *
  * One lightweight aggregate ChatMessage represents one physical Fire Ball and
  * reads its target/Initiative/Fear/Damage state from the canonical child
- * ChatMessages. It does not own or duplicate any mechanical state. Canonical
- * Test/Damage messages intentionally remain visible during this first stage so
- * Luck, adjudication and damage controls cannot be lost while the grouped UX is
- * runtime-verified.
+ * ChatMessages. It does not own or duplicate any mechanical state.
+ *
+ * Stage 2 removes only the now-redundant per-target Fire Ball impact/source
+ * cards from the top-level chat stream when a Ball aggregate explicitly owns
+ * that impactMessageId. The canonical impact ChatMessage remains in the World
+ * and is still the source of truth. TestResult and dedicated Damage cards remain
+ * visible for now because they still own Luck/adjudication/damage controls.
  */
 export class FireBallBallGroupPresentation {
 	static async create({ castId, castMessageId, caster, spell, ballNumber, impactMessageIds, targets } = {}) {
 		const ids = [...new Set((impactMessageIds ?? []).map((id) => String(id ?? "").trim()).filter(Boolean))];
 		if (!ids.length) return null;
 		const state = {
-			version: 2,
+			version: 3,
 			castId: String(castId ?? ""),
 			castMessageId: String(castMessageId ?? ""),
 			casterUuid: String(caster?.uuid ?? ""),
@@ -49,7 +52,10 @@ export class FireBallBallGroupPresentation {
 }
 
 Hooks.on("renderChatMessageHTML", (message, html) => {
-	requestAnimationFrame(() => decorate(message, html));
+	requestAnimationFrame(() => {
+		decorate(message, html);
+		hideRepresentedImpactMessage(message, html);
+	});
 });
 
 Hooks.on("updateChatMessage", (message) => {
@@ -257,6 +263,35 @@ function testResultSuccess(state) {
 }
 
 function result(text, kind) { return { text, kind }; }
+
+function hideRepresentedImpactMessage(message, html) {
+	if (!message?.getFlag?.(FLAG_SCOPE, IMPACT_FLAG)) return;
+	const id = String(message?.id ?? "").trim();
+	if (!id || !groupOwnsImpact(id)) return;
+
+	const root = asElement(html);
+	if (!(root instanceof HTMLElement)) return;
+	const entry = root.closest?.(".chat-message, li.message, li.chat-message") ??
+		root.parentElement?.closest?.(".chat-message, li.message, li.chat-message") ??
+		root;
+	if (!(entry instanceof HTMLElement)) return;
+
+	entry.hidden = true;
+	entry.style.display = "none";
+	entry.setAttribute("aria-hidden", "true");
+	entry.dataset.wfrpFireBallGroupedImpactHidden = "";
+}
+
+function groupOwnsImpact(impactMessageId) {
+	const id = String(impactMessageId ?? "").trim();
+	if (!id) return false;
+	for (const candidate of game.messages ?? []) {
+		const state = candidate.getFlag?.(FLAG_SCOPE, BALL_GROUP_FLAG);
+		if (!state) continue;
+		if ((state.impactMessageIds ?? []).some((value) => String(value ?? "") === id)) return true;
+	}
+	return false;
+}
 
 function isRelatedCanonicalMessage(message) {
 	if (message?.getFlag?.(FLAG_SCOPE, IMPACT_FLAG)) return true;
