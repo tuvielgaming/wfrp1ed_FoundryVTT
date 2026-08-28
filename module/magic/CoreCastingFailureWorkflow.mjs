@@ -1,26 +1,64 @@
 const FLAG_SCOPE = "wfrp1ed";
 const FLAG_KEY = "coreCastingFailure";
 const activeEdits = new Set();
+const castingAttempts = new WeakMap();
 let installed = false;
+let actorUpdatePatched = false;
 
-/**
- * WFRP 1e Core casting-failure check.
- *
- * Core rule: when Current Magic Points before casting are below 12, roll 2D6.
- * The spell takes effect when the total is <= Current MP. The spell cost is not
- * owned by this workflow: callers still spend it whether this check succeeds or
- * fails, because spell procedures know their actual cost.
- *
- * The result is stored as an ordinary ChatMessage transaction rather than only
- * as an animation. Both d6 values remain editable for later GM adjudication.
- */
+class CastingFailureAbort extends Error {
+	constructor(result) {
+		super("WFRP 1e Core casting failure");
+		this.name = "CastingFailureAbort";
+		this.result = result;
+	}
+}
+
+/** Generic WFRP 1e Core casting-failure workflow. */
 export class CoreCastingFailureWorkflow {
 	static install() {
 		if (installed) return;
 		installed = true;
+		Hooks.once("init", () => patchActorUpdate());
 		Hooks.on("renderChatMessageHTML", (message, html) => {
 			requestAnimationFrame(() => decorate(message, html));
 		});
+	}
+
+	/**
+	 * Run a registered Spell procedure inside the Core casting guard.
+	 * The concrete procedure remains responsible for computing and spending its
+	 * real MP cost; the guard observes that first MP-spending Actor update.
+	 */
+	static async withCastingAttempt(actor, spell, callback) {
+		if (!(actor instanceof foundry.documents.Actor)) {
+			throw new Error("Core casting attempt requires a caster Actor.");
+		}
+		if (typeof callback !== "function") {
+			throw new Error("Core casting attempt requires a procedure callback.");
+		}
+		if (castingAttempts.has(actor)) return callback();
+
+		const attempt = {
+			spell,
+			castId: foundry.utils.randomID(),
+			checked: false,
+			result: null,
+		};
+		castingAttempts.set(actor, attempt);
+		try {
+			return await callback();
+		} catch (error) {
+			if (error instanceof CastingFailureAbort) {
+				return Object.freeze({
+					castingFailed: true,
+					castingFailure: error.result,
+					castId: attempt.castId,
+				});
+			}
+			throw error;
+		} finally {
+			castingAttempts.delete(actor);
+		}
 	}
 
 	static async resolve({ actor, spell, currentMagicPoints, spellCost, castId = "" } = {}) {
@@ -31,13 +69,7 @@ export class CoreCastingFailureWorkflow {
 		const cost = integerAtLeast(spellCost, 0, "Spell cost");
 
 		if (current >= 12) {
-			return Object.freeze({
-				required: false,
-				success: true,
-				total: null,
-				dice: Object.freeze([]),
-				messageId: null,
-			});
+			return Object.freeze({ required: false, success: true, total: null, dice: Object.freeze([]), messageId: null, castId: String(castId ?? "") });
 		}
 
 		const roll = await new Roll("2d6").evaluate({ allowInteractive: false });
@@ -73,17 +105,61 @@ export class CoreCastingFailureWorkflow {
 			total: state.total,
 			dice: Object.freeze([...state.dice]),
 			messageId: String(message?.id ?? ""),
+			castId: String(castId ?? ""),
 		});
 	}
+}
+
+function patchActorUpdate() {
+	if (actorUpdatePatched) return;
+	const ActorClass = foundry.documents.Actor;
+	const original = ActorClass?.prototype?.update;
+	if (typeof original !== "function") {
+		console.error("WFRP1ED | Unable to install Core casting failure Actor update guard.");
+		return;
+	}
+	actorUpdatePatched = true;
+
+	ActorClass.prototype.update = async function wfrp1eCoreCastingGuard(changes = {}, options = {}) {
+		const attempt = castingAttempts.get(this);
+		if (!attempt || attempt.checked) return original.call(this, changes, options);
+
+		const current = Number(this.system?.status?.magicPoints);
+		const next = changedMagicPoints(changes);
+		if (!Number.isInteger(current) || !Number.isInteger(next) || next >= current) {
+			return original.call(this, changes, options);
+		}
+
+		attempt.checked = true;
+		const result = await CoreCastingFailureWorkflow.resolve({
+			actor: this,
+			spell: attempt.spell,
+			currentMagicPoints: current,
+			spellCost: current - next,
+			castId: attempt.castId,
+		});
+		attempt.result = result;
+
+		/* RAW spends MP even on failure. The same procedure update may also mark
+		 * once-per-round use, so commit the complete update before stopping effects. */
+		const updated = await original.call(this, changes, options);
+		if (result.required && !result.success) throw new CastingFailureAbort(result);
+		return updated;
+	};
+}
+
+function changedMagicPoints(changes) {
+	const flat = changes?.["system.status.magicPoints"];
+	if (flat !== undefined) return Number(flat);
+	const nested = changes?.system?.status?.magicPoints;
+	return nested === undefined ? null : Number(nested);
 }
 
 function decorate(message, html) {
 	const state = message?.getFlag?.(FLAG_SCOPE, FLAG_KEY);
 	if (!state) return;
 	const root = asElement(html);
-	const panel = root?.matches?.("[data-wfrp-core-casting-failure]")
-		? root
-		: root?.querySelector?.("[data-wfrp-core-casting-failure]");
+	const panel = root?.matches?.("[data-wfrp-core-casting-failure]") ? root : root?.querySelector?.("[data-wfrp-core-casting-failure]");
 	if (!(panel instanceof HTMLElement)) return;
 	panel.replaceChildren();
 	panel.classList.add("wfrp1e-damage-card");
@@ -91,14 +167,9 @@ function decorate(message, html) {
 	const header = document.createElement("header");
 	header.className = "wfrp1e-damage-card__header";
 	const title = document.createElement("strong");
-	title.textContent = localize(
-		`Casting — ${state.spellName}`,
-		`Rzucanie czaru — ${state.spellName}`,
-	);
+	title.textContent = localize(`Casting — ${state.spellName}`, `Rzucanie czaru — ${state.spellName}`);
 	const outcome = document.createElement("strong");
-	outcome.textContent = state.success
-		? localize("Success", "Sukces")
-		: localize("Failure", "Porażka");
+	outcome.textContent = state.success ? localize("Success", "Sukces") : localize("Failure", "Porażka");
 	outcome.style.whiteSpace = "nowrap";
 	header.append(title, outcome);
 	panel.append(header);
@@ -135,12 +206,8 @@ function decorate(message, html) {
 		input.className = "wfrp1e-damage-roll__total";
 		input.dataset.wfrpCastingDie = String(index);
 		input.readOnly = !editable;
-		input.addEventListener("keydown", (event) => {
-			if (event.key === "Enter") input.blur();
-		});
-		input.addEventListener("change", () => {
-			void adjudicateDie(message, index, input.value).catch(reportError);
-		});
+		input.addEventListener("keydown", (event) => { if (event.key === "Enter") input.blur(); });
+		input.addEventListener("change", () => void adjudicateDie(message, index, input.value).catch(reportError));
 		editor.append(input);
 	}
 	rollRow.append(label, editor);
@@ -150,29 +217,18 @@ function decorate(message, html) {
 	const note = document.createElement("div");
 	note.className = "combat-damage-context__status";
 	note.textContent = state.success
-		? localize(
-			"2D6 is not greater than Current Magic Points — the spell may take effect.",
-			"2K6 nie przekracza Aktualnych Punktów Magii — czar może zadziałać.",
-		)
-		: localize(
-			"2D6 exceeds Current Magic Points — the spell fails, but its Magic Point cost is still spent.",
-			"2K6 przekracza Aktualne Punkty Magii — czar nie działa, ale jego koszt w Punktach Magii nadal zostaje wydany.",
-		);
+		? localize("2D6 is not greater than Current Magic Points — the spell may take effect.", "2K6 nie przekracza Aktualnych Punktów Magii — czar może zadziałać.")
+		: localize("2D6 exceeds Current Magic Points — the spell fails, but its Magic Point cost is still spent.", "2K6 przekracza Aktualne Punkty Magii — czar nie działa, ale jego koszt w Punktach Magii nadal zostaje wydany.");
 	panel.append(note);
 }
 
 async function adjudicateDie(message, index, rawValue) {
-	if (!canEdit(message)) {
-		throw new Error(localize("You may not edit this casting roll.", "Nie możesz zmienić tego rzutu czaru."));
-	}
+	if (!canEdit(message)) throw new Error(localize("You may not edit this casting roll.", "Nie możesz zmienić tego rzutu czaru."));
 	const key = String(message?.id ?? "");
 	if (!key || activeEdits.has(key)) return;
 	const value = Number(rawValue);
 	if (!isD6(value)) {
-		ui.notifications.warn(localize(
-			"Each casting die must be an integer from 1 to 6.",
-			"Każda kość rzutu czaru musi być liczbą całkowitą od 1 do 6.",
-		));
+		ui.notifications.warn(localize("Each casting die must be an integer from 1 to 6.", "Każda kość rzutu czaru musi być liczbą całkowitą od 1 do 6."));
 		void ui.chat?.render?.({ force: true });
 		return;
 	}
@@ -227,46 +283,14 @@ function dieResults(roll) {
 
 async function showRollAnimation(roll) {
 	if (!roll || typeof game.dice3d?.showForRoll !== "function") return;
-	try {
-		await game.dice3d.showForRoll(roll, game.user, true);
-	} catch (_error) {
-		/* Dice animation is presentation-only. */
-	}
+	try { await game.dice3d.showForRoll(roll, game.user, true); } catch (_error) { /* presentation only */ }
 }
 
-function canEdit(message) {
-	return game.user?.isGM === true || message?.isAuthor === true;
-}
-
-function isD6(value) {
-	const number = Number(value);
-	return Number.isInteger(number) && number >= 1 && number <= 6;
-}
-
-function integerAtLeast(value, minimum, label) {
-	const number = Number(value);
-	if (!Number.isInteger(number) || number < minimum) {
-		throw new Error(`${label} must be an integer greater than or equal to ${minimum}.`);
-	}
-	return number;
-}
-
-function asElement(value) {
-	if (value instanceof HTMLElement) return value;
-	if (value?.[0] instanceof HTMLElement) return value[0];
-	return null;
-}
-
-function reportError(error) {
-	console.error("WFRP1ED | Unable to adjudicate Core casting failure roll.", error);
-	ui.notifications.error(error?.message ?? localize(
-		"Unable to change the casting roll.",
-		"Nie udało się zmienić rzutu czaru.",
-	));
-}
-
-function localize(english, polish) {
-	return game.i18n.lang === "pl" ? polish : english;
-}
+function canEdit(message) { return game.user?.isGM === true || message?.isAuthor === true; }
+function isD6(value) { const number = Number(value); return Number.isInteger(number) && number >= 1 && number <= 6; }
+function integerAtLeast(value, minimum, label) { const number = Number(value); if (!Number.isInteger(number) || number < minimum) throw new Error(`${label} must be an integer greater than or equal to ${minimum}.`); return number; }
+function asElement(value) { if (value instanceof HTMLElement) return value; if (value?.[0] instanceof HTMLElement) return value[0]; return null; }
+function reportError(error) { console.error("WFRP1ED | Unable to adjudicate Core casting failure roll.", error); ui.notifications.error(error?.message ?? localize("Unable to change the casting roll.", "Nie udało się zmienić rzutu czaru.")); }
+function localize(english, polish) { return game.i18n.lang === "pl" ? polish : english; }
 
 CoreCastingFailureWorkflow.install();
