@@ -102,7 +102,7 @@ function decorate(message, html) {
 	arrow.textContent = "▾";
 	arrow.setAttribute("aria-hidden", "true");
 	Object.assign(arrow.style, {
-		fontSize: "0.9rem",
+		fontSize: "1.7rem",
 		lineHeight: "1",
 		opacity: "0.75",
 	});

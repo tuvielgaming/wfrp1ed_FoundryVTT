@@ -15,7 +15,7 @@ details.wfrp1e-critical-result > summary::after {
 	content: "▸";
 	flex: 0 0 auto;
 	margin-left: 0.3rem;
-	font-size: 0.72rem;
+	font-size: 1.7rem;
 	line-height: 1;
 	opacity: 0.65;
 }
