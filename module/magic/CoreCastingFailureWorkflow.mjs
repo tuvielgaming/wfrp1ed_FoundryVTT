@@ -24,36 +24,18 @@ export class CoreCastingFailureWorkflow {
 		});
 	}
 
-	/**
-	 * Run a registered Spell procedure inside the Core casting guard.
-	 * The concrete procedure remains responsible for computing and spending its
-	 * real MP cost; the guard observes that first MP-spending Actor update.
-	 */
 	static async withCastingAttempt(actor, spell, callback) {
-		if (!(actor instanceof foundry.documents.Actor)) {
-			throw new Error("Core casting attempt requires a caster Actor.");
-		}
-		if (typeof callback !== "function") {
-			throw new Error("Core casting attempt requires a procedure callback.");
-		}
+		if (!(actor instanceof foundry.documents.Actor)) throw new Error("Core casting attempt requires a caster Actor.");
+		if (typeof callback !== "function") throw new Error("Core casting attempt requires a procedure callback.");
 		if (castingAttempts.has(actor)) return callback();
 
-		const attempt = {
-			spell,
-			castId: foundry.utils.randomID(),
-			checked: false,
-			result: null,
-		};
+		const attempt = { spell, castId: foundry.utils.randomID(), checked: false, result: null };
 		castingAttempts.set(actor, attempt);
 		try {
 			return await callback();
 		} catch (error) {
 			if (error instanceof CastingFailureAbort) {
-				return Object.freeze({
-					castingFailed: true,
-					castingFailure: error.result,
-					castId: attempt.castId,
-				});
+				return Object.freeze({ castingFailed: true, castingFailure: error.result, castId: attempt.castId });
 			}
 			throw error;
 		} finally {
@@ -62,9 +44,7 @@ export class CoreCastingFailureWorkflow {
 	}
 
 	static async resolve({ actor, spell, currentMagicPoints, spellCost, castId = "" } = {}) {
-		if (!(actor instanceof foundry.documents.Actor)) {
-			throw new Error("Core casting failure requires a caster Actor.");
-		}
+		if (!(actor instanceof foundry.documents.Actor)) throw new Error("Core casting failure requires a caster Actor.");
 		const current = integerAtLeast(currentMagicPoints, 0, "Current Magic Points");
 		const cost = integerAtLeast(spellCost, 0, "Spell cost");
 
@@ -77,7 +57,7 @@ export class CoreCastingFailureWorkflow {
 		const dice = dieResults(roll);
 		const total = dice.reduce((sum, value) => sum + value, 0);
 		const state = {
-			version: 1,
+			version: 2,
 			castId: String(castId ?? ""),
 			actorUuid: String(actor.uuid),
 			actorName: String(actor.name ?? ""),
@@ -85,9 +65,11 @@ export class CoreCastingFailureWorkflow {
 			spellName: String(spell?.name ?? localize("Spell", "Czar")),
 			currentMagicPoints: current,
 			spellCost: cost,
+			/* Physical d6 faces are retained for audit/animation only. */
 			dice,
 			originalDice: [...dice],
 			total,
+			originalTotal: total,
 			success: total <= current,
 			createdBy: String(game.user?.id ?? ""),
 			createdAt: Date.now(),
@@ -126,9 +108,7 @@ function patchActorUpdate() {
 
 		const current = Number(this.system?.status?.magicPoints);
 		const next = changedMagicPoints(changes);
-		if (!Number.isInteger(current) || !Number.isInteger(next) || next >= current) {
-			return original.call(this, changes, options);
-		}
+		if (!Number.isInteger(current) || !Number.isInteger(next) || next >= current) return original.call(this, changes, options);
 
 		attempt.checked = true;
 		const result = await CoreCastingFailureWorkflow.resolve({
@@ -140,8 +120,6 @@ function patchActorUpdate() {
 		});
 		attempt.result = result;
 
-		/* RAW spends MP even on failure. The same procedure update may also mark
-		 * once-per-round use, so commit the complete update before stopping effects. */
 		const updated = await original.call(this, changes, options);
 		if (result.required && !result.success) throw new CastingFailureAbort(result);
 		return updated;
@@ -184,35 +162,36 @@ function decorate(message, html) {
 	const editor = document.createElement("span");
 	editor.className = "wfrp1e-damage-roll";
 	const editable = canEdit(message);
+	const faces = Array.isArray(state.dice) && state.dice.length === 2 ? state.dice : [1, 1];
 
-	for (let index = 0; index < 2; index += 1) {
-		if (index > 0) {
-			const plus = document.createElement("span");
-			plus.className = "wfrp1e-damage-roll__operator";
-			plus.textContent = "+";
-			editor.append(plus);
-		}
-		editor.append(d6Badge(state.dice[index]));
-		const equals = document.createElement("span");
-		equals.className = "wfrp1e-damage-roll__operator";
-		equals.textContent = "=";
-		editor.append(equals);
-		const input = document.createElement("input");
-		input.type = "number";
-		input.min = "1";
-		input.max = "6";
-		input.step = "1";
-		input.value = String(state.dice[index]);
-		input.className = "wfrp1e-damage-roll__total";
-		input.dataset.wfrpCastingDie = String(index);
-		input.readOnly = !editable;
-		input.addEventListener("keydown", (event) => { if (event.key === "Enter") input.blur(); });
-		input.addEventListener("change", () => void adjudicateDie(message, index, input.value).catch(reportError));
-		editor.append(input);
-	}
+	editor.append(d6Badge(faces[0]), d6Badge(faces[1]));
+	const equals = document.createElement("span");
+	equals.className = "wfrp1e-damage-roll__operator";
+	equals.textContent = "=";
+	editor.append(equals);
+
+	const input = document.createElement("input");
+	input.type = "number";
+	input.min = "2";
+	input.max = "12";
+	input.step = "1";
+	input.value = String(state.total);
+	input.className = "wfrp1e-damage-roll__total";
+	input.dataset.wfrpCastingTotal = "";
+	input.readOnly = !editable;
+	input.addEventListener("keydown", (event) => { if (event.key === "Enter") input.blur(); });
+	input.addEventListener("change", () => void adjudicateTotal(message, input.value).catch(reportError));
+	editor.append(input);
+
+	const versus = document.createElement("span");
+	versus.className = "wfrp1e-damage-roll__operator";
+	versus.textContent = "vs";
+	const target = document.createElement("strong");
+	target.textContent = String(state.currentMagicPoints);
+	editor.append(versus, target);
+
 	rollRow.append(label, editor);
 	panel.append(rollRow);
-	panel.append(row(localize("Total", "Suma"), `${state.total} / ${state.currentMagicPoints}`));
 
 	const note = document.createElement("div");
 	note.className = "combat-damage-context__status";
@@ -222,13 +201,13 @@ function decorate(message, html) {
 	panel.append(note);
 }
 
-async function adjudicateDie(message, index, rawValue) {
+async function adjudicateTotal(message, rawValue) {
 	if (!canEdit(message)) throw new Error(localize("You may not edit this casting roll.", "Nie możesz zmienić tego rzutu czaru."));
 	const key = String(message?.id ?? "");
 	if (!key || activeEdits.has(key)) return;
 	const value = Number(rawValue);
-	if (!isD6(value)) {
-		ui.notifications.warn(localize("Each casting die must be an integer from 1 to 6.", "Każda kość rzutu czaru musi być liczbą całkowitą od 1 do 6."));
+	if (!Number.isInteger(value) || value < 2 || value > 12) {
+		ui.notifications.warn(localize("The 2D6 casting total must be an integer from 2 to 12.", "Suma rzutu 2K6 musi być liczbą całkowitą od 2 do 12."));
 		void ui.chat?.render?.({ force: true });
 		return;
 	}
@@ -236,14 +215,15 @@ async function adjudicateDie(message, index, rawValue) {
 	activeEdits.add(key);
 	try {
 		const current = foundry.utils.deepClone(message.getFlag?.(FLAG_SCOPE, FLAG_KEY) ?? {});
-		const dice = Array.isArray(current.dice) ? [...current.dice] : [];
-		while (dice.length < 2) dice.push(1);
-		dice[index] = value;
-		const total = dice.reduce((sum, die) => sum + Number(die), 0);
-		current.dice = dice;
-		current.total = total;
-		current.success = total <= Number(current.currentMagicPoints);
-		current.adjudicated = dice.some((die, dieIndex) => Number(die) !== Number(current.originalDice?.[dieIndex]));
+		const originalTotal = Number.isInteger(Number(current.originalTotal))
+			? Number(current.originalTotal)
+			: Array.isArray(current.originalDice)
+				? current.originalDice.reduce((sum, die) => sum + Number(die), 0)
+				: Number(current.total);
+		current.total = value;
+		current.success = value <= Number(current.currentMagicPoints);
+		current.originalTotal = originalTotal;
+		current.adjudicated = value !== originalTotal;
 		current.adjudicatedBy = current.adjudicated ? String(game.user?.id ?? "") : null;
 		current.adjudicatedAt = current.adjudicated ? Date.now() : null;
 		current.updatedAt = Date.now();
