@@ -80,11 +80,11 @@ function synchronizeDedicatedDamagePresentation(card, rollState, damageState) {
 		damageInput.value = String(nonNegativeInteger(rollState?.diceTotal));
 	}
 
-	/* Unified roll notation:
-	 * - an input constrained to the physical die uses [current face] = input;
-	 * - a total which may legally exceed the die uses [maximum face] → input.
-	 * Ordinary melee damage is a d6, while the editable summed damage value is
-	 * intentionally unbounded because Additional Damage can raise the total. */
+	/* Unified roll notation uses the value that is actually being adjudicated:
+	 * - while the current value fits on the physical d6, show that face = input;
+	 * - only an adjudicated total above d6 maximum shows [6] → input.
+	 * This keeps a normal roll such as 4 visually honest even though the editor
+	 * may also accept exploding Additional Damage totals above six. */
 	const dice = Array.isArray(rollState?.damageDice) ? rollState.damageDice : [];
 	if (dice.length === 1 && damageInput instanceof HTMLInputElement) {
 		const badge = card.querySelector(
@@ -94,10 +94,10 @@ function synchronizeDedicatedDamagePresentation(card, rollState, damageState) {
 			".wfrp1e-damage-card__roll-row .wfrp1e-damage-roll__operator",
 		);
 		if (badge instanceof HTMLElement) {
-			const maximum = finiteInputMaximum(damageInput);
-			const canExceedDie = maximum === null || maximum > 6;
-			updateD6Badge(badge, canExceedDie ? 6 : Number(damageInput.value));
-			if (operator) operator.textContent = canExceedDie ? "→" : "=";
+			const current = Number(damageInput.value);
+			const exceedsD6 = Number.isFinite(current) && current > 6;
+			updateD6Badge(badge, exceedsD6 ? 6 : current);
+			if (operator) operator.textContent = exceedsD6 ? "→" : "=";
 		}
 	}
 }
@@ -178,14 +178,12 @@ function decorateDedicatedParryDie(card, sourceMessage, rollState) {
 	editor.append(badgeHost, equals, input);
 	valueHost.append(editor);
 
-	/* Put the reduction where it is mechanically applied, immediately before the
-	 * post-parry "Before Toughness" subtotal. */
-	const beforeToughnessRow = findRow(
-		card,
-		localize("Before Toughness", "Przed Wytrzymałością"),
-	);
-	if (beforeToughnessRow && row !== beforeToughnessRow.previousElementSibling) {
-		beforeToughnessRow.before(row);
+	/* Presentation stays compact: Parry belongs directly below the primary Damage
+	 * roll. Its mechanics still reduce the amount before Toughness and Armour;
+	 * only the visual row position is restored here. */
+	const damageRollRow = card.querySelector(":scope > .wfrp1e-damage-card__roll-row");
+	if (damageRollRow && row !== damageRollRow.nextElementSibling) {
+		damageRollRow.after(row);
 	}
 }
 
@@ -261,13 +259,6 @@ function updateD6Badge(badge, value) {
 	badge.classList.add(`fa-dice-${names[number - 1]}`);
 	badge.title = `d6: ${number}`;
 	badge.setAttribute("aria-label", `d6: ${number}`);
-}
-
-function finiteInputMaximum(input) {
-	const raw = String(input?.max ?? "").trim();
-	if (!raw) return null;
-	const number = Number(raw);
-	return Number.isFinite(number) ? number : null;
 }
 
 function reportCommitError(error) {
