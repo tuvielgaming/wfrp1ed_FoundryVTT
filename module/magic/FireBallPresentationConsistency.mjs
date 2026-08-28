@@ -1,3 +1,4 @@
+import { ActorRollPolicy } from "../core/ActorRollPolicy.mjs";
 import { TestResultChat } from "../tests/TestResultChat.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
@@ -9,6 +10,7 @@ const INLINE_TEST_FLAG_KEY = "fireBallInlineTest";
 
 let installed = false;
 let refreshQueued = false;
+const fearSyncing = new Set();
 
 /**
  * Presentation-only reconciliation for Fire Ball's linked TestResult cards.
@@ -34,15 +36,21 @@ export function installFireBallPresentationConsistency() {
 		}));
 	});
 
-	/* Fear is resolved by updating its ActorTestRequest after the TestResult card
-	 * is created. Initiative stores its own linked Test flag. Refresh on either
-	 * transition so one completed related Test updates the source card
-	 * immediately; it must never wait for the other Test to finish. */
+	/* A generic chat rerender proved too weak for Fear because the request result
+	 * id and the Fire Ball source card are separate Documents. On the primary GM,
+	 * persist the resolved Fear link/outcome onto every matching impact message.
+	 * Updating the impact Document itself gives Foundry a concrete source-card
+	 * update, so Fear can finish while Initiative is still pending. */
 	Hooks.on("updateChatMessage", (message, changes) => {
-		if (fireBallRequestChanged(message, changes) ||
-			fireBallLinkedTestChanged(message, changes)) {
-			requestChatRefresh();
+		const requestChanged = fireBallRequestChanged(message, changes);
+		const linkedChanged = fireBallLinkedTestChanged(message, changes);
+		if (requestChanged) {
+			void synchronizeFearRequestToImpacts(message).catch(reportFearSyncError);
 		}
+		if (linkedChanged && isFireBallFearResult(message)) {
+			void synchronizeFearResultToImpacts(message).catch(reportFearSyncError);
+		}
+		if (requestChanged || linkedChanged) requestChatRefresh();
 	});
 	Hooks.on("createChatMessage", (message) => {
 		if (isFireBallFearResult(message) ||
@@ -91,14 +99,12 @@ function summarizeImpactRelatedTests(message, html) {
 	}
 
 	const fearRow = panel.querySelector(":scope > [data-fire-ball-fear-test-row]");
-	const fearMessage = fearResultMessage(impact);
-	const fearState = fearMessage?.getFlag?.(FLAG_SCOPE, TEST_FLAG_KEY);
-	if (fearRow instanceof HTMLElement && fearState) {
-		const result = TestResultChat._templateContext(fearState).result;
+	const fear = currentFearOutcome(impact);
+	if (fearRow instanceof HTMLElement && fear.resolved) {
 		replaceWithOutcomeSummary(
 			fearRow,
 			localize("Fear Test", "Test Strachu"),
-			result?.success === true,
+			fear.success,
 		);
 	}
 }
@@ -109,6 +115,21 @@ function currentInitiativeSuccess(impact) {
 	const state = testMessage?.getFlag?.(FLAG_SCOPE, TEST_FLAG_KEY);
 	if (state) return TestResultChat._templateContext(state).result?.success === true;
 	return impact?.initiative?.success === true;
+}
+
+function currentFearOutcome(impact) {
+	const fearMessage = fearResultMessage(impact);
+	const state = fearMessage?.getFlag?.(FLAG_SCOPE, TEST_FLAG_KEY);
+	if (state) {
+		return {
+			resolved: true,
+			success: TestResultChat._templateContext(state).result?.success === true,
+		};
+	}
+	if (typeof impact?.fearSuccess === "boolean") {
+		return { resolved: true, success: impact.fearSuccess === true };
+	}
+	return { resolved: false, success: false };
 }
 
 function replaceWithOutcomeSummary(row, labelText, success) {
@@ -177,19 +198,87 @@ function synchronizeDamageDie(card, kind, faces, value) {
 		die.setAttribute("aria-label", `d${faces}: ${number}`);
 	}
 	const operator = roll?.querySelector?.(".wfrp1e-damage-roll__operator");
-	if (operator) operator.textContent = inputAllowsAboveFaces(input, faces) ? "→" : "=";
-	if (die instanceof HTMLElement && inputAllowsAboveFaces(input, faces)) {
-		die.textContent = String(faces);
-		die.title = `d${faces}: ${faces}`;
-		die.setAttribute("aria-label", `d${faces}: ${faces}`);
+	if (operator) operator.textContent = "=";
+}
+
+async function synchronizeFearRequestToImpacts(requestMessage) {
+	if (!ActorRollPolicy.isPrimaryActiveGM()) return;
+	const request = requestMessage?.getFlag?.(FLAG_SCOPE, ACTOR_TEST_FLAG_KEY);
+	if (request?.source?.kind !== "spell-fire-ball" || request?.status !== "resolved") return;
+	const resultId = String(request?.resultMessageId ?? "").trim();
+	if (!resultId) return;
+	const resultMessage = game.messages?.get(resultId) ?? null;
+	const testState = resultMessage?.getFlag?.(FLAG_SCOPE, TEST_FLAG_KEY);
+	const success = testState
+		? TestResultChat._templateContext(testState).result?.success === true
+		: null;
+
+	for (const sourceMessage of matchingFearImpacts(requestMessage, request)) {
+		await persistFearSnapshot(sourceMessage, requestMessage.id, resultId, success, request.resolvedAt);
 	}
 }
 
-function inputAllowsAboveFaces(input, faces) {
-	const raw = String(input?.max ?? "").trim();
-	if (!raw) return true;
-	const maximum = Number(raw);
-	return Number.isFinite(maximum) && maximum > Number(faces);
+async function synchronizeFearResultToImpacts(resultMessage) {
+	if (!ActorRollPolicy.isPrimaryActiveGM()) return;
+	const testState = resultMessage?.getFlag?.(FLAG_SCOPE, TEST_FLAG_KEY);
+	if (!testState) return;
+	const success = TestResultChat._templateContext(testState).result?.success === true;
+	const resultId = String(resultMessage.id ?? "");
+	if (!resultId) return;
+
+	for (const sourceMessage of game.messages ?? []) {
+		const impact = sourceMessage.getFlag?.(FLAG_SCOPE, IMPACT_FLAG_KEY);
+		if (!impact?.fearOfFire) continue;
+		if (String(fearResultMessage(impact)?.id ?? impact?.fearResultMessageId ?? "") !== resultId) continue;
+		const request = fearRequestMessage(impact);
+		await persistFearSnapshot(
+			sourceMessage,
+			String(request?.id ?? impact?.fearRequestMessageId ?? ""),
+			resultId,
+			success,
+			request?.getFlag?.(FLAG_SCOPE, ACTOR_TEST_FLAG_KEY)?.resolvedAt,
+		);
+	}
+}
+
+async function persistFearSnapshot(sourceMessage, requestId, resultId, success, resolvedAt) {
+	const key = String(sourceMessage?.id ?? "");
+	if (!key || fearSyncing.has(key)) return;
+	const impact = sourceMessage?.getFlag?.(FLAG_SCOPE, IMPACT_FLAG_KEY);
+	if (!impact) return;
+	if (
+		String(impact.fearRequestMessageId ?? "") === String(requestId ?? "") &&
+		String(impact.fearResultMessageId ?? "") === String(resultId ?? "") &&
+		(typeof success !== "boolean" || impact.fearSuccess === success)
+	) return;
+
+	fearSyncing.add(key);
+	try {
+		const updated = foundry.utils.deepClone(impact);
+		if (requestId) updated.fearRequestMessageId = String(requestId);
+		updated.fearResultMessageId = String(resultId);
+		if (typeof success === "boolean") updated.fearSuccess = success;
+		updated.fearResolvedAt = Number(resolvedAt) || Date.now();
+		updated.updatedAt = Date.now();
+		await sourceMessage.setFlag(FLAG_SCOPE, IMPACT_FLAG_KEY, updated);
+	} finally {
+		fearSyncing.delete(key);
+	}
+}
+
+function matchingFearImpacts(requestMessage, request) {
+	const requestId = String(requestMessage?.id ?? "");
+	const spellUuid = String(request?.source?.spellUuid ?? "");
+	const castId = String(request?.source?.castId ?? "");
+	const actorUuid = String(request?.actorUuid ?? request?.source?.targetUuid ?? "");
+	return [...(game.messages ?? [])].filter((message) => {
+		const impact = message.getFlag?.(FLAG_SCOPE, IMPACT_FLAG_KEY);
+		if (!impact?.fearOfFire) return false;
+		if (String(impact.fearRequestMessageId ?? "") === requestId) return true;
+		if (actorUuid && String(impact.targetUuid ?? "") !== actorUuid) return false;
+		if (castId && String(impact.castId ?? "") === castId) return true;
+		return Boolean(spellUuid && String(impact.spellUuid ?? "") === spellUuid);
+	});
 }
 
 function fireBallRequestChanged(message, changes) {
@@ -226,12 +315,14 @@ function isFireBallFearResult(message) {
 	for (const source of game.messages ?? []) {
 		const impact = source.getFlag?.(FLAG_SCOPE, IMPACT_FLAG_KEY);
 		if (!impact) continue;
-		if (String(fearResultMessage(impact)?.id ?? "") === id) return true;
+		if (String(fearResultMessage(impact)?.id ?? impact?.fearResultMessageId ?? "") === id) return true;
 	}
 	return false;
 }
 
 function fearResultMessage(impact) {
+	const directId = String(impact?.fearResultMessageId ?? "").trim();
+	if (directId) return game.messages?.get(directId) ?? null;
 	const request = fearRequestMessage(impact);
 	const state = request?.getFlag?.(FLAG_SCOPE, ACTOR_TEST_FLAG_KEY);
 	const id = String(state?.resultMessageId ?? "").trim();
@@ -250,6 +341,10 @@ function fearRequestMessage(impact) {
 		) return message;
 	}
 	return null;
+}
+
+function reportFearSyncError(error) {
+	console.error("WFRP1ED | Unable to synchronize Fire Ball Fear result.", error);
 }
 
 function asElement(value) {
