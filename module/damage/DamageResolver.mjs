@@ -14,15 +14,13 @@ const ARMOUR_PENETRATION_SPECIAL_KEY = "armourPenetration";
  * breakdown, so applying the result later never re-reads live Actor/equipment
  * state.
  *
- * Core order (Combat, pp. 118, 121-122):
- *   generated damage -> Toughness -> armour at hit location -> successful
- *   Parry reduction -> unmitigated additions declared by the source -> Wounds.
+ * Combat damage order used by this system:
+ *   generated damage -> successful Parry reduction -> Toughness -> armour at
+ *   hit location -> unmitigated additions declared by the source -> Wounds.
  *
- * The successful Parry step is represented as a registered special mitigation
- * because the Core parry rule stops 1d6 of the damage caused by the blow after
- * the ordinary damage calculation. This distinction matters for Leather's 0/1
- * protection rule: Leather decides whether it protects against the blow before
- * the later Parry reduction is applied.
+ * Parry therefore changes the amount which reaches the ordinary defensive
+ * reductions. The `toughness.before` snapshot is the authoritative
+ * "Before Toughness" value presented in chat.
  *
  * Leather is the Core 0/1 exception: it reduces a blow by 1 only when the
  * post-Toughness, pre-armour damage is 1-3. A blow causing 4+ ignores leather.
@@ -45,6 +43,9 @@ export class DamageResolver {
 		);
 
 		let remaining = normalized.rawAmount;
+		const parry = resolveParry(special.parry, remaining);
+		remaining = parry.after;
+
 		const toughness = resolveToughness(
 			normalized.mitigation.toughness,
 			snapshots.toughness,
@@ -59,9 +60,6 @@ export class DamageResolver {
 			special.armourPenetration,
 		);
 		remaining = armour.after;
-
-		const parry = resolveParry(special.parry, remaining);
-		remaining = parry.after;
 
 		const unmitigated = resolveUnmitigated(
 			normalized.unmitigatedAmount,
