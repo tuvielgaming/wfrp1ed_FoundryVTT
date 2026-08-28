@@ -122,6 +122,7 @@
 		"module/movement/DrowningLifecycleIntegration.mjs",
 		"module/movement/DrowningRiskEditLockIntegration.mjs",
 		"module/movement/ClimbingConsequenceIntegration.mjs",
+		"module/tests/MechanicTriggeredGmRollAutomation.mjs",
 		"module/movement/ClimbingSkillIntegration.mjs",
 		"module/movement/MovementGMGameplayNoticeIntegration.mjs",
 		"module/combat/CombatTransactionEditLock.mjs",
