@@ -79,18 +79,26 @@ function buildRollInitiativeButton(record) {
 }
 
 async function invokeCanonicalInitiativeRoll(record) {
-	const messageId = String(record?.message?.id ?? "").trim();
+	const message = record?.message;
+	const messageId = String(message?.id ?? "").trim();
 	if (!messageId) throw new Error(localize(
 		"The Fire Ball impact is unavailable.",
 		"Trafienie Ognistej Kuli jest niedostępne.",
 	));
 
+	/* Prefer the already-rendered canonical control. Grouped impact messages are
+	 * intentionally hidden, though, and Foundry may omit a hidden message from
+	 * the currently materialised ChatLog DOM. A full ChatLog render therefore is
+	 * not a reliable way to recover this control.
+	 *
+	 * If the live control is absent, render the canonical impact message into a
+	 * detached DOM host by replaying the normal renderChatMessageHTML hook. This
+	 * lets FireBallImpactWorkflow attach its real requestAction listener, so this
+	 * grouped button still delegates to exactly the same permission/socket/Test
+	 * pipeline without duplicating Initiative logic. */
 	let control = canonicalInitiativeControl(messageId);
 	if (!(control instanceof HTMLButtonElement)) {
-		await ui.chat?.render?.({ force: true });
-		await nextAnimationFrame();
-		await nextAnimationFrame();
-		control = canonicalInitiativeControl(messageId);
+		control = await detachedCanonicalInitiativeControl(message);
 	}
 
 	if (!(control instanceof HTMLButtonElement)) {
@@ -112,6 +120,24 @@ function canonicalInitiativeControl(messageId) {
 	const entry = document.querySelector(`[data-message-id="${cssEscape(messageId)}"]`);
 	if (!(entry instanceof HTMLElement)) return null;
 	const panel = entry.querySelector("[data-wfrp-fireball-impact-workflow]");
+	if (!(panel instanceof HTMLElement)) return null;
+	return [...panel.querySelectorAll("button.combat-damage-roll-button")]
+		.find((button) => /initiative|inicjatyw/i.test(String(button.textContent ?? ""))) ?? null;
+}
+
+async function detachedCanonicalInitiativeControl(message) {
+	if (!message) return null;
+	const host = document.createElement("div");
+	host.innerHTML = String(message.content ?? "");
+	if (!host.querySelector("[data-wfrp-fireball-impact-workflow]")) {
+		host.innerHTML = '<section class="wfrp1ed wfrp-fireball-impact-workflow" data-wfrp-fireball-impact-workflow></section>';
+	}
+
+	Hooks.callAll("renderChatMessageHTML", message, host);
+	await nextAnimationFrame();
+	await nextAnimationFrame();
+
+	const panel = host.querySelector("[data-wfrp-fireball-impact-workflow]");
 	if (!(panel instanceof HTMLElement)) return null;
 	return [...panel.querySelectorAll("button.combat-damage-roll-button")]
 		.find((button) => /initiative|inicjatyw/i.test(String(button.textContent ?? ""))) ?? null;
