@@ -7,16 +7,13 @@ import {
 	DamagePacket,
 } from "../damage/DamagePacket.mjs";
 import { DamageResolver } from "../damage/DamageResolver.mjs";
-import { RuleEffectRollSelection } from "../effects/RuleEffectRollSelection.mjs";
 import { ActorTestRequestWorkflow } from "../tests/ActorTestRequestWorkflow.mjs";
-import { TestContext } from "../tests/TestContext.mjs";
-import { TestDialog } from "../tests/TestDialog.mjs";
-import { TestManager } from "../tests/TestManager.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
 const IMPACT_FLAG_KEY = "fireBallImpactWorkflow";
 const DAMAGE_FLAG_KEY = "damageState";
 const ACTOR_TEST_FLAG_KEY = "actorTestRequest";
+const INLINE_TEST_FLAG_KEY = "fireBallInlineTest";
 const SOCKET_CHANNEL = "system.wfrp1ed";
 const REQUEST_TYPE = "fire-ball-impact-action-request";
 const RESPONSE_TYPE = "fire-ball-impact-action-response";
@@ -30,10 +27,11 @@ let installed = false;
 /**
  * One Fire Ball hit, owned from Initiative through the shared Damage pipeline.
  *
- * The Initiative Test is resolved through the canonical Test engine, but its
- * d100 and final target are stored on this impact card instead of publishing a
- * second Test ChatMessage. This keeps the complete saving-throw/damage
- * transaction readable in one place while retaining normal Test hooks/effects.
+ * Related resistance Tests are normal actor Test rolls with their own
+ * ChatMessages. This keeps Luck, later GM edits and the ordinary Test audit
+ * available even when the world setting automatically resolves GM-only actors.
+ * The impact transaction stores only the linked result snapshot it needs for
+ * the spell calculation.
  */
 export class FireBallImpactWorkflow {
 	static install() {
@@ -470,9 +468,19 @@ async function resolveAsAuthority(message, action, requestingUser, extra = {}) {
 	try {
 		if (action === "initiative") {
 			if (state.status !== "awaiting-initiative") return state;
-			const result = await rollInitiativeWithoutChat(target);
-			await showRollAnimation(result.rollObject, requestingUser);
-			state.initiative = initiativeSnapshot(result);
+			const result = await target.rollTest("i", { modifier: 0 });
+			if (!result?.chatMessage) {
+				throw new Error("Initiative Test did not produce a ChatMessage.");
+			}
+			await result.chatMessage.setFlag(FLAG_SCOPE, INLINE_TEST_FLAG_KEY, {
+				version: 1,
+				role: "initiative",
+				sourceImpactMessageId: String(message.id),
+			});
+			state.initiative = {
+				...initiativeSnapshot(result),
+				testMessageId: String(result.chatMessage.id),
+			};
 			state.status = "awaiting-damage";
 			state.updatedBy = String(requestingUser?.id ?? "");
 			state.updatedAt = Date.now();
@@ -508,13 +516,16 @@ async function resolveAsAuthority(message, action, requestingUser, extra = {}) {
 
 		if (action === "damage") {
 			if (state.status !== "awaiting-damage") return state;
-			const d10 = await new Roll("1d10").evaluate({ allowInteractive: false });
-			await showRollAnimation(d10, requestingUser);
-			let d8 = null;
-			if (state.flammable) {
-				d8 = await new Roll("1d8").evaluate({ allowInteractive: false });
-				await showRollAnimation(d8, requestingUser);
-			}
+			const [d10, d8] = await Promise.all([
+				new Roll("1d10").evaluate({ allowInteractive: false }),
+				state.flammable
+					? new Roll("1d8").evaluate({ allowInteractive: false })
+					: Promise.resolve(null),
+			]);
+			await Promise.all([
+				showRollAnimation(d10, requestingUser),
+				d8 ? showRollAnimation(d8, requestingUser) : Promise.resolve(),
+			]);
 			return finalizeDamage(message, state, target, caster, {
 				damageRoll: boundedInteger(d10.total, 1, 10, "Fire Ball d10"),
 				flammableRoll: d8 ? boundedInteger(d8.total, 1, 8, "Flammable d8") : 0,
@@ -575,15 +586,6 @@ async function resolveAsAuthority(message, action, requestingUser, extra = {}) {
 	} finally {
 		activeActions.delete(key);
 	}
-}
-
-async function rollInitiativeWithoutChat(actor) {
-	const test = TestManager.get("i");
-	if (!test) throw new Error("Initiative Test is not registered.");
-	const context = new TestContext(actor, test, { modifier: 0, ruleEffects: [] });
-	TestDialog.applyModifier(context, 0);
-	RuleEffectRollSelection.applyToTestContext(context);
-	return test.roll(context);
 }
 
 function initiativeSnapshot(result) {
