@@ -4,11 +4,13 @@ import {
 	SpellData,
 } from "../data-models/item/SpellData.mjs";
 import { SpellItemSheet } from "../sheets/SpellItemSheet.mjs";
+import "../chat/DiceFirstChatReveal.mjs";
 import "../tests/TestResultOwnerAdjudicationIntegration.mjs";
 import "./CoreCastingFailureWorkflow.mjs";
 import "./SpellCastLinkage.mjs";
 import "./FireBallBallGroupPresentation.mjs";
 import "./FireBallBallGroupAutoCreate.mjs";
+import "./FireBallBallGroupDisclosureIndicator.mjs";
 import "./FireBallCriticalFallback.mjs";
 import "./FireBallDamageLabels.mjs";
 import { installFireBallGroupHitDiceAnimation } from "./FireBallGroupHitDiceAnimation.mjs";
