@@ -2,6 +2,7 @@ const FLAG_SCOPE = "wfrp1ed";
 const FLAG_KEY = "coreCastingFailure";
 const activeEdits = new Set();
 const castingAttempts = new WeakMap();
+const activeAttemptsById = new Map();
 let installed = false;
 let actorUpdatePatched = false;
 
@@ -29,10 +30,28 @@ export class CoreCastingFailureWorkflow {
 		if (typeof callback !== "function") throw new Error("Core casting attempt requires a procedure callback.");
 		if (castingAttempts.has(actor)) return callback();
 
-		const attempt = { spell, castId: foundry.utils.randomID(), checked: false, result: null };
+		const attempt = {
+			spell,
+			actorUuid: String(actor.uuid ?? ""),
+			spellUuid: String(spell?.uuid ?? ""),
+			castId: foundry.utils.randomID(),
+			checked: false,
+			result: null,
+			castingFailureMessageId: null,
+			links: {
+				castSummaryMessageId: null,
+				impactMessageIds: [],
+				fearRequestMessageIds: [],
+			},
+		};
 		castingAttempts.set(actor, attempt);
+		activeAttemptsById.set(attempt.castId, attempt);
 		try {
-			return await callback();
+			return await callback(Object.freeze({
+				castId: attempt.castId,
+				actorUuid: attempt.actorUuid,
+				spellUuid: attempt.spellUuid,
+			}));
 		} catch (error) {
 			if (error instanceof CastingFailureAbort) {
 				return Object.freeze({ castingFailed: true, castingFailure: error.result, castId: attempt.castId });
@@ -40,7 +59,56 @@ export class CoreCastingFailureWorkflow {
 			throw error;
 		} finally {
 			castingAttempts.delete(actor);
+			activeAttemptsById.delete(attempt.castId);
 		}
+	}
+
+	/**
+	 * Resolve the currently executing spell transaction without inferring
+	 * relationships from chat ordering. Embedded Spell UUIDs are Actor-specific,
+	 * so spellUuid is sufficient for target-owned dependent messages such as Fear.
+	 */
+	static activeContext({ actorUuid = "", spellUuid = "" } = {}) {
+		const actorId = String(actorUuid ?? "").trim();
+		const spellId = String(spellUuid ?? "").trim();
+		for (const attempt of activeAttemptsById.values()) {
+			if (actorId && attempt.actorUuid !== actorId) continue;
+			if (spellId && attempt.spellUuid !== spellId) continue;
+			return Object.freeze({
+				castId: attempt.castId,
+				actorUuid: attempt.actorUuid,
+				spellUuid: attempt.spellUuid,
+				castSummaryMessageId: attempt.links.castSummaryMessageId,
+			});
+		}
+		return null;
+	}
+
+	/** Persist explicit links on the casting Test when such a Test exists. */
+	static async registerLinkedMessage(castId, kind, messageId) {
+		const id = String(castId ?? "").trim();
+		const linkedId = String(messageId ?? "").trim();
+		const attempt = activeAttemptsById.get(id);
+		if (!attempt || !linkedId) return;
+
+		if (kind === "cast-summary") {
+			attempt.links.castSummaryMessageId = linkedId;
+		} else if (kind === "impact") {
+			pushUnique(attempt.links.impactMessageIds, linkedId);
+		} else if (kind === "fear-request") {
+			pushUnique(attempt.links.fearRequestMessageIds, linkedId);
+		} else {
+			return;
+		}
+
+		const castingMessage = attempt.castingFailureMessageId
+			? game.messages?.get(attempt.castingFailureMessageId) ?? null
+			: null;
+		if (!castingMessage) return;
+		const state = foundry.utils.deepClone(castingMessage.getFlag?.(FLAG_SCOPE, FLAG_KEY) ?? {});
+		state.links = foundry.utils.deepClone(attempt.links);
+		state.updatedAt = Date.now();
+		await castingMessage.setFlag(FLAG_SCOPE, FLAG_KEY, state);
 	}
 
 	static async resolve({ actor, spell, currentMagicPoints, spellCost, castId = "" } = {}) {
@@ -56,8 +124,9 @@ export class CoreCastingFailureWorkflow {
 		await showRollAnimation(roll);
 		const dice = dieResults(roll);
 		const total = dice.reduce((sum, value) => sum + value, 0);
+		const attempt = activeAttemptsById.get(String(castId ?? ""));
 		const state = {
-			version: 2,
+			version: 3,
 			castId: String(castId ?? ""),
 			actorUuid: String(actor.uuid),
 			actorName: String(actor.name ?? ""),
@@ -71,6 +140,11 @@ export class CoreCastingFailureWorkflow {
 			total,
 			originalTotal: total,
 			success: total <= current,
+			links: foundry.utils.deepClone(attempt?.links ?? {
+				castSummaryMessageId: null,
+				impactMessageIds: [],
+				fearRequestMessageIds: [],
+			}),
 			createdBy: String(game.user?.id ?? ""),
 			createdAt: Date.now(),
 		};
@@ -80,6 +154,7 @@ export class CoreCastingFailureWorkflow {
 			content: '<section class="wfrp1ed wfrp-core-casting-failure" data-wfrp-core-casting-failure></section>',
 			flags: { [FLAG_SCOPE]: { [FLAG_KEY]: state } },
 		});
+		if (attempt && message?.id) attempt.castingFailureMessageId = String(message.id);
 
 		return Object.freeze({
 			required: true,
@@ -264,6 +339,10 @@ function dieResults(roll) {
 async function showRollAnimation(roll) {
 	if (!roll || typeof game.dice3d?.showForRoll !== "function") return;
 	try { await game.dice3d.showForRoll(roll, game.user, true); } catch (_error) { /* presentation only */ }
+}
+
+function pushUnique(array, value) {
+	if (!array.includes(value)) array.push(value);
 }
 
 function canEdit(message) { return game.user?.isGM === true || message?.isAuthor === true; }
