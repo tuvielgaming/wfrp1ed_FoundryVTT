@@ -274,7 +274,8 @@ function matchingFearImpacts(requestMessage, request) {
 	return [...(game.messages ?? [])].filter((message) => {
 		const impact = message.getFlag?.(FLAG_SCOPE, IMPACT_FLAG_KEY);
 		if (!impact?.fearOfFire) return false;
-		if (String(impact.fearRequestMessageId ?? "") === requestId) return true;
+		const linkedRequestId = String(impact.fearRequestMessageId ?? "").trim();
+		if (linkedRequestId) return linkedRequestId === requestId;
 		if (actorUuid && String(impact.targetUuid ?? "") !== actorUuid) return false;
 		if (castId && String(impact.castId ?? "") === castId) return true;
 		return Boolean(spellUuid && String(impact.spellUuid ?? "") === spellUuid);
@@ -295,9 +296,13 @@ function fireBallLinkedTestChanged(message, changes) {
 
 function flagChanged(changes, key) {
 	if (!changes || typeof changes !== "object") return false;
-	if (Object.hasOwn(changes, `flags.${FLAG_SCOPE}.${key}`)) return true;
+	const path = `flags.${FLAG_SCOPE}.${key}`;
+	if (Object.keys(changes).some((entry) => entry === path || entry.startsWith(`${path}.`))) {
+		return true;
+	}
 	const scoped = changes?.flags?.[FLAG_SCOPE];
-	return Boolean(scoped && typeof scoped === "object" && Object.hasOwn(scoped, key));
+	if (!scoped || typeof scoped !== "object") return false;
+	return Object.keys(scoped).some((entry) => entry === key || entry.startsWith(`${key}.`));
 }
 
 function requestChatRefresh() {
