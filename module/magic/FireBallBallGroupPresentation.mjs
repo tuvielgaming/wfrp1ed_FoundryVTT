@@ -119,7 +119,7 @@ function decorate(message, html) {
 	arrow.textContent = details.open ? "▾" : "▸";
 	arrow.setAttribute("aria-hidden", "true");
 	Object.assign(arrow.style, {
-		fontSize: "0.75rem",
+		fontSize: "1.7rem",
 		lineHeight: "1",
 		opacity: "0.75",
 	});
