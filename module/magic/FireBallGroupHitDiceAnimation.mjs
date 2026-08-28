@@ -14,14 +14,15 @@ const animatedMessages = new Set();
  *
  * WFRP 1e Core Fire Ball uses one d3 per caster level for EACH ball fired into a
  * group, so a Level 3 caster firing two balls displays six physical d6s in one
- * batch. The cast-summary result row stays hidden until the complete batch ends.
+ * batch. For group casts the entire cast-summary card stays hidden until that
+ * complete batch ends, so the numerical result can never appear before the dice.
  */
 export function installFireBallGroupHitDiceAnimation() {
 	if (installed) return;
 	installed = true;
 
 	Hooks.on("renderChatMessageHTML", (message, html) => {
-		hideUnrevealedGroupResults(message, html);
+		hideUnrevealedGroupSummary(message, html);
 	});
 
 	/* Use the replicated update hook rather than preUpdate: casts initiated by a
@@ -71,7 +72,7 @@ function storedD3Results(volleys) {
 	});
 }
 
-function hideUnrevealedGroupResults(message, html) {
+function hideUnrevealedGroupSummary(message, html) {
 	const root = asElement(html);
 	const summary = root?.matches?.(".fire-ball-cast-summary")
 		? root
@@ -79,14 +80,22 @@ function hideUnrevealedGroupResults(message, html) {
 	if (!(summary instanceof HTMLElement)) return;
 	if (message?.getFlag?.(FLAG_SCOPE, REVEAL_FLAG_KEY)) return;
 
-	for (const row of summary.querySelectorAll(":scope > div")) {
+	/* At the first render the fireBallCast flag may not yet be attached. Detect a
+	 * group cast from its Group hits row instead, and hide the whole ChatMessage
+	 * until Dice So Nice finishes. Single-target casts have no such row and stay
+	 * visible immediately because they have no group-hit animation. */
+	const groupRow = [...summary.querySelectorAll(":scope > div")].find((row) => {
 		const label = String(row.querySelector(":scope > strong")?.textContent ?? "").trim();
-		if (label === localize("Group hits:", "Trafienia grupowe:") ||
-			label === localize("Group hits", "Trafienia grupowe")) {
-			row.hidden = true;
-			row.dataset.wfrpFireBallPendingGroupHits = "";
-		}
-	}
+		return label === localize("Group hits:", "Trafienia grupowe:") ||
+			label === localize("Group hits", "Trafienia grupowe");
+	});
+	if (!groupRow) return;
+
+	const entry = summary.closest?.("[data-message-id], .chat-message, li.message, li.chat-message") ?? root;
+	if (!(entry instanceof HTMLElement)) return;
+	entry.dataset.wfrpFireBallPendingGroupHits = "";
+	entry.style.display = "none";
+	entry.setAttribute("aria-hidden", "true");
 }
 
 async function animateGroupHits(message, results) {
@@ -137,6 +146,15 @@ async function revealGroupResults(message) {
 		version: 1,
 		revealedAt: Date.now(),
 	});
+
+	/* The flag update normally replaces the hidden ChatMessage DOM. Unhide the
+	 * current node as a safety net for clients which patch the existing element. */
+	const entry = document.querySelector(`[data-message-id="${cssEscape(message.id)}"]`);
+	if (entry instanceof HTMLElement) {
+		delete entry.dataset.wfrpFireBallPendingGroupHits;
+		entry.style.removeProperty("display");
+		entry.removeAttribute("aria-hidden");
+	}
 	void ui.chat?.render?.({ force: true });
 }
 
@@ -162,6 +180,12 @@ function primaryActiveGm() {
 	return [...(game.users ?? [])]
 		.filter((user) => user?.active && user?.isGM)
 		.sort((first, second) => String(first.id).localeCompare(String(second.id)))[0] ?? null;
+}
+
+function cssEscape(value) {
+	return globalThis.CSS?.escape
+		? CSS.escape(String(value))
+		: String(value).replace(/["\\]/g, "\\$&");
 }
 
 function asElement(value) {
