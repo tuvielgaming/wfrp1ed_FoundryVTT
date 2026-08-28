@@ -46,17 +46,31 @@ function decorateDedicatedDamageView(viewMessage, html) {
 	if (!(card instanceof HTMLElement)) return;
 
 	synchronizeDedicatedDamagePresentation(card, rollState, damageState);
-	decorateDedicatedParryDie(card, sourceMessage, rollState, damageState);
+	decorateDedicatedParryDie(card, sourceMessage, rollState);
 }
 
 function synchronizeDedicatedDamagePresentation(card, rollState, damageState) {
-	const finalAmount = nonNegativeInteger(damageState?.resolution?.finalAmount);
+	const resolution = damageState?.resolution ?? {};
+	const finalAmount = nonNegativeInteger(resolution.finalAmount);
 	const headerAmount = card.querySelector(":scope > .wfrp1e-damage-card__header .wfrp1e-damage-card__amount");
 	if (headerAmount) headerAmount.textContent = String(finalAmount);
 
 	const finalRow = findRow(card, localize("Final damage", "Końcowe obrażenia"));
 	const finalHost = finalRow?.querySelector?.(":scope > strong");
 	if (finalHost) finalHost.textContent = String(finalAmount);
+
+	/* Parry is resolved before the ordinary defensive reductions. The packet's
+	 * raw amount is generated damage, while toughness.before is the actual amount
+	 * which reaches Toughness after a successful parry. */
+	const beforeToughnessRow = findRow(
+		card,
+		localize("Before Toughness", "Przed Wytrzymałością"),
+	);
+	const beforeToughnessHost = beforeToughnessRow?.querySelector?.(":scope > strong");
+	const beforeToughness = Number(resolution?.breakdown?.toughness?.before);
+	if (beforeToughnessHost && Number.isFinite(beforeToughness)) {
+		beforeToughnessHost.textContent = String(nonNegativeInteger(beforeToughness));
+	}
 
 	/* The editable damage total is authoritative in combatDamageRoll. Keep the
 	 * value in the input after every derived-card rerender instead of allowing a
@@ -66,20 +80,29 @@ function synchronizeDedicatedDamagePresentation(card, rollState, damageState) {
 		damageInput.value = String(nonNegativeInteger(rollState?.diceTotal));
 	}
 
-	/* Ordinary melee damage is one d6. When that physical result is adjudicated,
-	 * the badge follows the current value just like the input. Multi-die Additional
-	 * Damage keeps its original sequence and is deliberately left untouched. */
+	/* Unified roll notation:
+	 * - an input constrained to the physical die uses [current face] = input;
+	 * - a total which may legally exceed the die uses [maximum face] → input.
+	 * Ordinary melee damage is a d6, while the editable summed damage value is
+	 * intentionally unbounded because Additional Damage can raise the total. */
 	const dice = Array.isArray(rollState?.damageDice) ? rollState.damageDice : [];
-	const current = Number(rollState?.diceTotal);
-	if (dice.length === 1 && isD6(current)) {
+	if (dice.length === 1 && damageInput instanceof HTMLInputElement) {
 		const badge = card.querySelector(
 			".wfrp1e-damage-card__roll-row .wfrp1e-damage-roll__dice .wfrp1e-damage-die",
 		);
-		if (badge instanceof HTMLElement) updateD6Badge(badge, current);
+		const operator = card.querySelector(
+			".wfrp1e-damage-card__roll-row .wfrp1e-damage-roll__operator",
+		);
+		if (badge instanceof HTMLElement) {
+			const maximum = finiteInputMaximum(damageInput);
+			const canExceedDie = maximum === null || maximum > 6;
+			updateD6Badge(badge, canExceedDie ? 6 : Number(damageInput.value));
+			if (operator) operator.textContent = canExceedDie ? "→" : "=";
+		}
 	}
 }
 
-function decorateDedicatedParryDie(card, sourceMessage, rollState, damageState) {
+function decorateDedicatedParryDie(card, sourceMessage, rollState) {
 	if (
 		rollState?.parry?.succeeded !== true ||
 		!isD6(rollState?.parry?.reduction)
@@ -87,6 +110,7 @@ function decorateDedicatedParryDie(card, sourceMessage, rollState, damageState) 
 
 	const row = findRow(card, localize("Parry", "Parowanie"));
 	if (!row) return;
+	const labelHost = row.querySelector?.(":scope > span");
 	const valueHost = row.querySelector?.(":scope > strong");
 	if (!valueHost) return;
 
@@ -95,10 +119,13 @@ function decorateDedicatedParryDie(card, sourceMessage, rollState, damageState) 
 		? Number(rollState.parry.reductionOriginal)
 		: current;
 	const editable = canEditCombatParryReduction(sourceMessage, game.user);
-	const absorbed = nonNegativeInteger(
-		damageState?.resolution?.breakdown?.parry?.absorbed,
-	);
 	const itemName = String(rollState.parry?.itemName ?? "").trim();
+
+	if (labelHost) {
+		labelHost.textContent = itemName
+			? `${localize("Parry", "Parowanie")} (${itemName})`
+			: localize("Parry", "Parowanie");
+	}
 
 	valueHost.textContent = "";
 	const editor = document.createElement("span");
@@ -144,20 +171,25 @@ function decorateDedicatedParryDie(card, sourceMessage, rollState, damageState) 
 	input.addEventListener("keydown", (event) => {
 		if (event.key === "Enter") input.blur();
 	});
-
-	const meta = document.createElement("span");
-	meta.className = "wfrp1e-combat-damage-die-editor__meta";
-	updateParryMeta(meta, absorbed, itemName);
-
 	input.addEventListener("change", () => {
-		void commitParry(sourceMessage, input, badge, meta).catch(reportCommitError);
+		void commitParry(sourceMessage, input, badge).catch(reportCommitError);
 	});
 
-	editor.append(badgeHost, equals, input, meta);
+	editor.append(badgeHost, equals, input);
 	valueHost.append(editor);
+
+	/* Put the reduction where it is mechanically applied, immediately before the
+	 * post-parry "Before Toughness" subtotal. */
+	const beforeToughnessRow = findRow(
+		card,
+		localize("Before Toughness", "Przed Wytrzymałością"),
+	);
+	if (beforeToughnessRow && row !== beforeToughnessRow.previousElementSibling) {
+		beforeToughnessRow.before(row);
+	}
 }
 
-async function commitParry(sourceMessage, input, badge, meta) {
+async function commitParry(sourceMessage, input, badge) {
 	const previousValue = lastValidParryValue(sourceMessage, input);
 	const value = Number(input.value);
 	if (!isD6(value)) {
@@ -182,13 +214,6 @@ async function commitParry(sourceMessage, input, badge, meta) {
 			? Number(freshRollState.parry.reduction)
 			: value;
 		restoreParryEditor(input, badge, current);
-
-		const freshDamageState = sourceMessage.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG_KEY);
-		const absorbed = nonNegativeInteger(
-			freshDamageState?.resolution?.breakdown?.parry?.absorbed,
-		);
-		const itemName = String(freshRollState?.parry?.itemName ?? "").trim();
-		updateParryMeta(meta, absorbed, itemName);
 
 		/* Force the derived card to reread the now-authoritative packet. This is
 		 * also the safety net for consecutive source updates arriving out of order. */
@@ -238,13 +263,11 @@ function updateD6Badge(badge, value) {
 	badge.setAttribute("aria-label", `d6: ${number}`);
 }
 
-function updateParryMeta(meta, absorbed, itemName) {
-	if (!(meta instanceof HTMLElement)) return;
-	meta.textContent = `→ ${nonNegativeInteger(absorbed)}${itemName ? ` (${itemName})` : ""}`;
-	meta.title = localize(
-		"Amount actually stopped by the successful parry after the current adjudication.",
-		"Liczba obrażeń faktycznie zatrzymanych przez udane parowanie po bieżącym rozstrzygnięciu.",
-	);
+function finiteInputMaximum(input) {
+	const raw = String(input?.max ?? "").trim();
+	if (!raw) return null;
+	const number = Number(raw);
+	return Number.isFinite(number) ? number : null;
 }
 
 function reportCommitError(error) {
