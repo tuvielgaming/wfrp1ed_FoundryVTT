@@ -6,15 +6,15 @@ let installed = false;
 const animatedMessages = new Set();
 
 /**
- * Dice So Nice has no normal d3 mesh. Keep the authoritative Fire Ball group
- * roll as d3, but display every stored d3 result in one physical d6 animation:
- *   1-2 => d3 1
- *   3-4 => d3 2
- *   5-6 => d3 3
+ * Dice So Nice has no normal d3 mesh. Keep every authoritative Core group-hit
+ * die as d3, but display the stored d3 faces in one physical d6 animation:
+ *   1 -> d6 1
+ *   2 -> d6 3
+ *   3 -> d6 5
  *
- * The cast-summary result row stays hidden until that animation batch finishes.
- * The reveal itself is persisted on the ChatMessage so every connected client
- * sees the same presentation after the primary GM completes the visual roll.
+ * WFRP 1e Core Fire Ball uses one d3 per caster level for EACH ball fired into a
+ * group, so a Level 3 caster firing two balls displays six physical d6s in one
+ * batch. The cast-summary result row stays hidden until the complete batch ends.
  */
 export function installFireBallGroupHitDiceAnimation() {
 	if (installed) return;
@@ -34,9 +34,7 @@ export function installFireBallGroupHitDiceAnimation() {
 
 		const messageId = String(message?.id ?? "").trim();
 		if (!messageId || animatedMessages.has(messageId)) return;
-		const results = incoming.volleys
-			.map((volley) => Number(volley?.groupRoll))
-			.filter(isD3);
+		const results = storedD3Results(incoming.volleys);
 		if (!results.length) {
 			void revealGroupResults(message);
 			return;
@@ -58,6 +56,18 @@ export function installFireBallGroupHitDiceAnimation() {
 					setTimeout(() => animatedMessages.delete(messageId), 10000);
 				}
 			});
+	});
+}
+
+function storedD3Results(volleys) {
+	return volleys.flatMap((volley) => {
+		/* Version 5+ stores each Core per-level d3 separately. Keep the older scalar
+		 * field as migration compatibility for already-existing chat history. */
+		if (Array.isArray(volley?.groupRolls)) {
+			return volley.groupRolls.map(Number).filter(isD3);
+		}
+		const legacy = Number(volley?.groupRoll);
+		return isD3(legacy) ? [legacy] : [];
 	});
 }
 
@@ -110,8 +120,6 @@ async function physicalD6BatchForD3(d3Results) {
 
 	let total = 0;
 	for (let index = 0; index < values.length; index += 1) {
-		/* Use the lower face of the matching d6 pair, exactly like the existing
-		 * Risk d3 bridge: d3 1 -> d6 1, d3 2 -> d6 3, d3 3 -> d6 5. */
 		const d6Face = (values[index] * 2) - 1;
 		physicalResults[index].result = d6Face;
 		total += d6Face;
