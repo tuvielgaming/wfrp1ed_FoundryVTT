@@ -12,15 +12,18 @@ const DAMAGE_RESULT_VIEW_FLAG_KEY = "combatDamageResultView";
 /*
  * View adapter for the dedicated Damage card.
  *
- * All permission, GM-authority, socket and damage-recalculation logic lives in
- * CombatDamagePhysicalDiceIntegration. This module only renders the same parry
- * d6 editor in the dedicated card and delegates the edit to that canonical path.
+ * All authority, socket and recalculation logic remains in
+ * CombatDamagePhysicalDiceIntegration / CombatDamageIntegration. This module
+ * makes the derived Damage card faithfully mirror the current source state.
+ * That is important because parry adjudication updates the parry flag and the
+ * resolved DamagePacket in two consecutive Document updates; an older derived
+ * render must never win visually over the newer damage resolution.
  */
 Hooks.on("renderChatMessageHTML", (message, html) => {
-	requestAnimationFrame(() => decorateDedicatedParryDie(message, html));
+	requestAnimationFrame(() => decorateDedicatedDamageView(message, html));
 });
 
-function decorateDedicatedParryDie(viewMessage, html) {
+function decorateDedicatedDamageView(viewMessage, html) {
 	const view = viewMessage?.getFlag?.(FLAG_SCOPE, DAMAGE_RESULT_VIEW_FLAG_KEY);
 	if (!view?.sourceAttackMessageId) return;
 
@@ -33,8 +36,6 @@ function decorateDedicatedParryDie(viewMessage, html) {
 	if (
 		attack?.family !== "melee" ||
 		rollState?.status !== "resolved" ||
-		rollState?.parry?.succeeded !== true ||
-		!isD6(rollState?.parry?.reduction) ||
 		!damageState?.packet?.id
 	) return;
 
@@ -42,14 +43,52 @@ function decorateDedicatedParryDie(viewMessage, html) {
 	const card = root?.matches?.("[data-wfrp-combat-damage-result-card]")
 		? root
 		: root?.querySelector?.("[data-wfrp-combat-damage-result-card]");
-	if (!card) return;
+	if (!(card instanceof HTMLElement)) return;
+
+	synchronizeDedicatedDamagePresentation(card, rollState, damageState);
+	decorateDedicatedParryDie(card, sourceMessage, rollState, damageState);
+}
+
+function synchronizeDedicatedDamagePresentation(card, rollState, damageState) {
+	const finalAmount = nonNegativeInteger(damageState?.resolution?.finalAmount);
+	const headerAmount = card.querySelector(":scope > .wfrp1e-damage-card__header .wfrp1e-damage-card__amount");
+	if (headerAmount) headerAmount.textContent = String(finalAmount);
+
+	const finalRow = findRow(card, localize("Final damage", "Końcowe obrażenia"));
+	const finalHost = finalRow?.querySelector?.(":scope > strong");
+	if (finalHost) finalHost.textContent = String(finalAmount);
+
+	/* The editable damage total is authoritative in combatDamageRoll. Keep the
+	 * value in the input after every derived-card rerender instead of allowing a
+	 * stale HTML render to clear or replace it. */
+	const damageInput = card.querySelector("[data-wfrp-damage-dice-total]");
+	if (damageInput instanceof HTMLInputElement && document.activeElement !== damageInput) {
+		damageInput.value = String(nonNegativeInteger(rollState?.diceTotal));
+	}
+
+	/* Ordinary melee damage is one d6. When that physical result is adjudicated,
+	 * the badge follows the current value just like the input. Multi-die Additional
+	 * Damage keeps its original sequence and is deliberately left untouched. */
+	const dice = Array.isArray(rollState?.damageDice) ? rollState.damageDice : [];
+	const current = Number(rollState?.diceTotal);
+	if (dice.length === 1 && isD6(current)) {
+		const badge = card.querySelector(
+			".wfrp1e-damage-card__roll-row .wfrp1e-damage-roll__dice .wfrp1e-damage-die",
+		);
+		if (badge instanceof HTMLElement) updateD6Badge(badge, current);
+	}
+}
+
+function decorateDedicatedParryDie(card, sourceMessage, rollState, damageState) {
+	if (
+		rollState?.parry?.succeeded !== true ||
+		!isD6(rollState?.parry?.reduction)
+	) return;
 
 	const row = findRow(card, localize("Parry", "Parowanie"));
 	if (!row) return;
 	const valueHost = row.querySelector?.(":scope > strong");
-	if (!valueHost || valueHost.querySelector?.("[data-wfrp-dedicated-parry-d6]")) {
-		return;
-	}
+	if (!valueHost) return;
 
 	const current = Number(rollState.parry.reduction);
 	const generated = isD6(rollState.parry.reductionOriginal)
@@ -63,24 +102,23 @@ function decorateDedicatedParryDie(viewMessage, html) {
 
 	valueHost.textContent = "";
 	const editor = document.createElement("span");
-	editor.className = "wfrp1e-combat-damage-die-editor";
+	editor.className = "wfrp1e-combat-damage-die-editor wfrp1e-damage-roll";
 	editor.dataset.wfrpDedicatedParryD6 = "";
-
-	const label = document.createElement("span");
-	label.className = "wfrp1e-combat-damage-die-editor__label";
-	label.textContent = game.i18n.lang === "pl" ? "K6" : "d6";
-	editor.append(label);
-
 	if (generated !== current) {
-		const audit = document.createElement("span");
-		audit.className = "wfrp1e-combat-damage-die-editor__audit";
-		audit.textContent = `${generated} →`;
-		audit.title = localize(
-			`Foundry generated ${generated}; the adjudicated physical-die result is shown in the input.`,
-			`Foundry wygenerował ${generated}; w polu znajduje się rozstrzygający wynik fizycznej kości.`,
+		editor.title = localize(
+			`Foundry generated ${generated}; the adjudicated parry d6 is ${current}.`,
+			`Foundry wygenerował ${generated}; rozstrzygający wynik K6 parowania to ${current}.`,
 		);
-		editor.append(audit);
 	}
+
+	const badgeHost = document.createElement("span");
+	badgeHost.className = "wfrp1e-damage-roll__dice";
+	const badge = createD6Badge(current);
+	badgeHost.append(badge);
+
+	const equals = document.createElement("span");
+	equals.className = "wfrp1e-damage-roll__operator";
+	equals.textContent = "=";
 
 	const input = document.createElement("input");
 	input.type = "number";
@@ -89,8 +127,9 @@ function decorateDedicatedParryDie(viewMessage, html) {
 	input.step = "1";
 	input.inputMode = "numeric";
 	input.value = String(current);
-	input.className = "wfrp1e-combat-damage-die-editor__input";
+	input.className = "wfrp1e-damage-roll__total wfrp1e-combat-damage-die-editor__input";
 	input.dataset.wfrpDedicatedParryD6Input = "";
+	input.dataset.lastValidValue = String(current);
 	input.readOnly = !editable;
 	input.setAttribute("aria-readonly", editable ? "false" : "true");
 	input.title = editable
@@ -105,53 +144,117 @@ function decorateDedicatedParryDie(viewMessage, html) {
 	input.addEventListener("keydown", (event) => {
 		if (event.key === "Enter") input.blur();
 	});
-	input.addEventListener("change", () => {
-		void commitParry(sourceMessage, input, current);
-	});
-	editor.append(input);
 
 	const meta = document.createElement("span");
 	meta.className = "wfrp1e-combat-damage-die-editor__meta";
-	meta.textContent = `→ ${absorbed}${itemName ? ` (${itemName})` : ""}`;
-	meta.title = localize(
-		"Amount actually stopped by the successful parry after the current adjudication.",
-		"Liczba obrażeń faktycznie zatrzymanych przez udane parowanie po bieżącym rozstrzygnięciu.",
-	);
-	editor.append(meta);
+	updateParryMeta(meta, absorbed, itemName);
 
+	input.addEventListener("change", () => {
+		void commitParry(sourceMessage, input, badge, meta).catch(reportCommitError);
+	});
+
+	editor.append(badgeHost, equals, input, meta);
 	valueHost.append(editor);
 }
 
-async function commitParry(sourceMessage, input, previousValue) {
+async function commitParry(sourceMessage, input, badge, meta) {
+	const previousValue = lastValidParryValue(sourceMessage, input);
 	const value = Number(input.value);
 	if (!isD6(value)) {
-		input.value = String(previousValue);
+		restoreParryEditor(input, badge, previousValue);
 		ui.notifications.warn(localize(
 			"Parry reduction d6 must be an integer from 1 to 6.",
 			"Wynik K6 redukcji parowania musi być liczbą całkowitą od 1 do 6.",
 		));
 		return;
 	}
-	if (value === previousValue) return;
+	if (value === previousValue) {
+		restoreParryEditor(input, badge, value);
+		return;
+	}
 
 	input.readOnly = true;
+	input.setAttribute("aria-readonly", "true");
 	try {
-		await requestCombatParryReductionUpdate(sourceMessage, value);
-	} catch (error) {
-		if (input.isConnected) input.value = String(previousValue);
-		console.error("WFRP1ED | Unable to adjudicate dedicated Damage-card parry d6.", error);
-		ui.notifications.error(
-			error?.message ?? localize(
-				"Unable to change the parry reduction die.",
-				"Nie udało się zmienić wyniku kości redukcji parowania.",
-			),
+		const returnedState = await requestCombatParryReductionUpdate(sourceMessage, value);
+		const freshRollState = sourceMessage.getFlag?.(FLAG_SCOPE, COMBAT_DAMAGE_FLAG_KEY) ?? returnedState;
+		const current = isD6(freshRollState?.parry?.reduction)
+			? Number(freshRollState.parry.reduction)
+			: value;
+		restoreParryEditor(input, badge, current);
+
+		const freshDamageState = sourceMessage.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG_KEY);
+		const absorbed = nonNegativeInteger(
+			freshDamageState?.resolution?.breakdown?.parry?.absorbed,
 		);
+		const itemName = String(freshRollState?.parry?.itemName ?? "").trim();
+		updateParryMeta(meta, absorbed, itemName);
+
+		/* Force the derived card to reread the now-authoritative packet. This is
+		 * also the safety net for consecutive source updates arriving out of order. */
+		requestAnimationFrame(() => void ui.chat?.render?.({ force: true }));
+	} catch (error) {
+		restoreParryEditor(input, badge, previousValue);
+		throw error;
 	} finally {
 		if (input.isConnected) {
 			input.readOnly = !canEditCombatParryReduction(sourceMessage, game.user);
 			input.setAttribute("aria-readonly", input.readOnly ? "true" : "false");
 		}
 	}
+}
+
+function lastValidParryValue(sourceMessage, input) {
+	const stored = Number(input?.dataset?.lastValidValue);
+	if (isD6(stored)) return stored;
+	const source = Number(
+		sourceMessage?.getFlag?.(FLAG_SCOPE, COMBAT_DAMAGE_FLAG_KEY)?.parry?.reduction,
+	);
+	return isD6(source) ? source : 1;
+}
+
+function restoreParryEditor(input, badge, value) {
+	if (input?.isConnected) {
+		input.value = String(value);
+		input.dataset.lastValidValue = String(value);
+	}
+	if (badge instanceof HTMLElement) updateD6Badge(badge, value);
+}
+
+function createD6Badge(value) {
+	const badge = document.createElement("i");
+	badge.className = "fa-solid wfrp1e-damage-die";
+	badge.dataset.wfrpDedicatedParryD6Badge = "";
+	updateD6Badge(badge, value);
+	return badge;
+}
+
+function updateD6Badge(badge, value) {
+	const number = Math.min(6, Math.max(1, Number(value) || 1));
+	const names = ["one", "two", "three", "four", "five", "six"];
+	for (const name of names) badge.classList.remove(`fa-dice-${name}`);
+	badge.classList.add(`fa-dice-${names[number - 1]}`);
+	badge.title = `d6: ${number}`;
+	badge.setAttribute("aria-label", `d6: ${number}`);
+}
+
+function updateParryMeta(meta, absorbed, itemName) {
+	if (!(meta instanceof HTMLElement)) return;
+	meta.textContent = `→ ${nonNegativeInteger(absorbed)}${itemName ? ` (${itemName})` : ""}`;
+	meta.title = localize(
+		"Amount actually stopped by the successful parry after the current adjudication.",
+		"Liczba obrażeń faktycznie zatrzymanych przez udane parowanie po bieżącym rozstrzygnięciu.",
+	);
+}
+
+function reportCommitError(error) {
+	console.error("WFRP1ED | Unable to adjudicate dedicated Damage-card parry d6.", error);
+	ui.notifications.error(
+		error?.message ?? localize(
+			"Unable to change the parry reduction die.",
+			"Nie udało się zmienić wyniku kości redukcji parowania.",
+		),
+	);
 }
 
 function findRow(card, expectedLabel) {
