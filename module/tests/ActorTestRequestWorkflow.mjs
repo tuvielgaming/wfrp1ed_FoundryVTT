@@ -144,7 +144,7 @@ async function resolveAsAuthority(message, requestingUser) {
 }
 
 function maybeAuto(message, actor) {
-	if (!ActorRollPolicy.shouldAutomaticallyRoll(actor, game.user)) return;
+	if (!ActorRollPolicy.shouldAutomaticallyRollMechanicTest(actor, game.user)) return;
 	const key = `${message.id}:auto`;
 	if (queued.has(key)) return;
 	queued.add(key);
