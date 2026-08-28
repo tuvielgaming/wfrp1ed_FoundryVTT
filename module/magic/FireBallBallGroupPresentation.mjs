@@ -10,6 +10,7 @@ const ACTOR_TEST_FLAG = "actorTestRequest";
 const TEST_RESULT_FLAG = "testResultState";
 
 let refreshQueued = false;
+const disclosureState = new Map();
 
 /**
  * Visible Fire Ball grouping layer.
@@ -18,9 +19,9 @@ let refreshQueued = false;
  * reads its target/Initiative/Damage state from the canonical child
  * ChatMessages. It does not own or duplicate any mechanical state.
  *
- * Fear is intentionally not repeated here. WFRP 1e Fear of Fire is a
- * target-level reaction to the cast/encounter and is presented once on the cast
- * summary by FireBallCastPsychologyPresentation.
+ * Cast-level vulnerabilities are intentionally not repeated here. Fear of Fire
+ * and Flammable are adjudicated once per target on the cast summary; individual
+ * Ball cards keep only Initiative and Damage.
  *
  * The redundant per-target impact/source card is hidden once a Ball aggregate
  * owns it. Any action that still belongs to that canonical impact must therefore
@@ -33,7 +34,7 @@ export class FireBallBallGroupPresentation {
 		const ids = [...new Set((impactMessageIds ?? []).map((id) => String(id ?? "").trim()).filter(Boolean))];
 		if (!ids.length) return null;
 		const state = {
-			version: 6,
+			version: 7,
 			castId: String(castId ?? ""),
 			castMessageId: String(castMessageId ?? ""),
 			casterUuid: String(caster?.uuid ?? ""),
@@ -71,6 +72,9 @@ Hooks.on("createChatMessage", (message) => {
 	if (!isRelatedCanonicalMessage(message)) return;
 	requestChatRefresh();
 });
+Hooks.on("deleteChatMessage", (message) => {
+	disclosureState.delete(String(message?.id ?? ""));
+});
 Hooks.on("updateActor", () => requestChatRefresh());
 
 function decorate(message, html) {
@@ -81,11 +85,19 @@ function decorate(message, html) {
 		? root
 		: root?.querySelector?.("[data-wfrp-fireball-ball-group]");
 	if (!(panel instanceof HTMLElement)) return;
+
+	const messageId = String(message?.id ?? "").trim();
+	const previousDetails = panel.querySelector("details.wfrp-fireball-ball-group__details");
+	const previousDomOpen = previousDetails instanceof HTMLDetailsElement ? previousDetails.open : null;
+	const fullyResolved = ballFullyResolved(state);
+	const disclosure = disclosureFor(messageId, fullyResolved, previousDomOpen);
+
 	panel.replaceChildren();
 	panel.classList.add("wfrp1e-damage-card", "wfrp-fireball-ball-group-card");
 
 	const details = document.createElement("details");
 	details.className = "wfrp-fireball-ball-group__details";
+	details.open = disclosure.open;
 	const summary = document.createElement("summary");
 	Object.assign(summary.style, {
 		display: "grid",
@@ -104,7 +116,7 @@ function decorate(message, html) {
 	compact.style.textAlign = "right";
 	const arrow = document.createElement("span");
 	arrow.className = "wfrp-fireball-ball-group__expand-indicator";
-	arrow.textContent = "▾";
+	arrow.textContent = details.open ? "▾" : "▸";
 	arrow.setAttribute("aria-hidden", "true");
 	Object.assign(arrow.style, {
 		fontSize: "0.75rem",
@@ -124,7 +136,51 @@ function decorate(message, html) {
 		body.append(targetSection(state, target));
 	}
 	details.append(body);
+
+	details.addEventListener("toggle", () => {
+		arrow.textContent = details.open ? "▾" : "▸";
+		const current = disclosureState.get(messageId) ?? { fullyResolved };
+		disclosureState.set(messageId, {
+			...current,
+			open: details.open,
+			fullyResolved,
+		});
+	});
 	panel.append(details);
+}
+
+function disclosureFor(messageId, fullyResolved, previousDomOpen) {
+	const id = String(messageId ?? "").trim();
+	const existing = id ? disclosureState.get(id) : null;
+	if (!existing) {
+		const created = {
+			open: previousDomOpen ?? !fullyResolved,
+			fullyResolved,
+		};
+		if (id) disclosureState.set(id, created);
+		return created;
+	}
+
+	/* A live DOM state wins over the cached value. This preserves an explicit
+	 * manual fold/unfold while an unresolved Ball is being refreshed in-place. */
+	let open = previousDomOpen ?? existing.open;
+
+	/* Collapse exactly once when the final target becomes resolved. If later GM
+	 * adjudication makes the Ball unresolved again, reopen it so the newly pending
+	 * work is immediately discoverable. */
+	if (existing.fullyResolved !== true && fullyResolved === true) open = false;
+	else if (existing.fullyResolved === true && fullyResolved !== true) open = true;
+
+	const next = { open, fullyResolved };
+	if (id) disclosureState.set(id, next);
+	return next;
+}
+
+function ballFullyResolved(state) {
+	const entries = targetEntries(state);
+	return entries.length > 0 && entries.every((target) =>
+		targetResolutionComplete(impactRecordForTarget(state, target))
+	);
 }
 
 function targetSection(groupState, target) {
@@ -142,8 +198,6 @@ function targetSection(groupState, target) {
 	section.append(heading);
 
 	const record = impactRecordForTarget(groupState, target);
-	if (record) section.append(buildFlammableControl(record));
-
 	const initiative = initiativeSummary(record?.state ?? null);
 	const damage = damageSummary(record);
 	section.append(
@@ -155,95 +209,6 @@ function targetSection(groupState, target) {
 		section.append(buildRollDamageButton(record));
 	}
 	return section;
-}
-
-function buildFlammableControl(record) {
-	const label = document.createElement("label");
-	label.className = "wfrp1ed-checkbox wfrp-fireball-ball-group__flammable";
-	Object.assign(label.style, {
-		display: "flex",
-		alignItems: "center",
-		gap: "0.35rem",
-		margin: "0.15rem 0 0.25rem",
-	});
-
-	const input = document.createElement("input");
-	input.type = "checkbox";
-	input.checked = record?.state?.flammable === true;
-	input.dataset.fireBallGroupedVulnerability = "flammable";
-
-	const transaction = damageTransactionForRecord(record);
-	input.disabled = !game.user?.isGM || transaction?.state === "applied";
-	input.title = transaction?.state === "applied"
-		? localize(
-			"Revert applied damage before changing Fire vulnerability.",
-			"Cofnij zastosowane obrażenia przed zmianą podatności na ogień.",
-		)
-		: localize("Flammable", "Łatwopalny");
-
-	input.addEventListener("change", () => {
-		if (!game.user?.isGM) return;
-		const requested = input.checked === true;
-		input.disabled = true;
-		void invokeCanonicalFlammableToggle(record, requested)
-			.catch((error) => {
-				input.checked = !requested;
-				reportError(error);
-			});
-	});
-
-	label.append(input, document.createTextNode(localize("Flammable", "Łatwopalny")));
-	return label;
-}
-
-async function invokeCanonicalFlammableToggle(record, requested) {
-	const messageId = String(record?.message?.id ?? "").trim();
-	if (!messageId) throw new Error(localize(
-		"The Fire Ball impact is unavailable.",
-		"Trafienie Ognistej Kuli jest niedostępne.",
-	));
-
-	let control = canonicalFlammableControl(messageId);
-	if (!(control instanceof HTMLInputElement)) {
-		await ui.chat?.render?.({ force: true });
-		await nextAnimationFrame();
-		await nextAnimationFrame();
-		control = canonicalFlammableControl(messageId);
-	}
-	if (!(control instanceof HTMLInputElement)) {
-		throw new Error(localize(
-			"The canonical Fire Ball vulnerability control is unavailable.",
-			"Kanoniczna kontrolka podatności Ognistej Kuli jest niedostępna.",
-		));
-	}
-	if (control.disabled) {
-		throw new Error(localize(
-			"Fire vulnerability cannot be changed while applied damage exists.",
-			"Nie można zmienić podatności na ogień, gdy obrażenia są już zastosowane.",
-		));
-	}
-
-	control.checked = requested === true;
-	control.dispatchEvent(new Event("change", { bubbles: true, cancelable: true }));
-}
-
-function canonicalFlammableControl(messageId) {
-	const id = cssEscape(messageId);
-	const entry = document.querySelector(`[data-message-id="${id}"]`);
-	if (!(entry instanceof HTMLElement)) return null;
-	const panel = entry.querySelector("[data-wfrp-fireball-impact-workflow]");
-	if (!(panel instanceof HTMLElement)) return null;
-	return panel.querySelector('input[data-fire-ball-vulnerability="flammable"]');
-}
-
-function damageTransactionForRecord(record) {
-	const impact = record?.state;
-	if (!impact) return null;
-	const packetId = String(
-		record?.message?.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG)?.packet?.id ?? impact.damage?.packetId ?? "",
-	).trim();
-	const actor = actorFromUuid(impact.targetUuid);
-	return actor && packetId ? DamageApplication.transactionFor(actor, packetId) : null;
 }
 
 function buildRollDamageButton(record) {
