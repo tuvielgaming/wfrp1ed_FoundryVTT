@@ -1,3 +1,4 @@
+import { CoreCastingFailureWorkflow } from "./CoreCastingFailureWorkflow.mjs";
 import { SpellProcedureRegistry } from "./SpellProcedureRegistry.mjs";
 
 /** User-facing dispatch from an embedded Spell row to its audited procedure. */
@@ -26,7 +27,15 @@ export class SpellCastingLauncher {
 			));
 		}
 
-		return procedure.execute(actor, spell);
+		/* Core casting failure is a generic spell rule. The concrete procedure first
+		 * collects its spell-specific choices and then exposes the real MP cost by
+		 * performing its normal Actor update. CoreCastingFailureWorkflow intercepts
+		 * that MP-spending boundary before any post-update spell effects are created. */
+		return CoreCastingFailureWorkflow.withCastingAttempt(
+			actor,
+			spell,
+			() => procedure.execute(actor, spell),
+		);
 	}
 }
 
