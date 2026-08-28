@@ -25,14 +25,14 @@ function decorateFireBallFearResult(message, html) {
 		: root?.querySelector?.(".wfrp1e-test-card");
 	if (!(card instanceof HTMLElement)) return;
 
-	/* The base Test name is intentionally kept; append the mechanic source so a
-	 * player can distinguish this Fear Test from unrelated Psychology tests in a
-	 * busy chat log. Reset to the exact label on every render to avoid suffixes
-	 * accumulating after rerenders. */
+	/* TestResultIdentityChat replaces the original <h2> with its compact
+	 * "Test | name" identity synchronously. This hook runs one frame later, so
+	 * prefer the decorated identity value and keep the old <h2> as a fallback. */
+	const sourceLabel = localize("Fear (Fire Ball)", "Strach (Ognista Kula)");
+	const identityName = card.querySelector("[data-wfrp-test-display-name]");
 	const title = card.querySelector(".wfrp1e-test-card__header h2");
-	if (title instanceof HTMLElement) {
-		title.textContent = localize("Fear (Fire Ball)", "Strach (Ognista Kula)");
-	}
+	if (identityName instanceof HTMLElement) identityName.textContent = sourceLabel;
+	else if (title instanceof HTMLElement) title.textContent = sourceLabel;
 
 	card.querySelector("[data-wfrp-fireball-psychology-summary]")?.remove();
 	const result = TestResultChat._templateContext(state).result;
