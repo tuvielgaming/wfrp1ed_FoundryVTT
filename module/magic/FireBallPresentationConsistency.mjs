@@ -8,6 +8,7 @@ const TEST_FLAG_KEY = "testResultState";
 const INLINE_TEST_FLAG_KEY = "fireBallInlineTest";
 
 let installed = false;
+let refreshQueued = false;
 
 /**
  * Presentation-only reconciliation for Fire Ball's linked TestResult cards.
@@ -31,6 +32,23 @@ export function installFireBallPresentationConsistency() {
 			summarizeImpactRelatedTests(message, html);
 			synchronizeDamageDieEditors(message, html);
 		}));
+	});
+
+	/* Fear is resolved by updating its ActorTestRequest after the TestResult card
+	 * is created. Initiative stores its own linked Test flag. Refresh on either
+	 * transition so one completed related Test updates the source card
+	 * immediately; it must never wait for the other Test to finish. */
+	Hooks.on("updateChatMessage", (message, changes) => {
+		if (fireBallRequestChanged(message, changes) ||
+			fireBallLinkedTestChanged(message, changes)) {
+			requestChatRefresh();
+		}
+	});
+	Hooks.on("createChatMessage", (message) => {
+		if (isFireBallFearResult(message) ||
+			message?.getFlag?.(FLAG_SCOPE, INLINE_TEST_FLAG_KEY)?.role === "initiative") {
+			requestChatRefresh();
+		}
 	});
 }
 
@@ -67,7 +85,7 @@ function summarizeImpactRelatedTests(message, html) {
 			replaceWithOutcomeSummary(
 				row,
 				localize("Damage Reduction - Initiative", "Redukcja obrażeń — Inicjatywa"),
-				impact.initiative.success === true,
+				currentInitiativeSuccess(impact),
 			);
 		}
 	}
@@ -85,13 +103,39 @@ function summarizeImpactRelatedTests(message, html) {
 	}
 }
 
+function currentInitiativeSuccess(impact) {
+	const id = String(impact?.initiative?.testMessageId ?? "").trim();
+	const testMessage = id ? game.messages?.get(id) ?? null : null;
+	const state = testMessage?.getFlag?.(FLAG_SCOPE, TEST_FLAG_KEY);
+	if (state) return TestResultChat._templateContext(state).result?.success === true;
+	return impact?.initiative?.success === true;
+}
+
 function replaceWithOutcomeSummary(row, labelText, success) {
+	row.classList.add("wfrp-fireball-outcome-summary");
+	Object.assign(row.style, {
+		display: "grid",
+		gridTemplateColumns: "minmax(0, 1fr) max-content",
+		alignItems: "center",
+		columnGap: "0.75rem",
+	});
+
 	const label = document.createElement("span");
 	label.textContent = labelText;
+	label.style.minWidth = "0";
+
 	const outcome = document.createElement("strong");
+	outcome.className = "wfrp-fireball-outcome-summary__result";
 	outcome.textContent = success
 		? localize("Success", "Sukces")
 		: localize("Failure", "Porażka");
+	Object.assign(outcome.style, {
+		minWidth: game.i18n.lang === "pl" ? "4.8rem" : "4.2rem",
+		textAlign: "right",
+		whiteSpace: "nowrap",
+		justifySelf: "end",
+	});
+
 	row.replaceChildren(label, outcome);
 }
 
@@ -132,6 +176,48 @@ function synchronizeDamageDie(card, kind, faces, value) {
 		die.title = `d${faces}: ${number}`;
 		die.setAttribute("aria-label", `d${faces}: ${number}`);
 	}
+	const operator = roll?.querySelector?.(".wfrp1e-damage-roll__operator");
+	if (operator) operator.textContent = inputAllowsAboveFaces(input, faces) ? "→" : "=";
+	if (die instanceof HTMLElement && inputAllowsAboveFaces(input, faces)) {
+		die.textContent = String(faces);
+		die.title = `d${faces}: ${faces}`;
+		die.setAttribute("aria-label", `d${faces}: ${faces}`);
+	}
+}
+
+function inputAllowsAboveFaces(input, faces) {
+	const raw = String(input?.max ?? "").trim();
+	if (!raw) return true;
+	const maximum = Number(raw);
+	return Number.isFinite(maximum) && maximum > Number(faces);
+}
+
+function fireBallRequestChanged(message, changes) {
+	const request = message?.getFlag?.(FLAG_SCOPE, ACTOR_TEST_FLAG_KEY);
+	if (request?.source?.kind !== "spell-fire-ball") return false;
+	return flagChanged(changes, ACTOR_TEST_FLAG_KEY);
+}
+
+function fireBallLinkedTestChanged(message, changes) {
+	if (!flagChanged(changes, TEST_FLAG_KEY)) return false;
+	const inline = message?.getFlag?.(FLAG_SCOPE, INLINE_TEST_FLAG_KEY);
+	return inline?.role === "initiative" || isFireBallFearResult(message);
+}
+
+function flagChanged(changes, key) {
+	if (!changes || typeof changes !== "object") return false;
+	if (Object.hasOwn(changes, `flags.${FLAG_SCOPE}.${key}`)) return true;
+	const scoped = changes?.flags?.[FLAG_SCOPE];
+	return Boolean(scoped && typeof scoped === "object" && Object.hasOwn(scoped, key));
+}
+
+function requestChatRefresh() {
+	if (refreshQueued) return;
+	refreshQueued = true;
+	requestAnimationFrame(() => {
+		refreshQueued = false;
+		void ui.chat?.render?.({ force: true });
+	});
 }
 
 function isFireBallFearResult(message) {
