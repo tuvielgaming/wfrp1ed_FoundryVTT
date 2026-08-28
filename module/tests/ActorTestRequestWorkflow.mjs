@@ -2,6 +2,7 @@ import { ActorRollPolicy } from "../core/ActorRollPolicy.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
 const FLAG_KEY = "actorTestRequest";
+const RESULT_SOURCE_FLAG_KEY = "actorTestRequestSource";
 const SOCKET_CHANNEL = "system.wfrp1ed";
 const REQUEST_TYPE = "actor-test-request-action";
 const RESPONSE_TYPE = "actor-test-request-response";
@@ -132,6 +133,20 @@ async function resolveAsAuthority(message, requestingUser) {
 	try {
 		const result = await actor.rollTest(state.testId, { modifier: 0 });
 		if (!result?.chatMessage) throw new Error("The requested Test did not produce a result message.");
+
+		/* Persist request provenance directly on the canonical TestResult before the
+		 * request itself is marked resolved. Consumers such as spell-specific result
+		 * presentation can therefore identify the result on its very first rerender
+		 * without racing a reverse lookup through the request ChatMessage. */
+		await result.chatMessage.setFlag(FLAG_SCOPE, RESULT_SOURCE_FLAG_KEY, {
+			version: 1,
+			requestMessageId: key,
+			actorUuid: String(state.actorUuid ?? ""),
+			testId: String(state.testId ?? ""),
+			source: state.source ? foundry.utils.deepClone(state.source) : null,
+			linkedAt: Date.now(),
+		});
+
 		state.status = "resolved";
 		state.resultMessageId = String(result.chatMessage.id ?? "");
 		state.resolvedBy = String(requestingUser?.id ?? "");
