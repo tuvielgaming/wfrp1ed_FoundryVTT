@@ -1,6 +1,10 @@
+import { DamageApplication } from "../damage/DamageApplication.mjs";
+
 const FLAG_SCOPE = "wfrp1ed";
 const BALL_GROUP_FLAG = "fireBallBallGroup";
 const IMPACT_FLAG = "fireBallImpactWorkflow";
+const DAMAGE_FLAG = "damageState";
+const DAMAGE_VIEW_FLAG = "fireBallDamageResultView";
 const ACTOR_TEST_FLAG = "actorTestRequest";
 const TEST_RESULT_FLAG = "testResultState";
 
@@ -21,7 +25,7 @@ export class FireBallBallGroupPresentation {
 		const ids = [...new Set((impactMessageIds ?? []).map((id) => String(id ?? "").trim()).filter(Boolean))];
 		if (!ids.length) return null;
 		const state = {
-			version: 1,
+			version: 2,
 			castId: String(castId ?? ""),
 			castMessageId: String(castMessageId ?? ""),
 			casterUuid: String(caster?.uuid ?? ""),
@@ -56,6 +60,7 @@ Hooks.on("createChatMessage", (message) => {
 	if (!isRelatedCanonicalMessage(message)) return;
 	requestChatRefresh();
 });
+Hooks.on("updateActor", () => requestChatRefresh());
 
 function decorate(message, html) {
 	const state = message?.getFlag?.(FLAG_SCOPE, BALL_GROUP_FLAG);
@@ -73,7 +78,7 @@ function decorate(message, html) {
 	const summary = document.createElement("summary");
 	Object.assign(summary.style, {
 		display: "grid",
-		gridTemplateColumns: "minmax(0, 1fr) max-content",
+		gridTemplateColumns: "minmax(0, 1fr) max-content max-content",
 		alignItems: "center",
 		gap: "0.6rem",
 		padding: "0.55rem 0.65rem",
@@ -86,7 +91,16 @@ function decorate(message, html) {
 	compact.textContent = compactStatus(state);
 	compact.style.whiteSpace = "nowrap";
 	compact.style.textAlign = "right";
-	summary.append(title, compact);
+	const arrow = document.createElement("span");
+	arrow.className = "wfrp-fireball-ball-group__expand-indicator";
+	arrow.textContent = "▾";
+	arrow.setAttribute("aria-hidden", "true");
+	Object.assign(arrow.style, {
+		fontSize: "0.9rem",
+		lineHeight: "1",
+		opacity: "0.75",
+	});
+	summary.append(title, compact, arrow);
 	details.append(summary);
 
 	const body = document.createElement("div");
@@ -116,10 +130,10 @@ function targetSection(groupState, target) {
 	heading.style.marginBottom = "0.25rem";
 	section.append(heading);
 
-	const impact = impactForTarget(groupState, target);
-	const initiative = initiativeSummary(impact);
-	const fear = fearSummary(groupState, target);
-	const damage = damageSummary(impact);
+	const record = impactRecordForTarget(groupState, target);
+	const initiative = initiativeSummary(record?.state ?? null);
+	const fear = fearSummary(record?.state ?? null);
+	const damage = damageSummary(record);
 	section.append(
 		statusRow(localize("Initiative", "Inicjatywa"), initiative.text, initiative.kind),
 		statusRow(localize("Fear", "Strach"), fear.text, fear.kind),
@@ -151,8 +165,14 @@ function statusRow(labelText, valueText, kind = "neutral") {
 
 function compactStatus(state) {
 	const entries = targetEntries(state);
-	const resolved = entries.filter((target) => impactForTarget(state, target)?.status === "resolved").length;
+	const resolved = entries.filter((target) => targetResolutionComplete(impactRecordForTarget(state, target))).length;
 	return `${resolved}/${entries.length} ${localize("resolved", "rozstrzygnięto")}`;
+}
+
+function targetResolutionComplete(record) {
+	if (!record?.state?.damage) return false;
+	const damage = damageSummary(record);
+	return damage.kind === "success" || /^\d+/.test(String(damage.text ?? ""));
 }
 
 function targetEntries(state) {
@@ -168,28 +188,34 @@ function targetEntries(state) {
 	}).filter(Boolean);
 }
 
-function impactForTarget(state, target) {
+function impactRecordForTarget(state, target) {
 	for (const id of state?.impactMessageIds ?? []) {
-		const impact = game.messages?.get(String(id))?.getFlag?.(FLAG_SCOPE, IMPACT_FLAG);
+		const message = game.messages?.get(String(id));
+		const impact = message?.getFlag?.(FLAG_SCOPE, IMPACT_FLAG);
 		if (!impact) continue;
-		if (target.tokenUuid && String(impact.targetTokenUuid ?? "") === String(target.tokenUuid)) return impact;
-		if (String(impact.targetUuid ?? "") === String(target.actorUuid ?? "")) return impact;
+		if (target.tokenUuid && String(impact.targetTokenUuid ?? "") === String(target.tokenUuid)) {
+			return { message, state: impact };
+		}
+		if (String(impact.targetUuid ?? "") === String(target.actorUuid ?? "")) {
+			return { message, state: impact };
+		}
 	}
 	return null;
 }
 
 function initiativeSummary(impact) {
-	if (!impact) return result(localize("Pending", "Oczekuje"), "neutral");
-	if (!impact.initiative) return result(localize("Pending", "Oczekuje"), "neutral");
+	if (!impact?.initiative) return result(localize("Pending", "Oczekuje"), "neutral");
 	const messageId = String(impact.initiative?.testMessageId ?? "").trim();
 	const testState = messageId ? game.messages?.get(messageId)?.getFlag?.(FLAG_SCOPE, TEST_RESULT_FLAG) : null;
 	const success = testState ? testResultSuccess(testState) : impact.initiative.success === true;
 	return result(success ? localize("Success", "Sukces") : localize("Failure", "Porażka"), success ? "success" : "failure");
 }
 
-function fearSummary(groupState, target) {
-	const request = fearRequest(groupState.castId, target.actorUuid);
-	if (!request) return result(localize("Not applicable", "Nie dotyczy"), "neutral");
+function fearSummary(impact) {
+	if (!impact?.fearOfFire) return result(localize("Not applicable", "Nie dotyczy"), "neutral");
+	const requestId = String(impact?.fearRequestMessageId ?? "").trim();
+	const request = requestId ? game.messages?.get(requestId) ?? null : null;
+	if (!request) return result(localize("Pending", "Oczekuje"), "neutral");
 	const requestState = request.getFlag?.(FLAG_SCOPE, ACTOR_TEST_FLAG);
 	if (requestState?.status !== "resolved" || !requestState?.resultMessageId) {
 		return result(localize("Pending", "Oczekuje"), "neutral");
@@ -200,26 +226,22 @@ function fearSummary(groupState, target) {
 	return result(success ? localize("Success", "Sukces") : localize("Failure", "Porażka"), success ? "success" : "failure");
 }
 
-function damageSummary(impact) {
-	if (!impact || impact.status !== "resolved" || !impact.damage) {
-		return result(localize("Pending", "Oczekuje"), "neutral");
-	}
+function damageSummary(record) {
+	const impact = record?.state;
+	if (!impact?.damage) return result(localize("Pending", "Oczekuje"), "neutral");
 	const amount = Number(impact.damage.finalDamage);
-	return result(Number.isFinite(amount) ? String(amount) : "—", "neutral");
-}
-
-function fearRequest(castId, actorUuid) {
-	const cast = String(castId ?? "").trim();
-	const actor = String(actorUuid ?? "").trim();
-	if (!cast || !actor) return null;
-	for (const message of game.messages ?? []) {
-		const state = message.getFlag?.(FLAG_SCOPE, ACTOR_TEST_FLAG);
-		if (state?.source?.kind !== "spell-fire-ball") continue;
-		if (String(state.source?.castId ?? "") !== cast) continue;
-		if (String(state.actorUuid ?? "") !== actor) continue;
-		return message;
+	const packetId = String(
+		record?.message?.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG)?.packet?.id ?? impact.damage.packetId ?? "",
+	).trim();
+	const actor = actorFromUuid(impact.targetUuid);
+	const transaction = actor && packetId ? DamageApplication.transactionFor(actor, packetId) : null;
+	if (transaction?.state === "applied") {
+		return result(
+			`${Number.isFinite(amount) ? amount : transaction.amountApplied} — ${localize("Applied", "Zastosowano")}`,
+			"success",
+		);
 	}
-	return null;
+	return result(Number.isFinite(amount) ? String(amount) : localize("Resolved", "Rozstrzygnięto"), "neutral");
 }
 
 function testResultSuccess(state) {
@@ -238,6 +260,7 @@ function result(text, kind) { return { text, kind }; }
 
 function isRelatedCanonicalMessage(message) {
 	if (message?.getFlag?.(FLAG_SCOPE, IMPACT_FLAG)) return true;
+	if (message?.getFlag?.(FLAG_SCOPE, DAMAGE_VIEW_FLAG)) return true;
 	const request = message?.getFlag?.(FLAG_SCOPE, ACTOR_TEST_FLAG);
 	if (request?.source?.kind === "spell-fire-ball") return true;
 	if (message?.getFlag?.(FLAG_SCOPE, TEST_RESULT_FLAG)) return isLinkedFireBallTestResult(message);
@@ -261,8 +284,28 @@ function requestChatRefresh() {
 	refreshQueued = true;
 	requestAnimationFrame(() => {
 		refreshQueued = false;
+		refreshVisibleGroups();
 		void ui.chat?.render?.({ force: true });
 	});
+}
+
+function refreshVisibleGroups() {
+	for (const message of game.messages ?? []) {
+		if (!message.getFlag?.(FLAG_SCOPE, BALL_GROUP_FLAG)) continue;
+		const entry = document.querySelector(`[data-message-id="${String(message.id)}"]`);
+		if (entry instanceof HTMLElement) decorate(message, entry);
+	}
+}
+
+function actorFromUuid(uuid) {
+	try {
+		const document = foundry.utils.fromUuidSync(String(uuid ?? "").trim());
+		if (document instanceof foundry.documents.Actor) return document;
+		if (document?.actor instanceof foundry.documents.Actor) return document.actor;
+	} catch (_error) {
+		return null;
+	}
+	return null;
 }
 
 function asElement(value) {
