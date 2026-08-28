@@ -57,6 +57,9 @@ async function executeFireBall(actor, spell) {
 	await actor.update(update);
 	await publishCastSummary({ actor, spell, configuration, volleys, magicPoints, magicPointsAfter });
 
+	/* Fear of Fire is a target-level reaction to this casting, not a reaction to
+	 * every projectile. Deduplicate all creatures hit by one or more balls before
+	 * creating Fear requests. */
 	const affected = new Map(
 		volleys.flatMap((volley) => volley.targets).map((target) => [target.key, target]),
 	);
@@ -456,13 +459,40 @@ function readConditions(form, targets) {
 	return conditions;
 }
 
+/**
+ * WFRP 1e Core Fire Ball group rule: EACH Fire Ball fired into a group hits
+ * 1D3 creatures PER LEVEL of the caster. At Power Level 3 one projectile
+ * therefore rolls 3D3 target-count dice, not one D3. The sum is capped by the
+ * number of creatures actually present in the selected group.
+ *
+ * Store the individual D3 faces as well as the sum. Besides documenting the RAW
+ * calculation this lets Dice So Nice show the physical D3-as-D6 bridge for every
+ * die while the authoritative target count remains the summed D3 result.
+ */
 async function resolveVolleyTargets(configuration, targets, powerLevel) {
 	const volleys = [];
 	for (let index = 0; index < configuration.fireBalls; index += 1) {
-		if (!configuration.group) { volleys.push({ targets: [targets[0]], groupRoll: null }); continue; }
-		const groupRoll = await new Roll("1d3").evaluate({ allowInteractive: false });
-		const count = Math.min(nonNegativeInteger(groupRoll.total, "Group hits"), targets.length);
-		volleys.push({ targets: await randomTargets(targets, count), groupRoll });
+		if (!configuration.group) {
+			volleys.push({ targets: [targets[0]], groupRolls: [], groupRollTotal: null });
+			continue;
+		}
+
+		const groupRoll = await new Roll(`${powerLevel}d3`).evaluate({ allowInteractive: false });
+		const term = groupRoll.dice?.find?.((die) => Number(die?.faces) === 3) ?? groupRoll.dice?.[0];
+		const groupRolls = (term?.results ?? []).map((result) => Number(result?.result));
+		if (groupRolls.length !== powerLevel || groupRolls.some((value) => !isD3(value))) {
+			throw new Error(localize(
+				"Unable to read all Fire Ball group-hit D3 results.",
+				"Nie udało się odczytać wszystkich wyników K3 trafień grupowych Ognistej Kuli.",
+			));
+		}
+		const groupRollTotal = groupRolls.reduce((sum, value) => sum + value, 0);
+		const count = Math.min(groupRollTotal, targets.length);
+		volleys.push({
+			targets: await randomTargets(targets, count),
+			groupRolls: Object.freeze(groupRolls),
+			groupRollTotal,
+		});
 	}
 	return Object.freeze(volleys);
 }
@@ -481,20 +511,24 @@ async function randomTargets(targets, count) {
 async function publishCastSummary({ actor, spell, configuration, volleys, magicPoints, magicPointsAfter }) {
 	const groupDetails = volleys.map((volley, index) => ({
 		ballNumber: index + 1,
-		groupRoll: volley.groupRoll ? nonNegativeInteger(volley.groupRoll.total, "Group hits") : null,
+		groupRolls: Object.freeze([...(volley.groupRolls ?? [])]),
+		groupRollTotal: volley.groupRollTotal === null || volley.groupRollTotal === undefined
+			? null
+			: nonNegativeInteger(volley.groupRollTotal, "Group hits"),
 		targets: volley.targets.map((target) => ({ uuid: target.key, actorUuid: target.actorUuid, tokenUuid: target.tokenUuid, name: target.name })),
 	}));
 	const content = `<section class="wfrp1ed fire-ball-cast-summary">
 		<h3>${escapeHtml(spell.name)}</h3>
 		<div><strong>${escapeHtml(localize("Fire Balls", "Ogniste Kule"))}:</strong> ${configuration.fireBalls}</div>
 		<div><strong>${escapeHtml(localize("Magic Points", "Punkty Magii"))}:</strong> ${magicPoints} → ${magicPointsAfter}</div>
-		${configuration.group ? `<div><strong>${escapeHtml(localize("Group hits", "Trafienia grupowe"))}:</strong> ${escapeHtml(groupDetails.map((entry) => `${entry.ballNumber}: ${entry.groupRoll} → ${entry.targets.map((target) => target.name).join(", ")}`).join("; "))}</div>` : ""}
+		${configuration.group ? `<div><strong>${escapeHtml(localize("Group hits", "Trafienia grupowe"))}:</strong> ${escapeHtml(groupDetails.map((entry) => `${entry.ballNumber}: ${entry.groupRolls.join("+")} = ${entry.groupRollTotal} → ${entry.targets.map((target) => target.name).join(", ")}`).join("; "))}</div>` : ""}
 	</section>`;
 	const message = await ChatMessage.create({ speaker: ChatMessage.getSpeaker({ actor }), content });
 	await message.setFlag(FLAG_SCOPE, CAST_FLAG_KEY, {
-		version: 4, casterUuid: actor.uuid, spellUuid: spell.uuid,
+		version: 5, casterUuid: actor.uuid, spellUuid: spell.uuid,
 		fireBalls: configuration.fireBalls, magicPointsBefore: magicPoints, magicPointsAfter,
-		group: configuration.group, distanceValidation: foundry.utils.deepClone(configuration.distanceValidation),
+		group: configuration.group, powerLevel: configuration.powerLevel,
+		distanceValidation: foundry.utils.deepClone(configuration.distanceValidation),
 		targets: configuration.targets.map((target) => ({ uuid: target.key, actorUuid: target.actorUuid, tokenUuid: target.tokenUuid, name: target.name })),
 		volleys: groupDetails,
 	});
@@ -581,6 +615,7 @@ function isCancelledDialogResult(response) { return response === null || respons
 function isCastConfiguration(response) { return Boolean(response && typeof response === "object" && Object.hasOwn(response, "fireBalls") && response.conditions && typeof response.conditions === "object"); }
 function positiveInteger(value, label) { const number = Number(value); if (!Number.isInteger(number) || number < 1) throw new Error(`${label} must be a positive integer.`); return number; }
 function nonNegativeInteger(value, label = "Value") { const number = Number(value); if (!Number.isInteger(number) || number < 0) throw new Error(`${label} must be a non-negative integer.`); return number; }
+function isD3(value) { const number = Number(value); return Number.isInteger(number) && number >= 1 && number <= 3; }
 function cssEscape(value) { return globalThis.CSS?.escape ? CSS.escape(String(value)) : String(value).replace(/["\\]/g, "\\$&"); }
 function escapeHtml(value) { const div = document.createElement("div"); div.textContent = String(value ?? ""); return div.innerHTML; }
 function reportTargetError(error) { console.error("WFRP1ED | Unable to add Fire Ball target.", error); ui.notifications.error(error?.message ?? localize("Unable to add the selected target.", "Nie udało się dodać wybranego celu.")); }
