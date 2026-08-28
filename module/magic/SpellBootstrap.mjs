@@ -9,6 +9,7 @@ import "./CoreCastingFailureWorkflow.mjs";
 import "./SpellCastLinkage.mjs";
 import "./FireBallBallGroupPresentation.mjs";
 import "./FireBallBallGroupAutoCreate.mjs";
+import "./FireBallCriticalFallback.mjs";
 import "./FireBallDamageLabels.mjs";
 import { installFireBallGroupHitDiceAnimation } from "./FireBallGroupHitDiceAnimation.mjs";
 import { installFireBallPresentationConsistency } from "./FireBallPresentationConsistency.mjs";
