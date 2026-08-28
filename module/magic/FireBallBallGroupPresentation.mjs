@@ -14,8 +14,12 @@ let refreshQueued = false;
  * Visible Fire Ball grouping layer.
  *
  * One lightweight aggregate ChatMessage represents one physical Fire Ball and
- * reads its target/Initiative/Fear/Damage state from the canonical child
+ * reads its target/Initiative/Damage state from the canonical child
  * ChatMessages. It does not own or duplicate any mechanical state.
+ *
+ * Fear is intentionally not repeated here. WFRP 1e Fear of Fire is a
+ * target-level reaction to the cast/encounter and is presented once on the cast
+ * summary by FireBallCastPsychologyPresentation.
  *
  * Stage 2 removes only the now-redundant per-target Fire Ball impact/source
  * cards from the top-level chat stream when a Ball aggregate explicitly owns
@@ -28,7 +32,7 @@ export class FireBallBallGroupPresentation {
 		const ids = [...new Set((impactMessageIds ?? []).map((id) => String(id ?? "").trim()).filter(Boolean))];
 		if (!ids.length) return null;
 		const state = {
-			version: 3,
+			version: 4,
 			castId: String(castId ?? ""),
 			castMessageId: String(castMessageId ?? ""),
 			casterUuid: String(caster?.uuid ?? ""),
@@ -138,11 +142,9 @@ function targetSection(groupState, target) {
 
 	const record = impactRecordForTarget(groupState, target);
 	const initiative = initiativeSummary(record?.state ?? null);
-	const fear = fearSummary(record?.state ?? null);
 	const damage = damageSummary(record);
 	section.append(
 		statusRow(localize("Initiative", "Inicjatywa"), initiative.text, initiative.kind),
-		statusRow(localize("Fear", "Strach"), fear.text, fear.kind),
 		statusRow(localize("Damage", "Obrażenia"), damage.text, damage.kind),
 	);
 	return section;
@@ -214,21 +216,6 @@ function initiativeSummary(impact) {
 	const messageId = String(impact.initiative?.testMessageId ?? "").trim();
 	const testState = messageId ? game.messages?.get(messageId)?.getFlag?.(FLAG_SCOPE, TEST_RESULT_FLAG) : null;
 	const success = testState ? testResultSuccess(testState) : impact.initiative.success === true;
-	return result(success ? localize("Success", "Sukces") : localize("Failure", "Porażka"), success ? "success" : "failure");
-}
-
-function fearSummary(impact) {
-	if (!impact?.fearOfFire) return result(localize("Not applicable", "Nie dotyczy"), "neutral");
-	const requestId = String(impact?.fearRequestMessageId ?? "").trim();
-	const request = requestId ? game.messages?.get(requestId) ?? null : null;
-	if (!request) return result(localize("Pending", "Oczekuje"), "neutral");
-	const requestState = request.getFlag?.(FLAG_SCOPE, ACTOR_TEST_FLAG);
-	if (requestState?.status !== "resolved" || !requestState?.resultMessageId) {
-		return result(localize("Pending", "Oczekuje"), "neutral");
-	}
-	const testState = game.messages?.get(String(requestState.resultMessageId))?.getFlag?.(FLAG_SCOPE, TEST_RESULT_FLAG);
-	if (!testState) return result(localize("Resolved", "Rozstrzygnięto"), "neutral");
-	const success = testResultSuccess(testState);
 	return result(success ? localize("Success", "Sukces") : localize("Failure", "Porażka"), success ? "success" : "failure");
 }
 
