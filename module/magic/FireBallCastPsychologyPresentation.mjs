@@ -1,7 +1,11 @@
-import { adjudicateFireBallCastFear } from "./FireBallVulnerabilitySync.mjs";
+import {
+	adjudicateFireBallCastFear,
+	adjudicateFireBallCastFlammable,
+} from "./FireBallVulnerabilitySync.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
 const CAST_FLAG = "fireBallCast";
+const BALL_GROUP_FLAG = "fireBallBallGroup";
 const IMPACT_FLAG = "fireBallImpactWorkflow";
 const ACTOR_TEST_FLAG = "actorTestRequest";
 const TEST_RESULT_FLAG = "testResultState";
@@ -10,13 +14,20 @@ const SECTION_ATTR = "data-wfrp-fireball-cast-psychology";
 let refreshQueued = false;
 
 /**
- * Fire Ball Fear belongs to the casting target, not to an individual projectile.
- * The cast summary therefore owns the visible vulnerability checkbox and one
- * result row per creature actually hit by at least one Ball. Canonical impact,
- * ActorTestRequest and TestResult messages remain the mechanical source of truth.
+ * Fire Ball vulnerabilities belong to the target in the cast, not to one
+ * projectile. The cast summary therefore owns one Flammable switch and one Fear
+ * of Fire switch per creature hit by at least one Ball. Fear results are shown
+ * here as Psychology; individual Ball cards keep only Initiative and Damage.
  */
 Hooks.on("renderChatMessageHTML", (message, html) => {
-	requestAnimationFrame(() => decorateCastPsychology(message, html));
+	requestAnimationFrame(() => {
+		decorateCastPsychology(message, html);
+		/* BallGroupPresentation also renders from a hook. Strip its obsolete
+		 * per-Ball Flammable control on the following frame so this remains robust
+		 * regardless of hook registration order while we preserve the canonical
+		 * hidden impact controls underneath. */
+		requestAnimationFrame(() => stripPerBallFlammable(html));
+	});
 });
 
 Hooks.on("createChatMessage", (message) => {
@@ -61,7 +72,7 @@ function decorateCastPsychology(message, html) {
 	arrow.textContent = section.open ? "▾" : "▸";
 	arrow.setAttribute("aria-hidden", "true");
 	const label = document.createElement("strong");
-	label.textContent = localize("Psychology", "Psychologia");
+	label.textContent = localize("Vulnerabilities", "Podatności");
 	const compact = document.createElement("span");
 	compact.textContent = psychologyCompact(targets);
 	compact.style.textAlign = "right";
@@ -75,7 +86,7 @@ function decorateCastPsychology(message, html) {
 		paddingTop: "0.35rem",
 		borderTop: "1px solid rgba(74, 52, 31, 0.22)",
 	});
-	for (const target of targets) body.append(psychologyRow(cast.castId, target));
+	for (const target of targets) body.append(vulnerabilityRow(cast.castId, target));
 	section.append(body);
 
 	section.addEventListener("toggle", () => {
@@ -85,64 +96,100 @@ function decorateCastPsychology(message, html) {
 	summary.append(section);
 }
 
-function psychologyRow(castId, target) {
-	const row = document.createElement("div");
+function vulnerabilityRow(castId, target) {
+	const row = document.createElement("section");
 	Object.assign(row.style, {
+		padding: "0.25rem 0",
+		borderBottom: "1px solid rgba(74, 52, 31, 0.12)",
+	});
+
+	const top = document.createElement("div");
+	Object.assign(top.style, {
 		display: "grid",
 		gridTemplateColumns: "minmax(0, 1fr) max-content",
 		alignItems: "center",
 		gap: "0.5rem",
-		minHeight: "1.65rem",
+		minHeight: "1.5rem",
 	});
-
-	/* Use the same checkbox wrapper as the rest of the system instead of forcing
-	 * a browser-native control. This keeps the Psychology control visually
-	 * identical to our existing Fire Ball/settings checkboxes on first render and
-	 * after subsequent chat refreshes. */
-	const control = document.createElement("label");
-	control.className = "wfrp1ed-checkbox";
-	Object.assign(control.style, {
-		display: "inline-flex",
-		alignItems: "center",
-		gap: "0.35rem",
-		minWidth: "0",
-	});
-
-	const checkbox = document.createElement("input");
-	checkbox.type = "checkbox";
-	checkbox.checked = target.enabled;
-	checkbox.disabled = !game.user?.isGM;
-	checkbox.title = localize("Fear of Fire", "Strach przed ogniem");
-	checkbox.setAttribute("aria-label", `${target.name}: ${localize("Fear of Fire", "Strach przed ogniem")}`);
-
-	const label = document.createElement("span");
-	label.textContent = target.name;
-	control.append(checkbox, label);
-
+	const name = document.createElement("strong");
+	name.textContent = target.name;
 	const outcome = fearOutcome(target);
 	const value = document.createElement("strong");
-	value.textContent = outcome.text;
+	value.textContent = `${localize("Fear", "Strach")}: ${outcome.text}`;
 	value.style.whiteSpace = "nowrap";
 	value.style.textAlign = "right";
 	if (outcome.kind === "success") value.style.color = "#31542f";
 	if (outcome.kind === "failure") value.style.color = "#7b2626";
+	top.append(name, value);
+	row.append(top);
 
-	checkbox.addEventListener("change", () => {
+	const controls = document.createElement("div");
+	Object.assign(controls.style, {
+		display: "flex",
+		flexWrap: "wrap",
+		gap: "0.35rem 0.9rem",
+		marginTop: "0.15rem",
+	});
+
+	const flammable = checkboxControl(localize("Flammable", "Łatwopalny"), target.flammable);
+	flammable.input.indeterminate = target.flammableMixed === true;
+	flammable.input.disabled = !game.user?.isGM;
+	flammable.input.title = target.flammableMixed
+		? localize(
+			"Existing Ball impacts disagree. Choose a value to normalize the whole cast for this target.",
+			"Istniejące trafienia Kul mają różne wartości. Wybierz wartość, aby ujednolicić cały czar dla tego celu.",
+		)
+		: localize("Flammable for every Fire Ball in this cast", "Łatwopalny dla każdej Ognistej Kuli w tym rzuceniu czaru");
+	flammable.input.addEventListener("change", () => {
 		if (!game.user?.isGM) return;
-		const requested = checkbox.checked === true;
-		checkbox.disabled = true;
-		void adjudicateFireBallCastFear(castId, target.actorUuid, requested)
+		const requested = flammable.input.checked === true;
+		flammable.input.indeterminate = false;
+		flammable.input.disabled = true;
+		void adjudicateFireBallCastFlammable(castId, target.actorUuid, requested)
 			.catch((error) => {
-				checkbox.checked = !requested;
+				flammable.input.checked = target.flammable;
+				flammable.input.indeterminate = target.flammableMixed === true;
 				reportError(error);
 			})
 			.finally(() => {
-				if (checkbox.isConnected) checkbox.disabled = !game.user?.isGM;
+				if (flammable.input.isConnected) flammable.input.disabled = !game.user?.isGM;
 			});
 	});
 
-	row.append(control, value);
+	const fear = checkboxControl(localize("Fear of Fire", "Strach przed ogniem"), target.enabled);
+	fear.input.disabled = !game.user?.isGM;
+	fear.input.addEventListener("change", () => {
+		if (!game.user?.isGM) return;
+		const requested = fear.input.checked === true;
+		fear.input.disabled = true;
+		void adjudicateFireBallCastFear(castId, target.actorUuid, requested)
+			.catch((error) => {
+				fear.input.checked = !requested;
+				reportError(error);
+			})
+			.finally(() => {
+				if (fear.input.isConnected) fear.input.disabled = !game.user?.isGM;
+			});
+	});
+
+	controls.append(flammable.label, fear.label);
+	row.append(controls);
 	return row;
+}
+
+function checkboxControl(text, checked) {
+	const label = document.createElement("label");
+	label.className = "wfrp1ed-checkbox";
+	Object.assign(label.style, {
+		display: "inline-flex",
+		alignItems: "center",
+		gap: "0.35rem",
+	});
+	const input = document.createElement("input");
+	input.type = "checkbox";
+	input.checked = checked === true;
+	label.append(input, document.createTextNode(text));
+	return { label, input };
 }
 
 function psychologyCompact(targets) {
@@ -151,7 +198,7 @@ function psychologyCompact(targets) {
 		.map(fearOutcome)
 		.filter((entry) => entry.kind === "success" || entry.kind === "failure")
 		.length;
-	return `${resolved}/${applicable.length} ${localize("resolved", "rozstrzygnięto")}`;
+	return `${localize("Fear", "Strach")} ${resolved}/${applicable.length}`;
 }
 
 function fearOutcome(target) {
@@ -170,49 +217,41 @@ function fearOutcome(target) {
 	};
 }
 
-/**
- * Build the cast-level Psychology roster from the cast's authoritative volley
- * targets first. Impact messages and Fear requests then overlay vulnerability
- * and result state. This keeps every creature hit by at least one Ball visible
- * even when one impact has not yet linked its Fear request.
- */
 function psychologyTargetsForCast(cast) {
 	const castId = String(cast?.castId ?? "").trim();
 	if (!castId) return [];
 	const byActor = new Map();
 
-	for (const volley of cast?.volleys ?? []) {
-		for (const target of volley?.targets ?? []) {
-			const actorUuid = String(target?.actorUuid ?? target?.uuid ?? "").trim();
-			if (!actorUuid) continue;
-			if (!byActor.has(actorUuid)) {
-				byActor.set(actorUuid, {
-					actorUuid,
-					name: String(target?.name ?? documentFromUuid(actorUuid)?.name ?? "—"),
-					enabled: false,
-					explicitlyDisabled: false,
-					requestMessage: null,
-				});
-			}
-		}
-	}
-
-	for (const message of game.messages ?? []) {
-		const impact = message.getFlag?.(FLAG_SCOPE, IMPACT_FLAG);
-		if (String(impact?.castId ?? "") !== castId) continue;
-		const actorUuid = String(impact?.targetUuid ?? "").trim();
-		if (!actorUuid) continue;
+	const ensureEntry = (actorUuid, name = "—") => {
 		let entry = byActor.get(actorUuid);
 		if (!entry) {
 			entry = {
 				actorUuid,
-				name: String(impact?.targetName ?? documentFromUuid(actorUuid)?.name ?? "—"),
+				name,
 				enabled: false,
 				explicitlyDisabled: false,
 				requestMessage: null,
+				flammableValues: new Set(),
 			};
 			byActor.set(actorUuid, entry);
 		}
+		return entry;
+	};
+
+	for (const volley of cast?.volleys ?? []) {
+		for (const target of volley?.targets ?? []) {
+			const actorUuid = String(target?.actorUuid ?? target?.uuid ?? "").trim();
+			if (!actorUuid) continue;
+			ensureEntry(actorUuid, String(target?.name ?? documentFromUuid(actorUuid)?.name ?? "—"));
+		}
+	}
+
+	for (const message of impactMessagesForCast(castId)) {
+		const impact = message.getFlag?.(FLAG_SCOPE, IMPACT_FLAG);
+		const actorUuid = String(impact?.targetUuid ?? "").trim();
+		if (!actorUuid) continue;
+		const entry = ensureEntry(actorUuid, String(impact?.targetName ?? documentFromUuid(actorUuid)?.name ?? "—"));
+		entry.flammableValues.add(impact?.flammable === true);
 		if (impact?.fearManuallyDisabled === true) {
 			entry.explicitlyDisabled = true;
 			entry.enabled = false;
@@ -229,28 +268,57 @@ function psychologyTargetsForCast(cast) {
 		if (String(request?.source?.castId ?? "") !== castId) continue;
 		const actorUuid = String(request?.actorUuid ?? request?.source?.targetUuid ?? "").trim();
 		if (!actorUuid) continue;
-		let entry = byActor.get(actorUuid);
-		if (!entry) {
-			entry = {
-				actorUuid,
-				name: String(request?.actorName ?? documentFromUuid(actorUuid)?.name ?? "—"),
-				enabled: false,
-				explicitlyDisabled: false,
-				requestMessage: null,
-			};
-			byActor.set(actorUuid, entry);
-		}
+		const entry = ensureEntry(actorUuid, String(request?.actorName ?? documentFromUuid(actorUuid)?.name ?? "—"));
 		entry.requestMessage = message;
 		if (!entry.explicitlyDisabled) entry.enabled = true;
 	}
 
 	return [...byActor.values()]
-		.map(({ explicitlyDisabled, ...entry }) => entry)
+		.map((entry) => {
+			const values = [...entry.flammableValues];
+			const flammableMixed = values.length > 1;
+			const flammable = values.length > 0 && values.every((value) => value === true);
+			return {
+				actorUuid: entry.actorUuid,
+				name: entry.name,
+				enabled: entry.enabled,
+				requestMessage: entry.requestMessage,
+				flammable,
+				flammableMixed,
+			};
+		})
 		.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function impactMessagesForCast(castId) {
+	const cast = String(castId ?? "").trim();
+	if (!cast) return [];
+	const byId = new Map();
+	for (const message of game.messages ?? []) {
+		const impact = message.getFlag?.(FLAG_SCOPE, IMPACT_FLAG);
+		if (String(impact?.castId ?? "") === cast) byId.set(String(message.id), message);
+	}
+	for (const message of game.messages ?? []) {
+		const group = message.getFlag?.(FLAG_SCOPE, BALL_GROUP_FLAG);
+		if (String(group?.castId ?? "") !== cast) continue;
+		for (const id of group?.impactMessageIds ?? []) {
+			const normalized = String(id ?? "").trim();
+			const impactMessage = normalized ? game.messages?.get(normalized) : null;
+			if (impactMessage?.getFlag?.(FLAG_SCOPE, IMPACT_FLAG)) byId.set(normalized, impactMessage);
+		}
+	}
+	return [...byId.values()];
+}
+
+function stripPerBallFlammable(html) {
+	const root = asElement(html);
+	if (!(root instanceof HTMLElement)) return;
+	root.querySelectorAll?.(".wfrp-fireball-ball-group__flammable").forEach((element) => element.remove());
 }
 
 function isRelated(message) {
 	if (message?.getFlag?.(FLAG_SCOPE, IMPACT_FLAG)) return true;
+	if (message?.getFlag?.(FLAG_SCOPE, BALL_GROUP_FLAG)) return true;
 	if (isFireBallFearMessage(message)) return true;
 	return isFireBallFearResult(message);
 }
@@ -293,6 +361,9 @@ function requestRefresh() {
 			const entry = document.querySelector(`[data-message-id="${cssEscape(message.id)}"]`);
 			if (entry instanceof HTMLElement) decorateCastPsychology(message, entry);
 		}
+		for (const element of document.querySelectorAll?.(".wfrp-fireball-ball-group__flammable") ?? []) {
+			element.remove();
+		}
 	});
 }
 
@@ -312,10 +383,10 @@ function asElement(value) {
 }
 
 function reportError(error) {
-	console.error("WFRP1ED | Unable to adjudicate cast Psychology.", error);
+	console.error("WFRP1ED | Unable to adjudicate cast vulnerabilities.", error);
 	ui.notifications.error(error?.message ?? localize(
-		"Unable to update Fear of Fire.",
-		"Nie udało się zaktualizować Strachu przed ogniem.",
+		"Unable to update Fire Ball vulnerability.",
+		"Nie udało się zaktualizować podatności Ognistej Kuli.",
 	));
 }
 
