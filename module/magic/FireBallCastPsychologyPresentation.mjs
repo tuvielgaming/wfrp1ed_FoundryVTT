@@ -89,10 +89,23 @@ function psychologyRow(castId, target) {
 	const row = document.createElement("div");
 	Object.assign(row.style, {
 		display: "grid",
-		gridTemplateColumns: "max-content minmax(0, 1fr) max-content",
+		gridTemplateColumns: "minmax(0, 1fr) max-content",
 		alignItems: "center",
 		gap: "0.5rem",
 		minHeight: "1.65rem",
+	});
+
+	/* Use the same checkbox wrapper as the rest of the system instead of forcing
+	 * a browser-native control. This keeps the Psychology control visually
+	 * identical to our existing Fire Ball/settings checkboxes on first render and
+	 * after subsequent chat refreshes. */
+	const control = document.createElement("label");
+	control.className = "wfrp1ed-checkbox";
+	Object.assign(control.style, {
+		display: "inline-flex",
+		alignItems: "center",
+		gap: "0.35rem",
+		minWidth: "0",
 	});
 
 	const checkbox = document.createElement("input");
@@ -101,17 +114,10 @@ function psychologyRow(castId, target) {
 	checkbox.disabled = !game.user?.isGM;
 	checkbox.title = localize("Fear of Fire", "Strach przed ogniem");
 	checkbox.setAttribute("aria-label", `${target.name}: ${localize("Fear of Fire", "Strach przed ogniem")}`);
-	/* Foundry's themed checkbox skin could briefly paint a checked control with
-	 * the UI accent colour on the initial injected DOM and then fall back to the
-	 * browser checkbox after a later card rebuild. Force the native checkbox
-	 * presentation from the start so the control does not visually change after
-	 * an unrelated Initiative/Test refresh. */
-	checkbox.style.setProperty("appearance", "auto", "important");
-	checkbox.style.setProperty("-webkit-appearance", "checkbox", "important");
-	checkbox.style.setProperty("accent-color", "auto", "important");
 
 	const label = document.createElement("span");
 	label.textContent = target.name;
+	control.append(checkbox, label);
 
 	const outcome = fearOutcome(target);
 	const value = document.createElement("strong");
@@ -135,7 +141,7 @@ function psychologyRow(castId, target) {
 			});
 	});
 
-	row.append(checkbox, label, value);
+	row.append(control, value);
 	return row;
 }
 
@@ -235,8 +241,6 @@ function psychologyTargetsForCast(cast) {
 			byActor.set(actorUuid, entry);
 		}
 		entry.requestMessage = message;
-		/* A linked request means Fear was enabled for the cast unless an impact
-		 * explicitly records a later GM disable. */
 		if (!entry.explicitlyDisabled) entry.enabled = true;
 	}
 
