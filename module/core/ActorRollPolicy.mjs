@@ -23,9 +23,12 @@ export class ActorRollPolicy {
 	}
 
 	/**
-	 * Use the same automation boundary as combat damage: player-owned Actors
-	 * always require an explicit owner/GM action. GM-only Actors may automate
-	 * only on the primary active GM and only while the World setting allows it.
+	 * Shared automation boundary for rolls belonging to one Actor. Player-owned
+	 * Actors always require an explicit owner/GM action. GM-only Actors may
+	 * automate only on the primary active GM and only while the World automation
+	 * setting allows it. The dependent mechanic must still publish its ordinary
+	 * roll/result ChatMessage; this policy decides only whether its action starts
+	 * automatically.
 	 */
 	static shouldAutomaticallyRoll(actor, user = game.user) {
 		if (!(actor instanceof foundry.documents.Actor) || !user) return false;
@@ -33,7 +36,7 @@ export class ActorRollPolicy {
 		return Boolean(
 			user.isGM &&
 			this.isPrimaryActiveGM() &&
-			WfrpRuleSettings.autoRollDamageForGmActors(),
+			WfrpRuleSettings.autoRollMechanicTestsForGmActors(),
 		);
 	}
 
