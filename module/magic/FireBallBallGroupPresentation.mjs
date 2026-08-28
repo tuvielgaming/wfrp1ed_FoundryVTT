@@ -1,3 +1,4 @@
+import { ActorRollPolicy } from "../core/ActorRollPolicy.mjs";
 import { DamageApplication } from "../damage/DamageApplication.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
@@ -21,18 +22,18 @@ let refreshQueued = false;
  * target-level reaction to the cast/encounter and is presented once on the cast
  * summary by FireBallCastPsychologyPresentation.
  *
- * Stage 2 removes only the now-redundant per-target Fire Ball impact/source
- * cards from the top-level chat stream when a Ball aggregate explicitly owns
- * that impactMessageId. The canonical impact ChatMessage remains in the World
- * and is still the source of truth. TestResult and dedicated Damage cards remain
- * visible for now because they still own Luck/adjudication/damage controls.
+ * The redundant per-target impact/source card is hidden once a Ball aggregate
+ * owns it. Any action that still belongs to that canonical impact must therefore
+ * be surfaced by the aggregate. The aggregate does not implement the mechanic:
+ * it delegates to the canonical impact card/control, preserving the existing
+ * permission, socket and damage workflow.
  */
 export class FireBallBallGroupPresentation {
 	static async create({ castId, castMessageId, caster, spell, ballNumber, impactMessageIds, targets } = {}) {
 		const ids = [...new Set((impactMessageIds ?? []).map((id) => String(id ?? "").trim()).filter(Boolean))];
 		if (!ids.length) return null;
 		const state = {
-			version: 4,
+			version: 5,
 			castId: String(castId ?? ""),
 			castMessageId: String(castMessageId ?? ""),
 			casterUuid: String(caster?.uuid ?? ""),
@@ -147,7 +148,89 @@ function targetSection(groupState, target) {
 		statusRow(localize("Initiative", "Inicjatywa"), initiative.text, initiative.kind),
 		statusRow(localize("Damage", "Obrażenia"), damage.text, damage.kind),
 	);
+
+	if (record?.state?.status === "awaiting-damage") {
+		section.append(buildRollDamageButton(record));
+	}
 	return section;
+}
+
+function buildRollDamageButton(record) {
+	const button = document.createElement("button");
+	button.type = "button";
+	button.className = "combat-damage-roll-button wfrp-fireball-ball-group__damage-action";
+	button.textContent = localize("Roll Damage", "Rzuć obrażenia");
+	button.style.marginTop = "0.35rem";
+	button.style.width = "100%";
+
+	const caster = actorFromUuid(record?.state?.casterUuid);
+	button.disabled = !ActorRollPolicy.canAdjudicate(caster, game.user);
+	button.title = button.disabled
+		? localize(
+			"Only the GM or an OWNER of the caster may roll this damage.",
+			"Tylko MG albo Właściciel rzucającego czar może rzucić te obrażenia.",
+		)
+		: localize(
+			"Roll damage for this Fire Ball hit.",
+			"Rzuć obrażenia dla tego trafienia Ognistej Kuli.",
+		);
+
+	button.addEventListener("click", () => {
+		button.disabled = true;
+		void invokeCanonicalDamageRoll(record)
+			.catch(reportError)
+			.finally(() => {
+				if (button.isConnected) {
+					const current = record?.message?.getFlag?.(FLAG_SCOPE, IMPACT_FLAG);
+					button.disabled = current?.status !== "awaiting-damage" ||
+						!ActorRollPolicy.canAdjudicate(actorFromUuid(current?.casterUuid), game.user);
+				}
+			});
+	});
+	return button;
+}
+
+async function invokeCanonicalDamageRoll(record) {
+	const messageId = String(record?.message?.id ?? "").trim();
+	if (!messageId) throw new Error(localize(
+		"The Fire Ball impact is unavailable.",
+		"Trafienie Ognistej Kuli jest niedostępne.",
+	));
+
+	let control = canonicalDamageControl(messageId);
+	if (!(control instanceof HTMLButtonElement)) {
+		await ui.chat?.render?.({ force: true });
+		await nextAnimationFrame();
+		await nextAnimationFrame();
+		control = canonicalDamageControl(messageId);
+	}
+	if (!(control instanceof HTMLButtonElement)) {
+		throw new Error(localize(
+			"The canonical Fire Ball damage action is unavailable.",
+			"Kanoniczna akcja obrażeń Ognistej Kuli jest niedostępna.",
+		));
+	}
+	if (control.disabled) {
+		throw new Error(localize(
+			"You may not roll this Fire Ball damage.",
+			"Nie masz uprawnień do rzutu obrażeń Ognistej Kuli.",
+		));
+	}
+	control.click();
+}
+
+function canonicalDamageControl(messageId) {
+	const id = cssEscape(messageId);
+	const entry = document.querySelector(`[data-message-id="${id}"]`);
+	if (!(entry instanceof HTMLElement)) return null;
+	const panel = entry.querySelector("[data-wfrp-fireball-impact-workflow]");
+	if (!(panel instanceof HTMLElement)) return null;
+	return [...panel.querySelectorAll("button.combat-damage-roll-button")]
+		.find((button) => /damage|obrażenia/i.test(String(button.textContent ?? ""))) ?? null;
+}
+
+function nextAnimationFrame() {
+	return new Promise((resolve) => requestAnimationFrame(() => resolve()));
 }
 
 function statusRow(labelText, valueText, kind = "neutral") {
@@ -314,7 +397,7 @@ function requestChatRefresh() {
 function refreshVisibleGroups() {
 	for (const message of game.messages ?? []) {
 		if (!message.getFlag?.(FLAG_SCOPE, BALL_GROUP_FLAG)) continue;
-		const entry = document.querySelector(`[data-message-id="${String(message.id)}"]`);
+		const entry = document.querySelector(`[data-message-id="${cssEscape(String(message.id))}"]`);
 		if (entry instanceof HTMLElement) decorate(message, entry);
 	}
 }
@@ -330,10 +413,22 @@ function actorFromUuid(uuid) {
 	return null;
 }
 
+function cssEscape(value) {
+	return globalThis.CSS?.escape ? CSS.escape(String(value)) : String(value).replace(/["\\]/g, "\\$&");
+}
+
 function asElement(value) {
 	if (value instanceof HTMLElement) return value;
 	if (value?.[0] instanceof HTMLElement) return value[0];
 	return null;
+}
+
+function reportError(error) {
+	console.error("WFRP1ED | Unable to roll grouped Fire Ball damage.", error);
+	ui.notifications.error(error?.message ?? localize(
+		"Unable to roll Fire Ball damage.",
+		"Nie udało się rzucić obrażeń Ognistej Kuli.",
+	));
 }
 
 function localize(english, polish) {
