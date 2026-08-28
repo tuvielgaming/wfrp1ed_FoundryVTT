@@ -2,6 +2,7 @@ import { TestResultChat } from "../tests/TestResultChat.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
 const ACTOR_TEST_FLAG_KEY = "actorTestRequest";
+const TEST_SOURCE_FLAG_KEY = "actorTestRequestSource";
 const TEST_FLAG_KEY = "testResultState";
 let refreshQueued = false;
 
@@ -11,11 +12,8 @@ let refreshQueued = false;
  * editable/Luck-capable Test card; this module adds only spell context and the
  * rule consequence.
  *
- * ActorTestRequestWorkflow publishes the TestResult first and only then stores
- * its resultMessageId on the request. When that link arrives, decorate the
- * already-rendered result directly and also queue a full chat refresh as a
- * fallback. This makes newly-created Fear Tests immediately show their Fire Ball
- * identity instead of waiting for a later adjudication render.
+ * New ActorTestRequest results persist their request provenance directly on the
+ * TestResult message. Historical reverse lookup is kept for older World messages.
  */
 Hooks.on("renderChatMessageHTML", (message, html) => {
 	requestAnimationFrame(() => decorateFireBallFearResult(message, html));
@@ -23,10 +21,17 @@ Hooks.on("renderChatMessageHTML", (message, html) => {
 
 Hooks.on("updateChatMessage", (message) => {
 	const request = message?.getFlag?.(FLAG_SCOPE, ACTOR_TEST_FLAG_KEY);
-	if (request?.source?.kind !== "spell-fire-ball" || !request?.resultMessageId) return;
-	const resultId = String(request.resultMessageId ?? "").trim();
-	requestAnimationFrame(() => requestAnimationFrame(() => decorateRenderedResult(resultId)));
-	queueRefresh();
+	if (request?.source?.kind === "spell-fire-ball" && request?.resultMessageId) {
+		const resultId = String(request.resultMessageId ?? "").trim();
+		requestAnimationFrame(() => requestAnimationFrame(() => decorateRenderedResult(resultId)));
+		queueRefresh();
+		return;
+	}
+	const direct = message?.getFlag?.(FLAG_SCOPE, TEST_SOURCE_FLAG_KEY);
+	if (direct?.source?.kind === "spell-fire-ball") {
+		requestAnimationFrame(() => requestAnimationFrame(() => decorateRenderedResult(message.id)));
+		queueRefresh();
+	}
 });
 
 function decorateRenderedResult(resultId) {
@@ -93,6 +98,12 @@ function queueRefresh() {
 }
 
 function isFireBallFearResult(message) {
+	const direct = message?.getFlag?.(FLAG_SCOPE, TEST_SOURCE_FLAG_KEY);
+	if (
+		direct?.source?.kind === "spell-fire-ball" &&
+		String(direct?.testId ?? "") === "fear"
+	) return true;
+
 	const id = String(message?.id ?? "").trim();
 	if (!id) return false;
 	for (const candidate of game.messages ?? []) {
