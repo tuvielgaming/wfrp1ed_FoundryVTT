@@ -3,15 +3,27 @@ import { TestResultChat } from "../tests/TestResultChat.mjs";
 const FLAG_SCOPE = "wfrp1ed";
 const ACTOR_TEST_FLAG_KEY = "actorTestRequest";
 const TEST_FLAG_KEY = "testResultState";
+let refreshQueued = false;
 
 /**
  * Present Fire Ball's canonical Fear TestResult with its source and, on failure,
  * the WFRP 1e psychology consequence. The TestResult itself remains the normal
  * editable/Luck-capable Test card; this module adds only spell context and the
  * rule consequence.
+ *
+ * ActorTestRequestWorkflow publishes the TestResult first and only then stores
+ * its resultMessageId on the request. Refresh when that link arrives so the very
+ * first rendered Fear result receives the spell identity and Psychology text;
+ * previously this appeared only after a later adjudication re-render.
  */
 Hooks.on("renderChatMessageHTML", (message, html) => {
 	requestAnimationFrame(() => decorateFireBallFearResult(message, html));
+});
+
+Hooks.on("updateChatMessage", (message) => {
+	const request = message?.getFlag?.(FLAG_SCOPE, ACTOR_TEST_FLAG_KEY);
+	if (request?.source?.kind !== "spell-fire-ball" || !request?.resultMessageId) return;
+	queueRefresh();
 });
 
 function decorateFireBallFearResult(message, html) {
@@ -25,9 +37,6 @@ function decorateFireBallFearResult(message, html) {
 		: root?.querySelector?.(".wfrp1e-test-card");
 	if (!(card instanceof HTMLElement)) return;
 
-	/* TestResultIdentityChat replaces the original <h2> with its compact
-	 * "Test | name" identity synchronously. This hook runs one frame later, so
-	 * prefer the decorated identity value and keep the old <h2> as a fallback. */
 	const sourceLabel = localize("Fear (Fire Ball)", "Strach (Ognista Kula)");
 	const identityName = card.querySelector("[data-wfrp-test-display-name]");
 	const title = card.querySelector(".wfrp1e-test-card__header h2");
@@ -61,6 +70,15 @@ function decorateFireBallFearResult(message, html) {
 	const metrics = card.querySelector(".wfrp1e-test-card__metrics");
 	if (metrics) metrics.before(section);
 	else card.append(section);
+}
+
+function queueRefresh() {
+	if (refreshQueued) return;
+	refreshQueued = true;
+	requestAnimationFrame(() => {
+		refreshQueued = false;
+		void ui.chat?.render?.({ force: true });
+	});
 }
 
 function isFireBallFearResult(message) {
