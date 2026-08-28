@@ -1,44 +1,82 @@
 const FLAG_SCOPE = "wfrp1ed";
 const CAST_FLAG_KEY = "fireBallCast";
+const REVEAL_FLAG_KEY = "fireBallGroupHitsRevealed";
 
 let installed = false;
 const animatedMessages = new Set();
 
 /**
  * Dice So Nice has no normal d3 mesh. Keep the authoritative Fire Ball group
- * roll as d3, but display each stored d3 result on a physical d6:
+ * roll as d3, but display every stored d3 result in one physical d6 animation:
  *   1-2 => d3 1
  *   3-4 => d3 2
  *   5-6 => d3 3
  *
- * This is the same visual-only convention used by Risk consequences. The d6
- * never changes target selection or any persisted Fire Ball mechanics.
+ * The cast-summary result row stays hidden until that animation batch finishes.
+ * The reveal itself is persisted on the ChatMessage so every connected client
+ * sees the same presentation after the primary GM completes the visual roll.
  */
 export function installFireBallGroupHitDiceAnimation() {
 	if (installed) return;
 	installed = true;
 
-	Hooks.on("preUpdateChatMessage", (message, changes) => {
+	Hooks.on("renderChatMessageHTML", (message, html) => {
+		hideUnrevealedGroupResults(message, html);
+	});
+
+	/* Use the replicated update hook rather than preUpdate: casts initiated by a
+	 * player still reach the primary GM, which is the one animation authority. */
+	Hooks.on("updateChatMessage", (message, changes) => {
 		const incoming = changedCastState(changes);
 		if (!incoming?.group || !Array.isArray(incoming.volleys)) return;
 		if (!isAnimationAuthority(message)) return;
-		if (message?.getFlag?.(FLAG_SCOPE, CAST_FLAG_KEY)) return;
+		if (message?.getFlag?.(FLAG_SCOPE, REVEAL_FLAG_KEY)) return;
 
 		const messageId = String(message?.id ?? "").trim();
 		if (!messageId || animatedMessages.has(messageId)) return;
 		const results = incoming.volleys
 			.map((volley) => Number(volley?.groupRoll))
 			.filter(isD3);
-		if (!results.length) return;
+		if (!results.length) {
+			void revealGroupResults(message);
+			return;
+		}
 
 		animatedMessages.add(messageId);
-		void animateGroupHits(message, results).finally(() => {
-			/* The persisted cast flag is the durable duplicate guard. Keeping this
-			 * set only for the current session also protects against duplicate hooks
-			 * during the same update. */
-			setTimeout(() => animatedMessages.delete(messageId), 10000);
-		});
+		void animateGroupHits(message, results)
+			.catch((error) => {
+				/* Optional 3D presentation must never leave mechanics/results hidden. */
+				console.error(
+					"WFRP1ED | Unable to display Fire Ball group-hit dice animation.",
+					error,
+				);
+			})
+			.finally(async () => {
+				try {
+					await revealGroupResults(message);
+				} finally {
+					setTimeout(() => animatedMessages.delete(messageId), 10000);
+				}
+			});
 	});
+}
+
+function hideUnrevealedGroupResults(message, html) {
+	const root = asElement(html);
+	const summary = root?.matches?.(".fire-ball-cast-summary")
+		? root
+		: root?.querySelector?.(".fire-ball-cast-summary");
+	if (!(summary instanceof HTMLElement)) return;
+	if (message?.getFlag?.(FLAG_SCOPE, REVEAL_FLAG_KEY)) return;
+
+	for (const row of summary.querySelectorAll(":scope > div")) {
+		const label = String(row.querySelector(":scope > strong")?.textContent ?? "").trim();
+		if (label === localize("Group hits:", "Trafienia grupowe:") ||
+			label === localize("Group hits", "Trafienia grupowe")) {
+			row.hidden = true;
+			row.dataset.wfrpFireBallPendingGroupHits = "";
+		}
+	}
 }
 
 async function animateGroupHits(message, results) {
@@ -48,37 +86,50 @@ async function animateGroupHits(message, results) {
 	const user = message?.author ?? game.user;
 	const whisper = Array.isArray(message?.whisper) ? [...message.whisper] : [];
 	const blind = message?.blind === true;
+	const visualRoll = await physicalD6BatchForD3(results);
 
-	try {
-		for (const result of results) {
-			const visualRoll = await physicalD6ForD3(result);
-			await dice3d.showForRoll(visualRoll, user, true, whisper, blind);
-		}
-	} catch (error) {
-		/* Optional presentation must never interrupt spell resolution. */
-		console.error(
-			"WFRP1ED | Unable to display Fire Ball group-hit dice animation.",
-			error,
-		);
-	}
+	/* One Roll containing all visual d6s makes Dice So Nice launch the complete
+	 * group-hit batch together rather than waiting for one die before the next. */
+	await dice3d.showForRoll(visualRoll, user, true, whisper, blind);
 }
 
-async function physicalD6ForD3(d3Result) {
-	const visualRoll = await new Roll("1d6").evaluate({ allowInteractive: false });
+async function physicalD6BatchForD3(d3Results) {
+	const values = d3Results.map(Number).filter(isD3);
+	if (!values.length) throw new Error("Fire Ball group-hit animation has no d3 results.");
+
+	const visualRoll = await new Roll(`${values.length}d6`).evaluate({
+		allowInteractive: false,
+	});
 	const term = visualRoll.dice?.[0] ?? visualRoll.terms?.find?.(
 		(candidate) => Number(candidate?.faces) === 6,
 	);
-	const result = term?.results?.[0];
-	if (!result) throw new Error("Unable to locate the evaluated d6 result.");
+	const physicalResults = term?.results;
+	if (!Array.isArray(physicalResults) || physicalResults.length < values.length) {
+		throw new Error("Unable to locate all evaluated d6 results.");
+	}
 
-	/* Use the lower face of the matching pair, exactly like the existing Risk
-	 * d3 bridge: d3 1 -> d6 1, d3 2 -> d6 3, d3 3 -> d6 5. */
-	const d6Face = (Number(d3Result) * 2) - 1;
-	result.result = d6Face;
+	let total = 0;
+	for (let index = 0; index < values.length; index += 1) {
+		/* Use the lower face of the matching d6 pair, exactly like the existing
+		 * Risk d3 bridge: d3 1 -> d6 1, d3 2 -> d6 3, d3 3 -> d6 5. */
+		const d6Face = (values[index] * 2) - 1;
+		physicalResults[index].result = d6Face;
+		total += d6Face;
+	}
 	if (Object.prototype.hasOwnProperty.call(visualRoll, "_total")) {
-		visualRoll._total = d6Face;
+		visualRoll._total = total;
 	}
 	return visualRoll;
+}
+
+async function revealGroupResults(message) {
+	if (!message?.id || message.getFlag?.(FLAG_SCOPE, REVEAL_FLAG_KEY)) return;
+	if (!message.canUserModify?.(game.user, "update")) return;
+	await message.setFlag(FLAG_SCOPE, REVEAL_FLAG_KEY, {
+		version: 1,
+		revealedAt: Date.now(),
+	});
+	void ui.chat?.render?.({ force: true });
 }
 
 function changedCastState(changes) {
@@ -103,4 +154,14 @@ function primaryActiveGm() {
 	return [...(game.users ?? [])]
 		.filter((user) => user?.active && user?.isGM)
 		.sort((first, second) => String(first.id).localeCompare(String(second.id)))[0] ?? null;
+}
+
+function asElement(value) {
+	if (value instanceof HTMLElement) return value;
+	if (value?.[0] instanceof HTMLElement) return value[0];
+	return null;
+}
+
+function localize(english, polish) {
+	return game.i18n.lang === "pl" ? polish : english;
 }
