@@ -33,7 +33,7 @@ export class FireBallBallGroupPresentation {
 		const ids = [...new Set((impactMessageIds ?? []).map((id) => String(id ?? "").trim()).filter(Boolean))];
 		if (!ids.length) return null;
 		const state = {
-			version: 5,
+			version: 6,
 			castId: String(castId ?? ""),
 			castMessageId: String(castMessageId ?? ""),
 			casterUuid: String(caster?.uuid ?? ""),
@@ -142,6 +142,8 @@ function targetSection(groupState, target) {
 	section.append(heading);
 
 	const record = impactRecordForTarget(groupState, target);
+	if (record) section.append(buildFlammableControl(record));
+
 	const initiative = initiativeSummary(record?.state ?? null);
 	const damage = damageSummary(record);
 	section.append(
@@ -153,6 +155,95 @@ function targetSection(groupState, target) {
 		section.append(buildRollDamageButton(record));
 	}
 	return section;
+}
+
+function buildFlammableControl(record) {
+	const label = document.createElement("label");
+	label.className = "wfrp1ed-checkbox wfrp-fireball-ball-group__flammable";
+	Object.assign(label.style, {
+		display: "flex",
+		alignItems: "center",
+		gap: "0.35rem",
+		margin: "0.15rem 0 0.25rem",
+	});
+
+	const input = document.createElement("input");
+	input.type = "checkbox";
+	input.checked = record?.state?.flammable === true;
+	input.dataset.fireBallGroupedVulnerability = "flammable";
+
+	const transaction = damageTransactionForRecord(record);
+	input.disabled = !game.user?.isGM || transaction?.state === "applied";
+	input.title = transaction?.state === "applied"
+		? localize(
+			"Revert applied damage before changing Fire vulnerability.",
+			"Cofnij zastosowane obrażenia przed zmianą podatności na ogień.",
+		)
+		: localize("Flammable", "Łatwopalny");
+
+	input.addEventListener("change", () => {
+		if (!game.user?.isGM) return;
+		const requested = input.checked === true;
+		input.disabled = true;
+		void invokeCanonicalFlammableToggle(record, requested)
+			.catch((error) => {
+				input.checked = !requested;
+				reportError(error);
+			});
+	});
+
+	label.append(input, document.createTextNode(localize("Flammable", "Łatwopalny")));
+	return label;
+}
+
+async function invokeCanonicalFlammableToggle(record, requested) {
+	const messageId = String(record?.message?.id ?? "").trim();
+	if (!messageId) throw new Error(localize(
+		"The Fire Ball impact is unavailable.",
+		"Trafienie Ognistej Kuli jest niedostępne.",
+	));
+
+	let control = canonicalFlammableControl(messageId);
+	if (!(control instanceof HTMLInputElement)) {
+		await ui.chat?.render?.({ force: true });
+		await nextAnimationFrame();
+		await nextAnimationFrame();
+		control = canonicalFlammableControl(messageId);
+	}
+	if (!(control instanceof HTMLInputElement)) {
+		throw new Error(localize(
+			"The canonical Fire Ball vulnerability control is unavailable.",
+			"Kanoniczna kontrolka podatności Ognistej Kuli jest niedostępna.",
+		));
+	}
+	if (control.disabled) {
+		throw new Error(localize(
+			"Fire vulnerability cannot be changed while applied damage exists.",
+			"Nie można zmienić podatności na ogień, gdy obrażenia są już zastosowane.",
+		));
+	}
+
+	control.checked = requested === true;
+	control.dispatchEvent(new Event("change", { bubbles: true, cancelable: true }));
+}
+
+function canonicalFlammableControl(messageId) {
+	const id = cssEscape(messageId);
+	const entry = document.querySelector(`[data-message-id="${id}"]`);
+	if (!(entry instanceof HTMLElement)) return null;
+	const panel = entry.querySelector("[data-wfrp-fireball-impact-workflow]");
+	if (!(panel instanceof HTMLElement)) return null;
+	return panel.querySelector('input[data-fire-ball-vulnerability="flammable"]');
+}
+
+function damageTransactionForRecord(record) {
+	const impact = record?.state;
+	if (!impact) return null;
+	const packetId = String(
+		record?.message?.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG)?.packet?.id ?? impact.damage?.packetId ?? "",
+	).trim();
+	const actor = actorFromUuid(impact.targetUuid);
+	return actor && packetId ? DamageApplication.transactionFor(actor, packetId) : null;
 }
 
 function buildRollDamageButton(record) {
@@ -424,10 +515,10 @@ function asElement(value) {
 }
 
 function reportError(error) {
-	console.error("WFRP1ED | Unable to roll grouped Fire Ball damage.", error);
+	console.error("WFRP1ED | Unable to resolve grouped Fire Ball action.", error);
 	ui.notifications.error(error?.message ?? localize(
-		"Unable to roll Fire Ball damage.",
-		"Nie udało się rzucić obrażeń Ognistej Kuli.",
+		"Unable to resolve Fire Ball action.",
+		"Nie udało się rozstrzygnąć akcji Ognistej Kuli.",
 	));
 }
 
