@@ -147,8 +147,8 @@ function decorate(message, html) {
 	const title = document.createElement("strong");
 	title.textContent = localize(`Casting — ${state.spellName}`, `Rzucanie czaru — ${state.spellName}`);
 	const outcome = document.createElement("strong");
+	outcome.className = `wfrp1e-test-card__status wfrp-core-casting-failure__status ${state.success ? "is-success" : "is-failure"}`;
 	outcome.textContent = state.success ? localize("Success", "Sukces") : localize("Failure", "Porażka");
-	outcome.style.whiteSpace = "nowrap";
 	header.append(title, outcome);
 	panel.append(header);
 
