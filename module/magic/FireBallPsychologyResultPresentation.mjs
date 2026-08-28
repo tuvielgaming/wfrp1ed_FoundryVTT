@@ -5,31 +5,38 @@ const ACTOR_TEST_FLAG_KEY = "actorTestRequest";
 const TEST_FLAG_KEY = "testResultState";
 
 /**
- * Restore the rule consequence beside the canonical Fear TestResult rather than
- * duplicating it on the Fire Ball transaction card.
- *
- * WFRP 1e Fear: a failed test leaves the character paralysed for the round. The
- * character may parry if attacked, but cannot move, fight, Dodge, or use another
- * avoidance skill; the Fear test repeats at the start of following rounds until
- * it is overcome. The summary is intentionally shown only on failure.
+ * Present Fire Ball's canonical Fear TestResult with its source and, on failure,
+ * the WFRP 1e psychology consequence. The TestResult itself remains the normal
+ * editable/Luck-capable Test card; this module adds only spell context and the
+ * rule consequence.
  */
 Hooks.on("renderChatMessageHTML", (message, html) => {
-	requestAnimationFrame(() => decorateFireBallFearFailure(message, html));
+	requestAnimationFrame(() => decorateFireBallFearResult(message, html));
 });
 
-function decorateFireBallFearFailure(message, html) {
+function decorateFireBallFearResult(message, html) {
 	if (!isFireBallFearResult(message)) return;
 	const state = message?.getFlag?.(FLAG_SCOPE, TEST_FLAG_KEY);
 	if (!state || String(state.testId ?? "") !== "fear") return;
-	const result = TestResultChat._templateContext(state).result;
-	if (result?.success === true) return;
 
 	const root = asElement(html);
 	const card = root?.matches?.(".wfrp1e-test-card")
 		? root
 		: root?.querySelector?.(".wfrp1e-test-card");
 	if (!(card instanceof HTMLElement)) return;
+
+	/* The base Test name is intentionally kept; append the mechanic source so a
+	 * player can distinguish this Fear Test from unrelated Psychology tests in a
+	 * busy chat log. Reset to the exact label on every render to avoid suffixes
+	 * accumulating after rerenders. */
+	const title = card.querySelector(".wfrp1e-test-card__header h2");
+	if (title instanceof HTMLElement) {
+		title.textContent = localize("Fear (Fire Ball)", "Strach (Ognista Kula)");
+	}
+
 	card.querySelector("[data-wfrp-fireball-psychology-summary]")?.remove();
+	const result = TestResultChat._templateContext(state).result;
+	if (result?.success === true) return;
 
 	const section = document.createElement("section");
 	section.dataset.wfrpFireballPsychologySummary = "";
