@@ -23,21 +23,23 @@ export class ActorRollPolicy {
 	}
 
 	/**
-	 * Shared automation boundary for rolls belonging to one Actor. Player-owned
-	 * Actors always require an explicit owner/GM action. GM-only Actors may
-	 * automate only on the primary active GM and only while the World automation
-	 * setting allows it. The dependent mechanic must still publish its ordinary
-	 * roll/result ChatMessage; this policy decides only whether its action starts
-	 * automatically.
+	 * Existing combat/damage automation boundary. Keep the transient damage
+	 * reconciliation suspension here so an adjudication never starts a new damage
+	 * generation while the previous result is being repaired.
 	 */
 	static shouldAutomaticallyRoll(actor, user = game.user) {
-		if (!(actor instanceof foundry.documents.Actor) || !user) return false;
-		if (this.ownedByPlayer(actor)) return false;
-		return Boolean(
-			user.isGM &&
-			this.isPrimaryActiveGM() &&
-			WfrpRuleSettings.autoRollMechanicTestsForGmActors(),
-		);
+		return this.#canAutomaticallyRoll(actor, user) &&
+			WfrpRuleSettings.autoRollDamageForGmActors();
+	}
+
+	/**
+	 * Dependent mechanic Test/check automation uses the same World preference but
+	 * is intentionally independent of the transient damage-only suspension.
+	 * Every caller must still create its ordinary editable/auditable ChatMessage.
+	 */
+	static shouldAutomaticallyRollMechanicTest(actor, user = game.user) {
+		return this.#canAutomaticallyRoll(actor, user) &&
+			WfrpRuleSettings.autoRollMechanicTestsForGmActors();
 	}
 
 	static primaryActiveGM() {
@@ -62,5 +64,11 @@ export class ActorRollPolicy {
 			return null;
 		}
 		return null;
+	}
+
+	static #canAutomaticallyRoll(actor, user) {
+		if (!(actor instanceof foundry.documents.Actor) || !user) return false;
+		if (this.ownedByPlayer(actor)) return false;
+		return Boolean(user.isGM && this.isPrimaryActiveGM());
 	}
 }
