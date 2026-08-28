@@ -12,9 +12,10 @@ let refreshQueued = false;
  * rule consequence.
  *
  * ActorTestRequestWorkflow publishes the TestResult first and only then stores
- * its resultMessageId on the request. Refresh when that link arrives so the very
- * first rendered Fear result receives the spell identity and Psychology text;
- * previously this appeared only after a later adjudication re-render.
+ * its resultMessageId on the request. When that link arrives, decorate the
+ * already-rendered result directly and also queue a full chat refresh as a
+ * fallback. This makes newly-created Fear Tests immediately show their Fire Ball
+ * identity instead of waiting for a later adjudication render.
  */
 Hooks.on("renderChatMessageHTML", (message, html) => {
 	requestAnimationFrame(() => decorateFireBallFearResult(message, html));
@@ -23,8 +24,18 @@ Hooks.on("renderChatMessageHTML", (message, html) => {
 Hooks.on("updateChatMessage", (message) => {
 	const request = message?.getFlag?.(FLAG_SCOPE, ACTOR_TEST_FLAG_KEY);
 	if (request?.source?.kind !== "spell-fire-ball" || !request?.resultMessageId) return;
+	const resultId = String(request.resultMessageId ?? "").trim();
+	requestAnimationFrame(() => requestAnimationFrame(() => decorateRenderedResult(resultId)));
 	queueRefresh();
 });
+
+function decorateRenderedResult(resultId) {
+	const id = String(resultId ?? "").trim();
+	if (!id) return;
+	const resultMessage = game.messages?.get(id);
+	const entry = document.querySelector(`[data-message-id="${cssEscape(id)}"]`);
+	if (resultMessage && entry instanceof HTMLElement) decorateFireBallFearResult(resultMessage, entry);
+}
 
 function decorateFireBallFearResult(message, html) {
 	if (!isFireBallFearResult(message)) return;
@@ -90,6 +101,10 @@ function isFireBallFearResult(message) {
 		if (String(request?.resultMessageId ?? "") === id) return true;
 	}
 	return false;
+}
+
+function cssEscape(value) {
+	return globalThis.CSS?.escape ? CSS.escape(String(value)) : String(value).replace(/["\\]/g, "\\$&");
 }
 
 function asElement(value) {
