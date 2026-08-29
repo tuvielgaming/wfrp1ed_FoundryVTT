@@ -1,14 +1,41 @@
+/*
+ * Keep the ordinary "follow new chat" behaviour, but distinguish a genuinely
+ * new local roll/result from a full ChatLog re-render. Fire Ball grouping does
+ * several forced renders while resolving one action; those renders can leave
+ * Foundry's isAtBottom flag false even though the user has just clicked a roll.
+ */
 Hooks.on("renderChatMessageHTML", (message) => {
+	if (!message?.id) return;
+	const chat = ui.chat;
+	if (!chat?.scrollBottom || chat.isAtBottom === false) return;
+	scheduleBottomFollow(String(message.id));
+});
+
+Hooks.on("createChatMessage", (message) => {
 	if (!message?.id) return;
 	const chat = ui.chat;
 	if (!chat?.scrollBottom) return;
 
-	/* renderChatMessageHTML fires while the new card is still pending insertion.
-	 * Preserve Foundry's normal user intent: only follow a growing card when the
-	 * user was already at the bottom before that card was inserted. */
-	if (chat.isAtBottom === false) return;
+	/* A Test/Damage card produced by this client is part of the action the user
+	 * just requested, so reveal it even if an intermediate forced chat render made
+	 * Foundry think the viewport was no longer at the bottom. Remote messages still
+	 * respect the user's decision to browse older chat history. */
+	if (chat.isAtBottom === false && !authoredByCurrentUser(message)) return;
+	scheduleBottomFollow(String(message.id));
+});
 
-	const messageId = String(message.id);
+function authoredByCurrentUser(message) {
+	const authorId = String(
+		message?.author?.id ??
+		message?.user?.id ??
+		message?.user ??
+		message?._source?.user ??
+		"",
+	);
+	return Boolean(authorId) && authorId === String(game.user?.id ?? "");
+}
+
+function scheduleBottomFollow(messageId) {
 	queueMicrotask(() => {
 		requestAnimationFrame(() => {
 			requestAnimationFrame(() => void scrollChatBottom(messageId));
@@ -17,7 +44,7 @@ Hooks.on("renderChatMessageHTML", (message) => {
 
 	/* Some WFRP chat decorators add controls after the first layout pass. */
 	setTimeout(() => void scrollChatBottom(messageId), 120);
-});
+}
 
 async function scrollChatBottom(messageId) {
 	const chat = ui.chat;
