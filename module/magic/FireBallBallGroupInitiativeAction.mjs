@@ -130,10 +130,7 @@ async function waitForCanonicalControl(messageId, frames) {
 function canonicalInitiativeControl(messageId) {
 	const entry = document.querySelector(`[data-message-id="${cssEscape(messageId)}"]`);
 	if (!(entry instanceof HTMLElement)) return null;
-	const panel = entry.querySelector("[data-wfrp-fireball-impact-workflow]");
-	if (!(panel instanceof HTMLElement)) return null;
-	return [...panel.querySelectorAll("button.combat-damage-roll-button")]
-		.find((button) => /initiative|inicjatyw/i.test(String(button.textContent ?? ""))) ?? null;
+	return initiativeControlFromPanel(entry.querySelector("[data-wfrp-fireball-impact-workflow]"));
 }
 
 async function detachedCanonicalInitiativeControl(message) {
@@ -146,15 +143,23 @@ async function detachedCanonicalInitiativeControl(message) {
 
 	Hooks.callAll("renderChatMessageHTML", message, host);
 	for (let index = 0; index < 12; index += 1) {
-		const panel = host.querySelector("[data-wfrp-fireball-impact-workflow]");
-		if (panel instanceof HTMLElement) {
-			const control = [...panel.querySelectorAll("button.combat-damage-roll-button")]
-				.find((button) => /initiative|inicjatyw/i.test(String(button.textContent ?? ""))) ?? null;
-			if (control instanceof HTMLButtonElement) return control;
-		}
+		const control = initiativeControlFromPanel(host.querySelector("[data-wfrp-fireball-impact-workflow]"));
+		if (control instanceof HTMLButtonElement) return control;
 		await nextAnimationFrame();
 	}
 	return null;
+}
+
+/**
+ * The canonical impact card deliberately labels the button only "Roll"/"Rzuć";
+ * Initiative is written beside it in the surrounding status. While an impact is
+ * awaiting Initiative this is the only roll button on that card, so matching the
+ * button text for "Initiative" was guaranteed to fail.
+ */
+function initiativeControlFromPanel(panel) {
+	if (!(panel instanceof HTMLElement)) return null;
+	return [...panel.querySelectorAll("button.combat-damage-roll-button")]
+		.find((button) => button instanceof HTMLButtonElement) ?? null;
 }
 
 function targetEntries(group) {
