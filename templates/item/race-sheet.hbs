@@ -1,0 +1,248 @@
+<section class="race-sheet-content">
+	<header class="race-sheet-header wfrp1ed-item-header">
+		<img
+			class="race-sheet-image wfrp1ed-item-header__image"
+			data-wfrp1ed-item-image
+			src="{{item.img}}"
+			alt="{{item.name}}"
+		>
+
+		<div class="race-sheet-field race-sheet-field--name">
+			<label for="race-name-{{item.id}}">{{raceUi.labels.name}}</label>
+			<input
+				id="race-name-{{item.id}}"
+				type="text"
+				name="name"
+				value="{{item.name}}"
+				autocomplete="off"
+				required
+				{{#unless editable}}disabled{{/unless}}
+			>
+		</div>
+
+		<div class="race-sheet-field race-sheet-field--rules-id">
+			<label
+				for="race-rules-id-{{item.id}}"
+				data-tooltip="{{raceUi.labels.rulesIdHint}}"
+			>
+				{{raceUi.labels.rulesId}}
+			</label>
+			<input
+				id="race-rules-id-{{item.id}}"
+				type="text"
+				name="system.rulesId"
+				value="{{system.rulesId}}"
+				autocomplete="off"
+				{{#unless editable}}disabled{{/unless}}
+			>
+		</div>
+	</header>
+
+	<section class="race-sheet-panel">
+		<h2>{{raceUi.labels.profile}}</h2>
+		<p class="race-sheet-hint">{{raceUi.labels.profileHint}}</p>
+
+		<div class="race-profile-grid">
+			{{#each raceUi.characteristics as |characteristic|}}
+				<label class="race-profile-cell">
+					<span>{{characteristic.label}}</span>
+					<input
+						type="text"
+						name="system.profile.{{characteristic.id}}"
+						value="{{characteristic.formula}}"
+						autocomplete="off"
+						placeholder="2d10 + 20"
+						{{#unless ../editable}}disabled{{/unless}}
+					>
+				</label>
+			{{/each}}
+		</div>
+	</section>
+
+	<section class="race-sheet-panel">
+		<h2>{{raceUi.labels.racialProperties}}</h2>
+		<div class="race-property-grid">
+			<label class="race-sheet-field">
+				<span>{{raceUi.labels.nightVision}}</span>
+				<div class="race-inline-fields">
+					<input
+						type="number"
+						name="system.vision.nightVisionRange"
+						value="{{system.vision.nightVisionRange}}"
+						min="0"
+						step="1"
+						{{#unless editable}}disabled{{/unless}}
+					>
+					<input
+						type="text"
+						name="system.vision.unit"
+						value="{{system.vision.unit}}"
+						autocomplete="off"
+						aria-label="{{raceUi.labels.unit}}"
+						{{#unless editable}}disabled{{/unless}}
+					>
+				</div>
+			</label>
+
+			<label class="race-sheet-field">
+				<span>{{raceUi.labels.startingAlignment}}</span>
+				<input
+					type="text"
+					name="system.startingAlignment"
+					value="{{system.startingAlignment}}"
+					autocomplete="off"
+					{{#unless editable}}disabled{{/unless}}
+				>
+			</label>
+		</div>
+	</section>
+
+	<section class="race-sheet-panel">
+		<h2>{{raceUi.labels.height}}</h2>
+		<div class="race-property-grid race-property-grid--three">
+			<label class="race-sheet-field">
+				<span>{{raceUi.labels.maleFormula}}</span>
+				<input
+					type="text"
+					name="system.height.maleFormula"
+					value="{{system.height.maleFormula}}"
+					autocomplete="off"
+					{{#unless editable}}disabled{{/unless}}
+				>
+			</label>
+
+			<label class="race-sheet-field">
+				<span>{{raceUi.labels.femaleFormula}}</span>
+				<input
+					type="text"
+					name="system.height.femaleFormula"
+					value="{{system.height.femaleFormula}}"
+					autocomplete="off"
+					{{#unless editable}}disabled{{/unless}}
+				>
+			</label>
+
+			<label class="race-sheet-field">
+				<span>{{raceUi.labels.unit}}</span>
+				<input
+					type="text"
+					name="system.height.unit"
+					value="{{system.height.unit}}"
+					autocomplete="off"
+					{{#unless editable}}disabled{{/unless}}
+				>
+			</label>
+		</div>
+	</section>
+
+	<section class="race-sheet-panel">
+		<h2>{{raceUi.labels.age}}</h2>
+		<div class="race-property-grid race-property-grid--four">
+			<label class="race-sheet-field">
+				<span>{{raceUi.labels.youngFormula}}</span>
+				<input
+					type="text"
+					name="system.age.youngFormula"
+					value="{{system.age.youngFormula}}"
+					autocomplete="off"
+					{{#unless editable}}disabled{{/unless}}
+				>
+			</label>
+
+			<label class="race-sheet-field">
+				<span>{{raceUi.labels.matureFormula}}</span>
+				<input
+					type="text"
+					name="system.age.matureFormula"
+					value="{{system.age.matureFormula}}"
+					autocomplete="off"
+					{{#unless editable}}disabled{{/unless}}
+				>
+			</label>
+
+			<label class="race-sheet-field">
+				<span>{{raceUi.labels.minimumAge}}</span>
+				<input
+					type="number"
+					name="system.age.minimum"
+					value="{{system.age.minimum}}"
+					min="0"
+					step="1"
+					{{#unless editable}}disabled{{/unless}}
+				>
+			</label>
+
+			<label class="race-sheet-checkbox">
+				<input
+					type="checkbox"
+					name="system.age.rerollBelowMinimum"
+					{{checked system.age.rerollBelowMinimum}}
+					{{#unless editable}}disabled{{/unless}}
+				>
+				<span>{{raceUi.labels.rerollBelowMinimum}}</span>
+			</label>
+		</div>
+	</section>
+
+	<section class="race-sheet-panel">
+		<h2>{{raceUi.labels.fate}}</h2>
+		<div class="race-property-grid">
+			<label class="race-sheet-field">
+				<span>{{raceUi.labels.fateFormula}}</span>
+				<input
+					type="text"
+					name="system.fate.formula"
+					value="{{system.fate.formula}}"
+					autocomplete="off"
+					{{#unless editable}}disabled{{/unless}}
+				>
+			</label>
+
+			<label class="race-sheet-field">
+				<span>{{raceUi.labels.fateMinimum}}</span>
+				<input
+					type="number"
+					name="system.fate.minimum"
+					value="{{system.fate.minimum}}"
+					min="0"
+					step="1"
+					{{#unless editable}}disabled{{/unless}}
+				>
+			</label>
+		</div>
+	</section>
+
+	<section class="race-sheet-panel race-sheet-panel--structured">
+		<h2>{{raceUi.labels.structuredData}}</h2>
+		<p class="race-sheet-hint">{{raceUi.labels.structuredHint}}</p>
+
+		<div class="race-collection-summary">
+			<div><strong>{{raceUi.labels.languages}}</strong><span>{{raceUi.counts.languages}}</span></div>
+			<div><strong>{{raceUi.labels.psychology}}</strong><span>{{raceUi.counts.psychology}}</span></div>
+			<div><strong>{{raceUi.labels.ageBands}}</strong><span>{{raceUi.counts.ageBands}}</span></div>
+			<div><strong>{{raceUi.labels.mandatorySkills}}</strong><span>{{raceUi.counts.mandatorySkills}}</span></div>
+			<div><strong>{{raceUi.labels.careerOverrides}}</strong><span>{{raceUi.counts.careerOverrides}}</span></div>
+		</div>
+
+		<div class="race-table-summary">
+			{{#each raceUi.careerClasses as |careerClass|}}
+				<div class="race-table-summary-row">
+					<strong>{{careerClass.label}}</strong>
+					<span>{{../raceUi.labels.skillTableRows}}: {{careerClass.skillRows}}</span>
+					<span>{{../raceUi.labels.careerTableRows}}: {{careerClass.careerRows}}</span>
+				</div>
+			{{/each}}
+		</div>
+	</section>
+
+	<section class="race-sheet-panel">
+		<label class="race-sheet-field race-sheet-field--description">
+			<span>{{raceUi.labels.description}}</span>
+			<textarea
+				name="system.description"
+				spellcheck="true"
+				{{#unless editable}}disabled{{/unless}}
+			>{{system.description}}</textarea>
+		</label>
+	</section>
+</section>
