@@ -183,6 +183,59 @@
 	outline-offset: -1px;
 }
 
+/* Shared Race generation badge ------------------------------------------ */
+.wfrp1ed-character-creation-mode .wfrp1ed-race-age-roll,
+.wfrp1ed-character-creation-mode .wfrp1ed-race-fate-roll {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 18px;
+	height: 18px;
+	margin: 0;
+	padding: 0;
+	border: 1px solid rgb(255 255 255 / 82%);
+	border-radius: 50%;
+	background: rgb(255 255 255 / 78%);
+	box-shadow: 0 0 0 1px rgb(0 0 0 / 32%);
+	color: #1b1b1b;
+	font-family: Arial, Helvetica, sans-serif;
+	font-size: 10px;
+	line-height: 1;
+	cursor: pointer;
+	pointer-events: auto;
+	z-index: 6;
+	opacity: 0.72;
+	transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+
+.wfrp1ed-character-creation-mode .wfrp1ed-race-age-roll:hover,
+.wfrp1ed-character-creation-mode .wfrp1ed-race-age-roll:focus-visible,
+.wfrp1ed-character-creation-mode .wfrp1ed-race-fate-roll:hover,
+.wfrp1ed-character-creation-mode .wfrp1ed-race-fate-roll:focus-visible {
+	background: rgb(255 255 255 / 96%);
+	opacity: 1;
+}
+
+.wfrp1ed-character-creation-mode .header-field--age {
+	position: relative;
+}
+
+.wfrp1ed-character-creation-mode .header-field--age input {
+	padding-right: 22px;
+}
+
+.wfrp1ed-character-creation-mode .header-field--age .wfrp1ed-race-age-roll {
+	position: absolute;
+	right: 3px;
+	bottom: 4px;
+}
+
+.wfrp1ed-character-creation-mode .wfrp1ed-classic-fate .wfrp1ed-race-fate-roll {
+	position: absolute;
+	left: calc(50% + 42px);
+	bottom: 17px;
+}
+
 /* Race-based starting Characteristic generation -------------------------- */
 .wfrp1ed-character-creation-mode .characteristics-row--initial .characteristics-row-label,
 .wfrp1ed-character-creation-mode .characteristic-cell--initial {
