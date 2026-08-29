@@ -1,0 +1,161 @@
+.race-item-sheet .window-content {
+	overflow: auto;
+}
+
+.race-sheet-content {
+	display: flex;
+	flex-direction: column;
+	gap: 0.8rem;
+	padding: 0.8rem;
+}
+
+.race-sheet-header {
+	display: grid;
+	grid-template-columns: 88px minmax(0, 1fr) minmax(220px, 0.7fr);
+	gap: 0.8rem;
+	align-items: end;
+}
+
+.race-sheet-image {
+	width: 88px;
+	height: 88px;
+	object-fit: cover;
+	border: 1px solid rgba(54, 36, 23, 0.55);
+}
+
+.race-sheet-panel {
+	padding: 0.65rem 0.75rem;
+	border: 1px solid rgba(73, 48, 29, 0.35);
+	background: rgba(255, 248, 224, 0.28);
+}
+
+.race-sheet-panel h2 {
+	margin: 0 0 0.45rem;
+	font-size: 1.05rem;
+}
+
+.race-sheet-hint {
+	margin: 0 0 0.65rem;
+	font-size: 0.85rem;
+	font-style: italic;
+	opacity: 0.78;
+}
+
+.race-sheet-field {
+	display: flex;
+	flex-direction: column;
+	gap: 0.2rem;
+	min-width: 0;
+}
+
+.race-sheet-field > span,
+.race-sheet-field > label,
+.race-profile-cell > span {
+	font-weight: 600;
+}
+
+.race-sheet-field input,
+.race-profile-cell input,
+.race-sheet-field textarea {
+	width: 100%;
+}
+
+.race-profile-grid {
+	display: grid;
+	grid-template-columns: repeat(7, minmax(82px, 1fr));
+	gap: 0.45rem;
+}
+
+.race-profile-cell {
+	display: flex;
+	flex-direction: column;
+	gap: 0.2rem;
+	text-align: center;
+}
+
+.race-profile-cell input {
+	text-align: center;
+}
+
+.race-property-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 0.65rem;
+	align-items: end;
+}
+
+.race-property-grid--three {
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.race-property-grid--four {
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.race-inline-fields {
+	display: grid;
+	grid-template-columns: minmax(80px, 1fr) 90px;
+	gap: 0.4rem;
+}
+
+.race-sheet-checkbox {
+	display: flex;
+	align-items: center;
+	gap: 0.45rem;
+	min-height: 32px;
+}
+
+.race-sheet-checkbox input {
+	flex: 0 0 auto;
+}
+
+.race-collection-summary {
+	display: grid;
+	grid-template-columns: repeat(5, minmax(0, 1fr));
+	gap: 0.45rem;
+	margin-bottom: 0.65rem;
+}
+
+.race-collection-summary > div {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.2rem;
+	padding: 0.4rem;
+	border: 1px solid rgba(73, 48, 29, 0.25);
+}
+
+.race-table-summary {
+	display: flex;
+	flex-direction: column;
+	gap: 0.35rem;
+}
+
+.race-table-summary-row {
+	display: grid;
+	grid-template-columns: minmax(130px, 0.7fr) 1fr 1fr;
+	gap: 0.5rem;
+	padding: 0.35rem 0.45rem;
+	border-top: 1px solid rgba(73, 48, 29, 0.2);
+}
+
+.race-sheet-field--description textarea {
+	min-height: 110px;
+	resize: vertical;
+}
+
+@media (max-width: 760px) {
+	.race-sheet-header,
+	.race-profile-grid,
+	.race-property-grid,
+	.race-property-grid--three,
+	.race-property-grid--four,
+	.race-collection-summary,
+	.race-table-summary-row {
+		grid-template-columns: 1fr;
+	}
+
+	.race-sheet-image {
+		justify-self: start;
+	}
+}
