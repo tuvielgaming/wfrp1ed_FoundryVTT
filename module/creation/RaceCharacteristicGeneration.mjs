@@ -15,6 +15,11 @@ installRaceCharacteristicGeneration();
  * initial Characteristic cell and an all-profile dice action in the row label.
  * Rolling writes only `system.characteristics.<id>.initial`; the Race formula
  * remains a generation instruction, never a permanent modifier.
+ *
+ * Evaluated rolls are also passed to Dice So Nice when available. Animation is
+ * presentation only: the exact already-evaluated Roll drives both the displayed
+ * dice and the value persisted on the Actor, so animation can never reroll the
+ * Characteristic or alter the mechanical result.
  */
 function installRaceCharacteristicGeneration() {
 	Hooks.on("renderApplicationV2", (application, element) => {
@@ -105,17 +110,27 @@ function installRollControls(actor, sheet) {
 async function rollCharacteristic(actor, race, id) {
 	const formula = raceFormula(race, id);
 	if (!formula) return;
-	const value = await evaluateFormula(formula, id);
-	await actor.update({ [`system.characteristics.${id}.initial`]: value });
+
+	const resolved = await evaluateFormula(formula, id);
+	await animateResolvedRoll(resolved.roll);
+	await actor.update({
+		[`system.characteristics.${id}.initial`]: resolved.value,
+	});
 }
 
 async function rollAllCharacteristics(actor, race) {
 	const updates = {};
+	const resolvedRolls = [];
+
 	for (const id of CHARACTERISTICS) {
 		const formula = raceFormula(race, id);
 		if (!formula) continue;
-		updates[`system.characteristics.${id}.initial`] = await evaluateFormula(formula, id);
+
+		const resolved = await evaluateFormula(formula, id);
+		updates[`system.characteristics.${id}.initial`] = resolved.value;
+		resolvedRolls.push(resolved.roll);
 	}
+
 	if (!Object.keys(updates).length) {
 		ui.notifications.warn(localize(
 			"The assigned Race has no starting Characteristic formulas.",
@@ -123,21 +138,103 @@ async function rollAllCharacteristics(actor, race) {
 		));
 		return;
 	}
+
+	/* Roll-all means one generation action. Let Dice So Nice display all of the
+	 * already-resolved characteristic rolls together rather than forcing the
+	 * player through fourteen sequential animation waits. */
+	await Promise.all(resolvedRolls.map((roll) => animateResolvedRoll(roll)));
 	await actor.update(updates);
 }
 
 async function evaluateFormula(formula, id) {
 	try {
-		const roll = await (new Roll(formula)).evaluate();
+		const roll = await (new Roll(formula)).evaluate({
+			allowInteractive: false,
+		});
 		const total = Number(roll.total);
-		if (!Number.isFinite(total)) throw new Error(`Non-numeric result for ${formula}`);
-		return Math.trunc(total);
+		if (!Number.isFinite(total)) {
+			throw new Error(`Non-numeric result for ${formula}`);
+		}
+		return {
+			roll,
+			value: Math.trunc(total),
+		};
 	} catch (error) {
 		throw new Error(localize(
 			`Invalid Race formula for ${id.toUpperCase()}: ${formula}`,
 			`Błędna formuła Rasy dla ${id.toUpperCase()}: ${formula}`,
 		), { cause: error });
 	}
+}
+
+/**
+ * Display the authoritative evaluated Roll through the same Dice So Nice API
+ * already used elsewhere in the system. No ChatMessage is created for character
+ * generation rolls.
+ *
+ * Dice So Nice has no ordinary d2/d3 mesh in the standard Roll path. WFRP 1e
+ * uses those dice in racial profiles, so a roll containing only d2/d3 dice is
+ * represented visually by d6s whose faces encode the already-resolved result.
+ * The Actor still receives the true d2/d3 total from the original Roll.
+ */
+async function animateResolvedRoll(roll) {
+	const dice3d = game.dice3d;
+	if (!dice3d || typeof dice3d.showForRoll !== "function") return;
+	if (!Array.isArray(roll?.dice) || roll.dice.length === 0) return;
+
+	try {
+		const visualRoll = await visualRollForUnsupportedSmallDice(roll);
+		await dice3d.showForRoll(
+			visualRoll ?? roll,
+			game.user,
+			true,
+			[],
+			false,
+		);
+	} catch (error) {
+		/* Dice animation is optional presentation and must never block creation. */
+		console.error(
+			"WFRP1ED | Unable to display Race characteristic dice animation.",
+			error,
+		);
+	}
+}
+
+async function visualRollForUnsupportedSmallDice(roll) {
+	const dice = Array.isArray(roll?.dice) ? roll.dice : [];
+	if (!dice.length) return null;
+	if (!dice.every((term) => [2, 3].includes(Number(term?.faces)))) return null;
+
+	const originalResults = dice.flatMap((term) =>
+		(term?.results ?? [])
+			.filter((result) => result?.active !== false)
+			.map((result) => ({
+				faces: Number(term.faces),
+				value: Number(result.result),
+			})),
+	);
+	if (!originalResults.length) return null;
+
+	const visualRoll = await new Roll(`${originalResults.length}d6`).evaluate({
+		allowInteractive: false,
+	});
+	const visualResults = visualRoll.dice?.[0]?.results ?? [];
+	if (visualResults.length < originalResults.length) return null;
+
+	for (let index = 0; index < originalResults.length; index += 1) {
+		const original = originalResults[index];
+		const visual = visualResults[index];
+		if (!visual) continue;
+
+		/* d3 uses the same 1-2/3-4/5-6 convention already used by the system's
+		 * Risk consequence animation. d2 uses 1-3/4-6; choose the first face of
+		 * each range so the animation deterministically represents the true roll. */
+		visual.result = original.faces === 3
+			? (original.value * 2) - 1
+			: (original.value === 1 ? 1 : 4);
+	}
+
+	return visualRoll;
 }
 
 function raceFormula(race, id) {
