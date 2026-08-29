@@ -1,3 +1,4 @@
+import "./RacePackageDialogStyle.mjs";
 import { RaceItemSheet } from "../sheets/RaceItemSheet.mjs";
 
 const TABS = Object.freeze(["features", "skills", "careers", "description"]);
