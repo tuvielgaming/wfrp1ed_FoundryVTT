@@ -3,6 +3,7 @@ import { ActorRollPolicy } from "../core/ActorRollPolicy.mjs";
 const FLAG_SCOPE = "wfrp1ed";
 const BALL_GROUP_FLAG = "fireBallBallGroup";
 const IMPACT_FLAG = "fireBallImpactWorkflow";
+let redecorateQueued = false;
 
 /**
  * Surface the canonical Fire Ball Initiative action inside the visible Ball
@@ -18,6 +19,33 @@ Hooks.on("renderChatMessageHTML", (message, html) => {
 	if (!message?.getFlag?.(FLAG_SCOPE, BALL_GROUP_FLAG)) return;
 	requestAnimationFrame(() => requestAnimationFrame(() => decorate(message, html)));
 });
+
+/* FireBallBallGroupPresentation also performs an in-place refresh of every
+ * visible aggregate when a linked Initiative/Test/Damage message changes. That
+ * refresh replaces each target section directly and therefore does not emit a
+ * new renderChatMessageHTML hook for the aggregate. Re-attach Initiative actions
+ * after that in-place rebuild so resolving Ball 1 cannot wipe the still-pending
+ * controls from Ball 2. */
+Hooks.on("createChatMessage", () => scheduleRedecorateAll());
+Hooks.on("updateChatMessage", () => scheduleRedecorateAll());
+Hooks.on("updateActor", () => scheduleRedecorateAll());
+
+function scheduleRedecorateAll() {
+	if (redecorateQueued) return;
+	redecorateQueued = true;
+	requestAnimationFrame(() => requestAnimationFrame(() => {
+		redecorateQueued = false;
+		decorateAllRenderedGroups();
+	}));
+}
+
+function decorateAllRenderedGroups() {
+	for (const message of game.messages ?? []) {
+		if (!message?.getFlag?.(FLAG_SCOPE, BALL_GROUP_FLAG)) continue;
+		const entry = document.querySelector(`[data-message-id="${cssEscape(String(message.id ?? ""))}"]`);
+		if (entry instanceof HTMLElement) decorate(message, entry);
+	}
+}
 
 function decorate(message, html) {
 	const group = message?.getFlag?.(FLAG_SCOPE, BALL_GROUP_FLAG);
