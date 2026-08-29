@@ -8,6 +8,7 @@ import "../chat/DiceFirstChatReveal.mjs";
 import "../tests/TestResultOwnerAdjudicationIntegration.mjs";
 import "./CoreCastingFailureWorkflow.mjs";
 import "./SpellCastLinkage.mjs";
+import "./FireBallExplicitCastContext.mjs";
 import "./FireBallBallGroupPresentation.mjs";
 import "./FireBallBallGroupAutoCreate.mjs";
 import "./FireBallBallGroupDisclosureIndicator.mjs";
