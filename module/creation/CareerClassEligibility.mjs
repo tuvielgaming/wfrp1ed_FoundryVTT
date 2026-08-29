@@ -1,4 +1,5 @@
 import { CharacterCreationMode } from "./CharacterCreationModeIntegration.mjs";
+import "./RaceCharacteristicGeneration.mjs";
 
 const CAREER_CLASSES = Object.freeze([
 	Object.freeze({ id: "warrior", pl: "Wojownik", en: "Warrior" }),
@@ -12,42 +13,24 @@ const CAREER_CLASSES = Object.freeze([
  * not to individual Race Items.
  */
 export class CareerClassEligibility {
-	static classes() {
-		return CAREER_CLASSES;
-	}
+	static classes() { return CAREER_CLASSES; }
 
 	static evaluate(actor, classId) {
 		const id = String(classId ?? "").trim();
 		const requirements = requirementsFor(actor, id);
 		if (!requirements.length) {
-			return {
-				eligible: false,
-				requirements: [],
-				failed: [],
-				reason: localize("Unknown Career Class.", "Nieznana Klasa Profesji."),
-			};
+			return { eligible: false, requirements: [], failed: [], reason: localize("Unknown Career Class.", "Nieznana Klasa Profesji.") };
 		}
-
-		const failed = requirements.filter((requirement) =>
-			characteristicValue(actor, requirement.characteristic) < requirement.minimum,
-		);
-		return {
-			eligible: failed.length === 0,
-			requirements,
-			failed,
-			reason: requirementText(requirements),
-		};
+		const failed = requirements.filter((requirement) => characteristicValue(actor, requirement.characteristic) < requirement.minimum);
+		return { eligible: failed.length === 0, requirements, failed, reason: requirementText(requirements) };
 	}
 
 	static options(actor) {
-		return CAREER_CLASSES.map((entry) => {
-			const evaluation = this.evaluate(actor, entry.id);
-			return {
-				...entry,
-				label: game.i18n.lang === "pl" ? entry.pl : entry.en,
-				...evaluation,
-			};
-		});
+		return CAREER_CLASSES.map((entry) => ({
+			...entry,
+			label: game.i18n.lang === "pl" ? entry.pl : entry.en,
+			...this.evaluate(actor, entry.id),
+		}));
 	}
 }
 
@@ -59,16 +42,14 @@ function installCharacterCreationClassSelector() {
 		if (!isClassicCharacterActor(actor, element)) return;
 		if (!CharacterCreationMode.enabled(actor)) return;
 		const root = asElement(element) ?? asElement(application?.element);
-		if (!(root instanceof HTMLElement)) return;
-		syncSelector(actor, root);
+		if (root instanceof HTMLElement) syncSelector(actor, root);
 	});
 
 	Hooks.on("updateActor", (actor, changes) => {
 		if (actor?.type !== "character" || !CharacterCreationMode.enabled(actor)) return;
 		if (!characteristicsChanged(changes) && !careerClassChanged(changes)) return;
 		const root = asElement(actor.sheet?.element);
-		if (!(root instanceof HTMLElement)) return;
-		syncSelector(actor, root);
+		if (root instanceof HTMLElement) syncSelector(actor, root);
 	});
 
 	for (const hookName of ["createItem", "deleteItem", "updateItem"]) {
@@ -77,21 +58,16 @@ function installCharacterCreationClassSelector() {
 			const actor = item.parent;
 			if (actor?.type !== "character" || !CharacterCreationMode.enabled(actor)) return;
 			const root = asElement(actor.sheet?.element);
-			if (!(root instanceof HTMLElement)) return;
-			syncSelector(actor, root);
+			if (root instanceof HTMLElement) syncSelector(actor, root);
 		});
 	}
 }
 
 function syncSelector(actor, root) {
-	const sheet = root.classList?.contains("wfrp1ed-classic-sheet")
-		? root
-		: root.querySelector?.(".wfrp1ed-classic-sheet") ?? root;
+	const sheet = root.classList?.contains("wfrp1ed-classic-sheet") ? root : root.querySelector?.(".wfrp1ed-classic-sheet") ?? root;
 	if (!(sheet instanceof HTMLElement)) return;
 
-	const existing = sheet.querySelector(
-		'.header-field--career-class select.wfrp1ed-career-class-selector',
-	);
+	const existing = sheet.querySelector('.header-field--career-class select.wfrp1ed-career-class-selector');
 	if (existing instanceof HTMLSelectElement) {
 		populateSelector(actor, existing);
 		return;
@@ -99,24 +75,19 @@ function syncSelector(actor, root) {
 
 	const field = sheet.querySelector(".header-field--career-class");
 	if (!(field instanceof HTMLElement)) return;
-
 	const input = field.querySelector('input[name="system.details.careerClass"]');
 	if (!(input instanceof HTMLInputElement)) return;
 
 	const select = document.createElement("select");
 	select.name = "system.details.careerClass";
 	select.className = "wfrp1ed-career-class-selector";
-	select.setAttribute(
-		"aria-label",
-		input.getAttribute("aria-label") ?? localize("Career Class", "Klasa Zawodowa"),
-	);
+	select.setAttribute("aria-label", input.getAttribute("aria-label") ?? localize("Career Class", "Klasa Zawodowa"));
 	select.addEventListener("change", () => {
 		void actor.update({ "system.details.careerClass": select.value }).catch((error) => {
 			console.error("WFRP1ED | Unable to set Career Class.", error);
 			ui.notifications.error(error?.message ?? String(error));
 		});
 	});
-
 	input.replaceWith(select);
 	populateSelector(actor, select);
 }
@@ -124,7 +95,6 @@ function syncSelector(actor, root) {
 function populateSelector(actor, select) {
 	const current = canonicalClassId(actor.system?.details?.careerClass);
 	select.replaceChildren();
-
 	const placeholder = document.createElement("option");
 	placeholder.value = "";
 	placeholder.textContent = localize("Select Class", "Wybierz Klasę");
@@ -134,24 +104,13 @@ function populateSelector(actor, select) {
 	for (const option of CareerClassEligibility.options(actor)) {
 		const element = document.createElement("option");
 		element.value = option.id;
-		element.textContent = option.eligible
-			? option.label
-			: `${option.label} — ${option.reason}`;
+		element.textContent = option.eligible ? option.label : `${option.label} — ${option.reason}`;
 		element.disabled = !option.eligible;
 		element.selected = current === option.id;
 		element.title = option.reason;
 		element.dataset.tooltip = option.reason;
 		select.append(element);
 	}
-
-	/* If Characteristics or Race changed and the previously selected Class is no
-	 * longer legal, keep it visible as selected only until the user chooses a new
-	 * legal Class. Do not silently rewrite character data. */
-	if (current) {
-		const selected = [...select.options].find((option) => option.value === current);
-		if (selected) selected.selected = true;
-	}
-
 	select.title = localize(
 		"Career Classes which do not meet the current Characteristic requirements are disabled. Disabled entries show their requirements in the list.",
 		"Klasy Profesji, których aktualne Cechy nie spełniają wymagań, są wyłączone. Wyłączone pozycje pokazują wymagania bezpośrednio na liście.",
@@ -160,19 +119,11 @@ function populateSelector(actor, select) {
 
 function requirementsFor(actor, classId) {
 	switch (classId) {
-		case "warrior":
-			return [{ characteristic: "ws", minimum: 30 }];
-		case "ranger":
-			return [{ characteristic: "bs", minimum: 30 }];
-		case "rogue":
-			return [{ characteristic: "i", minimum: isWoodElf(actor) ? 65 : 30 }];
-		case "academic":
-			return [
-				{ characteristic: "int", minimum: 30 },
-				{ characteristic: "wp", minimum: 30 },
-			];
-		default:
-			return [];
+		case "warrior": return [{ characteristic: "ws", minimum: 30 }];
+		case "ranger": return [{ characteristic: "bs", minimum: 30 }];
+		case "rogue": return [{ characteristic: "i", minimum: isWoodElf(actor) ? 65 : 30 }];
+		case "academic": return [{ characteristic: "int", minimum: 30 }, { characteristic: "wp", minimum: 30 }];
+		default: return [];
 	}
 }
 
@@ -183,26 +134,17 @@ function characteristicValue(actor, id) {
 }
 
 function isWoodElf(actor) {
-	const race = game.WFRP1ED?.race?.getEmbeddedRace?.(actor) ??
-		actor?.items?.find?.((item) => item.type === "race") ?? null;
+	const race = game.WFRP1ED?.race?.getEmbeddedRace?.(actor) ?? actor?.items?.find?.((item) => item.type === "race") ?? null;
 	const rulesId = normalize(race?.system?.rulesId);
 	return ["wood-elf", "woodelf"].includes(rulesId);
 }
 
 function requirementText(requirements) {
-	return requirements.map((requirement) =>
-		`${characteristicLabel(requirement.characteristic)} ≥ ${requirement.minimum}`,
-	).join(localize(" and ", " i "));
+	return requirements.map((requirement) => `${characteristicLabel(requirement.characteristic)} ≥ ${requirement.minimum}`).join(localize(" and ", " i "));
 }
 
 function characteristicLabel(id) {
-	const labels = {
-		ws: ["WW", "WS"],
-		bs: ["US", "BS"],
-		i: ["I", "I"],
-		int: ["Int", "Int"],
-		wp: ["SW", "WP"],
-	};
+	const labels = { ws: ["WW", "WS"], bs: ["US", "BS"], i: ["I", "I"], int: ["Int", "Int"], wp: ["SW", "WP"] };
 	const pair = labels[id] ?? [id, id];
 	return game.i18n.lang === "pl" ? pair[0] : pair[1];
 }
@@ -210,18 +152,10 @@ function characteristicLabel(id) {
 function canonicalClassId(value) {
 	const normalized = normalize(value);
 	const aliases = {
-		warrior: "warrior",
-		wojownik: "warrior",
-		ranger: "ranger",
-		"wędrowiec": "ranger",
-		wedrowiec: "ranger",
-		rogue: "rogue",
-		"łotr": "rogue",
-		lotr: "rogue",
-		"łotrzyk": "rogue",
-		lotrzyk: "rogue",
-		academic: "academic",
-		uczony: "academic",
+		warrior: "warrior", wojownik: "warrior",
+		ranger: "ranger", "wędrowiec": "ranger", wedrowiec: "ranger",
+		rogue: "rogue", "łotr": "rogue", lotr: "rogue", "łotrzyk": "rogue", lotrzyk: "rogue",
+		academic: "academic", uczony: "academic",
 	};
 	return aliases[normalized] ?? "";
 }
@@ -229,21 +163,15 @@ function canonicalClassId(value) {
 function isClassicCharacterActor(actor, element) {
 	if (actor?.documentName !== "Actor" || actor.type !== "character") return false;
 	const root = asElement(element);
-	return Boolean(
-		root?.classList?.contains("classic-actor-sheet") ||
-		root?.classList?.contains("wfrp1ed-classic-sheet") ||
-		root?.querySelector?.(".wfrp1ed-classic-sheet"),
-	);
+	return Boolean(root?.classList?.contains("classic-actor-sheet") || root?.classList?.contains("wfrp1ed-classic-sheet") || root?.querySelector?.(".wfrp1ed-classic-sheet"));
 }
 
 function characteristicsChanged(changes) {
-	return Object.keys(foundry.utils.flattenObject(changes ?? {}))
-		.some((path) => path.startsWith("system.characteristics."));
+	return Object.keys(foundry.utils.flattenObject(changes ?? {})).some((path) => path.startsWith("system.characteristics."));
 }
 
 function careerClassChanged(changes) {
-	return foundry.utils.getProperty(changes ?? {}, "system.details.careerClass") !== undefined ||
-		Object.hasOwn(changes ?? {}, "system.details.careerClass");
+	return foundry.utils.getProperty(changes ?? {}, "system.details.careerClass") !== undefined || Object.hasOwn(changes ?? {}, "system.details.careerClass");
 }
 
 function asElement(value) {
@@ -252,10 +180,5 @@ function asElement(value) {
 	return null;
 }
 
-function normalize(value) {
-	return String(value ?? "").trim().toLocaleLowerCase();
-}
-
-function localize(english, polish) {
-	return game.i18n.lang === "pl" ? polish : english;
-}
+function normalize(value) { return String(value ?? "").trim().toLocaleLowerCase(); }
+function localize(english, polish) { return game.i18n.lang === "pl" ? polish : english; }
