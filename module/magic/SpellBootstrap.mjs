@@ -12,6 +12,7 @@ import "./FireBallBallGroupPresentation.mjs";
 import "./FireBallBallGroupAutoCreate.mjs";
 import "./FireBallBallGroupDisclosureIndicator.mjs";
 import "./FireBallBallGroupInitiativeAction.mjs";
+import "./FireBallBallGroupDiceRevealGuard.mjs";
 import "./FireBallCastPsychologyPresentation.mjs";
 import "./FireBallCriticalFallback.mjs";
 import "./FireBallDamageLabels.mjs";
