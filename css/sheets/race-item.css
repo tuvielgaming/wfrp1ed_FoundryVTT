@@ -16,11 +16,51 @@
 .race-sheet-panel h2 { margin: 0 0 0.55rem; padding-bottom: 0.2rem; font-size: 1.08rem; font-weight: 700; color: #4a351f; border-bottom: 1px solid rgba(74, 53, 31, 0.32); text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45); }
 .race-sheet-hint { margin: 0 0 0.65rem; font-size: 0.85rem; font-style: italic; color: #5f503f; opacity: 1; }
 .race-sheet-field { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; }
-.race-sheet-field > span, .race-sheet-field > label, .race-profile-cell > span { font-weight: 600; color: #3f2e1d; }
+.race-sheet-field > span, .race-sheet-field > label { font-weight: 600; color: #3f2e1d; }
 .race-sheet-field input, .race-profile-cell input, .race-sheet-field textarea { width: 100%; }
-.race-profile-grid { display: grid; grid-template-columns: repeat(7, minmax(82px, 1fr)); gap: 0.45rem; }
-.race-profile-cell { display: flex; flex-direction: column; gap: 0.2rem; text-align: center; }
-.race-profile-cell input { text-align: center; }
+
+/* Starting profile intentionally uses the same visual language as the Career
+ * Advance Scheme: compact bordered cells and dark characteristic headers. */
+.race-profile-grid {
+	display: grid;
+	grid-template-columns: repeat(7, minmax(82px, 1fr));
+	gap: 0;
+	border: 2px solid #2b2822;
+	background: rgb(245 238 219 / 45%);
+}
+.race-profile-cell {
+	display: grid;
+	grid-template-rows: 24px 31px;
+	gap: 0;
+	min-width: 0;
+	border-right: 1px solid #5d5547;
+	border-bottom: 1px solid #5d5547;
+	text-align: center;
+}
+.race-profile-cell:nth-child(7n) { border-right: 0; }
+.race-profile-cell:nth-last-child(-n + 7) { border-bottom: 0; }
+.race-profile-cell > span {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 2px 1px;
+	background: #312a21;
+	font-size: 11px;
+	font-weight: 700;
+	line-height: 1;
+	color: #f4ead2;
+}
+.race-profile-cell input {
+	align-self: center;
+	justify-self: center;
+	width: calc(100% - 10px);
+	height: 23px;
+	margin: 0;
+	padding: 0 3px;
+	font-size: 11px;
+	text-align: center;
+}
+
 .race-property-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.65rem; align-items: end; }
 .race-property-grid--three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .race-property-grid--four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -48,29 +88,180 @@
 .race-drop-zone { min-height: 42px; padding: 0.45rem; border: 1px dashed rgba(73, 48, 29, 0.42); background: rgba(255,255,255,0.14); }
 .race-mandatory-drop-surface { min-height: 56px; }
 
-/* Mandatory racial Skills deliberately reuse Career's compact row/package
- * classes. Only the Race-specific outer spacing/actions live here. */
-.race-mandatory-compact-list {
+/* Race mandatory Skills use Career's compact/package vocabulary and matching
+ * dimensions/colors so packages read as the same UI component on both sheets. */
+.race-item-sheet .race-mandatory-drop-surface.career-compact-list {
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	padding: 0;
+	border: 0;
+	background: transparent;
+}
+.race-item-sheet .career-compact-row {
 	display: grid;
-	gap: 0.35rem;
-	min-height: 56px;
+	grid-template-columns: minmax(0, 1fr) 150px 63px;
+	align-items: center;
+	gap: 8px;
+	min-height: 31px;
+	padding: 3px 5px 3px 8px;
+	border-bottom: 1px solid rgb(66 54 39 / 23%);
+	background: transparent;
+	color: #261e17;
+	transition: background-color 100ms ease;
 }
-.race-mandatory-compact-row,
-.race-mandatory-compact-package {
-	margin: 0;
+.race-item-sheet .career-compact-row:first-child { border-top: 1px solid rgb(66 54 39 / 23%); }
+.race-item-sheet .career-compact-row:hover,
+.race-item-sheet .career-compact-row:focus-within { background: rgb(255 250 235 / 42%); }
+.race-item-sheet .career-compact-row__content {
+	grid-column: 1;
+	display: flex;
+	align-items: baseline;
+	gap: 7px;
+	min-width: 0;
 }
-.race-mandatory-package-actions {
+.race-item-sheet .career-compact-row__name {
+	overflow: hidden;
+	font-size: 13px;
+	font-weight: 700;
+	line-height: 1.2;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.race-item-sheet .career-compact-row__meta {
+	grid-column: 2;
+	justify-self: end;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	max-width: 150px;
+	min-height: 21px;
+	padding: 1px 7px;
+	border: 1px solid rgb(72 52 35 / 56%);
+	border-radius: 4px;
+	background: rgb(248 235 203 / 78%);
+	overflow: hidden;
+	font-family: Arial, Helvetica, sans-serif;
+	font-size: 10px;
+	font-weight: 700;
+	line-height: 1.15;
+	text-align: center;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: #21170f;
+}
+.race-item-sheet .career-compact-row__controls {
+	grid-column: 3;
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 1px;
+	width: 63px;
+	min-width: 63px;
+	opacity: 0.42;
+	transition: opacity 100ms ease;
+}
+.race-item-sheet .career-compact-row:hover .career-compact-row__controls,
+.race-item-sheet .career-compact-row:focus-within .career-compact-row__controls { opacity: 1; }
+.race-item-sheet .career-compact-row__controls button,
+.race-item-sheet .race-mandatory-package-actions button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 20px;
+	height: 20px;
+	min-height: 20px;
+	padding: 0;
+	border: 0;
+	border-radius: 2px;
+	background: transparent;
+	box-shadow: none;
+	font-size: 10px;
+	color: #3f3429;
+}
+.race-item-sheet .career-compact-row__controls button:hover,
+.race-item-sheet .career-compact-row__controls button:focus-visible,
+.race-item-sheet .race-mandatory-package-actions button:hover,
+.race-item-sheet .race-mandatory-package-actions button:focus-visible { background: rgb(255 255 255 / 46%); color: #17120e; }
+.race-item-sheet .career-compact-row__package {
+	border: 1px solid rgb(91 65 39 / 28%) !important;
+	background: rgb(255 250 235 / 26%) !important;
+}
+.race-item-sheet .career-compact-row__package:hover,
+.race-item-sheet .career-compact-row__package:focus-visible {
+	border-color: rgb(91 65 39 / 58%) !important;
+	background: rgb(255 250 235 / 62%) !important;
+}
+.race-item-sheet .career-compact-package {
+	position: relative;
+	margin: 15px 3px 8px;
+	padding-top: 9px;
+	border: 1px solid rgb(91 65 39 / 48%);
+	border-radius: 4px;
+	background: rgb(72 0 0 / 20%);
+	box-shadow: inset 0 1px 0 rgb(255 255 255 / 28%);
+}
+.race-item-sheet .career-compact-package__meta {
+	position: absolute;
+	top: -11px;
+	left: 8px;
+	display: inline-flex;
+	align-items: center;
+	min-height: 20px;
+	max-width: calc(100% - 58px);
+	padding: 2px 7px;
+	border: 1px solid rgb(91 65 39 / 46%);
+	border-radius: 999px;
+	background: rgb(244 235 211 / 98%);
+	overflow: hidden;
+	font-size: 10px;
+	font-weight: 800;
+	line-height: 1.15;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: #4b3526;
+}
+.race-item-sheet .career-compact-package__tab {
+	position: absolute;
+	top: -15px;
+	right: 7px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 30px;
+	height: 25px;
+	min-height: 25px;
+	padding: 0;
+	border: 1px solid rgb(91 65 39 / 58%);
+	border-bottom-color: rgb(244 235 211 / 98%);
+	border-radius: 5px 5px 0 0;
+	background: rgb(244 235 211 / 98%);
+	box-shadow: none;
+	font-size: 11px;
+	color: #392a20;
+	z-index: 2;
+}
+.race-item-sheet .career-compact-package__tab:hover,
+.race-item-sheet .career-compact-package__tab:focus-visible { background: rgb(255 249 230 / 100%); color: #17120e; }
+.race-item-sheet .career-compact-package__members { display: flex; flex-direction: column; }
+.race-item-sheet .career-compact-package__member {
+	grid-template-columns: minmax(0, 1fr);
+	padding-left: 9px;
+	padding-right: 9px;
+}
+.race-item-sheet .career-compact-package__member:first-child { border-top: 0; }
+.race-item-sheet .career-compact-package__member:last-child { border-bottom: 0; }
+.race-item-sheet .race-mandatory-package-actions {
 	display: flex;
 	justify-content: flex-end;
-	gap: 0.25rem;
-	padding-top: 0.25rem;
+	gap: 1px;
+	padding: 3px 5px;
+	border-top: 1px solid rgb(66 54 39 / 23%);
+	opacity: 0.42;
+	transition: opacity 100ms ease;
 }
-.race-mandatory-package-actions button {
-	width: 28px;
-	height: 28px;
-	min-height: 28px;
-	padding: 0;
-}
+.race-item-sheet .career-compact-package:hover .race-mandatory-package-actions,
+.race-item-sheet .career-compact-package:focus-within .race-mandatory-package-actions { opacity: 1; }
 
 .race-career-override { display: grid; gap: 0.35rem; padding: 0.45rem 0; border-top: 1px solid rgba(73,48,29,0.18); }
 .race-editor-row--override { grid-template-columns: minmax(140px,0.8fr) minmax(180px,1fr) auto 28px; }
@@ -95,5 +286,9 @@
 	.race-profile-grid, .race-property-grid, .race-property-grid--three, .race-property-grid--four, .race-table-grid,
 	.race-editor-row--language, .race-editor-row--psychology, .race-editor-row--age-band,
 	.race-editor-row--override, .race-editor-row--requirement { grid-template-columns: 1fr; }
+	.race-profile-grid { border: 0; gap: 0.4rem; background: transparent; }
+	.race-profile-cell { grid-template-rows: 22px 30px; border: 1px solid #5d5547 !important; }
 	.race-icon-button { justify-self: end; }
+	.race-item-sheet .career-compact-row { grid-template-columns: minmax(0, 1fr) 110px 63px; }
+	.race-item-sheet .career-compact-row__meta { max-width: 110px; }
 }
