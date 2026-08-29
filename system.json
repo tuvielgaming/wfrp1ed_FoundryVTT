@@ -20,6 +20,7 @@
 		"module/data-models/actor/CharacterPartialMigrationFix.mjs",
 		"module/forms/SelectAllOnFocus.mjs",
 		"module/careers/CareerBootstrap.mjs",
+		"module/races/RaceBootstrap.mjs",
 		"module/careers/CareerPartialMigrationFix.mjs",
 		"module/careers/CareerUpdateIntegrityGuard.mjs",
 		"module/careers/CareerSheetIntegration.mjs",
@@ -166,6 +167,7 @@
 		"css/sheets/career-item-authoring.css",
 		"css/sheets/career-item-compact.css",
 		"css/sheets/career-image.css",
+		"css/sheets/race-item.css",
 		"css/sheets/critical-wound-item.css",
 		"css/sheets/critical-wounds-window.css",
 		"css/sheets/combat-item.css",
@@ -220,7 +222,7 @@
 	"documentTypes": {
 		"ActiveEffect": {"wfrp": {}},
 		"Actor": {"character": {},"npc": {},"creature": {},"vehicle": {},"lootPile": {}},
-		"Item": {"career": {},"skill": {},"criticalWound": {},"weapon": {},"armour": {},"equipment": {},"trait": {},"spell": {}}
+		"Item": {"career": {},"race": {},"skill": {},"criticalWound": {},"weapon": {},"armour": {},"equipment": {},"trait": {},"spell": {}}
 	},
 	"background": "systems/wfrp1ed/WFRP1ed.jpg",
 	"grid": {"distance": 5,"units":"ft"}
