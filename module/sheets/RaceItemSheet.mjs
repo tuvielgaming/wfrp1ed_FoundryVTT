@@ -96,9 +96,15 @@ export class RaceItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
 		const zone = String(target.dataset.raceDropZone ?? "");
 		if (!(document instanceof foundry.documents.Item)) return null;
 
-		if (zone === "mandatorySkills") {
+		if (zone === "mandatorySkillsNew") {
 			if (document.type !== "skill") return warnDrop("Skill", "Umiejętność");
-			await this.#dropMandatorySkill(target, document);
+			await this.#dropMandatorySkill(null, document);
+			return document;
+		}
+
+		if (zone === "mandatorySkillChoice") {
+			if (document.type !== "skill") return warnDrop("Skill", "Umiejętność");
+			await this.#dropMandatorySkill(integer(target.dataset.ruleIndex, -1), document);
 			return document;
 		}
 
@@ -159,7 +165,19 @@ export class RaceItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
 		if (kind === "careerOverrides") {
 			const overrides = cloneArray(this.document.system?.careerClassOverrides);
 			if (!overrides[index]) return;
-			overrides[index][String(input.dataset.field ?? "")] = String(input.value ?? "");
+			const field = String(input.dataset.field ?? "");
+			const value = String(input.value ?? "");
+
+			if (field === "class" && overrides.some((entry, entryIndex) => entryIndex !== index && entry.class === value)) {
+				warnAuthoring(
+					"Each Career Class can have only one racial override. Edit the existing override instead.",
+					"Każda Klasa Profesji może mieć tylko jeden wyjątek rasowy. Edytuj istniejący wyjątek zamiast tworzyć drugi.",
+				);
+				this.render({ force: true });
+				return;
+			}
+
+			overrides[index][field] = value;
 			await this.document.update({ "system.careerClassOverrides": overrides });
 			return;
 		}
@@ -171,17 +189,27 @@ export class RaceItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
 			const requirement = overrides[overrideIndex]?.requirements?.[requirementIndex];
 			if (!requirement) return;
 			const field = String(input.dataset.field ?? "");
-			requirement[field] = field === "value" ? integer(input.value, 0) : String(input.value ?? "");
+			const value = field === "value" ? integer(input.value, 0) : String(input.value ?? "");
+
+			if (field === "characteristic" && overrides[overrideIndex].requirements.some((entry, entryIndex) => entryIndex !== requirementIndex && entry.characteristic === value)) {
+				warnAuthoring(
+					"The same Characteristic cannot appear twice in one Career Class override.",
+					"Ta sama Cecha nie może występować dwa razy w jednym wyjątku Klasy Profesji.",
+				);
+				this.render({ force: true });
+				return;
+			}
+
+			requirement[field] = value;
 			await this.document.update({ "system.careerClassOverrides": overrides });
 		}
 	}
 
-	async #dropMandatorySkill(target, document) {
+	async #dropMandatorySkill(ruleIndex, document) {
 		const rules = cloneArray(this.document.system?.mandatorySkills);
-		const ruleIndex = integer(target.dataset.ruleIndex, -1);
 		const grant = skillReference(document);
 
-		if (ruleIndex >= 0 && rules[ruleIndex]) {
+		if (ruleIndex !== null && ruleIndex >= 0 && rules[ruleIndex]) {
 			const rule = rules[ruleIndex];
 			rule.choices ??= [];
 			if (rule.choices.some((choice) => choice.grants?.some((candidate) => sameReference(candidate, grant)))) return;
@@ -280,7 +308,14 @@ export class RaceItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
 
 	static async #addCareerOverride() {
 		const overrides = cloneArray(this.document.system?.careerClassOverrides);
-		const unused = RACE_CAREER_CLASSES.find((careerClass) => !overrides.some((entry) => entry.class === careerClass)) ?? RACE_CAREER_CLASSES[0];
+		const unused = RACE_CAREER_CLASSES.find((careerClass) => !overrides.some((entry) => entry.class === careerClass));
+		if (!unused) {
+			warnAuthoring(
+				"All four Career Classes already have racial overrides.",
+				"Wszystkie cztery Klasy Profesji mają już wyjątki rasowe.",
+			);
+			return;
+		}
 		overrides.push({ class: unused, mode: RACE_CAREER_OVERRIDE_MODE.REPLACE_REQUIREMENTS, requirements: [] });
 		await this.document.update({ "system.careerClassOverrides": overrides });
 	}
@@ -294,7 +329,17 @@ export class RaceItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
 		const overrides = cloneArray(this.document.system?.careerClassOverrides);
 		if (!overrides[index]) return;
 		overrides[index].requirements ??= [];
-		overrides[index].requirements.push({ characteristic: "i", operator: "gte", value: 30 });
+		const unused = RACE_CHARACTERISTIC_IDS.find((characteristic) =>
+			!overrides[index].requirements.some((entry) => entry.characteristic === characteristic),
+		);
+		if (!unused) {
+			warnAuthoring(
+				"Every Characteristic is already used in this Career Class override.",
+				"Każda Cecha jest już użyta w tym wyjątku Klasy Profesji.",
+			);
+			return;
+		}
+		overrides[index].requirements.push({ characteristic: unused, operator: "gte", value: 30 });
 		await this.document.update({ "system.careerClassOverrides": overrides });
 	}
 
@@ -492,6 +537,10 @@ function warnDrop(englishType, polishType) {
 	return null;
 }
 
+function warnAuthoring(english, polish) {
+	ui.notifications.warn(localize(english, polish));
+}
+
 function reportAuthoringError(error) {
 	console.error("WFRP1ED | Race authoring update failed.", error);
 	ui.notifications.error(error?.message ?? String(error));
@@ -510,7 +559,7 @@ function labels() {
 		fate: localize("Initial Fate", "Początkowe Punkty Przeznaczenia"), fateFormula: localize("Formula", "Formuła"), fateMinimum: localize("Minimum", "Minimum"),
 		languages: localize("Languages", "Języki"), psychology: localize("Psychology", "Psychologia"), ageBands: localize("Age → initial Skill modifier", "Wiek → modyfikator początkowych Umiejętności"), mandatorySkills: localize("Mandatory racial Skills", "Obowiązkowe Umiejętności rasowe"), careerOverrides: localize("Career Class overrides", "Wyjątki Klas Profesji"),
 		add: localize("Add", "Dodaj"), delete: localize("Delete", "Usuń"), rulesIdentity: localize("Rules ID", "ID reguły"), displayName: localize("Name", "Nazwa"), psychologyDescription: localize("Description", "Opis"), minAge: localize("From", "Od"), maxAge: localize("To", "Do"), modifier: localize("Modifier", "Modyfikator"), minInitialSkills: localize("Applies from Skill count", "Od liczby Umiejętności"), mode: localize("Mode", "Tryb"), choose: localize("Choose", "Wybierz"),
-		dropMandatory: localize("Drop a Skill here to create a rule; drop more Skills onto an existing rule to create alternatives.", "Upuść Umiejętność tutaj, aby utworzyć regułę; upuszczaj kolejne Umiejętności na istniejącą regułę, aby tworzyć alternatywy."),
+		dropMandatory: localize("Drop a Skill anywhere in this section to create a new rule. Drop it directly onto an existing Skill chip to add it as an alternative to that rule.", "Upuść Umiejętność w dowolnym miejscu tej sekcji, aby utworzyć nową regułę. Upuść ją bezpośrednio na istniejącą Umiejętność, aby dodać ją jako alternatywę do tej reguły."),
 		skillTables: localize("Initial Skill D100 tables", "Tabele K100 początkowych Umiejętności"), careerTables: localize("Basic Career D100 tables", "Tabele K100 Profesji Podstawowych"),
 		dropSkillTable: localize("Drop Skills here. Edit the D100 ranges directly; the validator checks 01-100 coverage.", "Upuszczaj tutaj Umiejętności. Zakresy K100 edytuj bezpośrednio; walidator sprawdza pokrycie 01-100."),
 		dropCareerTable: localize("Drop Careers here. Edit the D100 ranges directly; the validator checks 01-100 coverage.", "Upuszczaj tutaj Profesje. Zakresy K100 edytuj bezpośrednio; walidator sprawdza pokrycie 01-100."),
