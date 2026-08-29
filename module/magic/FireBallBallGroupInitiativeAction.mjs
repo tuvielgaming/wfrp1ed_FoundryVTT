@@ -86,17 +86,19 @@ async function invokeCanonicalInitiativeRoll(record) {
 		"Trafienie Ognistej Kuli jest niedostępne.",
 	));
 
-	/* Prefer the already-rendered canonical control. Grouped impact messages are
-	 * intentionally hidden, though, and Foundry may omit a hidden message from
-	 * the currently materialised ChatLog DOM. A full ChatLog render therefore is
-	 * not a reliable way to recover this control.
-	 *
-	 * If the live control is absent, render the canonical impact message into a
-	 * detached DOM host by replaying the normal renderChatMessageHTML hook. This
-	 * lets FireBallImpactWorkflow attach its real requestAction listener, so this
-	 * grouped button still delegates to exactly the same permission/socket/Test
-	 * pipeline without duplicating Initiative logic. */
+	/* First prefer the real ChatLog control. A forced render may take several
+	 * animation frames because multiple WFRP presentation hooks rebuild/hide the
+	 * same impact card. Wait for that pipeline rather than assuming two frames are
+	 * enough. This still invokes the canonical FireBallImpactWorkflow listener. */
 	let control = canonicalInitiativeControl(messageId);
+	if (!(control instanceof HTMLButtonElement)) {
+		await ui.chat?.render?.({ force: true });
+		control = await waitForCanonicalControl(messageId, 12);
+	}
+
+	/* If Foundry's virtualised ChatLog does not materialise the hidden impact,
+	 * replay the ordinary render hook into a detached host and wait for the same
+	 * asynchronous decoration pipeline there. */
 	if (!(control instanceof HTMLButtonElement)) {
 		control = await detachedCanonicalInitiativeControl(message);
 	}
@@ -114,6 +116,15 @@ async function invokeCanonicalInitiativeRoll(record) {
 		));
 	}
 	control.click();
+}
+
+async function waitForCanonicalControl(messageId, frames) {
+	for (let index = 0; index < frames; index += 1) {
+		const control = canonicalInitiativeControl(messageId);
+		if (control instanceof HTMLButtonElement) return control;
+		await nextAnimationFrame();
+	}
+	return null;
 }
 
 function canonicalInitiativeControl(messageId) {
@@ -134,13 +145,16 @@ async function detachedCanonicalInitiativeControl(message) {
 	}
 
 	Hooks.callAll("renderChatMessageHTML", message, host);
-	await nextAnimationFrame();
-	await nextAnimationFrame();
-
-	const panel = host.querySelector("[data-wfrp-fireball-impact-workflow]");
-	if (!(panel instanceof HTMLElement)) return null;
-	return [...panel.querySelectorAll("button.combat-damage-roll-button")]
-		.find((button) => /initiative|inicjatyw/i.test(String(button.textContent ?? ""))) ?? null;
+	for (let index = 0; index < 12; index += 1) {
+		const panel = host.querySelector("[data-wfrp-fireball-impact-workflow]");
+		if (panel instanceof HTMLElement) {
+			const control = [...panel.querySelectorAll("button.combat-damage-roll-button")]
+				.find((button) => /initiative|inicjatyw/i.test(String(button.textContent ?? ""))) ?? null;
+			if (control instanceof HTMLButtonElement) return control;
+		}
+		await nextAnimationFrame();
+	}
+	return null;
 }
 
 function targetEntries(group) {
