@@ -12,9 +12,6 @@
 	column-gap: 10px;
 }
 
-/* Keep the actual controls available to forms and keyboard navigation while
- * drawing the visible radio control ourselves. Checkbox hiding is already
- * owned by css/forms/checkbox.css through .wfrp1ed-checkbox. */
 .career-choice-dialog__option > input[type="radio"] {
 	position: absolute !important;
 	width: 1px !important;
@@ -28,9 +25,6 @@
 	pointer-events: none;
 }
 
-/* SystemCheckboxIntegration wraps Career checkboxes after the dialog renders.
- * Make that canonical wrapper the ONLY checkbox marker. This avoids the former
- * duplicate checkmark and keeps the Skill/Trapping text on the same row. */
 .career-choice-dialog__option > .wfrp1ed-checkbox {
 	grid-column: 1;
 	grid-row: 1;
@@ -49,9 +43,7 @@
 	border: 2px solid rgb(245 218 164 / 96%);
 	border-radius: 2px;
 	background: rgb(20 17 14 / 92%);
-	box-shadow:
-		0 0 0 1px rgb(0 0 0 / 65%),
-		inset 0 0 0 1px rgb(255 255 255 / 7%);
+	box-shadow: 0 0 0 1px rgb(0 0 0 / 65%), inset 0 0 0 1px rgb(255 255 255 / 7%);
 	color: rgb(103 226 118);
 	font-family: Arial, Helvetica, sans-serif;
 	font-size: 15px;
@@ -72,15 +64,8 @@
 	outline-offset: 2px;
 }
 
-/* Checkbox rows already have their visual marker in the normalized wrapper,
- * so suppress the generic row marker there. */
-.career-choice-dialog__option:has(> .wfrp1ed-checkbox)::before {
-	content: none;
-	display: none;
-}
+.career-choice-dialog__option:has(> .wfrp1ed-checkbox)::before { content: none; display: none; }
 
-/* Radio choices are not normalized by SystemCheckboxIntegration, therefore
- * the row itself owns the one visible circular marker. */
 .career-choice-dialog__option:has(> input[type="radio"])::before {
 	content: "";
 	display: inline-grid;
@@ -92,22 +77,13 @@
 	border: 2px solid rgb(245 218 164 / 96%);
 	border-radius: 50%;
 	background: rgb(20 17 14 / 92%);
-	box-shadow:
-		0 0 0 1px rgb(0 0 0 / 65%),
-		inset 0 0 0 1px rgb(255 255 255 / 7%);
+	box-shadow: 0 0 0 1px rgb(0 0 0 / 65%), inset 0 0 0 1px rgb(255 255 255 / 7%);
 }
 
 .career-choice-dialog__option:has(> input[type="radio"]:checked)::before {
 	border-color: rgb(129 232 139 / 98%);
-	background:
-		radial-gradient(
-			circle at center,
-			rgb(103 226 118) 0 4px,
-			rgb(18 48 25 / 96%) 5px 100%
-		);
-	box-shadow:
-		0 0 0 1px rgb(0 0 0 / 65%),
-		0 0 5px rgb(86 220 103 / 28%);
+	background: radial-gradient(circle at center, rgb(103 226 118) 0 4px, rgb(18 48 25 / 96%) 5px 100%);
+	box-shadow: 0 0 0 1px rgb(0 0 0 / 65%), 0 0 5px rgb(86 220 103 / 28%);
 }
 
 .career-choice-dialog__option:has(> input[type="radio"]:focus-visible)::before {
@@ -115,28 +91,16 @@
 	outline-offset: 2px;
 }
 
-/* The option text always occupies the second column and therefore remains on
- * the same horizontal line as its checkbox/radio marker. Long labels may wrap
- * naturally inside that text column without dropping below the control. */
 .career-choice-dialog__option > span:not(.wfrp1ed-checkbox) {
 	grid-column: 2;
 	grid-row: 1;
 	min-width: 0;
 }
 
-/*
- * GM-only Character Creation Mode is a direct Foundry v14 frame button rather
- * than another entry hidden inside the three-dots header menu. The scroll icon
- * stays subdued when inactive and becomes visibly green while the Actor is in
- * Character Creation Mode.
- */
 .classic-actor-sheet .wfrp1ed-character-creation-toggle {
 	border-radius: 4px;
 	color: rgb(220 205 177 / 82%);
-	transition:
-		background-color 120ms ease,
-		color 120ms ease,
-		text-shadow 120ms ease;
+	transition: background-color 120ms ease, color 120ms ease, text-shadow 120ms ease;
 }
 
 .classic-actor-sheet .wfrp1ed-character-creation-toggle:hover,
@@ -157,32 +121,92 @@
 	color: rgb(139 239 151);
 }
 
-/*
- * Character Creation Mode is most useful when it remains obvious while the
- * user scrolls deep into the sheet. Colour only Foundry's content surface
- * behind the parchment pages: the existing transparent spacing around the
- * pages becomes gold, while the printed character-sheet pages themselves keep
- * their ordinary white artwork/backgrounds. Do not add padding here; Classic
- * sheet page spacing already owns the layout, so this is presentation only.
- */
 .application.classic-actor-sheet.wfrp1ed-character-creation-mode > section.window-content,
 .classic-actor-sheet.wfrp1ed-character-creation-mode > section.window-content {
-	background:
-		linear-gradient(
-			180deg,
-			rgb(227 190 55 / 98%) 0%,
-			rgb(211 169 45 / 98%) 52%,
-			rgb(224 185 52 / 98%) 100%
-		) !important;
-	box-shadow:
-		inset 0 0 0 1px rgb(255 237 171 / 30%),
-		inset 0 0 24px rgb(111 73 12 / 12%);
+	background: linear-gradient(180deg, rgb(227 190 55 / 98%) 0%, rgb(211 169 45 / 98%) 52%, rgb(224 185 52 / 98%) 100%) !important;
+	box-shadow: inset 0 0 0 1px rgb(255 237 171 / 30%), inset 0 0 24px rgb(111 73 12 / 12%);
 }
 
-/* Keep only a restrained outer cue; the gold content margins are now the
- * primary creation-mode indicator rather than colouring the application frame. */
 .application.classic-actor-sheet.wfrp1ed-character-creation-mode,
 .classic-actor-sheet.wfrp1ed-character-creation-mode {
 	border-color: rgb(187 145 38 / 72%) !important;
 	box-shadow: 0 0 14px rgb(211 169 45 / 20%) !important;
+}
+
+/* Career Class selector --------------------------------------------------- */
+.wfrp1ed-classic-sheet .header-field--career-class .wfrp1ed-career-class-selector {
+	display: block;
+	width: 100%;
+	height: 100%;
+	padding: 1px 22px 1px 4px;
+	border: 0;
+	border-radius: 0;
+	background-color: rgb(255 255 255 / 18%);
+	background-image: linear-gradient(45deg, transparent 50%, #2e241b 50%), linear-gradient(135deg, #2e241b 50%, transparent 50%);
+	background-position: calc(100% - 10px) 50%, calc(100% - 6px) 50%;
+	background-size: 4px 4px, 4px 4px;
+	background-repeat: no-repeat;
+	appearance: none;
+	-webkit-appearance: none;
+	cursor: pointer;
+	font: inherit;
+	color: inherit;
+}
+
+.wfrp1ed-classic-sheet .header-field--career-class .wfrp1ed-career-class-selector:hover,
+.wfrp1ed-classic-sheet .header-field--career-class .wfrp1ed-career-class-selector:focus {
+	background-color: var(--rollable-hover-background);
+	outline: 1px solid var(--focus-color);
+	outline-offset: -1px;
+}
+
+/* Race-based starting Characteristic generation -------------------------- */
+.wfrp1ed-character-creation-mode .characteristics-row--initial .characteristics-row-label,
+.wfrp1ed-character-creation-mode .characteristic-cell--initial {
+	position: relative;
+}
+
+.wfrp1ed-character-creation-mode .wfrp1ed-race-characteristic-roll,
+.wfrp1ed-character-creation-mode .wfrp1ed-race-profile-roll-all {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border: 0;
+	background: transparent;
+	box-shadow: none;
+	color: #6f0018;
+	cursor: pointer;
+	z-index: 3;
+}
+
+.wfrp1ed-character-creation-mode .wfrp1ed-race-characteristic-roll {
+	position: absolute;
+	top: 1px;
+	right: 1px;
+	width: 14px;
+	height: 14px;
+	font-size: 9px;
+	opacity: 0.25;
+	transition: opacity 100ms ease, background-color 100ms ease;
+}
+
+.wfrp1ed-character-creation-mode .characteristic-cell--initial:hover .wfrp1ed-race-characteristic-roll,
+.wfrp1ed-character-creation-mode .characteristic-cell--initial:focus-within .wfrp1ed-race-characteristic-roll {
+	opacity: 1;
+	background: rgb(255 255 255 / 72%);
+}
+
+.wfrp1ed-character-creation-mode .wfrp1ed-race-profile-roll-all {
+	position: absolute;
+	inset: 3px;
+	width: auto;
+	height: auto;
+	font-size: 13px;
+	opacity: 0.65;
+}
+
+.wfrp1ed-character-creation-mode .wfrp1ed-race-profile-roll-all:hover,
+.wfrp1ed-character-creation-mode .wfrp1ed-race-profile-roll-all:focus-visible {
+	opacity: 1;
+	background: rgb(125 0 25 / 8%);
 }
