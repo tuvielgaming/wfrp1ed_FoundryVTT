@@ -20,8 +20,14 @@ export const RACE_CAREER_CLASSES = Object.freeze([
 	"academic",
 ]);
 
+/**
+ * Keep the same package-mode vocabulary as CareerData. Race mandatory Skills
+ * use the same entry -> choices -> grants semantics, with the Race-specific
+ * minInitialSkills condition instead of Career acquisition chance.
+ */
 export const RACE_INITIAL_SKILL_MODE = Object.freeze({
 	ALL: "all",
+	PLAYER_CHOICE: "player-choice",
 	RANDOM_CHOICE: "random-choice",
 });
 
