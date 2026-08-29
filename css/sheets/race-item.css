@@ -30,15 +30,21 @@
 }
 
 .race-sheet-panel h2 {
-	margin: 0 0 0.45rem;
-	font-size: 1.05rem;
+	margin: 0 0 0.55rem;
+	padding-bottom: 0.2rem;
+	font-size: 1.08rem;
+	font-weight: 700;
+	color: #4a351f;
+	border-bottom: 1px solid rgba(74, 53, 31, 0.32);
+	text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
 .race-sheet-hint {
 	margin: 0 0 0.65rem;
 	font-size: 0.85rem;
 	font-style: italic;
-	opacity: 0.78;
+	color: #5f503f;
+	opacity: 1;
 }
 
 .race-sheet-field {
@@ -52,6 +58,7 @@
 .race-sheet-field > label,
 .race-profile-cell > span {
 	font-weight: 600;
+	color: #3f2e1d;
 }
 
 .race-sheet-field input,
