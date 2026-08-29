@@ -64,3 +64,36 @@
 	border-top: 1px solid rgba(0, 0, 0, 0.14);
 	background: #cbb886;
 }
+
+/* Age and Fate use the same compact visual grammar as the verified starting
+ * Characteristic generation cards. */
+.wfrp1ed-race-secondary-chat {
+	display: grid;
+	gap: 0.35rem;
+}
+
+.wfrp1ed-race-secondary-chat > header {
+	margin: 0 0 0.4rem;
+	padding-bottom: 0.3rem;
+	border-bottom: 1px solid rgba(0, 0, 0, 0.28);
+	font-size: 1rem;
+	font-weight: 700;
+}
+
+.wfrp1ed-race-secondary-chat > div {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 0.75rem;
+	align-items: baseline;
+	padding: 0.18rem 0;
+}
+
+.wfrp1ed-race-secondary-chat > div > strong {
+	font-weight: 600;
+}
+
+.wfrp1ed-race-secondary-chat > div:last-child {
+	margin-top: 0.2rem;
+	padding-top: 0.4rem;
+	border-top: 1px solid rgba(0, 0, 0, 0.18);
+}
