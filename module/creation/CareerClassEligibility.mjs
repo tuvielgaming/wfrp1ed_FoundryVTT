@@ -39,10 +39,23 @@ installCharacterCreationClassSelector();
 function installCharacterCreationClassSelector() {
 	Hooks.on("renderApplicationV2", (application, element) => {
 		const actor = application?.document;
-		if (!isClassicCharacterActor(actor, element)) return;
+		if (actor?.documentName !== "Actor" || actor.type !== "character") return;
 		if (!CharacterCreationMode.enabled(actor)) return;
+
 		const root = asElement(element) ?? asElement(application?.element);
-		if (root instanceof HTMLElement) syncSelector(actor, root);
+		if (!(root instanceof HTMLElement)) return;
+
+		/* Run once immediately and once after the current render-hook queue. Some
+		 * Classic-sheet integrations still decorate the header during render;
+		 * the deferred pass makes the Career Class selector the final owner of
+		 * that field in Character Creation Mode. */
+		syncSelector(actor, root);
+		queueMicrotask(() => {
+			const liveRoot = asElement(application?.element) ?? root;
+			if (liveRoot instanceof HTMLElement && CharacterCreationMode.enabled(actor)) {
+				syncSelector(actor, liveRoot);
+			}
+		});
 	});
 
 	Hooks.on("updateActor", (actor, changes) => {
@@ -64,37 +77,39 @@ function installCharacterCreationClassSelector() {
 }
 
 function syncSelector(actor, root) {
-	const sheet = root.classList?.contains("wfrp1ed-classic-sheet") ? root : root.querySelector?.(".wfrp1ed-classic-sheet") ?? root;
+	const sheet = classicSheetRoot(root);
 	if (!(sheet instanceof HTMLElement)) return;
-
-	const existing = sheet.querySelector('.header-field--career-class select.wfrp1ed-career-class-selector');
-	if (existing instanceof HTMLSelectElement) {
-		populateSelector(actor, existing);
-		return;
-	}
 
 	const field = sheet.querySelector(".header-field--career-class");
 	if (!(field instanceof HTMLElement)) return;
-	const input = field.querySelector('input[name="system.details.careerClass"]');
-	if (!(input instanceof HTMLInputElement)) return;
 
-	const select = document.createElement("select");
-	select.name = "system.details.careerClass";
-	select.className = "wfrp1ed-career-class-selector";
-	select.setAttribute("aria-label", input.getAttribute("aria-label") ?? localize("Career Class", "Klasa Zawodowa"));
-	select.addEventListener("change", () => {
-		void actor.update({ "system.details.careerClass": select.value }).catch((error) => {
-			console.error("WFRP1ED | Unable to set Career Class.", error);
-			ui.notifications.error(error?.message ?? String(error));
+	let select = field.querySelector("select.wfrp1ed-career-class-selector");
+	if (!(select instanceof HTMLSelectElement)) {
+		/* Do not rely on the input retaining a particular name. Other header
+		 * integrations may change/remove form ownership while decorating fields. */
+		const input = field.querySelector("input");
+		if (!(input instanceof HTMLInputElement)) return;
+
+		select = document.createElement("select");
+		select.name = "system.details.careerClass";
+		select.className = "wfrp1ed-career-class-selector";
+		select.setAttribute("aria-label", input.getAttribute("aria-label") ?? localize("Career Class", "Klasa Zawodowa"));
+		select.addEventListener("change", () => {
+			void actor.update({ "system.details.careerClass": select.value }).catch((error) => {
+				console.error("WFRP1ED | Unable to set Career Class.", error);
+				ui.notifications.error(error?.message ?? String(error));
+			});
 		});
-	});
-	input.replaceWith(select);
+		input.replaceWith(select);
+	}
+
 	populateSelector(actor, select);
 }
 
 function populateSelector(actor, select) {
 	const current = canonicalClassId(actor.system?.details?.careerClass);
 	select.replaceChildren();
+
 	const placeholder = document.createElement("option");
 	placeholder.value = "";
 	placeholder.textContent = localize("Select Class", "Wybierz Klasę");
@@ -111,6 +126,7 @@ function populateSelector(actor, select) {
 		element.dataset.tooltip = option.reason;
 		select.append(element);
 	}
+
 	select.title = localize(
 		"Career Classes which do not meet the current Characteristic requirements are disabled. Disabled entries show their requirements in the list.",
 		"Klasy Profesji, których aktualne Cechy nie spełniają wymagań, są wyłączone. Wyłączone pozycje pokazują wymagania bezpośrednio na liście.",
@@ -160,10 +176,9 @@ function canonicalClassId(value) {
 	return aliases[normalized] ?? "";
 }
 
-function isClassicCharacterActor(actor, element) {
-	if (actor?.documentName !== "Actor" || actor.type !== "character") return false;
-	const root = asElement(element);
-	return Boolean(root?.classList?.contains("classic-actor-sheet") || root?.classList?.contains("wfrp1ed-classic-sheet") || root?.querySelector?.(".wfrp1ed-classic-sheet"));
+function classicSheetRoot(root) {
+	if (root?.classList?.contains("wfrp1ed-classic-sheet")) return root;
+	return root?.querySelector?.(".wfrp1ed-classic-sheet") ?? null;
 }
 
 function characteristicsChanged(changes) {
