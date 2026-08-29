@@ -10,15 +10,6 @@ import { RaceItemSheet } from "../sheets/RaceItemSheet.mjs";
 const { DocumentSheetConfig } = foundry.applications.apps;
 const { Item } = foundry.documents;
 
-/**
- * Register the native WFRP 1e Race document contract.
- *
- * World and Compendium Race Items are reusable definitions. A Character owns
- * at most one embedded Race Item, which is its authoritative racial identity.
- * Creation rolls are deliberately not executed here; the future creation
- * engine will consume the Race definition and write generated results to the
- * Character.
- */
 Hooks.once("init", () => {
 	CONFIG.Item.dataModels.race = RaceData;
 
@@ -46,12 +37,6 @@ Hooks.once("init", () => {
 	});
 });
 
-/**
- * A Character may contain exactly zero or one Race Item.
- *
- * There is intentionally no migration or guessing from an old free-text race.
- * New creation uses the embedded Item only.
- */
 Hooks.on("preCreateItem", (item, _data, _options, userId) => {
 	if (item?.type !== "race") return;
 
@@ -63,31 +48,25 @@ Hooks.on("preCreateItem", (item, _data, _options, userId) => {
 
 	if (game.user?.id === userId) {
 		ui.notifications.warn(localize(
-			`${actor.name} already has the Race '${existing.name}'. Replace it through the Race field instead of adding a second Race.`,
-			`${actor.name} ma już Rasę „${existing.name}”. Zastąp ją przez pole Rasy zamiast dodawać drugą Rasę.`,
+			`${actor.name} already has the Race '${existing.name}'. Replace it instead of adding a second Race.`,
+			`${actor.name} ma już Rasę „${existing.name}”. Zastąp ją zamiast dodawać drugą Rasę.`,
 		));
 	}
 
 	return false;
 });
 
-/**
- * Convert the Classic header's old text input into a managed Race Item field.
- *
- * We deliberately do this at the integration layer in this first slice so the
- * Character sheet immediately stops accepting free text without introducing a
- * fake migration from old strings. The future creation UI can call the same
- * assignRace() API directly.
- */
 Hooks.on("renderApplicationV2", (application, element) => {
 	const actor = application?.document;
 	if (actor?.documentName !== "Actor" || actor.type !== "character") return;
 
 	const root = asElement(element) ?? asElement(application.element);
-	if (!root?.classList?.contains("classic-actor-sheet") &&
-		!root?.querySelector?.(".classic-actor-sheet")) return;
+	const sheet = root?.classList?.contains("wfrp1ed-classic-sheet")
+		? root
+		: root?.querySelector?.(".wfrp1ed-classic-sheet");
+	if (!(sheet instanceof HTMLElement)) return;
 
-	const field = root.querySelector(
+	const field = sheet.querySelector(
 		'.header-field--race input[name="system.details.race"], .header-field--race input[data-wfrp-race-field="true"]',
 	);
 	if (!(field instanceof HTMLInputElement)) return;
@@ -101,40 +80,33 @@ Hooks.on("renderApplicationV2", (application, element) => {
 	field.dataset.raceItemId = String(race?.id ?? "");
 	field.title = race
 		? localize(
-			"Double-click to open this Race. Drop another Race Item here to replace it. Right-click to remove it.",
-			"Kliknij dwukrotnie, aby otworzyć tę Rasę. Upuść tutaj inny Przedmiot Rasy, aby ją zastąpić. Kliknij prawym przyciskiem, aby ją usunąć.",
+			"Double-click to open this Race. Drop another Race Item anywhere on the character sheet to replace it. Right-click to remove it.",
+			"Kliknij dwukrotnie, aby otworzyć tę Rasę. Upuść inny Przedmiot Rasy w dowolnym miejscu karty postaci, aby ją zastąpić. Kliknij prawym przyciskiem, aby ją usunąć.",
 		)
 		: localize(
-			"Drop a Race Item here.",
-			"Upuść tutaj Przedmiot Rasy.",
+			"Drop a Race Item anywhere on the character sheet.",
+			"Upuść Przedmiot Rasy w dowolnym miejscu karty postaci.",
 		);
 
-	if (field.dataset.wfrpRaceListeners === "true") return;
-	field.dataset.wfrpRaceListeners = "true";
+	if (field.dataset.wfrpRaceListeners !== "true") {
+		field.dataset.wfrpRaceListeners = "true";
+		field.addEventListener("dblclick", (event) => {
+			event.preventDefault();
+			const current = getEmbeddedRace(actor);
+			if (current?.sheet) void current.sheet.render({ force: true });
+		});
 
-	field.addEventListener("dblclick", (event) => {
-		event.preventDefault();
-		const current = getEmbeddedRace(actor);
-		if (current?.sheet) void current.sheet.render({ force: true });
-	});
+		if (application.isEditable === true) {
+			field.addEventListener("contextmenu", (event) => {
+				event.preventDefault();
+				void removeRace(actor).catch(reportRaceError);
+			});
+		}
+	}
 
-	if (application.isEditable !== true) return;
-
-	field.addEventListener("dragover", (event) => {
-		event.preventDefault();
-		if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
-	});
-
-	field.addEventListener("drop", (event) => {
-		event.preventDefault();
-		event.stopPropagation();
-		void assignRaceFromDrop(actor, event).catch(reportRaceError);
-	});
-
-	field.addEventListener("contextmenu", (event) => {
-		event.preventDefault();
-		void removeRace(actor).catch(reportRaceError);
-	});
+	if (application.isEditable === true) {
+		installWholeSheetRaceDrop(sheet, actor);
+	}
 });
 
 for (const hookName of ["createItem", "deleteItem", "updateItem"]) {
@@ -151,11 +123,6 @@ export function getEmbeddedRace(actor) {
 	return actor.items?.find?.((candidate) => candidate.type === "race") ?? null;
 }
 
-/**
- * Replace the Character's embedded Race with a copy of the supplied Race Item.
- * This changes identity only. The future CharacterCreationEngine will own all
- * profile/age/Fate/skill generation transactions based on that identity.
- */
 export async function assignRace(actor, race) {
 	if (actor?.documentName !== "Actor" || actor.type !== "character") {
 		throw new Error(localize(
@@ -188,23 +155,45 @@ export async function assignRace(actor, race) {
 	return created ?? null;
 }
 
-async function assignRaceFromDrop(actor, event) {
+function installWholeSheetRaceDrop(sheet, actor) {
+	if (sheet.dataset.wfrpRaceSheetDrop === "true") return;
+	sheet.dataset.wfrpRaceSheetDrop = "true";
+
+	sheet.addEventListener("dragover", (event) => {
+		const race = raceFromDragEventSync(event);
+		if (!race) return;
+		event.preventDefault();
+		if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+	});
+
+	sheet.addEventListener("drop", (event) => {
+		const race = raceFromDragEventSync(event);
+		if (!race) return;
+
+		event.preventDefault();
+		event.stopImmediatePropagation();
+		void assignRace(actor, race).catch(reportRaceError);
+	}, true);
+}
+
+function raceFromDragEventSync(event) {
 	const dragData = foundry.applications.ux.TextEditor.getDragEventData(event);
 	if (String(dragData?.type ?? "") !== "Item") return null;
 
 	const uuid = String(dragData?.uuid ?? "").trim();
 	if (!uuid) return null;
 
-	const document = await foundry.utils.fromUuid(uuid);
-	if (!(document instanceof foundry.documents.Item) || document.type !== "race") {
-		ui.notifications.warn(localize(
-			"Only a Race Item can be dropped into the Race field.",
-			"Do pola Rasy można upuścić tylko Przedmiot Rasy.",
-		));
+	const resolver = foundry.utils?.fromUuidSync ?? globalThis.fromUuidSync;
+	if (typeof resolver !== "function") return null;
+
+	try {
+		const document = resolver(uuid);
+		return document instanceof foundry.documents.Item && document.type === "race"
+			? document
+			: null;
+	} catch (_error) {
 		return null;
 	}
-
-	return assignRace(actor, document);
 }
 
 async function removeRace(actor) {
