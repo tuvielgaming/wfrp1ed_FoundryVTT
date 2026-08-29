@@ -96,6 +96,7 @@ async function rearmIfReverted(message) {
 	 * detaching it from the live source. This is synchronization, not a gameplay
 	 * delay: no rules state is changed while waiting. */
 	const view = await waitForRevertedDamageView(message.id, packetId);
+	if (view === null) return;
 	if (view) await archiveDamageView(view, message.id, packetId);
 
 	const current = freshImpact(message);
@@ -121,7 +122,7 @@ async function rearmIfReverted(message) {
 async function waitForRevertedDamageView(sourceMessageId, packetId) {
 	for (let attempt = 0; attempt < 20; attempt += 1) {
 		const view = currentDamageView(sourceMessageId, packetId);
-		if (!view) return null;
+		if (!view) return undefined;
 		const damage = view.getFlag?.(FLAG_SCOPE, DAMAGE_FLAG_KEY);
 		if (damage?.application?.state === REVERTED_STATE) return view;
 		await delay(25);
