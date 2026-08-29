@@ -31,6 +31,10 @@ export const RACE_INITIAL_SKILL_MODE = Object.freeze({
 	RANDOM_CHOICE: "random-choice",
 });
 
+/* Legacy authoring constant retained temporarily because the Race sheet module
+ * still imports it for unreachable pre-refactor editor actions. Career Class
+ * eligibility itself is no longer Race data and is owned exclusively by
+ * CareerClassEligibility. */
 export const RACE_CAREER_OVERRIDE_MODE = Object.freeze({
 	REPLACE_REQUIREMENTS: "replace-requirements",
 	FORBID: "forbid",
@@ -47,6 +51,10 @@ export const RACE_CAREER_OVERRIDE_MODE = Object.freeze({
  * The model deliberately contains the race-specific D100 distributions rather
  * than UUIDs of eight external RollTables. One Race Item is therefore sufficient
  * to define one playable custom race.
+ *
+ * Career Class eligibility deliberately does NOT live here. Core Class
+ * requirements, including the Wood Elf Rogue exception, are system-level
+ * character-creation rules owned by CareerClassEligibility.
  */
 export class RaceData extends TypeDataModel {
 	static defineSchema() {
@@ -98,11 +106,6 @@ export class RaceData extends TypeDataModel {
 
 			skillTables: percentileTablesField(skillTableRowField),
 			basicCareerTables: percentileTablesField(careerTableRowField),
-
-			careerClassOverrides: new ArrayField(
-				careerClassOverrideField(),
-				arrayOptions(),
-			),
 		};
 	}
 }
@@ -178,25 +181,6 @@ function documentReferenceField() {
 		uuid: textField(),
 		rulesId: textField(),
 		name: textField(),
-	});
-}
-
-function careerClassOverrideField() {
-	return new SchemaField({
-		class: textField(),
-		mode: textField(RACE_CAREER_OVERRIDE_MODE.REPLACE_REQUIREMENTS),
-		requirements: new ArrayField(
-			careerClassRequirementField(),
-			arrayOptions(),
-		),
-	});
-}
-
-function careerClassRequirementField() {
-	return new SchemaField({
-		characteristic: textField(),
-		operator: textField("gte"),
-		value: integerField(0),
 	});
 }
 
