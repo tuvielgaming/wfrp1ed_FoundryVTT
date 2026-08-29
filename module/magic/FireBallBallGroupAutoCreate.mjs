@@ -3,37 +3,60 @@ import { FireBallBallGroupPresentation } from "./FireBallBallGroupPresentation.m
 const FLAG_SCOPE = "wfrp1ed";
 const BALL_GROUP_FLAG = "fireBallBallGroup";
 const IMPACT_FLAG = "fireBallImpactWorkflow";
+const CAST_FLAG = "fireBallCast";
+const REVEAL_FLAG = "fireBallGroupHitsRevealed";
 const pendingKeys = new Set();
 const dirtyKeys = new Set();
 
 /**
  * Create/update exactly one presentation-only aggregate message per physical
- * Fire Ball once SpellCastLinkage has attached a permanent castId to an impact.
- * Canonical impact/Test/Damage messages remain untouched.
+ * Fire Ball.
  *
- * Multiple impacts for the same Ball can be created/linked in the same tick.
- * Always rebuild the aggregate from ALL currently linked impacts for that
- * cast+ball key. A second event arriving while the key is already queued marks
- * it dirty so it is reconciled once more after the in-flight pass. This avoids
- * dropping the second target from a Ball aggregate.
+ * Group casts have a Dice So Nice target-count animation. Do not create the
+ * aggregate ChatMessages until that animation has been explicitly revealed by
+ * FireBallGroupHitDiceAnimation. This removes the previous render/hide race:
+ * there is simply no Ball aggregate card available to leak into chat before the
+ * dice finish.
+ *
+ * Multiple impacts for the same Ball can still arrive in the same tick. Each
+ * reconciliation rebuilds the group from ALL current impacts for cast+ball.
  */
-Hooks.on("createChatMessage", (message) => queueImpact(message));
-Hooks.on("updateChatMessage", (message) => queueImpact(message));
+Hooks.on("createChatMessage", (message) => {
+	queueImpact(message);
+	queueRevealedCast(message);
+});
+Hooks.on("updateChatMessage", (message) => {
+	queueImpact(message);
+	queueRevealedCast(message);
+});
 
 function queueImpact(message) {
 	const impact = message?.getFlag?.(FLAG_SCOPE, IMPACT_FLAG);
 	if (!impact?.castId || !Number.isInteger(Number(impact?.ballNumber))) return;
-	const castId = String(impact.castId);
-	const ballNumber = Number(impact.ballNumber);
+	if (!castReadyForAggregate(String(impact.castId))) return;
+	queueKey(String(impact.castId), Number(impact.ballNumber));
+}
+
+function queueRevealedCast(message) {
+	const cast = message?.getFlag?.(FLAG_SCOPE, CAST_FLAG);
+	if (!cast?.castId) return;
+	if (cast.group === true && !message.getFlag?.(FLAG_SCOPE, REVEAL_FLAG)) return;
+
+	const castId = String(cast.castId);
+	const ballNumbers = new Set(
+		impactsForCast(castId)
+			.map((impactMessage) => Number(impactMessage.getFlag?.(FLAG_SCOPE, IMPACT_FLAG)?.ballNumber))
+			.filter((number) => Number.isInteger(number) && number >= 1),
+	);
+	for (const ballNumber of ballNumbers) queueKey(castId, ballNumber);
+}
+
+function queueKey(castId, ballNumber) {
 	const key = `${castId}:${ballNumber}`;
 	if (pendingKeys.has(key)) {
 		dirtyKeys.add(key);
 		return;
 	}
-	queueKey(castId, ballNumber, key);
-}
-
-function queueKey(castId, ballNumber, key) {
 	pendingKeys.add(key);
 	queueMicrotask(() => {
 		void ensureBallGroup(castId, ballNumber)
@@ -41,13 +64,15 @@ function queueKey(castId, ballNumber, key) {
 			.finally(() => {
 				pendingKeys.delete(key);
 				if (!dirtyKeys.delete(key)) return;
-				queueKey(castId, ballNumber, key);
+				queueKey(castId, ballNumber);
 			});
 	});
 }
 
 async function ensureBallGroup(castId, ballNumber) {
 	if (!castId || !Number.isInteger(ballNumber) || ballNumber < 1) return;
+	if (!castReadyForAggregate(castId)) return;
+
 	const impacts = impactsForBall(castId, ballNumber);
 	if (!impacts.length) return;
 
@@ -57,16 +82,15 @@ async function ensureBallGroup(castId, ballNumber) {
 	const targets = impacts
 		.map((message) => targetFromImpact(message.getFlag?.(FLAG_SCOPE, IMPACT_FLAG)))
 		.filter((target) => target.actorUuid || target.tokenUuid);
-	const castMessageId = impacts
-		.map((message) => String(message.getFlag?.(FLAG_SCOPE, IMPACT_FLAG)?.castMessageId ?? ""))
-		.find(Boolean) ?? "";
+	const castMessage = castMessageForId(castId);
+	const castMessageId = String(castMessage?.id ?? firstState.castMessageId ?? "");
 
 	const existing = findGroup(castId, ballNumber);
 	if (existing) {
 		const state = foundry.utils.deepClone(existing.getFlag?.(FLAG_SCOPE, BALL_GROUP_FLAG) ?? {});
 		state.impactMessageIds = unique(impactIds);
 		state.targets = mergeTargets([], targets);
-		state.castMessageId ||= castMessageId;
+		state.castMessageId = castMessageId || String(state.castMessageId ?? "");
 		state.updatedAt = Date.now();
 		await existing.setFlag(FLAG_SCOPE, BALL_GROUP_FLAG, state);
 		requestChatRefresh();
@@ -87,12 +111,32 @@ async function ensureBallGroup(castId, ballNumber) {
 	requestChatRefresh();
 }
 
+function castReadyForAggregate(castId) {
+	const message = castMessageForId(castId);
+	if (!message) return false;
+	const cast = message.getFlag?.(FLAG_SCOPE, CAST_FLAG);
+	if (!cast) return false;
+	return cast.group !== true || Boolean(message.getFlag?.(FLAG_SCOPE, REVEAL_FLAG));
+}
+
+function castMessageForId(castId) {
+	for (const message of game.messages ?? []) {
+		const cast = message.getFlag?.(FLAG_SCOPE, CAST_FLAG);
+		if (String(cast?.castId ?? "") === String(castId)) return message;
+	}
+	return null;
+}
+
+function impactsForCast(castId) {
+	return [...(game.messages ?? [])].filter((message) =>
+		String(message.getFlag?.(FLAG_SCOPE, IMPACT_FLAG)?.castId ?? "") === String(castId),
+	);
+}
+
 function impactsForBall(castId, ballNumber) {
-	return [...(game.messages ?? [])].filter((message) => {
-		const impact = message.getFlag?.(FLAG_SCOPE, IMPACT_FLAG);
-		return String(impact?.castId ?? "") === String(castId) &&
-			Number(impact?.ballNumber) === Number(ballNumber);
-	});
+	return impactsForCast(castId).filter((message) =>
+		Number(message.getFlag?.(FLAG_SCOPE, IMPACT_FLAG)?.ballNumber) === Number(ballNumber),
+	);
 }
 
 function findGroup(castId, ballNumber) {
