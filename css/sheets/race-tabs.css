@@ -1,0 +1,86 @@
+.race-item-sheet .race-tab-nav {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	margin: 0;
+	border: 1px solid rgba(73, 48, 29, 0.42);
+	background: rgba(244, 235, 211, 0.48);
+}
+
+.race-item-sheet .race-tab-nav button {
+	min-height: 34px;
+	margin: 0;
+	padding: 5px 8px;
+	border: 0;
+	border-right: 1px solid rgba(73, 48, 29, 0.32);
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+	font-family: inherit;
+	font-size: 13px;
+	font-weight: 700;
+	color: #4a351f;
+}
+
+.race-item-sheet .race-tab-nav button:last-child {
+	border-right: 0;
+}
+
+.race-item-sheet .race-tab-nav button:hover,
+.race-item-sheet .race-tab-nav button:focus-visible {
+	background: rgba(255, 250, 235, 0.58);
+	color: #21170f;
+}
+
+.race-item-sheet .race-tab-nav button.is-active {
+	background: rgba(92, 0, 20, 0.10);
+	box-shadow: inset 0 -3px 0 #7a0019;
+	color: #4d0011;
+}
+
+.race-item-sheet [data-race-panel][hidden] {
+	display: none !important;
+}
+
+.race-item-sheet [data-race-panel].is-active {
+	animation: wfrp1ed-race-tab-in 90ms ease-out;
+}
+
+@keyframes wfrp1ed-race-tab-in {
+	from { opacity: 0.72; }
+	to { opacity: 1; }
+}
+
+.wfrp1ed-classic-sheet .header-field--career-class select.wfrp1ed-career-class-selector {
+	width: 100%;
+	height: 100%;
+	min-height: 0;
+	padding: 0 4px;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+	font: inherit;
+	font-weight: inherit;
+	text-align: center;
+	text-align-last: center;
+	color: inherit;
+	cursor: pointer;
+}
+
+.wfrp1ed-character-creation-mode .header-field--career-class select.wfrp1ed-career-class-selector:hover,
+.wfrp1ed-character-creation-mode .header-field--career-class select.wfrp1ed-career-class-selector:focus {
+	color: darkred;
+	outline: none;
+}
+
+@media (max-width: 760px) {
+	.race-item-sheet .race-tab-nav {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+	.race-item-sheet .race-tab-nav button:nth-child(2) {
+		border-right: 0;
+	}
+	.race-item-sheet .race-tab-nav button:nth-child(-n + 2) {
+		border-bottom: 1px solid rgba(73, 48, 29, 0.32);
+	}
+}
