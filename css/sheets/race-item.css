@@ -9,18 +9,30 @@
 	padding: 0.8rem;
 }
 
-.race-sheet-header {
+.race-item-sheet .race-sheet-header {
 	display: grid;
-	grid-template-columns: 88px minmax(0, 1fr) minmax(220px, 0.7fr);
+	grid-template-columns: 88px minmax(0, 1fr) minmax(260px, 0.55fr);
+	grid-template-areas: "image name rules";
 	gap: 0.8rem;
 	align-items: end;
 }
 
-.race-sheet-image {
+.race-item-sheet .race-sheet-image {
+	grid-area: image;
 	width: 88px;
 	height: 88px;
 	object-fit: cover;
 	border: 1px solid rgba(54, 36, 23, 0.55);
+}
+
+.race-item-sheet .race-sheet-field--name {
+	grid-area: name;
+	min-width: 0;
+}
+
+.race-item-sheet .race-sheet-field--rules-id {
+	grid-area: rules;
+	min-width: 260px;
 }
 
 .race-sheet-panel {
@@ -151,8 +163,29 @@
 	resize: vertical;
 }
 
+/* The Character Race field is an Item-backed interaction surface, not text
+ * entry. Match the existing rollable characteristic affordance: hand cursor
+ * and dark-red hover text. */
+.wfrp1ed-classic-sheet .header-field--race input[data-wfrp-race-field="true"] {
+	cursor: pointer;
+}
+
+.wfrp1ed-classic-sheet .header-field--race input[data-wfrp-race-field="true"]:hover {
+	color: darkred;
+}
+
 @media (max-width: 760px) {
-	.race-sheet-header,
+	.race-item-sheet .race-sheet-header {
+		grid-template-columns: 88px minmax(0, 1fr);
+		grid-template-areas:
+			"image name"
+			"image rules";
+	}
+
+	.race-item-sheet .race-sheet-field--rules-id {
+		min-width: 0;
+	}
+
 	.race-profile-grid,
 	.race-property-grid,
 	.race-property-grid--three,
@@ -160,9 +193,5 @@
 	.race-collection-summary,
 	.race-table-summary-row {
 		grid-template-columns: 1fr;
-	}
-
-	.race-sheet-image {
-		justify-self: start;
 	}
 }
