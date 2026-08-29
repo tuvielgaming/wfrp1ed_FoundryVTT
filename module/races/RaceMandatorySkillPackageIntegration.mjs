@@ -43,6 +43,15 @@ function renderMandatorySkillWorkspace(sheet, root) {
 	const dropZone = root.querySelector('[data-race-drop-zone="mandatorySkillsNew"]');
 	if (!(dropZone instanceof HTMLElement)) return;
 
+	const section = dropZone.closest(".race-mandatory-section");
+	const hint = section?.querySelector?.(".race-sheet-hint");
+	if (hint instanceof HTMLElement) {
+		hint.textContent = localize(
+			"Drop a Skill in this section to add it as a free row. Use the package button on a Skill row to group it with other free Skills, exactly like Career packages.",
+			"Upuść Umiejętność w tej sekcji, aby dodać ją jako wolny wpis. Użyj przycisku pakietu przy wpisie Umiejętności, aby połączyć ją z innymi wolnymi Umiejętnościami — tak samo jak w pakietach Profesji.",
+		);
+	}
+
 	const entries = cloneArray(sheet.document.system?.mandatorySkills);
 	const groups = presentGroups(entries);
 
