@@ -1,168 +1,33 @@
 <section class="race-sheet-content">
 	<header class="race-sheet-header wfrp1ed-item-header">
 		<img class="race-sheet-image wfrp1ed-item-header__image" data-wfrp1ed-item-image src="{{item.img}}" alt="{{item.name}}">
-		<div class="race-sheet-field race-sheet-field--name">
-			<label for="race-name-{{item.id}}">{{raceUi.labels.name}}</label>
-			<input id="race-name-{{item.id}}" type="text" name="name" value="{{item.name}}" autocomplete="off" required {{#unless editable}}disabled{{/unless}}>
-		</div>
-		<div class="race-sheet-field race-sheet-field--rules-id">
-			<label for="race-rules-id-{{item.id}}" data-tooltip="{{raceUi.labels.rulesIdHint}}">{{raceUi.labels.rulesId}}</label>
-			<input id="race-rules-id-{{item.id}}" type="text" name="system.rulesId" value="{{system.rulesId}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}>
-		</div>
+		<div class="race-sheet-field race-sheet-field--name"><label for="race-name-{{item.id}}">{{raceUi.labels.name}}</label><input id="race-name-{{item.id}}" type="text" name="name" value="{{item.name}}" autocomplete="off" required {{#unless editable}}disabled{{/unless}}></div>
+		<div class="race-sheet-field race-sheet-field--rules-id"><label for="race-rules-id-{{item.id}}" data-tooltip="{{raceUi.labels.rulesIdHint}}">{{raceUi.labels.rulesId}}</label><input id="race-rules-id-{{item.id}}" type="text" name="system.rulesId" value="{{system.rulesId}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}></div>
 	</header>
 
-	<section class="race-sheet-panel">
-		<h2>{{raceUi.labels.profile}}</h2>
-		<p class="race-sheet-hint">{{raceUi.labels.profileHint}}</p>
-		<div class="race-profile-grid">
-			{{#each raceUi.characteristics as |characteristic|}}
-				<label class="race-profile-cell"><span>{{characteristic.label}}</span><input type="text" name="system.profile.{{characteristic.id}}" value="{{characteristic.formula}}" autocomplete="off" placeholder="2d10 + 20" {{#unless ../editable}}disabled{{/unless}}></label>
-			{{/each}}
-		</div>
-	</section>
+	<section class="race-sheet-panel"><h2>{{raceUi.labels.profile}}</h2><p class="race-sheet-hint">{{raceUi.labels.profileHint}}</p><div class="race-profile-grid">{{#each raceUi.characteristics as |characteristic|}}<label class="race-profile-cell"><span>{{characteristic.label}}</span><input type="text" name="system.profile.{{characteristic.id}}" value="{{characteristic.formula}}" autocomplete="off" placeholder="2d10 + 20" {{#unless ../editable}}disabled{{/unless}}></label>{{/each}}</div></section>
 
-	<section class="race-sheet-panel">
-		<h2>{{raceUi.labels.racialProperties}}</h2>
-		<div class="race-property-grid">
-			<label class="race-sheet-field"><span>{{raceUi.labels.nightVision}}</span><div class="race-inline-fields"><input type="number" name="system.vision.nightVisionRange" value="{{system.vision.nightVisionRange}}" min="0" step="1" {{#unless editable}}disabled{{/unless}}><input type="text" name="system.vision.unit" value="{{system.vision.unit}}" autocomplete="off" aria-label="{{raceUi.labels.unit}}" {{#unless editable}}disabled{{/unless}}></div></label>
-			<label class="race-sheet-field"><span>{{raceUi.labels.startingAlignment}}</span><input type="text" name="system.startingAlignment" value="{{system.startingAlignment}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}></label>
-		</div>
-	</section>
+	<section class="race-sheet-panel"><h2>{{raceUi.labels.racialProperties}}</h2><div class="race-property-grid"><label class="race-sheet-field"><span>{{raceUi.labels.nightVision}}</span><div class="race-inline-fields"><input type="number" name="system.vision.nightVisionRange" value="{{system.vision.nightVisionRange}}" min="0" step="1" {{#unless editable}}disabled{{/unless}}><input type="text" name="system.vision.unit" value="{{system.vision.unit}}" autocomplete="off" aria-label="{{raceUi.labels.unit}}" {{#unless editable}}disabled{{/unless}}></div></label><label class="race-sheet-field"><span>{{raceUi.labels.startingAlignment}}</span><input type="text" name="system.startingAlignment" value="{{system.startingAlignment}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}></label></div></section>
 
-	<section class="race-sheet-panel">
-		<h2>{{raceUi.labels.height}}</h2>
-		<div class="race-property-grid race-property-grid--three">
-			<label class="race-sheet-field"><span>{{raceUi.labels.maleFormula}}</span><input type="text" name="system.height.maleFormula" value="{{system.height.maleFormula}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}></label>
-			<label class="race-sheet-field"><span>{{raceUi.labels.femaleFormula}}</span><input type="text" name="system.height.femaleFormula" value="{{system.height.femaleFormula}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}></label>
-			<label class="race-sheet-field"><span>{{raceUi.labels.unit}}</span><input type="text" name="system.height.unit" value="{{system.height.unit}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}></label>
-		</div>
-	</section>
+	<section class="race-sheet-panel"><h2>{{raceUi.labels.height}}</h2><div class="race-property-grid race-property-grid--three"><label class="race-sheet-field"><span>{{raceUi.labels.maleFormula}}</span><input type="text" name="system.height.maleFormula" value="{{system.height.maleFormula}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}></label><label class="race-sheet-field"><span>{{raceUi.labels.femaleFormula}}</span><input type="text" name="system.height.femaleFormula" value="{{system.height.femaleFormula}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}></label><label class="race-sheet-field"><span>{{raceUi.labels.unit}}</span><input type="text" name="system.height.unit" value="{{system.height.unit}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}></label></div></section>
 
-	<section class="race-sheet-panel">
-		<h2>{{raceUi.labels.age}}</h2>
-		<div class="race-property-grid race-property-grid--four">
-			<label class="race-sheet-field"><span>{{raceUi.labels.youngFormula}}</span><input type="text" name="system.age.youngFormula" value="{{system.age.youngFormula}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}></label>
-			<label class="race-sheet-field"><span>{{raceUi.labels.matureFormula}}</span><input type="text" name="system.age.matureFormula" value="{{system.age.matureFormula}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}></label>
-			<label class="race-sheet-field"><span>{{raceUi.labels.minimumAge}}</span><input type="number" name="system.age.minimum" value="{{system.age.minimum}}" min="0" step="1" {{#unless editable}}disabled{{/unless}}></label>
-			<label class="race-sheet-checkbox"><input type="checkbox" name="system.age.rerollBelowMinimum" {{checked system.age.rerollBelowMinimum}} {{#unless editable}}disabled{{/unless}}><span>{{raceUi.labels.rerollBelowMinimum}}</span></label>
-		</div>
-	</section>
+	<section class="race-sheet-panel"><h2>{{raceUi.labels.age}}</h2><div class="race-property-grid race-property-grid--four"><label class="race-sheet-field"><span>{{raceUi.labels.youngFormula}}</span><input type="text" name="system.age.youngFormula" value="{{system.age.youngFormula}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}></label><label class="race-sheet-field"><span>{{raceUi.labels.matureFormula}}</span><input type="text" name="system.age.matureFormula" value="{{system.age.matureFormula}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}></label><label class="race-sheet-field"><span>{{raceUi.labels.minimumAge}}</span><input type="number" name="system.age.minimum" value="{{system.age.minimum}}" min="0" step="1" {{#unless editable}}disabled{{/unless}}></label><label class="race-sheet-checkbox"><input type="checkbox" name="system.age.rerollBelowMinimum" {{checked system.age.rerollBelowMinimum}} {{#unless editable}}disabled{{/unless}}><span>{{raceUi.labels.rerollBelowMinimum}}</span></label></div></section>
 
-	<section class="race-sheet-panel">
-		<h2>{{raceUi.labels.fate}}</h2>
-		<div class="race-property-grid">
-			<label class="race-sheet-field"><span>{{raceUi.labels.fateFormula}}</span><input type="text" name="system.fate.formula" value="{{system.fate.formula}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}></label>
-			<label class="race-sheet-field"><span>{{raceUi.labels.fateMinimum}}</span><input type="number" name="system.fate.minimum" value="{{system.fate.minimum}}" min="0" step="1" {{#unless editable}}disabled{{/unless}}></label>
-		</div>
-	</section>
+	<section class="race-sheet-panel"><h2>{{raceUi.labels.fate}}</h2><div class="race-property-grid"><label class="race-sheet-field"><span>{{raceUi.labels.fateFormula}}</span><input type="text" name="system.fate.formula" value="{{system.fate.formula}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}></label><label class="race-sheet-field"><span>{{raceUi.labels.fateMinimum}}</span><input type="number" name="system.fate.minimum" value="{{system.fate.minimum}}" min="0" step="1" {{#unless editable}}disabled{{/unless}}></label></div></section>
 
-	<section class="race-sheet-panel race-authoring-section">
-		<div class="race-section-heading"><h2>{{raceUi.labels.languages}}</h2>{{#if editable}}<button type="button" data-action="addLanguage"><i class="fa-solid fa-plus"></i> {{raceUi.labels.add}}</button>{{/if}}</div>
-		<div class="race-editor-list">
-			{{#each raceUi.languages as |entry|}}
-				<div class="race-editor-row race-editor-row--language">
-					<input type="text" value="{{entry.rulesId}}" placeholder="{{../raceUi.labels.rulesIdentity}}" data-race-array-edit="languages" data-index="{{entry.index}}" data-field="rulesId" {{#unless ../editable}}disabled{{/unless}}>
-					<input type="text" value="{{entry.name}}" placeholder="{{../raceUi.labels.displayName}}" data-race-array-edit="languages" data-index="{{entry.index}}" data-field="name" {{#unless ../editable}}disabled{{/unless}}>
-					{{#if ../editable}}<button type="button" class="race-icon-button" data-action="deleteLanguage" data-index="{{entry.index}}" title="{{../raceUi.labels.delete}}"><i class="fa-solid fa-trash"></i></button>{{/if}}
-				</div>
-			{{/each}}
-		</div>
-	</section>
+	<section class="race-sheet-panel race-authoring-section"><div class="race-section-heading"><h2>{{raceUi.labels.languages}}</h2>{{#if editable}}<button type="button" data-action="addLanguage"><i class="fa-solid fa-plus"></i> {{raceUi.labels.add}}</button>{{/if}}</div><div class="race-editor-list">{{#each raceUi.languages as |entry|}}<div class="race-editor-row race-editor-row--language"><input type="text" value="{{entry.rulesId}}" placeholder="{{../raceUi.labels.rulesIdentity}}" data-race-array-edit="languages" data-index="{{entry.index}}" data-field="rulesId" {{#unless ../editable}}disabled{{/unless}}><input type="text" value="{{entry.name}}" placeholder="{{../raceUi.labels.displayName}}" data-race-array-edit="languages" data-index="{{entry.index}}" data-field="name" {{#unless ../editable}}disabled{{/unless}}>{{#if ../editable}}<button type="button" class="race-icon-button" data-action="deleteLanguage" data-index="{{entry.index}}"><i class="fa-solid fa-trash"></i></button>{{/if}}</div>{{/each}}</div></section>
 
-	<section class="race-sheet-panel race-authoring-section">
-		<div class="race-section-heading"><h2>{{raceUi.labels.psychology}}</h2>{{#if editable}}<button type="button" data-action="addPsychology"><i class="fa-solid fa-plus"></i> {{raceUi.labels.add}}</button>{{/if}}</div>
-		<div class="race-editor-list">
-			{{#each raceUi.psychology as |entry|}}
-				<div class="race-editor-row race-editor-row--psychology">
-					<input type="text" value="{{entry.rulesId}}" placeholder="{{../raceUi.labels.rulesIdentity}}" data-race-array-edit="psychology" data-index="{{entry.index}}" data-field="rulesId" {{#unless ../editable}}disabled{{/unless}}>
-					<input type="text" value="{{entry.name}}" placeholder="{{../raceUi.labels.displayName}}" data-race-array-edit="psychology" data-index="{{entry.index}}" data-field="name" {{#unless ../editable}}disabled{{/unless}}>
-					<input type="text" value="{{entry.description}}" placeholder="{{../raceUi.labels.psychologyDescription}}" data-race-array-edit="psychology" data-index="{{entry.index}}" data-field="description" {{#unless ../editable}}disabled{{/unless}}>
-					{{#if ../editable}}<button type="button" class="race-icon-button" data-action="deletePsychology" data-index="{{entry.index}}" title="{{../raceUi.labels.delete}}"><i class="fa-solid fa-trash"></i></button>{{/if}}
-				</div>
-			{{/each}}
-		</div>
-	</section>
+	<section class="race-sheet-panel race-authoring-section"><div class="race-section-heading"><h2>{{raceUi.labels.psychology}}</h2>{{#if editable}}<button type="button" data-action="addPsychology"><i class="fa-solid fa-plus"></i> {{raceUi.labels.add}}</button>{{/if}}</div><div class="race-editor-list">{{#each raceUi.psychology as |entry|}}<div class="race-editor-row race-editor-row--psychology"><input type="text" value="{{entry.rulesId}}" placeholder="{{../raceUi.labels.rulesIdentity}}" data-race-array-edit="psychology" data-index="{{entry.index}}" data-field="rulesId" {{#unless ../editable}}disabled{{/unless}}><input type="text" value="{{entry.name}}" placeholder="{{../raceUi.labels.displayName}}" data-race-array-edit="psychology" data-index="{{entry.index}}" data-field="name" {{#unless ../editable}}disabled{{/unless}}><input type="text" value="{{entry.description}}" placeholder="{{../raceUi.labels.psychologyDescription}}" data-race-array-edit="psychology" data-index="{{entry.index}}" data-field="description" {{#unless ../editable}}disabled{{/unless}}>{{#if ../editable}}<button type="button" class="race-icon-button" data-action="deletePsychology" data-index="{{entry.index}}"><i class="fa-solid fa-trash"></i></button>{{/if}}</div>{{/each}}</div></section>
 
-	<section class="race-sheet-panel race-authoring-section">
-		<div class="race-section-heading"><h2>{{raceUi.labels.ageBands}}</h2>{{#if editable}}<button type="button" data-action="addAgeBand"><i class="fa-solid fa-plus"></i> {{raceUi.labels.add}}</button>{{/if}}</div>
-		<div class="race-editor-list">
-			{{#each raceUi.ageBands as |entry|}}
-				<div class="race-editor-row race-editor-row--age-band">
-					<label>{{../raceUi.labels.minAge}}<input type="number" value="{{entry.minAge}}" data-race-array-edit="ageBands" data-index="{{entry.index}}" data-field="minAge" {{#unless ../editable}}disabled{{/unless}}></label>
-					<label>{{../raceUi.labels.maxAge}}<input type="number" value="{{entry.maxAge}}" data-race-array-edit="ageBands" data-index="{{entry.index}}" data-field="maxAge" {{#unless ../editable}}disabled{{/unless}}></label>
-					<label>{{../raceUi.labels.modifier}}<input type="number" value="{{entry.modifier}}" data-race-array-edit="ageBands" data-index="{{entry.index}}" data-field="modifier" {{#unless ../editable}}disabled{{/unless}}></label>
-					{{#if ../editable}}<button type="button" class="race-icon-button" data-action="deleteAgeBand" data-index="{{entry.index}}" title="{{../raceUi.labels.delete}}"><i class="fa-solid fa-trash"></i></button>{{/if}}
-				</div>
-			{{/each}}
-		</div>
-	</section>
+	<section class="race-sheet-panel race-authoring-section"><div class="race-section-heading"><h2>{{raceUi.labels.ageBands}}</h2>{{#if editable}}<button type="button" data-action="addAgeBand"><i class="fa-solid fa-plus"></i> {{raceUi.labels.add}}</button>{{/if}}</div><div class="race-editor-list">{{#each raceUi.ageBands as |entry|}}<div class="race-editor-row race-editor-row--age-band"><label>{{../raceUi.labels.minAge}}<input type="number" value="{{entry.minAge}}" data-race-array-edit="ageBands" data-index="{{entry.index}}" data-field="minAge" {{#unless ../editable}}disabled{{/unless}}></label><label>{{../raceUi.labels.maxAge}}<input type="number" value="{{entry.maxAge}}" data-race-array-edit="ageBands" data-index="{{entry.index}}" data-field="maxAge" {{#unless ../editable}}disabled{{/unless}}></label><label>{{../raceUi.labels.modifier}}<input type="number" value="{{entry.modifier}}" data-race-array-edit="ageBands" data-index="{{entry.index}}" data-field="modifier" {{#unless ../editable}}disabled{{/unless}}></label>{{#if ../editable}}<button type="button" class="race-icon-button" data-action="deleteAgeBand" data-index="{{entry.index}}"><i class="fa-solid fa-trash"></i></button>{{/if}}</div>{{/each}}</div></section>
 
-	<section class="race-sheet-panel race-authoring-section">
-		<h2>{{raceUi.labels.mandatorySkills}}</h2>
-		<p class="race-sheet-hint">{{raceUi.labels.dropMandatory}}</p>
-		<div class="race-drop-zone" data-race-drop-zone="mandatorySkills">
-			{{#each raceUi.mandatorySkills as |rule|}}
-				<div class="race-mandatory-rule" data-race-drop-zone="mandatorySkills" data-rule-index="{{rule.index}}">
-					<div class="race-mandatory-rule__controls">
-						<label>{{../../raceUi.labels.minInitialSkills}}<input type="number" min="1" value="{{rule.minInitialSkills}}" data-race-array-edit="mandatoryRules" data-index="{{rule.index}}" data-field="minInitialSkills" {{#unless ../../editable}}disabled{{/unless}}></label>
-						<label>{{../../raceUi.labels.mode}}<select data-race-array-edit="mandatoryRules" data-index="{{rule.index}}" data-field="mode" {{#unless ../../editable}}disabled{{/unless}}>{{#each rule.modeOptions as |option|}}<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>{{/each}}</select></label>
-						<label>{{../../raceUi.labels.choose}}<input type="number" min="1" value="{{rule.choose}}" data-race-array-edit="mandatoryRules" data-index="{{rule.index}}" data-field="choose" {{#unless ../../editable}}disabled{{/unless}}></label>
-						{{#if ../../editable}}<button type="button" class="race-icon-button" data-action="deleteMandatoryRule" data-index="{{rule.index}}"><i class="fa-solid fa-trash"></i></button>{{/if}}
-					</div>
-					<div class="race-choice-chips">{{#each rule.choices as |choice|}}<span class="race-choice-chip">{{choice.display}}{{#if ../../../editable}}<button type="button" data-action="deleteMandatoryChoice" data-rule-index="{{rule.index}}" data-choice-index="{{choice.choiceIndex}}"><i class="fa-solid fa-xmark"></i></button>{{/if}}</span>{{/each}}</div>
-				</div>
-			{{/each}}
-		</div>
-	</section>
+	<section class="race-sheet-panel race-authoring-section"><h2>{{raceUi.labels.mandatorySkills}}</h2><p class="race-sheet-hint">{{raceUi.labels.dropMandatory}}</p><div class="race-drop-zone" data-race-drop-zone="mandatorySkills">{{#each raceUi.mandatorySkills as |rule|}}<div class="race-mandatory-rule" data-race-drop-zone="mandatorySkills" data-rule-index="{{rule.index}}"><div class="race-mandatory-rule__controls"><label>{{../raceUi.labels.minInitialSkills}}<input type="number" min="1" value="{{rule.minInitialSkills}}" data-race-array-edit="mandatoryRules" data-index="{{rule.index}}" data-field="minInitialSkills" {{#unless ../editable}}disabled{{/unless}}></label><label>{{../raceUi.labels.mode}}<select data-race-array-edit="mandatoryRules" data-index="{{rule.index}}" data-field="mode" {{#unless ../editable}}disabled{{/unless}}>{{#each rule.modeOptions as |option|}}<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>{{/each}}</select></label><label>{{../raceUi.labels.choose}}<input type="number" min="1" value="{{rule.choose}}" data-race-array-edit="mandatoryRules" data-index="{{rule.index}}" data-field="choose" {{#unless ../editable}}disabled{{/unless}}></label>{{#if ../editable}}<button type="button" class="race-icon-button" data-action="deleteMandatoryRule" data-index="{{rule.index}}"><i class="fa-solid fa-trash"></i></button>{{/if}}</div><div class="race-choice-chips">{{#each rule.choices as |choice|}}<span class="race-choice-chip">{{choice.display}}{{#if ../../editable}}<button type="button" data-action="deleteMandatoryChoice" data-rule-index="{{rule.index}}" data-choice-index="{{choice.choiceIndex}}"><i class="fa-solid fa-xmark"></i></button>{{/if}}</span>{{/each}}</div></div>{{/each}}</div></section>
 
-	<section class="race-sheet-panel race-authoring-section">
-		<div class="race-section-heading"><h2>{{raceUi.labels.careerOverrides}}</h2>{{#if editable}}<button type="button" data-action="addCareerOverride"><i class="fa-solid fa-plus"></i> {{raceUi.labels.add}}</button>{{/if}}</div>
-		{{#each raceUi.careerOverrides as |override|}}
-			<div class="race-career-override">
-				<div class="race-editor-row race-editor-row--override">
-					<select data-race-array-edit="careerOverrides" data-index="{{override.index}}" data-field="class" {{#unless ../editable}}disabled{{/unless}}>{{#each override.classOptions as |option|}}<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>{{/each}}</select>
-					<select data-race-array-edit="careerOverrides" data-index="{{override.index}}" data-field="mode" {{#unless ../editable}}disabled{{/unless}}>{{#each override.modeOptions as |option|}}<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>{{/each}}</select>
-					{{#if ../editable}}<button type="button" data-action="addRequirement" data-index="{{override.index}}"><i class="fa-solid fa-plus"></i> {{../raceUi.labels.addRequirement}}</button><button type="button" class="race-icon-button" data-action="deleteCareerOverride" data-index="{{override.index}}"><i class="fa-solid fa-trash"></i></button>{{/if}}
-				</div>
-				{{#each override.requirements as |requirement|}}
-					<div class="race-editor-row race-editor-row--requirement">
-						<select data-race-array-edit="requirements" data-index="0" data-override-index="{{override.index}}" data-requirement-index="{{requirement.requirementIndex}}" data-field="characteristic" {{#unless ../../editable}}disabled{{/unless}}>{{#each requirement.characteristicOptions as |option|}}<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>{{/each}}</select>
-						<select data-race-array-edit="requirements" data-index="0" data-override-index="{{override.index}}" data-requirement-index="{{requirement.requirementIndex}}" data-field="operator" {{#unless ../../editable}}disabled{{/unless}}><option value="gte" selected>≥</option></select>
-						<input type="number" value="{{requirement.value}}" data-race-array-edit="requirements" data-index="0" data-override-index="{{override.index}}" data-requirement-index="{{requirement.requirementIndex}}" data-field="value" {{#unless ../../editable}}disabled{{/unless}}>
-						{{#if ../../editable}}<button type="button" class="race-icon-button" data-action="deleteRequirement" data-override-index="{{override.index}}" data-requirement-index="{{requirement.requirementIndex}}"><i class="fa-solid fa-trash"></i></button>{{/if}}
-					</div>
-				{{/each}}
-			</div>
-		{{/each}}
-	</section>
+	<section class="race-sheet-panel race-authoring-section"><div class="race-section-heading"><h2>{{raceUi.labels.careerOverrides}}</h2>{{#if editable}}<button type="button" data-action="addCareerOverride"><i class="fa-solid fa-plus"></i> {{raceUi.labels.add}}</button>{{/if}}</div>{{#each raceUi.careerOverrides as |override|}}<div class="race-career-override"><div class="race-editor-row race-editor-row--override"><select data-race-array-edit="careerOverrides" data-index="{{override.index}}" data-field="class" {{#unless ../editable}}disabled{{/unless}}>{{#each override.classOptions as |option|}}<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>{{/each}}</select><select data-race-array-edit="careerOverrides" data-index="{{override.index}}" data-field="mode" {{#unless ../editable}}disabled{{/unless}}>{{#each override.modeOptions as |option|}}<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>{{/each}}</select>{{#if ../editable}}<button type="button" data-action="addRequirement" data-index="{{override.index}}"><i class="fa-solid fa-plus"></i> {{../raceUi.labels.addRequirement}}</button><button type="button" class="race-icon-button" data-action="deleteCareerOverride" data-index="{{override.index}}"><i class="fa-solid fa-trash"></i></button>{{/if}}</div>{{#each override.requirements as |requirement|}}<div class="race-editor-row race-editor-row--requirement"><select data-race-array-edit="requirements" data-index="0" data-override-index="{{override.index}}" data-requirement-index="{{requirement.requirementIndex}}" data-field="characteristic" {{#unless ../../editable}}disabled{{/unless}}>{{#each requirement.characteristicOptions as |option|}}<option value="{{option.value}}" {{#if option.selected}}selected{{/if}}>{{option.label}}</option>{{/each}}</select><select data-race-array-edit="requirements" data-index="0" data-override-index="{{override.index}}" data-requirement-index="{{requirement.requirementIndex}}" data-field="operator" {{#unless ../../editable}}disabled{{/unless}}><option value="gte" selected>≥</option></select><input type="number" value="{{requirement.value}}" data-race-array-edit="requirements" data-index="0" data-override-index="{{override.index}}" data-requirement-index="{{requirement.requirementIndex}}" data-field="value" {{#unless ../../editable}}disabled{{/unless}}>{{#if ../../editable}}<button type="button" class="race-icon-button" data-action="deleteRequirement" data-override-index="{{override.index}}" data-requirement-index="{{requirement.requirementIndex}}"><i class="fa-solid fa-trash"></i></button>{{/if}}</div>{{/each}}</div>{{/each}}</section>
 
-	<section class="race-sheet-panel race-authoring-section">
-		<h2>{{raceUi.labels.skillTables}}</h2>
-		<p class="race-sheet-hint">{{raceUi.labels.dropSkillTable}}</p>
-		<div class="race-table-grid">
-			{{#each raceUi.careerClasses as |careerClass|}}
-				<div class="race-percentile-table" data-race-drop-zone="skillTable" data-career-class="{{careerClass.id}}">
-					<div class="race-percentile-table__heading"><strong>{{careerClass.label}}</strong><span class="race-validation {{careerClass.skillValidation.statusClass}}">{{careerClass.skillValidation.label}}</span></div>
-					{{#each careerClass.skillRows as |row|}}<div class="race-percentile-row"><input type="number" min="1" max="100" value="{{row.min}}" data-race-array-edit="tableRows" data-table="skillTables" data-career-class="{{careerClass.id}}" data-index="{{row.index}}" data-field="min"><span>–</span><input type="number" min="1" max="100" value="{{row.max}}" data-race-array-edit="tableRows" data-table="skillTables" data-career-class="{{careerClass.id}}" data-index="{{row.index}}" data-field="max"><span class="race-percentile-row__result">{{row.display}}</span>{{#if ../../../editable}}<button type="button" class="race-icon-button" data-action="deleteTableRow" data-table="skillTables" data-career-class="{{careerClass.id}}" data-index="{{row.index}}"><i class="fa-solid fa-trash"></i></button>{{/if}}</div>{{/each}}
-				</div>
-			{{/each}}
-		</div>
-	</section>
+	<section class="race-sheet-panel race-authoring-section"><h2>{{raceUi.labels.skillTables}}</h2><p class="race-sheet-hint">{{raceUi.labels.dropSkillTable}}</p><div class="race-table-grid">{{#each raceUi.careerClasses as |careerClass|}}<div class="race-percentile-table" data-race-drop-zone="skillTable" data-career-class="{{careerClass.id}}"><div class="race-percentile-table__heading"><strong>{{careerClass.label}}</strong><span class="race-validation {{careerClass.skillValidation.statusClass}}">{{careerClass.skillValidation.label}}</span></div>{{#each careerClass.skillRows as |row|}}<div class="race-percentile-row"><input type="number" min="1" max="100" value="{{row.min}}" data-race-array-edit="tableRows" data-table="skillTables" data-career-class="{{careerClass.id}}" data-index="{{row.index}}" data-field="min"><span>–</span><input type="number" min="1" max="100" value="{{row.max}}" data-race-array-edit="tableRows" data-table="skillTables" data-career-class="{{careerClass.id}}" data-index="{{row.index}}" data-field="max"><span class="race-percentile-row__result">{{row.display}}</span>{{#if ../../editable}}<button type="button" class="race-icon-button" data-action="deleteTableRow" data-table="skillTables" data-career-class="{{careerClass.id}}" data-index="{{row.index}}"><i class="fa-solid fa-trash"></i></button>{{/if}}</div>{{/each}}</div>{{/each}}</div></section>
 
-	<section class="race-sheet-panel race-authoring-section">
-		<h2>{{raceUi.labels.careerTables}}</h2>
-		<p class="race-sheet-hint">{{raceUi.labels.dropCareerTable}}</p>
-		<div class="race-table-grid">
-			{{#each raceUi.careerClasses as |careerClass|}}
-				<div class="race-percentile-table" data-race-drop-zone="careerTable" data-career-class="{{careerClass.id}}">
-					<div class="race-percentile-table__heading"><strong>{{careerClass.label}}</strong><span class="race-validation {{careerClass.careerValidation.statusClass}}">{{careerClass.careerValidation.label}}</span></div>
-					{{#each careerClass.careerRows as |row|}}<div class="race-percentile-row"><input type="number" min="1" max="100" value="{{row.min}}" data-race-array-edit="tableRows" data-table="basicCareerTables" data-career-class="{{careerClass.id}}" data-index="{{row.index}}" data-field="min"><span>–</span><input type="number" min="1" max="100" value="{{row.max}}" data-race-array-edit="tableRows" data-table="basicCareerTables" data-career-class="{{careerClass.id}}" data-index="{{row.index}}" data-field="max"><span class="race-percentile-row__result">{{row.display}}</span>{{#if ../../../editable}}<button type="button" class="race-icon-button" data-action="deleteTableRow" data-table="basicCareerTables" data-career-class="{{careerClass.id}}" data-index="{{row.index}}"><i class="fa-solid fa-trash"></i></button>{{/if}}</div>{{/each}}
-				</div>
-			{{/each}}
-		</div>
-	</section>
+	<section class="race-sheet-panel race-authoring-section"><h2>{{raceUi.labels.careerTables}}</h2><p class="race-sheet-hint">{{raceUi.labels.dropCareerTable}}</p><div class="race-table-grid">{{#each raceUi.careerClasses as |careerClass|}}<div class="race-percentile-table" data-race-drop-zone="careerTable" data-career-class="{{careerClass.id}}"><div class="race-percentile-table__heading"><strong>{{careerClass.label}}</strong><span class="race-validation {{careerClass.careerValidation.statusClass}}">{{careerClass.careerValidation.label}}</span></div>{{#each careerClass.careerRows as |row|}}<div class="race-percentile-row"><input type="number" min="1" max="100" value="{{row.min}}" data-race-array-edit="tableRows" data-table="basicCareerTables" data-career-class="{{careerClass.id}}" data-index="{{row.index}}" data-field="min"><span>–</span><input type="number" min="1" max="100" value="{{row.max}}" data-race-array-edit="tableRows" data-table="basicCareerTables" data-career-class="{{careerClass.id}}" data-index="{{row.index}}" data-field="max"><span class="race-percentile-row__result">{{row.display}}</span>{{#if ../../editable}}<button type="button" class="race-icon-button" data-action="deleteTableRow" data-table="basicCareerTables" data-career-class="{{careerClass.id}}" data-index="{{row.index}}"><i class="fa-solid fa-trash"></i></button>{{/if}}</div>{{/each}}</div>{{/each}}</div></section>
 
-	<section class="race-sheet-panel">
-		<label class="race-sheet-field race-sheet-field--description"><span>{{raceUi.labels.description}}</span><textarea name="system.description" spellcheck="true" {{#unless editable}}disabled{{/unless}}>{{system.description}}</textarea></label>
-	</section>
+	<section class="race-sheet-panel"><label class="race-sheet-field race-sheet-field--description"><span>{{raceUi.labels.description}}</span><textarea name="system.description" spellcheck="true" {{#unless editable}}disabled{{/unless}}>{{system.description}}</textarea></label></section>
 </section>
