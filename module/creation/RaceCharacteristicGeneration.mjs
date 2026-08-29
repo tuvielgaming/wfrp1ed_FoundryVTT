@@ -262,7 +262,7 @@ function generationRow(label, value, final = false) {
 function generationTitle() {
 	return localize(
 		"Starting Characteristic Generation",
-		"Losowanie Początkowych Charakterystyk",
+		"Losowanie Charakterystyk Początkowych ",
 	);
 }
 
