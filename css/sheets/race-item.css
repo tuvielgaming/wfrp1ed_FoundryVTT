@@ -43,22 +43,34 @@
 .race-editor-row--age-band label { display: grid; gap: 2px; color: #3f2e1d; font-size: 11px; font-weight: 700; }
 .race-icon-button { width: 28px !important; height: 28px; min-height: 28px !important; padding: 0 !important; }
 
-.race-mandatory-section {
-	transition: background-color 120ms ease, border-color 120ms ease;
-}
-.race-mandatory-section:hover {
-	border-color: rgba(91, 57, 26, 0.55);
-}
+.race-mandatory-section { transition: background-color 120ms ease, border-color 120ms ease; }
+.race-mandatory-section:hover { border-color: rgba(91, 57, 26, 0.55); }
 .race-drop-zone { min-height: 42px; padding: 0.45rem; border: 1px dashed rgba(73, 48, 29, 0.42); background: rgba(255,255,255,0.14); }
 .race-mandatory-drop-surface { min-height: 56px; }
-.race-mandatory-rule { display: grid; gap: 0.45rem; padding: 0.5rem; border: 1px solid rgba(73,48,29,0.25); background: rgba(255,255,255,0.2); }
-.race-mandatory-rule + .race-mandatory-rule { margin-top: 0.5rem; }
-.race-mandatory-rule__controls { display: grid; grid-template-columns: minmax(150px, 0.8fr) minmax(150px, 0.8fr) 90px 28px; gap: 0.45rem; align-items: end; }
-.race-mandatory-rule__controls label { display: grid; gap: 2px; color: #3f2e1d; font-size: 11px; font-weight: 700; }
-.race-choice-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
-.race-choice-chip { display: inline-flex; align-items: center; gap: 0.3rem; padding: 2px 6px; border: 1px solid rgba(73,48,29,0.28); border-radius: 10px; background: rgba(244,237,221,0.8); font-size: 11px; cursor: copy; transition: background-color 100ms ease, border-color 100ms ease; }
-.race-choice-chip:hover { border-color: rgba(91, 57, 26, 0.75); background: rgba(238, 224, 194, 0.96); }
-.race-choice-chip button { width: 18px; height: 18px; min-height: 18px; padding: 0; border: 0; background: transparent; cursor: pointer; }
+
+/* Mandatory racial Skills deliberately reuse Career's compact row/package
+ * classes. Only the Race-specific outer spacing/actions live here. */
+.race-mandatory-compact-list {
+	display: grid;
+	gap: 0.35rem;
+	min-height: 56px;
+}
+.race-mandatory-compact-row,
+.race-mandatory-compact-package {
+	margin: 0;
+}
+.race-mandatory-package-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 0.25rem;
+	padding-top: 0.25rem;
+}
+.race-mandatory-package-actions button {
+	width: 28px;
+	height: 28px;
+	min-height: 28px;
+	padding: 0;
+}
 
 .race-career-override { display: grid; gap: 0.35rem; padding: 0.45rem 0; border-top: 1px solid rgba(73,48,29,0.18); }
 .race-editor-row--override { grid-template-columns: minmax(140px,0.8fr) minmax(180px,1fr) auto 28px; }
@@ -81,7 +93,7 @@
 	.race-item-sheet .race-sheet-header { grid-template-columns: 88px minmax(0, 1fr); grid-template-areas: "image name" "image rules"; }
 	.race-item-sheet .race-sheet-field--rules-id { min-width: 0; }
 	.race-profile-grid, .race-property-grid, .race-property-grid--three, .race-property-grid--four, .race-table-grid,
-	.race-editor-row--language, .race-editor-row--psychology, .race-editor-row--age-band, .race-mandatory-rule__controls,
+	.race-editor-row--language, .race-editor-row--psychology, .race-editor-row--age-band,
 	.race-editor-row--override, .race-editor-row--requirement { grid-template-columns: 1fr; }
 	.race-icon-button { justify-self: end; }
 }
