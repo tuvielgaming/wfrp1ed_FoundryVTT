@@ -50,7 +50,7 @@ function prepareWorkspace(root) {
 		nav.innerHTML = [
 			["features", localize("Racial Features", "Cechy Rasowe")],
 			["skills", localize("Skills", "Umiejętności")],
-			["careers", localize("Careers", "Profesje")],
+			["careers", localize("Professions", "Profesje")],
 			["description", localize("Description", "Opis")],
 		].map(([id, label]) => `<button type="button" role="tab" data-race-tab="${id}">${label}</button>`).join("");
 		root.querySelector(".race-sheet-header")?.after(nav);
@@ -72,11 +72,17 @@ function prepareWorkspace(root) {
 	const skillHeading = skillTablePanel?.querySelector?.("h2");
 	const careerHeading = careerTablePanel?.querySelector?.("h2");
 	if (skillHeading) skillHeading.textContent = localize("Random Initial Skills", "Losowe Umiejętności Początkowe");
-	if (careerHeading) careerHeading.textContent = localize("Random Initial Careers", "Losowe Profesje Początkowe");
+	if (careerHeading) careerHeading.textContent = localize("Random Initial Professions", "Losowe Profesje Początkowe");
 }
 
 function classifyPanel(panel) {
-	if (panel.querySelector('[data-action="addCareerOverride"]')) return "obsolete";
+	const heading = String(panel.querySelector("h2")?.textContent ?? "").trim().toLocaleLowerCase();
+	if (
+		panel.querySelector('[data-action="addCareerOverride"]') ||
+		panel.querySelector(".race-career-override") ||
+		heading === "career class overrides" ||
+		heading === "wyjątki klas profesji"
+	) return "obsolete";
 	if (panel.querySelector('[data-action="addAgeBand"]')) return "skills";
 	if (panel.classList.contains("race-mandatory-section")) return "skills";
 	if (panel.querySelector('[data-race-drop-zone="skillTable"]')) return "skills";
