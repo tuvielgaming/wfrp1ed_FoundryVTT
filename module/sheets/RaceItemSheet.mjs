@@ -551,7 +551,7 @@ function labels() {
 		name: localize("Name", "Nazwa"), rulesId: localize("Rules ID", "Identyfikator reguły"),
 		rulesIdHint: localize("Stable language-neutral rule identity.", "Stała, niezależna od języka tożsamość reguły."),
 		description: localize("Description", "Opis"),
-		profile: localize("Starting profile formulas", "Formuły profilu początkowego"),
+		profile: localize("Starting profile formulas", "Charakterystyki początkowe (formuły)"),
 		profileHint: localize("These formulas are rolled once during character creation. They are not permanent racial modifiers.", "Te formuły są rzucane jeden raz podczas tworzenia postaci. Nie są stałymi modyfikatorami rasowymi."),
 		racialProperties: localize("Racial properties", "Właściwości rasy"), nightVision: localize("Night Vision", "Widzenie w ciemnościach"), startingAlignment: localize("Starting alignment", "Początkowy charakter"),
 		height: localize("Height generation", "Losowanie wzrostu"), maleFormula: localize("Male formula", "Formuła mężczyzny"), femaleFormula: localize("Female formula", "Formuła kobiety"), unit: localize("Unit", "Jednostka"),
