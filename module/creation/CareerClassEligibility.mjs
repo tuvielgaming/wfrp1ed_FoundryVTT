@@ -1,5 +1,4 @@
 import { CharacterCreationMode } from "./CharacterCreationModeIntegration.mjs";
-import { ClassicActorSheet } from "../sheets/ClassicActorSheet.mjs";
 
 const CAREER_CLASSES = Object.freeze([
 	Object.freeze({ id: "warrior", pl: "Wojownik", en: "Warrior" }),
@@ -11,16 +10,6 @@ const CAREER_CLASSES = Object.freeze([
 /**
  * WFRP 1e Core Career Class eligibility belongs to character creation rules,
  * not to individual Race Items.
- *
- * Core requirements:
- * - Warrior: WS >= 30
- * - Ranger: BS >= 30
- * - Rogue: I >= 30
- * - Academic: Int >= 30 and WP >= 30
- * - Wood Elf exception: Rogue requires I >= 65
- *
- * This module is intentionally data/rule focused so a future dedicated rules
- * editor can replace the built-in definitions without changing Race Items.
  */
 export class CareerClassEligibility {
 	static classes() {
@@ -31,7 +20,12 @@ export class CareerClassEligibility {
 		const id = String(classId ?? "").trim();
 		const requirements = requirementsFor(actor, id);
 		if (!requirements.length) {
-			return { eligible: false, requirements: [], reason: localize("Unknown Career Class.", "Nieznana Klasa Profesji.") };
+			return {
+				eligible: false,
+				requirements: [],
+				failed: [],
+				reason: localize("Unknown Career Class.", "Nieznana Klasa Profesji."),
+			};
 		}
 
 		const failed = requirements.filter((requirement) =>
@@ -61,17 +55,17 @@ installCharacterCreationClassSelector();
 
 function installCharacterCreationClassSelector() {
 	Hooks.on("renderApplicationV2", (application, element) => {
-		if (!(application instanceof ClassicActorSheet)) return;
-		const actor = application.document;
-		if (actor?.type !== "character") return;
-		if (!(element instanceof HTMLElement)) return;
+		const actor = application?.document;
+		if (!isClassicCharacterActor(actor, element)) return;
 		if (!CharacterCreationMode.enabled(actor)) return;
-		syncSelector(actor, element);
+		const root = asElement(element) ?? asElement(application?.element);
+		if (!(root instanceof HTMLElement)) return;
+		syncSelector(actor, root);
 	});
 
 	Hooks.on("updateActor", (actor, changes) => {
 		if (actor?.type !== "character" || !CharacterCreationMode.enabled(actor)) return;
-		if (!characteristicsChanged(changes)) return;
+		if (!characteristicsChanged(changes) && !careerClassChanged(changes)) return;
 		const root = asElement(actor.sheet?.element);
 		if (!(root instanceof HTMLElement)) return;
 		syncSelector(actor, root);
@@ -90,24 +84,39 @@ function installCharacterCreationClassSelector() {
 }
 
 function syncSelector(actor, root) {
-	const existing = root.querySelector('.header-field--career-class select.wfrp1ed-career-class-selector');
+	const sheet = root.classList?.contains("wfrp1ed-classic-sheet")
+		? root
+		: root.querySelector?.(".wfrp1ed-classic-sheet") ?? root;
+	if (!(sheet instanceof HTMLElement)) return;
+
+	const existing = sheet.querySelector(
+		'.header-field--career-class select.wfrp1ed-career-class-selector',
+	);
 	if (existing instanceof HTMLSelectElement) {
 		populateSelector(actor, existing);
 		return;
 	}
 
-	const input = root.querySelector('.header-field--career-class input[name="system.details.careerClass"]');
+	const field = sheet.querySelector(".header-field--career-class");
+	if (!(field instanceof HTMLElement)) return;
+
+	const input = field.querySelector('input[name="system.details.careerClass"]');
 	if (!(input instanceof HTMLInputElement)) return;
+
 	const select = document.createElement("select");
 	select.name = "system.details.careerClass";
 	select.className = "wfrp1ed-career-class-selector";
-	select.setAttribute("aria-label", input.getAttribute("aria-label") ?? localize("Career Class", "Klasa Zawodowa"));
+	select.setAttribute(
+		"aria-label",
+		input.getAttribute("aria-label") ?? localize("Career Class", "Klasa Zawodowa"),
+	);
 	select.addEventListener("change", () => {
 		void actor.update({ "system.details.careerClass": select.value }).catch((error) => {
 			console.error("WFRP1ED | Unable to set Career Class.", error);
 			ui.notifications.error(error?.message ?? String(error));
 		});
 	});
+
 	input.replaceWith(select);
 	populateSelector(actor, select);
 }
@@ -135,9 +144,17 @@ function populateSelector(actor, select) {
 		select.append(element);
 	}
 
+	/* If Characteristics or Race changed and the previously selected Class is no
+	 * longer legal, keep it visible as selected only until the user chooses a new
+	 * legal Class. Do not silently rewrite character data. */
+	if (current) {
+		const selected = [...select.options].find((option) => option.value === current);
+		if (selected) selected.selected = true;
+	}
+
 	select.title = localize(
-		"Career Classes which do not meet the current Characteristic requirements are disabled. Disabled entries include their requirement in the list.",
-		"Klasy Profesji, których aktualne Cechy nie spełniają wymagań, są wyłączone. Wyłączone pozycje pokazują wymaganie bezpośrednio na liście.",
+		"Career Classes which do not meet the current Characteristic requirements are disabled. Disabled entries show their requirements in the list.",
+		"Klasy Profesji, których aktualne Cechy nie spełniają wymagań, są wyłączone. Wyłączone pozycje pokazują wymagania bezpośrednio na liście.",
 	);
 }
 
@@ -209,9 +226,24 @@ function canonicalClassId(value) {
 	return aliases[normalized] ?? "";
 }
 
+function isClassicCharacterActor(actor, element) {
+	if (actor?.documentName !== "Actor" || actor.type !== "character") return false;
+	const root = asElement(element);
+	return Boolean(
+		root?.classList?.contains("classic-actor-sheet") ||
+		root?.classList?.contains("wfrp1ed-classic-sheet") ||
+		root?.querySelector?.(".wfrp1ed-classic-sheet"),
+	);
+}
+
 function characteristicsChanged(changes) {
 	return Object.keys(foundry.utils.flattenObject(changes ?? {}))
 		.some((path) => path.startsWith("system.characteristics."));
+}
+
+function careerClassChanged(changes) {
+	return foundry.utils.getProperty(changes ?? {}, "system.details.careerClass") !== undefined ||
+		Object.hasOwn(changes ?? {}, "system.details.careerClass");
 }
 
 function asElement(value) {
