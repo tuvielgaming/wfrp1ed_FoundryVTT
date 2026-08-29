@@ -19,6 +19,7 @@ import "./FireBallCastPsychologyPresentation.mjs";
 import "./FireBallCriticalFallback.mjs";
 import "./FireBallDamageLabels.mjs";
 import "./FireBallDamageCardConsistency.mjs";
+import { installFireBallDamageInvalidationLifecycle } from "./FireBallDamageInvalidationLifecycle.mjs";
 import { installFireBallGroupHitDiceAnimation } from "./FireBallGroupHitDiceAnimation.mjs";
 import { installFireBallPresentationConsistency } from "./FireBallPresentationConsistency.mjs";
 import "./FireBallPsychologyResultPresentation.mjs";
@@ -41,6 +42,7 @@ Hooks.once("init", () => {
 	installFireBallPresentation();
 	installFireBallTargetingDialogIntegration();
 	installFireBallDamageResultView();
+	installFireBallDamageInvalidationLifecycle();
 	installFireBallGroupHitDiceAnimation();
 	installFireBallPresentationConsistency();
 
