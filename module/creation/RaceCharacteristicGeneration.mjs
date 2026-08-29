@@ -20,6 +20,11 @@ installRaceCharacteristicGeneration();
  * presentation only: the exact already-evaluated Roll drives both the displayed
  * dice and the value persisted on the Actor, so animation can never reroll the
  * Characteristic or alter the mechanical result.
+ *
+ * The same evaluated Roll is logged to chat after the Actor update. Chat cards
+ * deliberately do not attach Foundry Roll objects, because Dice So Nice already
+ * received the authoritative Roll explicitly and attaching it to ChatMessage
+ * would risk a second animation.
  */
 function installRaceCharacteristicGeneration() {
 	Hooks.on("renderApplicationV2", (application, element) => {
@@ -116,11 +121,12 @@ async function rollCharacteristic(actor, race, id) {
 	await actor.update({
 		[`system.characteristics.${id}.initial`]: resolved.value,
 	});
+	await createSingleGenerationMessage(actor, race, id, formula, resolved);
 }
 
 async function rollAllCharacteristics(actor, race) {
 	const updates = {};
-	const resolvedRolls = [];
+	const entries = [];
 
 	for (const id of CHARACTERISTICS) {
 		const formula = raceFormula(race, id);
@@ -128,7 +134,7 @@ async function rollAllCharacteristics(actor, race) {
 
 		const resolved = await evaluateFormula(formula, id);
 		updates[`system.characteristics.${id}.initial`] = resolved.value;
-		resolvedRolls.push(resolved.roll);
+		entries.push({ id, formula, resolved });
 	}
 
 	if (!Object.keys(updates).length) {
@@ -142,8 +148,9 @@ async function rollAllCharacteristics(actor, race) {
 	/* Roll-all means one generation action. Let Dice So Nice display all of the
 	 * already-resolved characteristic rolls together rather than forcing the
 	 * player through fourteen sequential animation waits. */
-	await Promise.all(resolvedRolls.map((roll) => animateResolvedRoll(roll)));
+	await Promise.all(entries.map(({ resolved }) => animateResolvedRoll(resolved.roll)));
 	await actor.update(updates);
+	await createAllGenerationMessage(actor, race, entries);
 }
 
 async function evaluateFormula(formula, id) {
@@ -158,6 +165,7 @@ async function evaluateFormula(formula, id) {
 		return {
 			roll,
 			value: Math.trunc(total),
+			rolled: rolledDiceTotal(roll),
 		};
 	} catch (error) {
 		throw new Error(localize(
@@ -167,10 +175,119 @@ async function evaluateFormula(formula, id) {
 	}
 }
 
+async function createSingleGenerationMessage(actor, race, id, formula, resolved) {
+	const content = `
+		<section class="wfrp1e-race-generation-card">
+			<h3 class="wfrp1e-race-generation-card__title">${escapeHtml(generationTitle())}</h3>
+			${generationDetailRows(id, formula, resolved)}
+		</section>
+	`;
+	await createGenerationChatMessage(actor, race, content);
+}
+
+async function createAllGenerationMessage(actor, race, entries) {
+	const details = entries.map(({ id, formula, resolved }) => {
+		const abbreviation = characteristicAbbreviation(id);
+		return `
+			<details class="wfrp1e-race-generation-card__entry">
+				<summary>
+					<span>${escapeHtml(abbreviation)}</span>
+					<strong>${escapeHtml(String(resolved.value))}</strong>
+				</summary>
+				<div class="wfrp1e-race-generation-card__entry-body">
+					${generationDetailRows(id, formula, resolved)}
+				</div>
+			</details>
+		`;
+	}).join("");
+
+	const content = `
+		<section class="wfrp1e-race-generation-card wfrp1e-race-generation-card--all">
+			<h3 class="wfrp1e-race-generation-card__title">${escapeHtml(generationTitle())}</h3>
+			<div class="wfrp1e-race-generation-card__entries">${details}</div>
+		</section>
+	`;
+	await createGenerationChatMessage(actor, race, content);
+}
+
+async function createGenerationChatMessage(actor, race, content) {
+	try {
+		const speaker = ChatMessage.getSpeaker?.({ actor }) ?? {
+			actor: actor?.id ?? null,
+			alias: actor?.name ?? game.user?.name ?? "",
+		};
+		await ChatMessage.create({
+			speaker,
+			content,
+			flags: {
+				wfrp1ed: {
+					raceCharacteristicGeneration: {
+						actorUuid: actor?.uuid ?? null,
+						raceUuid: race?.uuid ?? null,
+					},
+				},
+			},
+		});
+	} catch (error) {
+		/* Chat logging is audit/presentation and must never undo generated values. */
+		console.error(
+			"WFRP1ED | Unable to create Race characteristic generation chat card.",
+			error,
+		);
+		ui.notifications.warn(localize(
+			"The Characteristic was generated, but its chat card could not be created.",
+			"Charakterystyka została wylosowana, ale nie udało się utworzyć jej karty na czacie.",
+		));
+	}
+}
+
+function generationDetailRows(id, formula, resolved) {
+	return [
+		generationRow(localize("Target", "Cel"), characteristicAbbreviation(id)),
+		generationRow(localize("Formula", "Formuła"), formula),
+		generationRow(localize("Roll", "Rzut"), resolved.rolled),
+		generationRow(localize("Final value", "Wartość końcowa"), resolved.value, true),
+	].join("");
+}
+
+function generationRow(label, value, final = false) {
+	return `
+		<div class="wfrp1e-race-generation-card__row${final ? " wfrp1e-race-generation-card__row--final" : ""}">
+			<span>${escapeHtml(String(label))}</span>
+			<strong>${escapeHtml(String(value))}</strong>
+		</div>
+	`;
+}
+
+function generationTitle() {
+	return localize(
+		"Starting Characteristic Generation",
+		"Losowanie Początkowych Charakterystyk",
+	);
+}
+
+function characteristicAbbreviation(id) {
+	const key = `WFRP1ed.CHARAbbrev.${id === "m" ? "sp" : id}`;
+	const translated = game.i18n.localize(key);
+	return translated && translated !== key ? translated : String(id).toUpperCase();
+}
+
+function rolledDiceTotal(roll) {
+	const dice = Array.isArray(roll?.dice) ? roll.dice : [];
+	const values = dice.flatMap((term) =>
+		(term?.results ?? [])
+			.filter((result) => result?.active !== false)
+			.map((result) => Number(result.result))
+			.filter(Number.isFinite),
+	);
+	if (!values.length) return "—";
+	return values.reduce((sum, value) => sum + value, 0);
+}
+
 /**
  * Display the authoritative evaluated Roll through the same Dice So Nice API
- * already used elsewhere in the system. No ChatMessage is created for character
- * generation rolls.
+ * already used elsewhere in the system. No ChatMessage is created by Dice So
+ * Nice here; chat logging is handled separately from the same resolved Roll.
  *
  * Dice So Nice has no ordinary d2/d3 mesh in the standard Roll path. WFRP 1e
  * uses those dice in racial profiles, so a roll containing only d2/d3 dice is
@@ -249,6 +366,15 @@ function embeddedRace(actor) {
 function reportError(error) {
 	console.error("WFRP1ED | Race characteristic generation failed.", error);
 	ui.notifications.error(error?.message ?? String(error));
+}
+
+function escapeHtml(value) {
+	return String(value ?? "")
+		.replaceAll("&", "&amp;")
+		.replaceAll("<", "&lt;")
+		.replaceAll(">", "&gt;")
+		.replaceAll('"', "&quot;")
+		.replaceAll("'", "&#039;");
 }
 
 function asElement(value) {
