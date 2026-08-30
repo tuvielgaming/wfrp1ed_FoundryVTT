@@ -190,7 +190,8 @@
 .wfrp1ed-character-creation-mode .wfrp1ed-race-characteristic-roll,
 .wfrp1ed-character-creation-mode .wfrp1ed-race-profile-roll-all,
 .wfrp1ed-character-creation-mode .wfrp1ed-race-age-roll,
-.wfrp1ed-character-creation-mode .wfrp1ed-race-fate-roll {
+.wfrp1ed-character-creation-mode .wfrp1ed-race-fate-roll,
+.wfrp1ed-character-creation-mode .wfrp1ed-race-initial-skills-roll {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
@@ -223,7 +224,8 @@
 .wfrp1ed-character-creation-mode .wfrp1ed-race-characteristic-roll > i::before,
 .wfrp1ed-character-creation-mode .wfrp1ed-race-profile-roll-all > i::before,
 .wfrp1ed-character-creation-mode .wfrp1ed-race-age-roll > i::before,
-.wfrp1ed-character-creation-mode .wfrp1ed-race-fate-roll > i::before {
+.wfrp1ed-character-creation-mode .wfrp1ed-race-fate-roll > i::before,
+.wfrp1ed-character-creation-mode .wfrp1ed-race-initial-skills-roll > i::before {
 	content: "\f6cf";
 }
 
@@ -234,7 +236,9 @@
 .wfrp1ed-character-creation-mode .wfrp1ed-race-age-roll:hover,
 .wfrp1ed-character-creation-mode .wfrp1ed-race-age-roll:focus-visible,
 .wfrp1ed-character-creation-mode .wfrp1ed-race-fate-roll:hover,
-.wfrp1ed-character-creation-mode .wfrp1ed-race-fate-roll:focus-visible {
+.wfrp1ed-character-creation-mode .wfrp1ed-race-fate-roll:focus-visible,
+.wfrp1ed-character-creation-mode .wfrp1ed-race-initial-skills-roll:hover,
+.wfrp1ed-character-creation-mode .wfrp1ed-race-initial-skills-roll:focus-visible {
 	background: rgb(255 255 255 / 98%);
 	color: #7a0019;
 	opacity: 1;
@@ -243,7 +247,8 @@
 .wfrp1ed-character-creation-mode .wfrp1ed-race-characteristic-roll:focus-visible,
 .wfrp1ed-character-creation-mode .wfrp1ed-race-profile-roll-all:focus-visible,
 .wfrp1ed-character-creation-mode .wfrp1ed-race-age-roll:focus-visible,
-.wfrp1ed-character-creation-mode .wfrp1ed-race-fate-roll:focus-visible {
+.wfrp1ed-character-creation-mode .wfrp1ed-race-fate-roll:focus-visible,
+.wfrp1ed-character-creation-mode .wfrp1ed-race-initial-skills-roll:focus-visible {
 	outline: 1px solid var(--focus-color);
 	outline-offset: 1px;
 }
@@ -284,4 +289,18 @@
 	right: 10px;
 	top: 50%;
 	transform: translateY(-50%);
+}
+
+/* Initial Skill generation -----------------------------------------------
+ * The normal + button keeps the far-right corner. The d20 sits immediately to
+ * its left so manual Skill authoring remains available in Character Creation.
+ */
+.wfrp1ed-character-creation-mode .skills--primary {
+	position: relative;
+}
+
+.wfrp1ed-character-creation-mode .skills--primary .wfrp1ed-race-initial-skills-roll {
+	position: absolute;
+	top: 2px;
+	right: 27px;
 }
