@@ -1,6 +1,7 @@
 import { CharacterCreationMode } from "./CharacterCreationModeIntegration.mjs";
 import "./RaceCharacteristicGeneration.mjs";
 import "./RaceSecondaryGeneration.mjs";
+import "./RaceHeightGeneration.mjs";
 import "./RaceInitialSkillGeneration.mjs";
 import "./RaceInitialCareerStyle.mjs";
 import "./RaceInitialCareerGeneration.mjs";
