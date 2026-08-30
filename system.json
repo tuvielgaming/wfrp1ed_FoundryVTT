@@ -21,6 +21,7 @@
 		"module/forms/SelectAllOnFocus.mjs",
 		"module/careers/CareerBootstrap.mjs",
 		"module/languages/LanguageBootstrap.mjs",
+		"module/psychology/PsychologyBootstrap.mjs",
 		"module/races/RaceBootstrap.mjs",
 		"module/races/RaceMandatorySkillPackageIntegration.mjs",
 		"module/races/RaceSkillSpecialisationIntegration.mjs",
@@ -172,6 +173,8 @@
 		"css/sheets/parchment-window.css",
 		"css/sheets/skill-item.css",
 		"css/sheets/language-item.css",
+		"css/sheets/psychology-item.css",
+		"css/sheets/psychology-authoring.css",
 		"css/sheets/career-item.css",
 		"css/sheets/career-item-authoring.css",
 		"css/sheets/career-item-compact.css",
@@ -232,7 +235,7 @@
 	"documentTypes": {
 		"ActiveEffect": {"wfrp": {}},
 		"Actor": {"character": {},"npc": {},"creature": {},"vehicle": {},"lootPile": {}},
-		"Item": {"career": {},"race": {},"skill": {},"language": {},"criticalWound": {},"weapon": {},"armour": {},"equipment": {},"trait": {},"spell": {}}
+		"Item": {"career": {},"race": {},"skill": {},"language": {},"psychology": {},"criticalWound": {},"weapon": {},"armour": {},"equipment": {},"trait": {},"spell": {}}
 	},
 	"background": "systems/wfrp1ed/WFRP1ed.jpg",
 	"grid": {"distance": 5,"units":"ft"}
