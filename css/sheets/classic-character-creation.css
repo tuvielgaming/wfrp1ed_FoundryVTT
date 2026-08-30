@@ -61,7 +61,8 @@
 	text-shadow: 0 0 4px rgb(86 220 103 / 46%);
 }
 
-.career-choice-dialog__option > .wfrp1ed-checkbox:has(> input:focus-visible)::before {
+.career-choice-dialog__option
+	> .wfrp1ed-checkbox:has(> input:focus-visible)::before {
 	outline: 2px solid rgb(250 230 190 / 96%);
 	outline-offset: 2px;
 }
@@ -89,12 +90,11 @@
 
 .career-choice-dialog__option:has(> input[type="radio"]:checked)::before {
 	border-color: rgb(129 232 139 / 98%);
-	background:
-		radial-gradient(
-			circle at center,
-			rgb(103 226 118) 0 4px,
-			rgb(18 48 25 / 96%) 5px 100%
-		);
+	background: radial-gradient(
+		circle at center,
+		rgb(103 226 118) 0 4px,
+		rgb(18 48 25 / 96%) 5px 100%
+	);
 	box-shadow:
 		0 0 0 1px rgb(0 0 0 / 65%),
 		0 0 5px rgb(86 220 103 / 28%);
@@ -133,20 +133,21 @@
 }
 
 .classic-actor-sheet .wfrp1ed-character-creation-toggle.is-active:hover,
-.classic-actor-sheet .wfrp1ed-character-creation-toggle.is-active:focus-visible {
+.classic-actor-sheet
+	.wfrp1ed-character-creation-toggle.is-active:focus-visible {
 	background: rgb(39 105 52 / 48%);
 	color: rgb(139 239 151);
 }
 
-.application.classic-actor-sheet.wfrp1ed-character-creation-mode > section.window-content,
+.application.classic-actor-sheet.wfrp1ed-character-creation-mode
+	> section.window-content,
 .classic-actor-sheet.wfrp1ed-character-creation-mode > section.window-content {
-	background:
-		linear-gradient(
-			180deg,
-			rgb(227 190 55 / 98%) 0%,
-			rgb(211 169 45 / 98%) 52%,
-			rgb(224 185 52 / 98%) 100%
-		) !important;
+	background: linear-gradient(
+		180deg,
+		rgb(227 190 55 / 98%) 0%,
+		rgb(211 169 45 / 98%) 52%,
+		rgb(224 185 52 / 98%) 100%
+	) !important;
 	box-shadow:
 		inset 0 0 0 1px rgb(255 237 171 / 30%),
 		inset 0 0 24px rgb(111 73 12 / 12%);
@@ -159,7 +160,9 @@
 }
 
 /* Career Class selector -------------------------------------------------- */
-.wfrp1ed-classic-sheet .header-field--career-class .wfrp1ed-career-class-selector {
+.wfrp1ed-classic-sheet
+	.header-field--career-class
+	.wfrp1ed-career-class-selector {
 	display: block;
 	width: 100%;
 	height: 100%;
@@ -176,8 +179,12 @@
 	color: inherit;
 }
 
-.wfrp1ed-classic-sheet .header-field--career-class .wfrp1ed-career-class-selector:hover,
-.wfrp1ed-classic-sheet .header-field--career-class .wfrp1ed-career-class-selector:focus {
+.wfrp1ed-classic-sheet
+	.header-field--career-class
+	.wfrp1ed-career-class-selector:hover,
+.wfrp1ed-classic-sheet
+	.header-field--career-class
+	.wfrp1ed-career-class-selector:focus {
 	background-color: var(--rollable-hover-background);
 	outline: 1px solid var(--focus-color);
 	outline-offset: -1px;
@@ -230,7 +237,8 @@
 }
 
 .wfrp1ed-character-creation-mode .wfrp1ed-race-characteristic-roll:hover,
-.wfrp1ed-character-creation-mode .wfrp1ed-race-characteristic-roll:focus-visible,
+.wfrp1ed-character-creation-mode
+	.wfrp1ed-race-characteristic-roll:focus-visible,
 .wfrp1ed-character-creation-mode .wfrp1ed-race-profile-roll-all:hover,
 .wfrp1ed-character-creation-mode .wfrp1ed-race-profile-roll-all:focus-visible,
 .wfrp1ed-character-creation-mode .wfrp1ed-race-age-roll:hover,
@@ -238,17 +246,20 @@
 .wfrp1ed-character-creation-mode .wfrp1ed-race-fate-roll:hover,
 .wfrp1ed-character-creation-mode .wfrp1ed-race-fate-roll:focus-visible,
 .wfrp1ed-character-creation-mode .wfrp1ed-race-initial-skills-roll:hover,
-.wfrp1ed-character-creation-mode .wfrp1ed-race-initial-skills-roll:focus-visible {
+.wfrp1ed-character-creation-mode
+	.wfrp1ed-race-initial-skills-roll:focus-visible {
 	background: rgb(255 255 255 / 98%);
 	color: #7a0019;
 	opacity: 1;
 }
 
-.wfrp1ed-character-creation-mode .wfrp1ed-race-characteristic-roll:focus-visible,
+.wfrp1ed-character-creation-mode
+	.wfrp1ed-race-characteristic-roll:focus-visible,
 .wfrp1ed-character-creation-mode .wfrp1ed-race-profile-roll-all:focus-visible,
 .wfrp1ed-character-creation-mode .wfrp1ed-race-age-roll:focus-visible,
 .wfrp1ed-character-creation-mode .wfrp1ed-race-fate-roll:focus-visible,
-.wfrp1ed-character-creation-mode .wfrp1ed-race-initial-skills-roll:focus-visible {
+.wfrp1ed-character-creation-mode
+	.wfrp1ed-race-initial-skills-roll:focus-visible {
 	outline: 1px solid var(--focus-color);
 	outline-offset: 1px;
 }
@@ -273,7 +284,9 @@
 }
 
 /* Starting Characteristic generation ------------------------------------ */
-.wfrp1ed-character-creation-mode .characteristics-row--initial .characteristics-row-label,
+.wfrp1ed-character-creation-mode
+	.characteristics-row--initial
+	.characteristics-row-label,
 .wfrp1ed-character-creation-mode .characteristic-cell--initial {
 	position: relative;
 }
@@ -299,8 +312,10 @@
 	position: relative;
 }
 
-.wfrp1ed-character-creation-mode .skills--primary .wfrp1ed-race-initial-skills-roll {
+.wfrp1ed-character-creation-mode
+	.skills--primary
+	.wfrp1ed-race-initial-skills-roll {
 	position: absolute;
-	top: 2px;
-	right: 27px;
+	top: 17px;
+	right: 22px;
 }
