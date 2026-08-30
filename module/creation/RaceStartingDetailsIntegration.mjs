@@ -6,18 +6,18 @@ const FLAG_KEY = "raceStartingDetails";
 installRaceStartingDetailsIntegration();
 
 /**
- * Apply deterministic Race-owned starting details which already have a clear
- * Character storage owner.
+ * Apply and invalidate deterministic Race-owned starting details which already
+ * have a clear Character storage owner.
  *
- * This integration intentionally handles only Languages and Psychology.
+ * Languages and Psychology are copied with provenance so Race replacement or
+ * removal deletes only values injected by the Race and preserves manual Actor
+ * entries. Age, Height and Fate are generated from Race formulas elsewhere,
+ * but are invalid once the embedded Race changes, so this lifecycle owner also
+ * clears them when the Race leaves the Character during Character Creation.
+ *
  * Starting Alignment is deferred until its canonical Core vocabulary and
  * localized presentation are audited. Night Vision remains authoritative on
  * the embedded Race Item until the Character senses/vision subsystem exists.
- *
- * Values are copied only while Character Creation Mode is active. A narrow
- * Actor flag records exactly which text entries were injected by the Race so a
- * Race replacement/removal can remove those values without deleting manual
- * Character entries.
  */
 function installRaceStartingDetailsIntegration() {
 	for (const hookName of ["createItem", "updateItem"]) {
@@ -33,7 +33,7 @@ function installRaceStartingDetailsIntegration() {
 		if (item?.type !== "race") return;
 		const actor = item.parent;
 		if (!isCreationCharacter(actor)) return;
-		void removeTrackedRaceStartingDetails(actor).catch(reportError);
+		void resetRaceStartingDetails(actor).catch(reportError);
 	});
 
 	/* A Race may already be embedded before the GM enables Character Creation
@@ -78,6 +78,21 @@ async function syncRaceStartingDetails(actor, race) {
 		raceRulesId: String(race.system?.rulesId ?? "").trim(),
 		languages: raceLanguages,
 		psychology: racePsychology,
+	});
+}
+
+/**
+ * Clear every secondary Character value which is currently produced from the
+ * embedded Race. Gender is intentionally retained: it selects the Race Height
+ * formula but is a player choice, not a Race-derived value.
+ */
+async function resetRaceStartingDetails(actor) {
+	await removeTrackedRaceStartingDetails(actor);
+	await actor.update({
+		"system.details.age": "",
+		"system.details.height": "",
+		"system.status.fate.value": 0,
+		"system.status.fate.max": 0,
 	});
 }
 
