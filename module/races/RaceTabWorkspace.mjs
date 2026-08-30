@@ -86,6 +86,7 @@ function enhanceSkillsWorkspace(root) {
 	const mandatory = root.querySelector(".race-mandatory-section");
 	if (mandatory instanceof HTMLElement) {
 		mandatory.classList.add("race-skills-panel--mandatory");
+		ensureMandatoryStructure(mandatory);
 
 		const heading = mandatory.querySelector("h2");
 		if (heading instanceof HTMLElement && !(heading.parentElement?.classList?.contains("race-mandatory-heading"))) {
@@ -132,6 +133,30 @@ function enhanceSkillsWorkspace(root) {
 
 	const skillTablePanel = root.querySelector('[data-race-drop-zone="skillTable"]')?.closest?.(".race-sheet-panel");
 	skillTablePanel?.classList?.add("race-skills-panel--random");
+}
+
+/* RaceMandatorySkillPackageIntegration historically targets the whole
+ * mandatory section because that section is the drop target. Its compact
+ * renderer therefore replaces the section contents with the row list. Repair
+ * the presentation here, after the ItemSheet render has completed, while
+ * keeping the whole section as the drop target so the easy drop UX remains. */
+function ensureMandatoryStructure(mandatory) {
+	if (mandatory.querySelector(".race-mandatory-drop-surface")) return;
+
+	const renderedEntries = [...mandatory.childNodes];
+	mandatory.replaceChildren();
+
+	const heading = document.createElement("h2");
+	heading.textContent = localize("Mandatory Racial Skills", "Obowiązkowe Umiejętności rasowe");
+
+	const hint = document.createElement("p");
+	hint.className = "race-sheet-hint";
+
+	const surface = document.createElement("div");
+	surface.className = "race-drop-zone race-mandatory-drop-surface career-compact-list race-mandatory-compact-list";
+	for (const node of renderedEntries) surface.append(node);
+
+	mandatory.append(heading, hint, surface);
 }
 
 function classifyPanel(panel) {
