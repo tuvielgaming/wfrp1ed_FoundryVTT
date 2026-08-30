@@ -190,8 +190,8 @@ function ensurePsychologyPanelStyles() {
 		position: absolute;
 		left: 6px;
 		right: 6px;
-		top: 42px;
-		bottom: 52px;
+		top: 70px;
+		bottom: 44px;
 		display: block;
 		min-height: 0;
 		margin: 0;
