@@ -4,17 +4,48 @@ import { RaceItemSheet } from "../sheets/RaceItemSheet.mjs";
 const TABS = Object.freeze(["features", "skills", "careers", "description"]);
 const activeTabs = new WeakMap();
 
+installRaceTabWorkspace();
+
+/**
+ * Race tabs are presentation-only. Install directly on RaceItemSheet so their
+ * presence cannot depend on global ApplicationV2 hook ordering. The original
+ * sheet render chain (including mandatory-Skill package rendering) still runs
+ * first; this layer only groups the already-rendered panels into tabs.
+ */
+function installRaceTabWorkspace() {
+	if (RaceItemSheet.prototype.__wfrpRaceTabsInstalled === true) return;
+
+	const originalRender = RaceItemSheet.prototype._onRender;
+	RaceItemSheet.prototype._onRender = function raceTabRender(context, options) {
+		originalRender.call(this, context, options);
+		const root = asElement(this.element)?.querySelector?.(".race-sheet-content");
+		if (root instanceof HTMLElement) prepareApplicationWorkspace(this, root);
+	};
+
+	Object.defineProperty(
+		RaceItemSheet.prototype,
+		"__wfrpRaceTabsInstalled",
+		{ value: true, configurable: false, enumerable: false },
+	);
+}
+
+/* Keep the global hook as a harmless fallback for Foundry render paths which
+ * may not call ItemSheetV2._onRender in the ordinary order. */
 Hooks.on("renderApplicationV2", (application, element) => {
 	if (!(application instanceof RaceItemSheet)) return;
-	if (!(element instanceof HTMLElement)) return;
+	const rootElement = asElement(element) ?? asElement(application?.element);
+	const root = rootElement?.querySelector?.(".race-sheet-content");
+	if (root instanceof HTMLElement) prepareApplicationWorkspace(application, root);
+});
 
-	const root = element.querySelector(".race-sheet-content");
-	if (!(root instanceof HTMLElement)) return;
-
+function prepareApplicationWorkspace(application, root) {
 	prepareWorkspace(root);
 	const selected = normalizedTab(activeTabs.get(application)) || "features";
 	activateTab(root, selected);
+	bindTabControls(application, root);
+}
 
+function bindTabControls(application, root) {
 	for (const button of root.querySelectorAll("[data-race-tab]")) {
 		if (button.dataset.raceTabBound === "true") continue;
 		button.dataset.raceTabBound = "true";
@@ -39,7 +70,7 @@ Hooks.on("renderApplicationV2", (application, element) => {
 			root.querySelector(`[data-race-tab="${next}"]`)?.focus?.();
 		});
 	}
-});
+}
 
 function prepareWorkspace(root) {
 	let nav = root.querySelector(".race-tab-nav");
@@ -135,11 +166,6 @@ function enhanceSkillsWorkspace(root) {
 	skillTablePanel?.classList?.add("race-skills-panel--random");
 }
 
-/* RaceMandatorySkillPackageIntegration historically targets the whole
- * mandatory section because that section is the drop target. Its compact
- * renderer therefore replaces the section contents with the row list. Repair
- * the presentation here, after the ItemSheet render has completed, while
- * keeping the whole section as the drop target so the easy drop UX remains. */
 function ensureMandatoryStructure(mandatory) {
 	if (mandatory.querySelector(".race-mandatory-drop-surface")) return;
 
@@ -193,6 +219,12 @@ function activateTab(root, selected) {
 function normalizedTab(value) {
 	const tab = String(value ?? "").trim();
 	return TABS.includes(tab) ? tab : "";
+}
+
+function asElement(value) {
+	if (value?.nodeType === 1 && typeof value.querySelector === "function") return value;
+	if (value?.[0]?.nodeType === 1 && typeof value[0].querySelector === "function") return value[0];
+	return null;
 }
 
 function escapeHtml(value) {
