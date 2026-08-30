@@ -1,0 +1,61 @@
+<section class="psychology-health-manager">
+	<header class="psychology-health-manager__header">
+		<div>
+			<h2>{{actor.name}}</h2>
+			<p>{{ui.total}}: <strong>{{totalCount}}</strong></p>
+		</div>
+	</header>
+
+	<nav class="psychology-health-manager__tabs" aria-label="Psychology and Health">
+		{{#each tabs as |tab|}}
+			<button
+				type="button"
+				class="psychology-health-manager__tab {{#if tab.active}}is-active{{/if}}"
+				data-action="selectTab"
+				data-tab="{{tab.id}}"
+			>
+				<i class="{{tab.icon}}" aria-hidden="true"></i>
+				<span>{{tab.label}}</span>
+				<span class="psychology-health-manager__tab-count">{{tab.count}}</span>
+			</button>
+		{{/each}}
+	</nav>
+
+	{{#if active}}
+		<section class="psychology-health-manager__panel" data-health-category="{{active.id}}">
+			<header class="psychology-health-manager__panel-header">
+				<div>
+					<h3><i class="{{active.icon}}" aria-hidden="true"></i> {{active.label}}</h3>
+					<p>{{active.hint}}</p>
+				</div>
+				{{#if editable}}<span class="psychology-health-manager__drop-hint">{{ui.drop}}</span>{{/if}}
+			</header>
+
+			{{#if items.length}}
+				<div class="psychology-health-manager__list">
+					{{#each items as |item|}}
+						<article class="psychology-health-manager__row" data-item-id="{{item.id}}">
+							<img class="psychology-health-manager__image" src="{{item.img}}" alt="">
+							<div class="psychology-health-manager__main">
+								<div class="psychology-health-manager__title-line">
+									<button type="button" class="psychology-health-manager__name" data-action="openItem" title="{{../ui.open}}">{{item.name}}</button>
+									{{#if item.raceManaged}}<span class="psychology-health-manager__source">{{../ui.race}}</span>{{/if}}
+									{{#if item.rulesId}}<span class="psychology-health-manager__rules-id">{{item.rulesId}}</span>{{/if}}
+								</div>
+								{{#if item.description}}<p class="psychology-health-manager__description">{{item.description}}</p>{{/if}}
+							</div>
+							<div class="psychology-health-manager__actions">
+								<button type="button" data-action="openItem" title="{{../ui.open}}"><i class="fas fa-pen-to-square" aria-hidden="true"></i></button>
+								{{#if ../editable}}
+									{{#unless item.raceManaged}}<button type="button" class="psychology-health-manager__remove" data-action="removeItem" title="{{../ui.remove}}"><i class="fas fa-trash" aria-hidden="true"></i></button>{{/unless}}
+								{{/if}}
+							</div>
+						</article>
+					{{/each}}
+				</div>
+			{{else}}
+				<div class="psychology-health-manager__empty"><i class="{{active.icon}}" aria-hidden="true"></i><span>{{ui.empty}}</span></div>
+			{{/if}}
+		</section>
+	{{/if}}
+</section>
