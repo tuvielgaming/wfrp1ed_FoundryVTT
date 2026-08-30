@@ -1,3 +1,4 @@
+import "../races/RacePercentileTableOrdering.mjs";
 import { configureRaceSkill } from "../races/RaceSkillSpecialisationIntegration.mjs";
 import { CareerItemSheet } from "../sheets/CareerItemSheet.mjs";
 import { RaceItemSheet } from "../sheets/RaceItemSheet.mjs";
