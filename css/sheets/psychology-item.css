@@ -1,0 +1,86 @@
+/******************************************************************/
+/*                  WFRP 1e Psychology Item Sheet                 */
+/******************************************************************/
+
+.psychology-item-sheet {
+	--psychology-border: rgb(0 0 0 / 48%);
+	--psychology-field: #e8dfcc;
+	--psychology-focus: #f8f1e2;
+	--psychology-text: #1c1812;
+	font-family: "Book Antiqua", "Times New Roman", serif;
+}
+
+.psychology-item-sheet .window-content { overflow-y: auto; }
+
+.psychology-item-sheet .psychology-sheet-content {
+	display: grid;
+	gap: 14px;
+	width: 100%;
+	padding: 16px;
+}
+
+.psychology-item-sheet .psychology-sheet-image {
+	border: 1px solid var(--psychology-border);
+}
+
+.psychology-item-sheet .psychology-sheet-field {
+	display: grid;
+	grid-template-columns: 130px minmax(0, 1fr);
+	align-items: center;
+	gap: 10px;
+	min-width: 0;
+}
+
+.psychology-item-sheet .psychology-sheet-header .psychology-sheet-field--name,
+.psychology-item-sheet .psychology-sheet-field--description {
+	grid-template-columns: 1fr;
+	grid-template-rows: auto auto;
+	align-items: stretch;
+	gap: 5px;
+}
+
+.psychology-item-sheet .psychology-sheet-field > label {
+	font-size: 14px;
+	font-weight: 700;
+	line-height: 1.2;
+}
+
+.psychology-item-sheet .psychology-sheet-field > input,
+.psychology-item-sheet .psychology-sheet-field > textarea {
+	width: 100%;
+	min-width: 0;
+	margin: 0;
+	border: 1px solid var(--psychology-border);
+	border-radius: 3px;
+	background: var(--psychology-field);
+	box-shadow: none;
+	font: inherit;
+	color: var(--psychology-text);
+}
+
+.psychology-item-sheet .psychology-sheet-field > input {
+	height: 34px;
+	padding: 4px 8px;
+	font-size: 15px;
+}
+
+.psychology-item-sheet .psychology-sheet-field > textarea {
+	min-height: 210px;
+	padding: 8px;
+	font-size: 14px;
+	line-height: 1.35;
+	resize: vertical;
+}
+
+.psychology-item-sheet .psychology-sheet-field > input:focus,
+.psychology-item-sheet .psychology-sheet-field > textarea:focus {
+	outline: 1px solid #7a0019;
+	outline-offset: -1px;
+	background: var(--psychology-focus);
+}
+
+.psychology-item-sheet .psychology-sheet-field > input:disabled,
+.psychology-item-sheet .psychology-sheet-field > textarea:disabled {
+	cursor: default;
+	opacity: 0.55;
+}
