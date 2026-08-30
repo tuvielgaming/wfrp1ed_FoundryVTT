@@ -5,6 +5,19 @@ const GRANT_FLAG = "raceInitialSkillGrant";
 const BASE_SKILL_COUNT_FORMULA = "1d4";
 const MAX_TABLE_ATTEMPTS = 500;
 
+class RaceDefinitionError extends Error {
+	constructor(race, detail) {
+		const raceName = String(race?.name ?? localize("Unnamed Race", "Rasa bez nazwy"));
+		super(localize(
+			`Invalid Race template — ${raceName}. ${detail}`,
+			`Błędnie zdefiniowany szablon Rasy — ${raceName}. ${detail}`,
+		));
+		this.name = "RaceDefinitionError";
+		this.raceName = raceName;
+		this.detail = detail;
+	}
+}
+
 installRaceInitialSkillGeneration();
 
 /**
@@ -64,7 +77,7 @@ function installControl(actor, sheet) {
 	button.addEventListener("click", (event) => {
 		event.preventDefault();
 		event.stopPropagation();
-		void generateInitialSkills(actor, race).catch(reportError);
+		void generateInitialSkills(actor, race).catch((error) => reportError(error, race));
 	});
 	section.append(button);
 }
@@ -89,12 +102,7 @@ async function generateInitialSkills(actor, race) {
 	const table = Array.isArray(race.system?.skillTables?.[careerClass])
 		? race.system.skillTables[careerClass]
 		: [];
-	if (!table.length) {
-		throw new Error(localize(
-			`Race ${race.name} has no initial-Skill d100 table for ${careerClass}.`,
-			`Rasa ${race.name} nie ma tabeli losowych Umiejętności początkowych dla klasy ${classLabel(careerClass)}.`,
-		));
-	}
+	validateRaceInitialSkillDefinition(race, age, careerClass, table);
 
 	const previousGenerated = [...(actor.items ?? [])].filter((item) =>
 		item?.type === "skill" && Boolean(item.getFlag?.(FLAG_SCOPE, GRANT_FLAG)),
@@ -116,9 +124,9 @@ async function generateInitialSkills(actor, race) {
 	const mandatoryResolution = await resolveMandatorySkills(race, totalCount, usedIdentities);
 	const planned = [...mandatoryResolution.skills];
 	if (planned.length > totalCount) {
-		throw new Error(localize(
-			`The Race's mandatory Skill rules grant ${planned.length} Skills, but this character has only ${totalCount} initial Skill slots.`,
-			`Reguły obowiązkowych Umiejętności rasy przyznają ${planned.length} Umiejętności, ale postać ma tylko ${totalCount} miejsc na Umiejętności początkowe.`,
+		throw new RaceDefinitionError(race, localize(
+			`Mandatory racial Skill rules grant ${planned.length} Skills, but the generated initial-Skill allowance is only ${totalCount}. Check "Mandatory racial Skills" package thresholds and Choose values.`,
+			`Reguły „Obowiązkowe Umiejętności rasowe” przyznają ${planned.length} Umiejętności, ale wylosowany limit Umiejętności początkowych wynosi tylko ${totalCount}. Sprawdź progi „Obowiązuje od liczby początkowych Umiejętności” oraz wartości „Wybierz”.`,
 		));
 	}
 
@@ -127,9 +135,9 @@ async function generateInitialSkills(actor, race) {
 	while (planned.length < totalCount) {
 		attempts += 1;
 		if (attempts > MAX_TABLE_ATTEMPTS) {
-			throw new Error(localize(
-				"Unable to complete initial Skill generation without duplicates. Check that the selected Race/Class table contains enough distinct Skills.",
-				"Nie można ukończyć losowania Umiejętności początkowych bez duplikatów. Sprawdź, czy tabela wybranej Rasy/Klasy zawiera wystarczającą liczbę różnych Umiejętności.",
+			throw new RaceDefinitionError(race, localize(
+				`The "Random Initial Skills" table for ${classLabel(careerClass)} cannot provide enough distinct Skills. Check duplicate entries and the number of distinct Skill identities in the table.`,
+				`Tabela „Losowe Umiejętności Początkowe” dla klasy ${classLabel(careerClass)} nie może dostarczyć wystarczającej liczby różnych Umiejętności. Sprawdź duplikaty oraz liczbę różnych Umiejętności w tabeli.`,
 			));
 		}
 
@@ -140,13 +148,16 @@ async function generateInitialSkills(actor, race) {
 			result >= wholeNumber(candidate?.min, 1) && result <= wholeNumber(candidate?.max, 100),
 		);
 		if (!row?.grant) {
-			throw new Error(localize(
-				`The ${classLabel(careerClass)} initial-Skill table has no result for ${result}.`,
-				`Tabela Umiejętności początkowych dla klasy ${classLabel(careerClass)} nie ma wyniku dla ${result}.`,
+			throw new RaceDefinitionError(race, localize(
+				`The "Random Initial Skills" table for ${classLabel(careerClass)} has no result for d100=${result}. Fix the table so it covers 01–100 exactly once.`,
+				`Tabela „Losowe Umiejętności Początkowe” dla klasy ${classLabel(careerClass)} nie ma wyniku dla k100=${result}. Popraw tabelę tak, aby zakres 01–100 był pokryty dokładnie jeden raz.`,
 			));
 		}
 
-		const resolved = await resolveSkillReference(row.grant);
+		const resolved = await resolveSkillReference(row.grant, race, localize(
+			`Random Initial Skills / ${classLabel(careerClass)} / ${rangeLabel(row)}`,
+			`Losowe Umiejętności Początkowe / ${classLabel(careerClass)} / ${rangeLabel(row)}`,
+		));
 		const duplicate = !resolved.identity || usedIdentities.has(resolved.identity);
 		tableRolls.push({ result, name: resolved.name, duplicate });
 		if (duplicate) continue;
@@ -197,12 +208,101 @@ async function generateInitialSkills(actor, race) {
 	void actor.sheet?.render?.();
 }
 
+function validateRaceInitialSkillDefinition(race, age, careerClass, table) {
+	const bands = Array.isArray(race.system?.age?.skillCountModifiers)
+		? race.system.age.skillCountModifiers
+		: [];
+	for (let index = 0; index < bands.length; index += 1) {
+		const band = bands[index];
+		const min = integer(band?.minAge, 0);
+		const max = integer(band?.maxAge, 0);
+		if (min > max) {
+			throw new RaceDefinitionError(race, localize(
+				`Age → initial-Skill modifier row ${index + 1} is reversed (${min}–${max}). Minimum age must not exceed maximum age.`,
+				`W sekcji „Wiek → modyfikator początkowych Umiejętności” wiersz ${index + 1} ma odwrócony zakres (${min}–${max}). Wartość „Od” nie może być większa niż „Do”.`,
+			));
+		}
+	}
+	const matchingBands = bands.filter((band) =>
+		age >= integer(band?.minAge, 0) && age <= integer(band?.maxAge, 0),
+	);
+	if (matchingBands.length > 1) {
+		throw new RaceDefinitionError(race, localize(
+			`Age ${age} matches ${matchingBands.length} rows in Age → initial-Skill modifier. Age ranges overlap.`,
+			`Wiek ${age} pasuje do ${matchingBands.length} wierszy w sekcji „Wiek → modyfikator początkowych Umiejętności”. Zakresy wieku nakładają się.`,
+		));
+	}
+
+	if (!table.length) {
+		throw new RaceDefinitionError(race, localize(
+			`The "Random Initial Skills" table for Career Class ${classLabel(careerClass)} is empty. Add d100 rows covering 01–100.`,
+			`Tabela „Losowe Umiejętności Początkowe” dla klasy ${classLabel(careerClass)} jest pusta. Dodaj wiersze k100 pokrywające zakres 01–100.`,
+		));
+	}
+
+	const coverage = Array.from({ length: 101 }, () => 0);
+	for (let index = 0; index < table.length; index += 1) {
+		const row = table[index];
+		const min = wholeNumber(row?.min, 0);
+		const max = wholeNumber(row?.max, 0);
+		if (min < 1 || max > 100 || min > max) {
+			throw new RaceDefinitionError(race, localize(
+				`"Random Initial Skills" / ${classLabel(careerClass)} row ${index + 1} has invalid d100 range ${min}–${max}. Use a valid range inside 01–100.`,
+				`„Losowe Umiejętności Początkowe” / ${classLabel(careerClass)}: wiersz ${index + 1} ma błędny zakres k100 ${min}–${max}. Użyj poprawnego zakresu w granicach 01–100.`,
+			));
+		}
+		if (!row?.grant || !skillReferenceHasIdentity(row.grant)) {
+			throw new RaceDefinitionError(race, localize(
+				`"Random Initial Skills" / ${classLabel(careerClass)} / ${rangeLabel(row)} has no valid Skill reference. Drop a Skill Item onto that row again.`,
+				`„Losowe Umiejętności Początkowe” / ${classLabel(careerClass)} / ${rangeLabel(row)} nie zawiera prawidłowego odwołania do Umiejętności. Upuść ponownie Przedmiot Umiejętności na ten wiersz.`,
+			));
+		}
+		for (let value = min; value <= max; value += 1) coverage[value] += 1;
+	}
+	const gap = firstCoverageRun(coverage, 0);
+	if (gap) {
+		throw new RaceDefinitionError(race, localize(
+			`"Random Initial Skills" / ${classLabel(careerClass)} has a d100 gap at ${rangeText(gap.start, gap.end)}. Cover every result from 01 to 100.`,
+			`„Losowe Umiejętności Początkowe” / ${classLabel(careerClass)} ma lukę k100 w zakresie ${rangeText(gap.start, gap.end)}. Każdy wynik od 01 do 100 musi być pokryty.`,
+		));
+	}
+	const overlap = firstCoverageAboveOne(coverage);
+	if (overlap) {
+		throw new RaceDefinitionError(race, localize(
+			`"Random Initial Skills" / ${classLabel(careerClass)} has overlapping d100 ranges at ${rangeText(overlap.start, overlap.end)}. Every result must belong to exactly one row.`,
+			`„Losowe Umiejętności Początkowe” / ${classLabel(careerClass)} ma nakładające się zakresy k100 w ${rangeText(overlap.start, overlap.end)}. Każdy wynik musi należeć dokładnie do jednego wiersza.`,
+		));
+	}
+
+	const mandatory = Array.isArray(race.system?.mandatorySkills) ? race.system.mandatorySkills : [];
+	for (let index = 0; index < mandatory.length; index += 1) {
+		const entry = mandatory[index];
+		const choices = Array.isArray(entry?.choices) ? entry.choices : [];
+		if (!choices.length) {
+			throw new RaceDefinitionError(race, localize(
+				`Mandatory racial Skill package ${index + 1} has no Skill options. Add at least one Skill or remove the empty package.`,
+				`Pakiet ${index + 1} w sekcji „Obowiązkowe Umiejętności rasowe” nie ma żadnej opcji Umiejętności. Dodaj co najmniej jedną Umiejętność albo usuń pusty pakiet.`,
+			));
+		}
+		for (let choiceIndex = 0; choiceIndex < choices.length; choiceIndex += 1) {
+			const grants = Array.isArray(choices[choiceIndex]?.grants) ? choices[choiceIndex].grants : [];
+			if (!grants.length || grants.some((grant) => !skillReferenceHasIdentity(grant))) {
+				throw new RaceDefinitionError(race, localize(
+					`Mandatory racial Skill package ${index + 1}, option ${choiceIndex + 1}, contains an invalid Skill reference. Re-add the Skill to the package.`,
+					`Pakiet ${index + 1} w sekcji „Obowiązkowe Umiejętności rasowe”, opcja ${choiceIndex + 1}, zawiera błędne odwołanie do Umiejętności. Dodaj tę Umiejętność do pakietu ponownie.`,
+				));
+			}
+		}
+	}
+}
+
 async function resolveMandatorySkills(race, totalCount, usedIdentities) {
 	const entries = Array.isArray(race.system?.mandatorySkills) ? race.system.mandatorySkills : [];
 	const skills = [];
 	const summary = [];
 
-	for (const entry of entries) {
+	for (let entryIndex = 0; entryIndex < entries.length; entryIndex += 1) {
+		const entry = entries[entryIndex];
 		const minimum = Math.max(1, wholeNumber(entry?.minInitialSkills, 1));
 		if (totalCount < minimum) continue;
 
@@ -233,9 +333,13 @@ async function resolveMandatorySkills(race, totalCount, usedIdentities) {
 		}
 
 		const selectedNames = [];
-		for (const choice of selected) {
+		for (let choiceIndex = 0; choiceIndex < selected.length; choiceIndex += 1) {
+			const choice = selected[choiceIndex];
 			for (const grant of choice?.grants ?? []) {
-				const resolved = await resolveSkillReference(grant);
+				const resolved = await resolveSkillReference(grant, race, localize(
+					`Mandatory racial Skills / package ${entryIndex + 1} / option ${choiceIndex + 1}`,
+					`Obowiązkowe Umiejętności rasowe / pakiet ${entryIndex + 1} / opcja ${choiceIndex + 1}`,
+				));
 				if (!resolved.identity || usedIdentities.has(resolved.identity)) continue;
 				usedIdentities.add(resolved.identity);
 				skills.push({ ...resolved, origin: "mandatory" });
@@ -249,7 +353,10 @@ async function resolveMandatorySkills(race, totalCount, usedIdentities) {
 
 async function chooseMandatoryChoices(choices, choose) {
 	const DialogV2 = foundry.applications?.api?.DialogV2;
-	if (!DialogV2?.wait) throw new Error("Foundry DialogV2 is unavailable.");
+	if (!DialogV2?.wait) throw new Error(localize(
+		"Foundry DialogV2 is unavailable; the racial Skill choice cannot be displayed.",
+		"DialogV2 Foundry jest niedostępny; nie można wyświetlić wyboru rasowych Umiejętności.",
+	));
 	const type = choose === 1 ? "radio" : "checkbox";
 	const group = `raceSkillChoice-${foundry.utils.randomID()}`;
 	const rows = choices.map((choice, index) => `
@@ -293,23 +400,37 @@ async function chooseMandatoryChoices(choices, choose) {
 	return choices.filter((choice, index) => result.includes(String(choice?.id ?? index)));
 }
 
-async function resolveSkillReference(reference) {
+async function resolveSkillReference(reference, race = null, location = "") {
 	const uuid = String(reference?.uuid ?? "").trim();
 	let source = null;
 	if (uuid) {
 		try { source = await foundry.utils.fromUuid(uuid); } catch (_error) { source = null; }
+		if (!source && race) {
+			throw new RaceDefinitionError(race, localize(
+				`${location}: referenced Skill '${reference?.name ?? uuid}' cannot be resolved. Re-add that Skill from a current World/Compendium Item.`,
+				`${location}: nie można odnaleźć wskazanej Umiejętności „${reference?.name ?? uuid}”. Dodaj ją ponownie z aktualnego Przedmiotu Świata/Kompendium.`,
+			));
+		}
 	}
 	if (source && (!(source instanceof foundry.documents.Item) || source.type !== "skill")) {
-		throw new Error(localize(
-			`Referenced document '${reference?.name ?? uuid}' is not a Skill Item.`,
-			`Powiązany dokument '${reference?.name ?? uuid}' nie jest Przedmiotem Umiejętności.`,
-		));
+		const detail = localize(
+			`${location}: referenced document '${reference?.name ?? uuid}' is not a Skill Item.`,
+			`${location}: wskazany dokument „${reference?.name ?? uuid}” nie jest Przedmiotem Umiejętności.`,
+		);
+		if (race) throw new RaceDefinitionError(race, detail);
+		throw new Error(detail);
 	}
 
 	const rulesId = String(reference?.rulesId ?? source?.system?.rulesId ?? "").trim();
 	const specialisation = String(reference?.specialisation ?? source?.system?.specialisation ?? "").trim();
 	const name = String(reference?.name ?? source?.name ?? localize("Initial Skill", "Umiejętność Początkowa")).trim();
 	const identity = skillIdentity({ rulesId, specialisation, uuid, name });
+	if (!identity && race) {
+		throw new RaceDefinitionError(race, localize(
+			`${location}: Skill reference has no rulesId, UUID, or name and therefore has no stable identity. Re-add the Skill.`,
+			`${location}: odwołanie do Umiejętności nie ma rulesId, UUID ani nazwy, więc nie posiada stabilnej tożsamości. Dodaj Umiejętność ponownie.`,
+		));
+	}
 	return { reference: foundry.utils.deepClone(reference ?? {}), source, rulesId, specialisation, name, identity };
 }
 
@@ -352,7 +473,7 @@ function ageSkillModifier(race, age) {
 		? race.system.age.skillCountModifiers
 		: [];
 	const match = bands.find((band) => age >= wholeNumber(band?.minAge, 0) && age <= wholeNumber(band?.maxAge, 0));
-	return match ? integer(band.modifier, 0) : 0;
+	return match ? integer(match.modifier, 0) : 0;
 }
 
 function numericAge(actor) {
@@ -377,6 +498,14 @@ function skillIdentity({ rulesId, specialisation, uuid, name }) {
 	if (stableUuid) return `uuid:${stableUuid}::${spec}`;
 	const normalizedName = normalize(name);
 	return normalizedName ? `name:${normalizedName}::${spec}` : "";
+}
+
+function skillReferenceHasIdentity(reference) {
+	return Boolean(
+		String(reference?.rulesId ?? "").trim() ||
+		String(reference?.uuid ?? "").trim() ||
+		String(reference?.name ?? "").trim(),
+	);
 }
 
 function choiceLabel(choice) {
@@ -441,6 +570,35 @@ function classLabel(id) {
 	return game.i18n.lang === "pl" ? pair[1] : pair[0];
 }
 
+function firstCoverageRun(coverage, expected) {
+	for (let value = 1; value <= 100; value += 1) {
+		if (coverage[value] !== expected) continue;
+		let end = value;
+		while (end + 1 <= 100 && coverage[end + 1] === expected) end += 1;
+		return { start: value, end };
+	}
+	return null;
+}
+
+function firstCoverageAboveOne(coverage) {
+	for (let value = 1; value <= 100; value += 1) {
+		if (coverage[value] <= 1) continue;
+		let end = value;
+		while (end + 1 <= 100 && coverage[end + 1] > 1) end += 1;
+		return { start: value, end };
+	}
+	return null;
+}
+
+function rangeLabel(row) {
+	return rangeText(wholeNumber(row?.min, 0), wholeNumber(row?.max, 0));
+}
+
+function rangeText(start, end) {
+	const format = (value) => String(value).padStart(2, "0");
+	return start === end ? format(start) : `${format(start)}–${format(end)}`;
+}
+
 function classicSheetRoot(root) {
 	if (root?.classList?.contains("wfrp1ed-classic-sheet")) return root;
 	return root?.querySelector?.(".wfrp1ed-classic-sheet") ?? null;
@@ -471,7 +629,15 @@ function escapeHtml(value) {
 		.replaceAll("'", "&#039;");
 }
 function localize(english, polish) { return game.i18n.lang === "pl" ? polish : english; }
-function reportError(error) {
+function reportError(error, race) {
 	console.error("WFRP1ED | Race initial Skill generation failed.", error);
-	ui.notifications.error(error?.message ?? String(error));
+	if (error instanceof RaceDefinitionError) {
+		ui.notifications.error(error.message);
+		return;
+	}
+	const detail = error?.message ?? String(error);
+	ui.notifications.error(localize(
+		`Initial Skill generation failed for Race ${race?.name ?? "?"}: ${detail}`,
+		`Nie udało się wygenerować Umiejętności początkowych dla Rasy ${race?.name ?? "?"}: ${detail}`,
+	));
 }
