@@ -1,5 +1,6 @@
 import { LanguageData } from "../data-models/item/LanguageData.mjs";
 import { LanguageItemSheet } from "../sheets/LanguageItemSheet.mjs";
+import "../races/RaceLanguageAuthoringIntegration.mjs";
 
 const { DocumentSheetConfig } = foundry.applications.apps;
 const { Item } = foundry.documents;
