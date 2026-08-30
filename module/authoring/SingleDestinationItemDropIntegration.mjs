@@ -10,6 +10,7 @@ const ROUTES = Object.freeze({
 });
 
 Hooks.once("ready", () => {
+	ensureRouterStyles();
 	Hooks.on("renderApplicationV2", (application, element) => {
 		const document = application?.document;
 		const root = asElement(element) ?? asElement(application.element);
@@ -189,6 +190,36 @@ function clearHighlight(surface) {
 	for (const target of surface.querySelectorAll(".wfrp-single-destination-target")) {
 		target.classList.remove("wfrp-single-destination-target");
 	}
+}
+
+function ensureRouterStyles() {
+	if (document.getElementById("wfrp1ed-single-destination-drop-style")) return;
+	const style = document.createElement("style");
+	style.id = "wfrp1ed-single-destination-drop-style";
+	style.textContent = `
+	[data-wfrp-single-destination-router="true"] {
+		transition: box-shadow 100ms ease, background-color 100ms ease;
+	}
+	[data-wfrp-single-destination-router="true"].wfrp-single-destination-drag {
+		box-shadow: inset 0 0 0 3px rgb(150 10 24 / 70%) !important;
+		background-color: rgb(130 0 15 / 3%);
+	}
+	.race-language-authoring.wfrp-single-destination-target,
+	.race-psychology-authoring.wfrp-single-destination-target,
+	.classic-psychology-panel.wfrp-single-destination-target {
+		outline: 2px dashed #a10f20 !important;
+		outline-offset: -2px;
+		background-color: rgb(145 0 18 / 10%) !important;
+		box-shadow: inset 0 0 0 1px rgb(161 15 32 / 40%) !important;
+	}
+	.classic-health-categories.wfrp-single-destination-target {
+		padding: 3px !important;
+		border: 2px dashed #a10f20 !important;
+		border-radius: 6px;
+		background: rgb(145 0 18 / 10%) !important;
+	}
+	`;
+	document.head.append(style);
 }
 
 function asElement(value) {
