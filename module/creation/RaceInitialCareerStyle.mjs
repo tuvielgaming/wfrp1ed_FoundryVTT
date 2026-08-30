@@ -1,3 +1,5 @@
+import "../sheets/CharacterGenderIntegration.mjs";
+
 const STYLE_ID = "wfrp1ed-race-initial-career-style";
 
 if (!document.getElementById(STYLE_ID)) {
