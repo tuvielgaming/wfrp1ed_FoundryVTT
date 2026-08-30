@@ -311,7 +311,7 @@ async function packageDialog({ title, rows, seedEntryId, minInitialSkills, mode,
 		</div>`;
 
 	return DialogV2.wait({
-		window: { title }, content, modal: true, rejectClose: false,
+		window: { title }, content, modal: false, rejectClose: false,
 		render: (_event, dialog) => {
 			const list = dialog.element.querySelector("[data-race-package-drop-target]");
 			const chooseInput = dialog.element.querySelector('input[name="choose"]');
@@ -382,7 +382,7 @@ async function editPackageDialog(packageEntry, initialMembers, freeRows) {
 		</div>`;
 
 	return DialogV2.wait({
-		window: { title: localize("Edit racial Skill package", "Edytuj pakiet rasowych Umiejętności") }, content, modal: true, rejectClose: false,
+		window: { title: localize("Edit racial Skill package", "Edytuj pakiet rasowych Umiejętności") }, content, modal: false, rejectClose: false,
 		render: (_event, dialog) => {
 			const list = dialog.element.querySelector(".career-package-editor__members");
 			const add = dialog.element.querySelector("[data-package-add]");
