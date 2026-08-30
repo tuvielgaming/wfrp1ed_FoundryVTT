@@ -7,6 +7,7 @@ import {
 import "./RaceCharacteristicGeneration.mjs";
 import "./RaceSecondaryGeneration.mjs";
 import "./RaceHeightGeneration.mjs";
+import "./RaceStartingDetailsIntegration.mjs";
 import "./RaceInitialSkillGeneration.mjs";
 import "./RaceInitialCareerStyle.mjs";
 import "./RaceInitialCareerGeneration.mjs";
