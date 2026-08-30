@@ -7,8 +7,9 @@ install();
 
 /**
  * Race mandatory Skills use the same Skill-specialisation authoring contract as
- * Career Skills. Package settings stay package-level; the row gear edits the
- * individual Skill choice only.
+ * Career Skills. The row gear always edits the racial Skill itself using one
+ * consistent dialog, whether the Skill is standalone or belongs to a package.
+ * Package membership/mode/choose remain owned by the package icon/editor.
  */
 function install() {
 	if (RaceItemSheet.prototype.__wfrpRaceSkillSpecialisationInstalled === true) return;
@@ -84,7 +85,11 @@ export async function configureRaceSkill(sheet, entryId, requestedChoiceId = "")
 	if (!result) return;
 
 	const nextEntry = foundry.utils.deepClone(entry);
-	if (!packaged) nextEntry.minInitialSkills = result.minInitialSkills;
+	/* minInitialSkills is entry-level data. In a package every member shares this
+	 * threshold, so editing it from any member's full Skill dialog intentionally
+	 * updates the package entry as a whole. Membership/mode/choose remain package-
+	 * editor concerns. */
+	nextEntry.minInitialSkills = result.minInitialSkills;
 	nextEntry.choices[choiceIndex] = result.choice;
 	normalizeChoiceLabel(nextEntry.choices[choiceIndex]);
 
@@ -95,7 +100,7 @@ export async function configureRaceSkill(sheet, entryId, requestedChoiceId = "")
 
 async function skillDialog({ entry, choice, fields, packaged }) {
 	const title = localize("Configure racial Skill", "Konfiguruj rasową Umiejętność");
-	const threshold = packaged ? "" : `
+	const threshold = `
 		<label class="wfrp1ed-race-skill-config__threshold">
 			<span>${escapeHtml(localize("Applies from initial Skill count", "Obowiązuje od liczby początkowych Umiejętności"))}</span>
 			<input type="number" name="minInitialSkills" min="1" step="1" value="${Math.max(1, integer(entry?.minInitialSkills, 1))}">
@@ -108,8 +113,8 @@ async function skillDialog({ entry, choice, fields, packaged }) {
 				${fields.map(specialisationFieldHtml).join("")}
 				<p class="hint">${escapeHtml(packaged
 					? localize(
-						"Package settings are edited with the package icon. This window changes only this Skill.",
-						"Ustawienia pakietu edytuje się ikoną pakietu. To okno zmienia wyłącznie tę Umiejętność.",
+						"This is the same Skill editor used for standalone racial Skills. The threshold is shared by all members of this package; membership, mode, and number selected are edited with the package icon.",
+						"To ten sam edytor Umiejętności, którego używają samodzielne rasowe Umiejętności. Próg obowiązuje wspólnie wszystkich członków tego pakietu; skład pakietu, tryb i liczbę wybieranych edytuje się ikoną pakietu.",
 					)
 					: localize(
 						"Core suggestions copy a value into the free-text field. You can replace it with any custom specialisation.",
@@ -155,9 +160,7 @@ async function skillDialog({ entry, choice, fields, packaged }) {
 				}];
 				applySpecialisations([nextChoice], effectiveFields, data);
 				return {
-					minInitialSkills: packaged
-						? Math.max(1, integer(entry?.minInitialSkills, 1))
-						: Math.max(1, integer(data.get("minInitialSkills"), 1)),
+					minInitialSkills: Math.max(1, integer(data.get("minInitialSkills"), 1)),
 					choice: nextChoice,
 				};
 			},
