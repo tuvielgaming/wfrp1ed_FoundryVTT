@@ -34,7 +34,7 @@ function decorateCareer(sheet, root) {
 		row.classList.add("wfrp1ed-package-draggable");
 	}
 	for (const packageNode of root.querySelectorAll('[data-career-panel="skills"] .career-compact-package[data-career-entry-id]')) {
-		ensurePackageDeleteButton(packageNode, "career");
+		ensurePackageDeleteButton(sheet, packageNode, "career");
 	}
 	bindRoot(sheet, root, "career");
 }
@@ -47,7 +47,7 @@ function decorateRace(sheet, root) {
 	}
 	for (const packageNode of root.querySelectorAll('.race-mandatory-compact-package[data-race-entry-id]')) {
 		packageNode.querySelector(".race-mandatory-package-actions")?.remove();
-		ensurePackageDeleteButton(packageNode, "race");
+		ensurePackageDeleteButton(sheet, packageNode, "race");
 	}
 	bindRoot(sheet, root, "race");
 }
@@ -117,14 +117,13 @@ function careerPayload(target) {
 }
 
 function racePayload(sheet, target) {
-	const packageNode = target?.closest?.('.race-mandatory-compact-package[data-race-entry-id]');
-	const member = target?.closest?.('.career-compact-package__member');
-	if (packageNode && member) {
-		const entryId = String(packageNode.dataset.raceEntryId ?? "");
-		const entry = findEntry(sheet.document.system?.mandatorySkills, entryId);
-		const label = String(member.querySelector('.career-compact-row__name')?.textContent ?? "").trim();
-		const choice = cloneArray(entry?.choices).find((candidate) => choiceLabel(candidate) === label);
-		return { kind: "race", entryId, choiceId: String(choice?.id ?? "") };
+	const member = target?.closest?.('.career-compact-package__member[data-race-entry-id]');
+	if (member instanceof HTMLElement) {
+		return {
+			kind: "race",
+			entryId: String(member.dataset.raceEntryId ?? ""),
+			choiceId: String(member.dataset.raceChoiceId ?? ""),
+		};
 	}
 	const row = target?.closest?.('.race-mandatory-compact-row[data-race-entry-id]');
 	if (!(row instanceof HTMLElement)) return null;
@@ -166,13 +165,12 @@ async function handleCareerInternal(sheet, source, target) {
 
 	if (target.type === "list") {
 		if (cloneArray(sourceEntry.choices).length <= 1) return;
-		const next = detachChoice(entries, source.entryId, source.choiceId, careerStandalone);
-		await sheet.document.update({ "system.skills": next });
+		await sheet.document.update({ "system.skills": detachChoice(entries, source.entryId, source.choiceId, careerStandalone) });
 		return;
 	}
 	if (target.entryId === source.entryId) return;
 
-	let next = removeChoiceForMove(entries, source.entryId, source.choiceId, careerStandalone);
+	let next = removeChoiceForMove(entries, source.entryId, source.choiceId);
 	if (target.type === "package") next = addChoiceToCareerPackage(next, target.entryId, sourceChoice);
 	else next = mergeCareerWithFreeTarget(next, target.entryId, sourceChoice);
 	await sheet.document.update({ "system.skills": next });
@@ -188,13 +186,12 @@ async function handleRaceInternal(sheet, source, target) {
 
 	if (target.type === "list") {
 		if (cloneArray(sourceEntry.choices).length <= 1) return;
-		const next = detachChoice(entries, source.entryId, source.choiceId, raceStandalone);
-		await sheet.document.update({ "system.mandatorySkills": next });
+		await sheet.document.update({ "system.mandatorySkills": detachChoice(entries, source.entryId, source.choiceId, raceStandalone) });
 		return;
 	}
 	if (target.entryId === source.entryId) return;
 
-	let next = removeChoiceForMove(entries, source.entryId, source.choiceId, raceStandalone);
+	let next = removeChoiceForMove(entries, source.entryId, source.choiceId);
 	if (target.type === "package") next = addChoiceToRacePackage(next, target.entryId, sourceChoice);
 	else next = mergeRaceWithFreeTarget(next, target.entryId, sourceChoice);
 	await sheet.document.update({ "system.mandatorySkills": next });
@@ -206,9 +203,7 @@ async function handleCareerExternal(sheet, document, target) {
 	const grant = careerGrant(document);
 	if (grantPresent(entries, grant)) return warn(localize("This Skill is already listed in the Career.", "Ta Umiejętność jest już wpisana w Profesji."));
 	const choice = careerChoice(grant);
-	const next = target.type === "package"
-		? addChoiceToCareerPackage(entries, target.entryId, choice)
-		: mergeCareerWithFreeTarget(entries, target.entryId, choice);
+	const next = target.type === "package" ? addChoiceToCareerPackage(entries, target.entryId, choice) : mergeCareerWithFreeTarget(entries, target.entryId, choice);
 	await sheet.document.update({ "system.skills": next });
 }
 
@@ -218,9 +213,7 @@ async function handleRaceExternal(sheet, document, target) {
 	const grant = raceGrant(document);
 	if (grantPresent(entries, grant)) return warn(localize("This Skill is already listed in the Race.", "Ta Umiejętność jest już wpisana w Rasie."));
 	const choice = raceChoice(grant);
-	const next = target.type === "package"
-		? addChoiceToRacePackage(entries, target.entryId, choice)
-		: mergeRaceWithFreeTarget(entries, target.entryId, choice);
+	const next = target.type === "package" ? addChoiceToRacePackage(entries, target.entryId, choice) : mergeRaceWithFreeTarget(entries, target.entryId, choice);
 	await sheet.document.update({ "system.mandatorySkills": next });
 }
 
@@ -228,27 +221,27 @@ function detachChoice(entries, entryId, choiceId, standaloneFactory) {
 	const next = cloneArray(entries);
 	const index = next.findIndex((entry) => String(entry?.id ?? "") === entryId);
 	if (index < 0) return next;
-	const entry = next[index];
-	const choices = cloneArray(entry.choices);
+	const sourceMeta = foundry.utils.deepClone(next[index]);
+	const choices = cloneArray(next[index].choices);
 	const detached = choices.find((choice) => String(choice?.id ?? "") === choiceId);
 	if (!detached) return next;
-	entry.choices = choices.filter((choice) => String(choice?.id ?? "") !== choiceId);
+	next[index].choices = choices.filter((choice) => String(choice?.id ?? "") !== choiceId);
 	normalizeEntryAfterRemoval(next, index);
-	next.splice(Math.min(index + 1, next.length), 0, standaloneFactory(detached, entry));
+	const insertion = Math.min(index + 1, next.length);
+	next.splice(insertion, 0, standaloneFactory(detached, sourceMeta));
 	return next;
 }
 
-function removeChoiceForMove(entries, entryId, choiceId, standaloneFactory) {
+function removeChoiceForMove(entries, entryId, choiceId) {
 	const next = cloneArray(entries);
 	const index = next.findIndex((entry) => String(entry?.id ?? "") === entryId);
 	if (index < 0) return next;
-	const entry = next[index];
-	const choices = cloneArray(entry.choices);
-	if (choices.length === 1) {
+	const choices = cloneArray(next[index].choices);
+	if (choices.length <= 1) {
 		next.splice(index, 1);
 		return next;
 	}
-	entry.choices = choices.filter((choice) => String(choice?.id ?? "") !== choiceId);
+	next[index].choices = choices.filter((choice) => String(choice?.id ?? "") !== choiceId);
 	normalizeEntryAfterRemoval(next, index);
 	return next;
 }
@@ -266,7 +259,7 @@ function normalizeEntryAfterRemoval(entries, index) {
 
 function addChoiceToCareerPackage(entries, targetId, choice) {
 	const next = cloneArray(entries);
-	const target = findEntry(next, targetId);
+	const target = findEntryMutable(next, targetId);
 	if (!target) return next;
 	target.choices = [...cloneArray(target.choices), foundry.utils.deepClone(choice)];
 	if (target.choices.length > 1 && String(target.mode) === CAREER_ENTRY_MODE.ALL) {
@@ -278,7 +271,7 @@ function addChoiceToCareerPackage(entries, targetId, choice) {
 
 function addChoiceToRacePackage(entries, targetId, choice) {
 	const next = cloneArray(entries);
-	const target = findEntry(next, targetId);
+	const target = findEntryMutable(next, targetId);
 	if (!target) return next;
 	target.choices = [...cloneArray(target.choices), foundry.utils.deepClone(choice)];
 	if (target.choices.length > 1 && String(target.mode) === RACE_INITIAL_SKILL_MODE.ALL) {
@@ -290,7 +283,7 @@ function addChoiceToRacePackage(entries, targetId, choice) {
 
 function mergeCareerWithFreeTarget(entries, targetId, choice) {
 	const next = cloneArray(entries);
-	const target = findEntry(next, targetId);
+	const target = findEntryMutable(next, targetId);
 	if (!target) return next;
 	if (cloneArray(target.choices).length > 1) return addChoiceToCareerPackage(next, targetId, choice);
 	target.choices = [cloneArray(target.choices)[0], foundry.utils.deepClone(choice)].filter(Boolean);
@@ -301,7 +294,7 @@ function mergeCareerWithFreeTarget(entries, targetId, choice) {
 
 function mergeRaceWithFreeTarget(entries, targetId, choice) {
 	const next = cloneArray(entries);
-	const target = findEntry(next, targetId);
+	const target = findEntryMutable(next, targetId);
 	if (!target) return next;
 	if (cloneArray(target.choices).length > 1) return addChoiceToRacePackage(next, targetId, choice);
 	target.choices = [cloneArray(target.choices)[0], foundry.utils.deepClone(choice)].filter(Boolean);
@@ -310,7 +303,7 @@ function mergeRaceWithFreeTarget(entries, targetId, choice) {
 	return next;
 }
 
-function ensurePackageDeleteButton(packageNode, kind) {
+function ensurePackageDeleteButton(sheet, packageNode, kind) {
 	if (packageNode.querySelector("[data-wfrp-delete-package]")) return;
 	const edit = packageNode.querySelector(".career-compact-package__tab");
 	if (!(edit instanceof HTMLElement)) return;
@@ -325,8 +318,7 @@ function ensurePackageDeleteButton(packageNode, kind) {
 		event.preventDefault();
 		event.stopPropagation();
 		const entryId = kind === "career" ? String(packageNode.dataset.careerEntryId ?? "") : String(packageNode.dataset.raceEntryId ?? "");
-		const sheet = closestSheetApplication(packageNode, kind);
-		if (!sheet || !entryId) return;
+		if (!entryId) return;
 		const path = kind === "career" ? "skills" : "mandatorySkills";
 		const entries = cloneArray(sheet.document.system?.[path]).filter((entry) => String(entry?.id ?? "") !== entryId);
 		await sheet.document.update({ [`system.${path}`]: entries });
@@ -346,11 +338,9 @@ function ensureRaceMemberControls(sheet, row) {
 	row.dataset.raceChoiceId = String(choice.id ?? "");
 	const controls = document.createElement("div");
 	controls.className = "career-compact-row__controls";
-	controls.innerHTML = `<button type="button" data-race-member-configure title="${escapeHtml(localize("Configure package rule", "Konfiguruj regułę pakietu"))}"><i class="fa-solid fa-gear"></i></button><button type="button" data-race-member-delete title="${escapeHtml(localize("Delete from Race", "Usuń z Rasy"))}"><i class="fa-solid fa-trash"></i></button>`;
+	controls.innerHTML = `<button type="button" data-race-member-configure title="${escapeHtml(localize("Configure package", "Konfiguruj pakiet"))}"><i class="fa-solid fa-gear"></i></button><button type="button" data-race-member-delete title="${escapeHtml(localize("Delete from Race", "Usuń z Rasy"))}"><i class="fa-solid fa-trash"></i></button>`;
 	row.append(controls);
-	controls.querySelector("[data-race-member-configure]")?.addEventListener("click", () => {
-		packageNode.querySelector(".career-compact-package__tab")?.click();
-	});
+	controls.querySelector("[data-race-member-configure]")?.addEventListener("click", () => packageNode.querySelector(".career-compact-package__tab")?.click());
 	controls.querySelector("[data-race-member-delete]")?.addEventListener("click", async () => {
 		const entries = cloneArray(sheet.document.system?.mandatorySkills);
 		const index = entries.findIndex((candidate) => String(candidate?.id ?? "") === entryId);
@@ -361,79 +351,37 @@ function ensureRaceMemberControls(sheet, row) {
 	});
 }
 
-function closestSheetApplication(node, kind) {
-	const root = node.closest(kind === "career" ? ".career-item-sheet" : ".race-item-sheet");
-	const apps = foundry.applications.instances ?? foundry.applications.api?.ApplicationV2?.instances;
-	if (apps?.values) {
-		for (const app of apps.values()) if (app?.element === root || app?.element?.contains?.(node)) return app;
-	}
-	return null;
-}
-
 function careerStandalone(choice, source) {
 	return { id: foundry.utils.randomID(), chance: percentage(source?.chance), mode: CAREER_ENTRY_MODE.ALL, choose: 1, note: String(source?.note ?? ""), choices: [foundry.utils.deepClone(choice)] };
 }
-
 function raceStandalone(choice, source) {
 	return { id: foundry.utils.randomID(), minInitialSkills: Math.max(1, integer(source?.minInitialSkills, 1)), mode: RACE_INITIAL_SKILL_MODE.ALL, choose: 1, choices: [foundry.utils.deepClone(choice)] };
 }
-
 function careerGrant(document) {
 	return { uuid: String(document.uuid ?? ""), rulesId: String(document.system?.rulesId ?? ""), name: String(document.name ?? ""), specialisation: String(document.system?.specialisation ?? document.system?.specialization ?? ""), documentType: "Item", documentSubtype: "skill", quantity: 1 };
 }
-
 function raceGrant(document) {
 	return { uuid: String(document.uuid ?? ""), rulesId: String(document.system?.rulesId ?? ""), name: String(document.name ?? ""), specialisation: String(document.system?.specialisation ?? document.system?.specialization ?? "") };
 }
-
 function careerChoice(grant) { return { id: foundry.utils.randomID(), label: grantName(grant), grants: [grant] }; }
 function raceChoice(grant) { return { id: foundry.utils.randomID(), label: grantName(grant), grants: [grant] }; }
-
-function grantPresent(entries, grant) {
-	return cloneArray(entries).some((entry) => cloneArray(entry?.choices).some((choice) => cloneArray(choice?.grants).some((candidate) => sameReference(candidate, grant))));
-}
-
+function grantPresent(entries, grant) { return cloneArray(entries).some((entry) => cloneArray(entry?.choices).some((choice) => cloneArray(choice?.grants).some((candidate) => sameReference(candidate, grant)))); }
 function sameReference(a, b) {
-	const ar = String(a?.rulesId ?? "");
-	const br = String(b?.rulesId ?? "");
-	const as = String(a?.specialisation ?? "");
-	const bs = String(b?.specialisation ?? "");
+	const ar = String(a?.rulesId ?? ""); const br = String(b?.rulesId ?? "");
+	const as = String(a?.specialisation ?? ""); const bs = String(b?.specialisation ?? "");
 	if (ar && br) return ar === br && as === bs;
 	return Boolean(String(a?.uuid ?? "")) && String(a?.uuid ?? "") === String(b?.uuid ?? "") && as === bs;
 }
-
-function grantName(grant) {
-	const name = String(grant?.name ?? grant?.rulesId ?? "").trim();
-	const spec = String(grant?.specialisation ?? "").trim();
-	return spec ? `${name} (${spec})` : name;
-}
-
-function choiceLabel(choice) {
-	return String(choice?.label ?? "").trim() || cloneArray(choice?.grants).map(grantName).filter(Boolean).join(" + ") || "—";
-}
-
+function grantName(grant) { const name = String(grant?.name ?? grant?.rulesId ?? "").trim(); const spec = String(grant?.specialisation ?? "").trim(); return spec ? `${name} (${spec})` : name; }
+function choiceLabel(choice) { return String(choice?.label ?? "").trim() || cloneArray(choice?.grants).map(grantName).filter(Boolean).join(" + ") || "—"; }
 function findEntry(entries, id) { return cloneArray(entries).find((entry) => String(entry?.id ?? "") === String(id)); }
+function findEntryMutable(entries, id) { return entries.find((entry) => String(entry?.id ?? "") === String(id)); }
 function cloneArray(value) { const source = value?.toObject?.() ?? value; return Array.isArray(source) ? foundry.utils.deepClone(source) : []; }
 function integer(value, fallback = 0) { const n = Number(value); return Number.isFinite(n) ? Math.trunc(n) : fallback; }
 function percentage(value) { return Math.max(0, Math.min(100, integer(value, 100))); }
-
-function readInternal(event) {
-	try {
-		const raw = event.dataTransfer?.getData(INTERNAL_MIME);
-		return raw ? JSON.parse(raw) : null;
-	} catch (_error) { return null; }
-}
-
-function readFoundryDragData(event) {
-	try { return TextEditor.getDragEventData(event); } catch (_error) { return null; }
-}
-
-async function resolveItem(data) {
-	if (!data?.uuid) return null;
-	const document = await fromUuid(String(data.uuid));
-	return document instanceof foundry.documents.Item ? document : null;
-}
-
+function readInternal(event) { try { const raw = event.dataTransfer?.getData(INTERNAL_MIME); return raw ? JSON.parse(raw) : null; } catch (_error) { return null; } }
+function readFoundryDragData(event) { try { return TextEditor.getDragEventData(event); } catch (_error) { return null; } }
+async function resolveItem(data) { if (!data?.uuid) return null; const document = await fromUuid(String(data.uuid)); return document instanceof foundry.documents.Item ? document : null; }
 function warn(message) { ui.notifications.info(message); }
 function reportError(error) { console.error("WFRP1ED | Package row drag/drop failed.", error); ui.notifications.error(error?.message ?? String(error)); }
 function escapeHtml(value) { return foundry.utils.escapeHTML(String(value ?? "")); }
