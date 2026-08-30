@@ -1,4 +1,9 @@
 import { CharacterCreationMode } from "./CharacterCreationModeIntegration.mjs";
+import {
+	applyCreationValuePresentation,
+	canonicalCareerClass,
+	careerClassLabel,
+} from "./CharacterCreationValuePresentation.mjs";
 import "./RaceCharacteristicGeneration.mjs";
 import "./RaceSecondaryGeneration.mjs";
 import "./RaceHeightGeneration.mjs";
@@ -9,7 +14,7 @@ import "./RaceInitialCareerGeneration.mjs";
 const CAREER_CLASSES = Object.freeze([
 	Object.freeze({ id: "warrior", pl: "Wojownik", en: "Warrior" }),
 	Object.freeze({ id: "ranger", pl: "Wędrowiec", en: "Ranger" }),
-	Object.freeze({ id: "rogue", pl: "Łotr", en: "Rogue" }),
+	Object.freeze({ id: "rogue", pl: "Łotrzyk", en: "Rogue" }),
 	Object.freeze({ id: "academic", pl: "Uczony", en: "Academic" }),
 ]);
 
@@ -21,7 +26,7 @@ export class CareerClassEligibility {
 	static classes() { return CAREER_CLASSES; }
 
 	static evaluate(actor, classId) {
-		const id = String(classId ?? "").trim();
+		const id = canonicalCareerClass(classId);
 		const requirements = requirementsFor(actor, id);
 		if (!requirements.length) {
 			return { eligible: false, requirements: [], failed: [], reason: localize("Unknown Career Class.", "Nieznana Klasa Profesji.") };
@@ -45,10 +50,14 @@ function installCharacterCreationClassSelector() {
 	Hooks.on("renderApplicationV2", (application, element) => {
 		const actor = application?.document;
 		if (actor?.documentName !== "Actor" || actor.type !== "character") return;
-		if (!CharacterCreationMode.enabled(actor)) return;
 
 		const root = asElement(element) ?? asElement(application?.element);
 		if (!(root instanceof HTMLElement)) return;
+
+		if (!CharacterCreationMode.enabled(actor)) {
+			presentStoredCareerClass(actor, root);
+			return;
+		}
 
 		/* Run once immediately and once after the current render-hook queue. Some
 		 * Classic-sheet integrations still decorate the header during render;
@@ -81,6 +90,19 @@ function installCharacterCreationClassSelector() {
 	}
 }
 
+function presentStoredCareerClass(actor, root) {
+	const sheet = classicSheetRoot(root);
+	if (!(sheet instanceof HTMLElement)) return;
+	const field = sheet.querySelector(".header-field--career-class");
+	if (!(field instanceof HTMLElement)) return;
+	const stored = actor.system?.details?.careerClass;
+	applyCreationValuePresentation(field, {
+		inputName: "system.details.careerClass",
+		displayValue: careerClassLabel(stored) || "—",
+		fullLabel: careerClassLabel(stored) || localize("Career Class not selected", "Klasa Zawodowa nie została wybrana"),
+	});
+}
+
 function syncSelector(actor, root) {
 	const sheet = classicSheetRoot(root);
 	if (!(sheet instanceof HTMLElement)) return;
@@ -90,8 +112,6 @@ function syncSelector(actor, root) {
 
 	let select = field.querySelector("select.wfrp1ed-career-class-selector");
 	if (!(select instanceof HTMLSelectElement)) {
-		/* Do not rely on the input retaining a particular name. Other header
-		 * integrations may change/remove form ownership while decorating fields. */
 		const input = field.querySelector("input");
 		if (!(input instanceof HTMLInputElement)) return;
 
@@ -112,7 +132,7 @@ function syncSelector(actor, root) {
 }
 
 function populateSelector(actor, select) {
-	const current = canonicalClassId(actor.system?.details?.careerClass);
+	const current = canonicalCareerClass(actor.system?.details?.careerClass);
 	select.replaceChildren();
 
 	const placeholder = document.createElement("option");
@@ -168,17 +188,6 @@ function characteristicLabel(id) {
 	const labels = { ws: ["WW", "WS"], bs: ["US", "BS"], i: ["I", "I"], int: ["Int", "Int"], wp: ["SW", "WP"] };
 	const pair = labels[id] ?? [id, id];
 	return game.i18n.lang === "pl" ? pair[0] : pair[1];
-}
-
-function canonicalClassId(value) {
-	const normalized = normalize(value);
-	const aliases = {
-		warrior: "warrior", wojownik: "warrior",
-		ranger: "ranger", "wędrowiec": "ranger", wedrowiec: "ranger",
-		rogue: "rogue", "łotr": "rogue", lotr: "rogue", "łotrzyk": "rogue", lotrzyk: "rogue",
-		academic: "academic", uczony: "academic",
-	};
-	return aliases[normalized] ?? "";
 }
 
 function classicSheetRoot(root) {
