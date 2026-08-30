@@ -1,0 +1,45 @@
+<section class="psychology-sheet-content">
+	<header class="psychology-sheet-header wfrp1ed-item-header">
+		<img
+			class="psychology-sheet-image wfrp1ed-item-header__image"
+			data-wfrp1ed-item-image
+			src="{{item.img}}"
+			alt="{{item.name}}"
+		>
+
+		<div class="psychology-sheet-field psychology-sheet-field--name">
+			<label for="psychology-name-{{item.id}}">{{ui.name}}</label>
+			<input
+				id="psychology-name-{{item.id}}"
+				type="text"
+				name="name"
+				value="{{item.name}}"
+				autocomplete="off"
+				required
+				{{#unless editable}}disabled{{/unless}}
+			>
+		</div>
+	</header>
+
+	<div class="psychology-sheet-field psychology-sheet-field--rules-id">
+		<label for="psychology-rules-id-{{item.id}}" data-tooltip="{{ui.rulesIdHint}}">{{ui.rulesId}}</label>
+		<input
+			id="psychology-rules-id-{{item.id}}"
+			type="text"
+			name="system.rulesId"
+			value="{{system.rulesId}}"
+			autocomplete="off"
+			{{#unless editable}}disabled{{/unless}}
+		>
+	</div>
+
+	<div class="psychology-sheet-field psychology-sheet-field--description">
+		<label for="psychology-description-{{item.id}}">{{ui.description}}</label>
+		<textarea
+			id="psychology-description-{{item.id}}"
+			name="system.description"
+			spellcheck="true"
+			{{#unless editable}}disabled{{/unless}}
+		>{{system.description}}</textarea>
+	</div>
+</section>
