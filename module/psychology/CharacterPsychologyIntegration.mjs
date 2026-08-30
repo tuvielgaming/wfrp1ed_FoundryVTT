@@ -1,3 +1,5 @@
+import { PsychologyHealthManagerWindow } from "./PsychologyHealthManagerWindow.mjs";
+
 const PSYCHOLOGY_TYPE = "psychology";
 const FLAG_SCOPE = "wfrp1ed";
 const RACE_GRANT_FLAG = "racePsychologyGrant";
@@ -18,6 +20,16 @@ Hooks.once("ready", () => {
 		if (!(section instanceof HTMLElement)) return;
 		renderPsychologyPanel(section, actor, application.isEditable === true);
 	});
+
+	for (const hookName of ["createItem", "updateItem", "deleteItem"]) {
+		Hooks.on(hookName, (item) => {
+			const actor = item?.parent;
+			if (actor?.documentName !== "Actor" || actor.type !== "character") return;
+			if (!PsychologyHealthManagerWindow.categories().some((category) => category.itemType === item.type)) return;
+			void PsychologyHealthManagerWindow.refresh(actor).catch(reportError);
+			if (actor.sheet?.rendered) void actor.sheet.render({ force: true });
+		});
+	}
 });
 
 function renderPsychologyPanel(section, actor, editable) {
@@ -33,11 +45,13 @@ function renderPsychologyPanel(section, actor, editable) {
 	panel.replaceChildren();
 	panel.title = editable
 		? localize("Drop a Psychology Item anywhere on this Character sheet.", "Upuść Przedmiot Psychologii w dowolnym miejscu tej karty Postaci.")
-		: localize("Character Psychology", "Psychologia Postaci");
+		: localize("Psychology and Health", "Psychika i Zdrowie");
+
+	panel.append(managerLauncher(actor));
 
 	const list = document.createElement("div");
 	list.className = "classic-psychology-list";
-	const items = [...(actor.items ?? [])].filter((item) => item?.type === PSYCHOLOGY_TYPE);
+	const items = psychologyItems(actor);
 	if (!items.length) {
 		const empty = document.createElement("div");
 		empty.className = "classic-psychology-empty";
@@ -46,7 +60,7 @@ function renderPsychologyPanel(section, actor, editable) {
 			: "—";
 		list.append(empty);
 	} else {
-		for (const item of items) list.append(psychologyRow(item, editable));
+		for (const item of items) list.append(psychologyRow(item, actor));
 	}
 	panel.append(list);
 
@@ -55,13 +69,51 @@ function renderPsychologyPanel(section, actor, editable) {
 	if (editable) installDropListeners(panel, actor);
 }
 
-function psychologyRow(item, editable) {
+function managerLauncher(actor) {
+	const button = document.createElement("button");
+	button.type = "button";
+	button.className = "classic-health-category classic-psychology-health-launcher";
+	button.title = localize(
+		"Open Psychology and Health Manager",
+		"Otwórz menedżer Psychiki i Zdrowia",
+	);
+	button.setAttribute("aria-label", button.title);
+
+	const icon = document.createElement("i");
+	icon.className = "fas fa-brain";
+	icon.setAttribute("aria-hidden", "true");
+	button.append(icon);
+
+	const label = document.createElement("span");
+	label.className = "classic-health-category__label";
+	label.textContent = localize("Psychology & Health", "Psychika i Zdrowie");
+	button.append(label);
+
+	const count = PsychologyHealthManagerWindow.count(actor);
+	const badge = document.createElement("span");
+	badge.className = "classic-health-category__count";
+	badge.textContent = String(count);
+	badge.hidden = count === 0;
+	button.append(badge);
+
+	button.addEventListener("click", (event) => {
+		event.preventDefault();
+		event.stopPropagation();
+		void PsychologyHealthManagerWindow.open(actor, { tab: "psychology" }).catch(reportError);
+	});
+	return button;
+}
+
+function psychologyRow(item, actor) {
 	const row = document.createElement("div");
 	row.className = "classic-psychology-row";
 	row.dataset.itemId = String(item.id ?? "");
 	const raceGrant = Boolean(item.getFlag?.(FLAG_SCOPE, RACE_GRANT_FLAG));
 	if (raceGrant) row.classList.add("is-race-granted");
-	row.title = String(item.system?.description ?? "").trim() || item.name;
+	row.title = localize(
+		`Open Psychology and Health Manager — ${item.name}`,
+		`Otwórz menedżer Psychiki i Zdrowia — ${item.name}`,
+	);
 
 	const name = document.createElement("button");
 	name.type = "button";
@@ -69,7 +121,7 @@ function psychologyRow(item, editable) {
 	name.textContent = String(item.name ?? "");
 	name.addEventListener("click", (event) => {
 		event.preventDefault();
-		void item.sheet?.render({ force: true });
+		void PsychologyHealthManagerWindow.open(actor, { tab: "psychology" }).catch(reportError);
 	});
 	row.append(name);
 
@@ -83,17 +135,15 @@ function psychologyRow(item, editable) {
 		);
 		row.append(badge);
 	}
-
-	if (editable && !raceGrant) {
-		const remove = iconButton("fa-solid fa-trash", localize("Remove Psychology", "Usuń Psychologię"));
-		remove.addEventListener("click", (event) => {
-			event.preventDefault();
-			event.stopPropagation();
-			void item.delete().catch(reportError);
-		});
-		row.append(remove);
-	}
 	return row;
+}
+
+function psychologyItems(actor) {
+	return [...(actor.items ?? [])]
+		.filter((item) => item?.type === PSYCHOLOGY_TYPE)
+		.sort((a, b) => String(a.name ?? "").localeCompare(
+			String(b.name ?? ""), game.i18n.lang, { sensitivity: "base" },
+		));
 }
 
 function installDropListeners(panel, actor) {
@@ -132,7 +182,7 @@ async function embedPsychologyFromDrop(actor, data) {
 	if (!(source instanceof foundry.documents.Item) || source.type !== PSYCHOLOGY_TYPE) return warnWrongDrop();
 
 	const identity = canonicalIdentity(source);
-	if ([...(actor.items ?? [])].some((item) => item.type === PSYCHOLOGY_TYPE && canonicalIdentity(item) === identity)) {
+	if (psychologyItems(actor).some((item) => canonicalIdentity(item) === identity)) {
 		ui.notifications.warn(localize(
 			`${source.name} is already on this Character.`,
 			`${source.name} jest już na tej Postaci.`,
@@ -151,18 +201,6 @@ async function embedPsychologyFromDrop(actor, data) {
 function canonicalIdentity(item) {
 	const rulesId = normalize(item?.system?.rulesId);
 	return rulesId || normalize(item?.name);
-}
-
-function iconButton(iconClass, title) {
-	const button = document.createElement("button");
-	button.type = "button";
-	button.className = "classic-psychology-row__remove";
-	button.title = title;
-	button.setAttribute("aria-label", title);
-	const icon = document.createElement("i");
-	icon.className = iconClass;
-	button.append(icon);
-	return button;
 }
 
 function dragData(event) {
@@ -192,7 +230,9 @@ function ensurePsychologyPanelStyles() {
 		right: 6px;
 		top: 70px;
 		bottom: 44px;
-		display: block;
+		display: flex;
+		flex-direction: column;
+		gap: 3px;
 		min-height: 0;
 		margin: 0;
 		padding: 2px 3px;
@@ -203,10 +243,26 @@ function ensurePsychologyPanelStyles() {
 		overflow: hidden;
 		pointer-events: auto;
 	}
+	.wfrp1ed-classic-sheet .sheet-overlay--psychology .classic-psychology-health-launcher {
+		flex: 0 0 auto;
+		align-self: stretch;
+		width: 100%;
+		height: 21px;
+		min-height: 21px;
+		margin: 0;
+		padding: 1px 4px;
+		font-size: 8px;
+	}
+	.wfrp1ed-classic-sheet .sheet-overlay--psychology .classic-psychology-health-launcher .classic-health-category__count {
+		min-width: 14px;
+		height: 14px;
+		padding: 0 3px;
+		font-size: 7px;
+	}
 	.wfrp1ed-classic-sheet .sheet-overlay--psychology .classic-psychology-list {
 		display: block;
+		flex: 1 1 auto;
 		width: 100%;
-		height: 100%;
 		min-height: 0;
 		overflow-y: auto;
 		overflow-x: hidden;
@@ -227,7 +283,7 @@ function ensurePsychologyPanelStyles() {
 	}
 	.wfrp1ed-classic-sheet .sheet-overlay--psychology .classic-psychology-row {
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) auto auto;
+		grid-template-columns: minmax(0, 1fr) auto;
 		align-items: center;
 		gap: 2px;
 		min-height: 18px;
@@ -268,21 +324,6 @@ function ensurePsychologyPanelStyles() {
 		font-size: 6.5px;
 		font-weight: 700;
 		line-height: 12px;
-	}
-	.wfrp1ed-classic-sheet .sheet-overlay--psychology .classic-psychology-row__remove {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 16px;
-		height: 16px;
-		min-height: 16px;
-		margin: 0;
-		padding: 0;
-		border: 0;
-		background: transparent;
-		box-shadow: none;
-		font-size: 7px;
-		color: #3a3027;
 	}
 	.wfrp1ed-classic-sheet .sheet-overlay--psychology .classic-health-categories {
 		pointer-events: auto;
