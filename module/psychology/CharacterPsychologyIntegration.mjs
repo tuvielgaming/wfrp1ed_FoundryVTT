@@ -3,6 +3,7 @@ const FLAG_SCOPE = "wfrp1ed";
 const RACE_GRANT_FLAG = "racePsychologyGrant";
 
 Hooks.once("ready", () => {
+	ensurePsychologyPanelStyles();
 	Hooks.on("renderApplicationV2", (application, element) => {
 		const actor = application?.document;
 		if (actor?.documentName !== "Actor" || actor.type !== "character") return;
@@ -30,18 +31,9 @@ function renderPsychologyPanel(section, actor, editable) {
 		else section.prepend(panel);
 	}
 	panel.replaceChildren();
-
-	const heading = document.createElement("div");
-	heading.className = "classic-psychology-panel__heading";
-	const title = document.createElement("strong");
-	title.textContent = localize("Psychology", "Psychologia");
-	heading.append(title);
-	const hint = document.createElement("span");
-	hint.textContent = editable
-		? localize("Drop Psychology", "Upuść Psychologię")
-		: localize("Psychology", "Psychologia");
-	heading.append(hint);
-	panel.append(heading);
+	panel.title = editable
+		? localize("Drop a Psychology Item anywhere on this Character sheet.", "Upuść Przedmiot Psychologii w dowolnym miejscu tej karty Postaci.")
+		: localize("Character Psychology", "Psychologia Postaci");
 
 	const list = document.createElement("div");
 	list.className = "classic-psychology-list";
@@ -50,14 +42,16 @@ function renderPsychologyPanel(section, actor, editable) {
 		const empty = document.createElement("div");
 		empty.className = "classic-psychology-empty";
 		empty.textContent = editable
-			? localize("Drop a Psychology Item here.", "Upuść tutaj Przedmiot Psychologii.")
-			: localize("No Psychology entries.", "Brak wpisów Psychologii.");
+			? localize("Drop Psychology", "Upuść Psychologię")
+			: "—";
 		list.append(empty);
 	} else {
 		for (const item of items) list.append(psychologyRow(item, editable));
 	}
 	panel.append(list);
 
+	/* Keep the local target operational as a fallback. The sheet-level
+	 * single-destination router normally handles Psychology first. */
 	if (editable) installDropListeners(panel, actor);
 }
 
@@ -181,6 +175,120 @@ function dragData(event) {
 
 function warnWrongDrop() {
 	ui.notifications.warn(localize("Drop a Psychology Item here.", "Upuść tutaj Przedmiot Psychologii."));
+}
+
+function ensurePsychologyPanelStyles() {
+	if (document.getElementById("wfrp1ed-character-psychology-layout-style")) return;
+	const style = document.createElement("style");
+	style.id = "wfrp1ed-character-psychology-layout-style";
+	style.textContent = `
+	.wfrp1ed-classic-sheet .sheet-overlay--psychology.classic-psychology-sector {
+		position: absolute !important;
+		pointer-events: none;
+	}
+	.wfrp1ed-classic-sheet .sheet-overlay--psychology .classic-psychology-panel {
+		position: absolute;
+		left: 6px;
+		right: 6px;
+		top: 42px;
+		bottom: 52px;
+		display: block;
+		min-height: 0;
+		margin: 0;
+		padding: 2px 3px;
+		border: 1px solid transparent;
+		border-radius: 2px;
+		background: transparent;
+		box-shadow: none;
+		overflow: hidden;
+		pointer-events: auto;
+	}
+	.wfrp1ed-classic-sheet .sheet-overlay--psychology .classic-psychology-list {
+		display: block;
+		width: 100%;
+		height: 100%;
+		min-height: 0;
+		overflow-y: auto;
+		overflow-x: hidden;
+		scrollbar-width: thin;
+	}
+	.wfrp1ed-classic-sheet .sheet-overlay--psychology .classic-psychology-empty {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 100%;
+		height: 100%;
+		min-height: 0;
+		padding: 2px;
+		font-size: 8px;
+		font-style: italic;
+		text-align: center;
+		color: rgb(30 22 16 / 55%);
+	}
+	.wfrp1ed-classic-sheet .sheet-overlay--psychology .classic-psychology-row {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto auto;
+		align-items: center;
+		gap: 2px;
+		min-height: 18px;
+		padding: 1px 0;
+		border-bottom: 1px solid rgb(0 0 0 / 15%);
+		background: rgb(255 255 255 / 18%);
+	}
+	.wfrp1ed-classic-sheet .sheet-overlay--psychology .classic-psychology-row:hover {
+		background: rgb(255 255 255 / 40%);
+	}
+	.wfrp1ed-classic-sheet .sheet-overlay--psychology .classic-psychology-row__name {
+		display: block;
+		min-width: 0;
+		height: 16px;
+		margin: 0;
+		padding: 0 2px;
+		border: 0;
+		background: transparent;
+		box-shadow: none;
+		overflow: hidden;
+		font-family: "Book Antiqua", "Times New Roman", serif;
+		font-size: 8.5px;
+		font-weight: 700;
+		line-height: 16px;
+		text-align: left;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		color: #18120e;
+	}
+	.wfrp1ed-classic-sheet .sheet-overlay--psychology .classic-psychology-row__source {
+		display: inline-flex;
+		align-items: center;
+		height: 13px;
+		padding: 0 3px;
+		border: 1px solid rgb(98 61 35 / 42%);
+		border-radius: 4px;
+		background: rgb(235 219 183 / 72%);
+		font-size: 6.5px;
+		font-weight: 700;
+		line-height: 12px;
+	}
+	.wfrp1ed-classic-sheet .sheet-overlay--psychology .classic-psychology-row__remove {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 16px;
+		height: 16px;
+		min-height: 16px;
+		margin: 0;
+		padding: 0;
+		border: 0;
+		background: transparent;
+		box-shadow: none;
+		font-size: 7px;
+		color: #3a3027;
+	}
+	.wfrp1ed-classic-sheet .sheet-overlay--psychology .classic-health-categories {
+		pointer-events: auto;
+	}
+	`;
+	document.head.append(style);
 }
 
 function asElement(value) {
