@@ -63,6 +63,15 @@ Hooks.on("preCreateItem", (item, _data, _options, userId) => {
 	return false;
 });
 
+Hooks.on("preUpdateItem", (item, _changes, _options, userId) => {
+	if (item?.type !== "race") return;
+	const actor = item.parent;
+	if (actor?.documentName !== "Actor" || actor.type !== "character") return;
+	if (isCharacterCreationMode(actor)) return;
+	if (game.user?.id === userId) notifyRaceLocked(actor);
+	return false;
+});
+
 Hooks.on("preDeleteItem", (item, _options, userId) => {
 	if (item?.type !== "race") return;
 	const actor = item.parent;
