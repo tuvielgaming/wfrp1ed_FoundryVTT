@@ -2,6 +2,7 @@ import { CharacterCreationMode } from "./CharacterCreationModeIntegration.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
 const FLAG_KEY = "raceStartingDetails";
+const RACE_PSYCHOLOGY_GRANT_FLAG = "racePsychologyGrant";
 
 installRaceStartingDetailsIntegration();
 
@@ -9,15 +10,15 @@ installRaceStartingDetailsIntegration();
  * Apply and invalidate deterministic Race-owned starting details which already
  * have a clear Character storage owner.
  *
- * Languages and Psychology are copied with provenance so Race replacement or
- * removal deletes only values injected by the Race and preserves manual Actor
- * entries. Age, Height and Fate are generated from Race formulas elsewhere,
- * but are invalid once the embedded Race changes, so this lifecycle owner also
- * clears them when the Race leaves the Character during Character Creation.
+ * Languages still use the Character's legacy text-array storage in this slice.
+ * Psychology now uses native embedded Psychology Items. The Actor flag records
+ * only Psychology Item ids actually created by the Race, so a manually added
+ * Psychology Item with the same identity is never claimed/deleted by Race
+ * cleanup.
  *
- * Starting Alignment is deferred until its canonical Core vocabulary and
- * localized presentation are audited. Night Vision remains authoritative on
- * the embedded Race Item until the Character senses/vision subsystem exists.
+ * Age, Height and Fate are generated from Race formulas elsewhere, but are
+ * invalid once the embedded Race changes, so this lifecycle owner clears them
+ * when the Race leaves the Character during Character Creation.
  */
 function installRaceStartingDetailsIntegration() {
 	for (const hookName of ["createItem", "updateItem"]) {
@@ -36,9 +37,6 @@ function installRaceStartingDetailsIntegration() {
 		void resetRaceStartingDetails(actor).catch(reportError);
 	});
 
-	/* A Race may already be embedded before the GM enables Character Creation
-	 * Mode. Apply its deterministic details when the authoritative mode flag is
-	 * switched on instead of requiring the Race to be removed/re-added. */
 	Hooks.on("updateActor", (actor, changes) => {
 		if (actor?.documentName !== "Actor" || actor.type !== "character") return;
 		if (!creationModeWasEnabled(changes)) return;
@@ -51,33 +49,35 @@ function installRaceStartingDetailsIntegration() {
 async function syncRaceStartingDetails(actor, race) {
 	const previous = trackedState(actor);
 	const currentLanguages = textArray(actor.system?.details?.languages);
-	const currentPsychology = textArray(actor.system?.details?.psychology);
+	const currentLegacyPsychology = textArray(actor.system?.details?.psychology);
 
 	const manualLanguages = removeTrackedValues(currentLanguages, previous.languages);
-	const manualPsychology = removeTrackedValues(currentPsychology, previous.psychology);
+	const manualLegacyPsychology = removeTrackedValues(currentLegacyPsychology, previous.psychology);
+
+	await removeTrackedPsychologyItems(actor, previous.psychologyItemIds);
 
 	const raceLanguages = uniqueText(
 		(Array.isArray(race.system?.languages) ? race.system.languages : [])
 			.map((entry) => entry?.name),
 	);
-	const racePsychology = uniqueText(
-		(Array.isArray(race.system?.psychology) ? race.system.psychology : [])
-			.map((entry) => entry?.name),
-	);
-
 	const languages = mergeUniqueText(manualLanguages, raceLanguages);
-	const psychology = mergeUniqueText(manualPsychology, racePsychology);
 
+	/* Native Psychology Items supersede old Race-generated psychology strings.
+	 * Preserve any untracked/manual legacy values until a later explicit data
+	 * migration removes that storage contract. */
 	await actor.update({
 		"system.details.languages": languages,
-		"system.details.psychology": psychology,
+		"system.details.psychology": manualLegacyPsychology,
 	});
+
+	const psychologyItemIds = await grantRacePsychologyItems(actor, race);
 
 	await actor.setFlag(FLAG_SCOPE, FLAG_KEY, {
 		raceItemId: String(race.id ?? ""),
 		raceRulesId: String(race.system?.rulesId ?? "").trim(),
 		languages: raceLanguages,
-		psychology: racePsychology,
+		psychology: [],
+		psychologyItemIds,
 	});
 }
 
@@ -98,25 +98,94 @@ async function resetRaceStartingDetails(actor) {
 
 async function removeTrackedRaceStartingDetails(actor) {
 	const previous = trackedState(actor);
-	if (!previous.languages.length && !previous.psychology.length) {
-		await actor.unsetFlag?.(FLAG_SCOPE, FLAG_KEY);
-		return;
-	}
-
 	const languages = removeTrackedValues(
 		textArray(actor.system?.details?.languages),
 		previous.languages,
 	);
-	const psychology = removeTrackedValues(
+	const legacyPsychology = removeTrackedValues(
 		textArray(actor.system?.details?.psychology),
 		previous.psychology,
 	);
 
+	await removeTrackedPsychologyItems(actor, previous.psychologyItemIds);
+
 	await actor.update({
 		"system.details.languages": languages,
-		"system.details.psychology": psychology,
+		"system.details.psychology": legacyPsychology,
 	});
 	await actor.unsetFlag?.(FLAG_SCOPE, FLAG_KEY);
+}
+
+async function grantRacePsychologyItems(actor, race) {
+	const references = Array.isArray(race.system?.psychology)
+		? foundry.utils.deepClone(race.system.psychology)
+		: [];
+	const createdIds = [];
+
+	for (const reference of references) {
+		const source = await resolvePsychologyReference(reference);
+		if (!source) {
+			ui.notifications.warn(localize(
+				`Race '${race.name}' references Psychology '${reference?.name || reference?.rulesId || "?"}', but its Psychology Item could not be found.`,
+				`Rasa „${race.name}” odwołuje się do Psychologii „${reference?.name || reference?.rulesId || "?"}”, ale nie znaleziono jej Przedmiotu Psychologii.`,
+			));
+			continue;
+		}
+
+		const identity = psychologyIdentity(source);
+		const alreadyPresent = [...(actor.items ?? [])].some((item) =>
+			item?.type === "psychology" && psychologyIdentity(item) === identity,
+		);
+		if (alreadyPresent) continue;
+
+		const data = source.toObject();
+		delete data._id;
+		delete data.folder;
+		delete data.sort;
+		delete data.ownership;
+		data.flags ??= {};
+		data.flags[FLAG_SCOPE] ??= {};
+		data.flags[FLAG_SCOPE][RACE_PSYCHOLOGY_GRANT_FLAG] = {
+			raceItemId: String(race.id ?? ""),
+			raceRulesId: String(race.system?.rulesId ?? "").trim(),
+			sourceUuid: String(source.uuid ?? ""),
+		};
+
+		const [created] = await actor.createEmbeddedDocuments("Item", [data]);
+		if (created?.id) createdIds.push(created.id);
+	}
+	return createdIds;
+}
+
+async function removeTrackedPsychologyItems(actor, ids) {
+	const trackedIds = uniqueText(ids).filter((id) => {
+		const item = actor.items?.get?.(id);
+		return item?.type === "psychology" && Boolean(item.getFlag?.(FLAG_SCOPE, RACE_PSYCHOLOGY_GRANT_FLAG));
+	});
+	if (trackedIds.length) await actor.deleteEmbeddedDocuments("Item", trackedIds);
+}
+
+async function resolvePsychologyReference(reference) {
+	const uuid = String(reference?.uuid ?? "").trim();
+	if (uuid) {
+		try {
+			const document = await foundry.utils.fromUuid(uuid);
+			if (document instanceof foundry.documents.Item && document.type === "psychology") return document;
+		} catch (_error) {
+			// Fall through to stable Rules ID/name lookup.
+		}
+	}
+
+	const rulesId = normalize(reference?.rulesId);
+	const name = normalize(reference?.name);
+	return [...(game.items ?? [])].find((item) =>
+		item?.type === "psychology" &&
+		((rulesId && normalize(item.system?.rulesId) === rulesId) || (!rulesId && name && normalize(item.name) === name)),
+	) ?? null;
+}
+
+function psychologyIdentity(item) {
+	return normalize(item?.system?.rulesId) || normalize(item?.name);
 }
 
 function trackedState(actor) {
@@ -124,15 +193,10 @@ function trackedState(actor) {
 	return {
 		languages: uniqueText(raw?.languages),
 		psychology: uniqueText(raw?.psychology),
+		psychologyItemIds: uniqueText(raw?.psychologyItemIds),
 	};
 }
 
-/**
- * Remove only one matching occurrence per tracked value. This is deliberately
- * narrower than filtering every equal string: if a user intentionally created
- * a duplicate manual entry, Race cleanup must not erase more data than the
- * integration itself can account for.
- */
 function removeTrackedValues(values, tracked) {
 	const result = [...values];
 	for (const generated of uniqueText(tracked)) {
@@ -187,12 +251,15 @@ function isCreationCharacter(actor) {
 
 function creationModeWasEnabled(changes) {
 	const path = "flags.wfrp1ed.characterCreationMode";
-	return foundry.utils.getProperty(changes ?? {}, path) === true ||
-		changes?.[path] === true;
+	return foundry.utils.getProperty(changes ?? {}, path) === true || changes?.[path] === true;
 }
 
 function normalize(value) {
 	return String(value ?? "").trim().toLocaleLowerCase();
+}
+
+function localize(english, polish) {
+	return game.i18n.lang === "pl" ? polish : english;
 }
 
 function reportError(error) {
