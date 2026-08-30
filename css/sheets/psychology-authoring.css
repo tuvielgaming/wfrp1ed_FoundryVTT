@@ -102,22 +102,26 @@
 }
 .race-item-sheet .race-psychology-icon-button:hover { background: rgb(255 255 255 / 48%); color: #17120e; }
 
-/* Character printed Psychology sector --------------------------- */
-.wfrp1ed-classic-sheet .classic-psychology-sector {
-	display: flex;
-	flex-direction: column;
-	min-height: 0;
-}
+/* Character printed Psychology sector ---------------------------
+ * classic-health.css deliberately keeps the Critical Wounds launcher
+ * absolutely anchored near the bottom of this printed sector. The Psychology
+ * list therefore occupies an independent absolute box above that launcher
+ * rather than participating in its layout flow. */
+.wfrp1ed-classic-sheet .classic-psychology-sector { min-height: 0; }
 
 .wfrp1ed-classic-sheet .classic-psychology-panel {
+	position: absolute;
+	left: 3px;
+	right: 3px;
+	top: 2px;
+	bottom: 50px;
 	display: flex;
-	flex: 1 1 auto;
 	flex-direction: column;
 	min-height: 0;
-	margin: 2px 3px 4px;
 	padding: 3px;
 	border: 1px solid transparent;
 	border-radius: 2px;
+	pointer-events: auto;
 	transition: border-color 100ms ease, background-color 100ms ease;
 }
 
@@ -218,11 +222,6 @@
 	color: #3a3027;
 }
 .wfrp1ed-classic-sheet .classic-psychology-row__remove:hover { color: darkred; }
-
-.wfrp1ed-classic-sheet .classic-psychology-sector > .classic-health-categories {
-	flex: 0 0 auto;
-	margin-top: auto;
-}
 
 @media (max-width: 760px) {
 	.race-item-sheet .race-psychology-reference-row {
