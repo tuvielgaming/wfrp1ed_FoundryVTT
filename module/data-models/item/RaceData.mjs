@@ -120,6 +120,7 @@ function languageField() {
 
 function psychologyField() {
 	return new SchemaField({
+		uuid: textField(),
 		rulesId: textField(),
 		name: textField(),
 		description: textField(),
