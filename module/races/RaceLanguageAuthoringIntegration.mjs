@@ -1,6 +1,7 @@
 const LANGUAGE_TYPE = "language";
 
 Hooks.once("ready", () => {
+	ensureLanguageStyles();
 	Hooks.on("renderApplicationV2", (application, element) => {
 		const race = application?.document;
 		if (race?.documentName !== "Item" || race.type !== "race") return;
@@ -22,7 +23,7 @@ function renderLanguageAuthoring(section, race, editable) {
 	section.replaceChildren();
 
 	const heading = document.createElement("div");
-	heading.className = "race-section-heading";
+	heading.className = "race-section-heading race-language-heading";
 
 	const title = document.createElement("h2");
 	title.textContent = localize("Languages", "Języki");
@@ -31,22 +32,19 @@ function renderLanguageAuthoring(section, race, editable) {
 	if (editable) {
 		const hint = document.createElement("span");
 		hint.className = "race-language-heading-hint";
-		hint.textContent = localize("Drop Language Items below", "Upuść Przedmioty Języka poniżej");
+		hint.textContent = localize("Drop Language Items here", "Upuść tutaj Przedmioty Języka");
 		heading.append(hint);
 	}
 	section.append(heading);
 
 	const help = document.createElement("p");
-	help.className = "race-sheet-hint";
+	help.className = "race-sheet-hint race-language-help";
 	help.textContent = editable
 		? localize(
-			"Drag Language Items from the sidebar into this panel. Race Languages are references to Language Items; their Rules ID and name are not edited here.",
-			"Przeciągnij Przedmioty Języka z panelu bocznego do tej sekcji. Języki Rasy są odwołaniami do Przedmiotów Języka; ich ID reguły i nazwy nie są edytowane tutaj.",
+			"Drag Language Items from the sidebar into this panel. Race Languages are references to Language Items; their Rules ID and name are edited on the Language Item.",
+			"Przeciągnij Przedmioty Języka z panelu bocznego do tej sekcji. Języki Rasy są odwołaniami do Przedmiotów Języka; ID reguły i nazwę edytuj na Przedmiocie Języka.",
 		)
-		: localize(
-			"Languages granted by this Race.",
-			"Języki przyznawane przez tę Rasę.",
-		);
+		: localize("Languages granted by this Race.", "Języki przyznawane przez tę Rasę.");
 	section.append(help);
 
 	const list = document.createElement("div");
@@ -56,9 +54,9 @@ function renderLanguageAuthoring(section, race, editable) {
 	if (!entries.length) {
 		const empty = document.createElement("div");
 		empty.className = "race-language-empty";
-		empty.textContent = editable
-			? localize("Drop a Language Item here.", "Upuść tutaj Przedmiot Języka.")
-			: localize("No racial Languages.", "Brak języków rasowych.");
+		empty.innerHTML = `<i class="fa-solid fa-language"></i><span>${editable
+			? escapeHtml(localize("Drop a Language Item here.", "Upuść tutaj Przedmiot Języka."))
+			: escapeHtml(localize("No racial Languages.", "Brak języków rasowych."))}</span>`;
 		list.append(empty);
 	} else {
 		entries.forEach((entry, index) => list.append(languageRow(entry, index, race, editable)));
@@ -92,6 +90,7 @@ function languageRow(entry, index, race, editable) {
 	const rules = document.createElement("span");
 	rules.className = "race-language-reference-row__rules";
 	rules.textContent = String(entry?.rulesId ?? "").trim() || localize("No Rules ID", "Brak ID reguły");
+	rules.title = localize("Rules ID", "ID reguły");
 	row.append(rules);
 
 	if (editable) {
@@ -157,9 +156,7 @@ async function addLanguageFromDrop(race, data) {
 	if (!uuid) return warnWrongDrop();
 
 	const item = await foundry.utils.fromUuid(uuid);
-	if (!(item instanceof foundry.documents.Item) || item.type !== LANGUAGE_TYPE) {
-		return warnWrongDrop();
-	}
+	if (!(item instanceof foundry.documents.Item) || item.type !== LANGUAGE_TYPE) return warnWrongDrop();
 
 	const reference = languageReference(item);
 	const entries = languageEntries(race);
@@ -273,10 +270,161 @@ function dragData(event) {
 }
 
 function warnWrongDrop() {
-	ui.notifications.warn(localize(
-		"Drop a Language Item here.",
-		"Upuść tutaj Przedmiot Języka.",
-	));
+	ui.notifications.warn(localize("Drop a Language Item here.", "Upuść tutaj Przedmiot Języka."));
+}
+
+function ensureLanguageStyles() {
+	if (document.getElementById("wfrp1ed-race-language-authoring-style")) return;
+	const style = document.createElement("style");
+	style.id = "wfrp1ed-race-language-authoring-style";
+	style.textContent = `
+	.race-item-sheet .race-language-authoring {
+		transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
+	}
+	.race-item-sheet .race-language-heading { margin-bottom: 5px; }
+	.race-item-sheet .race-language-heading-hint {
+		flex: 0 0 auto;
+		font-size: 11px;
+		font-style: italic;
+		font-weight: 600;
+		color: #6a5742;
+	}
+	.race-item-sheet .race-language-help {
+		margin: 0 0 7px;
+		padding: 5px 8px;
+		border-left: 3px solid rgb(104 72 40 / 34%);
+		background: rgb(255 251 239 / 30%);
+		font-size: 11px;
+		font-style: normal;
+		line-height: 1.3;
+	}
+	.race-item-sheet .race-language-reference-list {
+		display: flex;
+		flex-direction: column;
+		min-height: 36px;
+		padding: 3px;
+		border: 1px dashed rgb(91 65 39 / 46%);
+		border-radius: 3px;
+		background: rgb(255 252 241 / 22%);
+	}
+	.race-item-sheet .race-language-reference-row {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) minmax(110px, 180px) 48px;
+		align-items: center;
+		gap: 8px;
+		min-height: 30px;
+		padding: 3px 5px 3px 8px;
+		border-bottom: 1px solid rgb(66 54 39 / 23%);
+		background: transparent;
+		color: #261e17;
+	}
+	.race-item-sheet .race-language-reference-row:last-child { border-bottom: 0; }
+	.race-item-sheet .race-language-reference-row:hover { background: rgb(255 250 235 / 46%); }
+	.race-item-sheet .race-language-reference-row__identity {
+		display: flex;
+		align-items: center;
+		gap: 7px;
+		min-width: 0;
+	}
+	.race-item-sheet .race-language-reference-row__identity > i {
+		flex: 0 0 auto;
+		width: 14px;
+		text-align: center;
+		color: #62462e;
+	}
+	.race-item-sheet .race-language-reference-row__identity > strong {
+		overflow: hidden;
+		font-size: 13px;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.race-item-sheet .race-language-reference-row__rules {
+		overflow: hidden;
+		padding: 2px 6px;
+		border: 1px solid rgb(72 52 35 / 42%);
+		border-radius: 4px;
+		background: rgb(248 235 203 / 66%);
+		font-family: Arial, Helvetica, sans-serif;
+		font-size: 10px;
+		font-weight: 700;
+		text-align: center;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		color: #3f3023;
+	}
+	.race-item-sheet .race-language-reference-row__controls {
+		display: flex;
+		align-items: center;
+		justify-content: flex-end;
+		gap: 2px;
+		width: 48px;
+	}
+	.race-item-sheet .race-language-icon-button {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 22px !important;
+		height: 22px;
+		min-height: 22px !important;
+		margin: 0;
+		padding: 0 !important;
+		border: 1px solid rgb(91 65 39 / 36%);
+		border-radius: 3px;
+		background: rgb(248 238 213 / 58%);
+		box-shadow: none;
+		font-size: 10px;
+		color: #3f3429;
+	}
+	.race-item-sheet .race-language-icon-button:hover,
+	.race-item-sheet .race-language-icon-button:focus-visible {
+		background: rgb(255 249 230 / 100%);
+		border-color: rgb(91 65 39 / 68%);
+		color: #17120e;
+	}
+	.race-item-sheet .race-language-empty {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 8px;
+		min-height: 42px;
+		font-size: 11px;
+		font-style: italic;
+		color: #67533e;
+	}
+	.race-item-sheet .race-language-empty > i { color: #74543a; }
+	.race-item-sheet .race-language-authoring.is-language-drag-over {
+		border-color: #8c1f1f !important;
+		background: rgb(133 24 24 / 8%) !important;
+		box-shadow: inset 0 0 0 1px rgb(140 31 31 / 48%);
+	}
+	.race-item-sheet .race-language-authoring.is-language-drag-over .race-language-reference-list {
+		border-color: #8c1f1f;
+		background: rgb(133 24 24 / 8%);
+	}
+	@media (max-width: 760px) {
+		.race-item-sheet .race-language-reference-row {
+			grid-template-columns: minmax(0, 1fr) 48px;
+			gap: 5px;
+		}
+		.race-item-sheet .race-language-reference-row__rules {
+			grid-column: 1;
+			grid-row: 2;
+			justify-self: start;
+			max-width: 180px;
+		}
+		.race-item-sheet .race-language-reference-row__controls {
+			grid-column: 2;
+			grid-row: 1 / 3;
+		}
+	}
+	`;
+	document.head.append(style);
+}
+
+function escapeHtml(value) {
+	const div = document.createElement("div");
+	div.textContent = String(value ?? "");
+	return div.innerHTML;
 }
 
 function asElement(value) {
