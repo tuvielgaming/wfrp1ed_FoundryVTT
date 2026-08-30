@@ -3,13 +3,8 @@ const STYLE_ID = "wfrp1ed-race-package-dialog-style";
 installRacePackageDialogStyle();
 
 /**
- * Race mandatory-Skill packages deliberately reuse Career package-builder
- * markup. Keep those shared dialogs readable as one component.
- *
- * Package dialogs live in Foundry's dark application chrome, while the global
- * WFRP checkbox component is intentionally parchment-safe. The scoped rules
- * below provide a dark-dialog presentation without changing checkboxes on the
- * ordinary Actor/Item sheets.
+ * Pure presentation for the shared Career/Race package dialogs.
+ * No package-selection or form mechanics live here.
  */
 function installRacePackageDialogStyle() {
 	if (document.getElementById(STYLE_ID)) return;
@@ -21,7 +16,7 @@ function installRacePackageDialogStyle() {
 		.career-package-builder,
 		.career-package-editor,
 		.career-package-add-dialog {
-			color: rgb(238 229 211 / 98%);
+			color: #f0e6d3;
 		}
 
 		.career-package-builder .career-package-builder__settings,
@@ -33,6 +28,7 @@ function installRacePackageDialogStyle() {
 		.career-package-builder .career-package-builder__settings label,
 		.career-package-editor .career-package-builder__settings label {
 			grid-template-columns: minmax(0, 1fr) minmax(190px, 52%);
+			color: #f0e6d3;
 		}
 
 		.career-package-builder .career-package-builder__settings select[name="mode"],
@@ -52,137 +48,158 @@ function installRacePackageDialogStyle() {
 		/* Choice list ---------------------------------------------------------- */
 		.career-package-builder .career-package-builder__choices,
 		.career-package-add-dialog .career-package-builder__choices {
-			border-color: rgb(211 187 143 / 48%);
-			background: rgb(12 11 14 / 26%);
-			box-shadow: inset 0 0 0 1px rgb(255 255 255 / 3%);
+			border: 1px solid #8e7b62;
+			background: #151318;
+			box-shadow: inset 0 0 0 1px rgb(255 255 255 / 4%);
 		}
 
 		.career-package-builder .career-package-builder__choice,
 		.career-package-add-dialog .career-package-builder__choice {
-			border-bottom-color: rgb(211 187 143 / 16%);
-			color: rgb(238 229 211 / 96%);
-			transition:
-				background-color 100ms ease,
-				box-shadow 100ms ease,
-				color 100ms ease;
+			border-bottom-color: rgb(222 197 156 / 20%);
+			background: #1d1a20;
+			color: #f0e6d3;
+			transition: background-color 100ms ease, box-shadow 100ms ease, color 100ms ease;
+		}
+
+		.career-package-builder .career-package-builder__choice:nth-child(even),
+		.career-package-add-dialog .career-package-builder__choice:nth-child(even) {
+			background: #211e25;
 		}
 
 		.career-package-builder .career-package-builder__choice:hover,
 		.career-package-builder .career-package-builder__choice:focus-within,
 		.career-package-add-dialog .career-package-builder__choice:hover,
 		.career-package-add-dialog .career-package-builder__choice:focus-within {
-			background: rgb(255 236 197 / 7%);
+			background: #302a31;
 		}
 
-		/* SystemCheckboxIntegration wraps raw checkboxes in `.wfrp1ed-checkbox`.
-		 * Override only inside package dialogs: the global checkbox colors target
-		 * parchment and otherwise disappear against Foundry's dark dialog chrome. */
-		.career-package-builder__choice > .wfrp1ed-checkbox {
+		.career-package-builder__choice > span {
+			color: #f5ead6;
+		}
+
+		.career-package-builder__choice > small {
+			color: #d8c7aa;
+			opacity: 1;
+		}
+
+		/* SystemCheckboxIntegration may wrap the native checkbox. Style the
+		 * canonical wrapper as a descendant rather than relying on exact DOM
+		 * nesting; browsers may normalize nested labels differently. */
+		.career-package-builder__choice .wfrp1ed-checkbox {
 			align-self: center;
 			display: inline-flex;
 			align-items: center;
 			justify-content: center;
+			width: 22px;
+			height: 22px;
+			min-width: 22px;
+			gap: 0;
+			opacity: 1 !important;
+		}
+
+		.career-package-builder__choice .wfrp1ed-checkbox::before {
+			flex: 0 0 20px;
 			width: 20px;
 			height: 20px;
-			min-width: 20px;
-			gap: 0;
-		}
-
-		.career-package-builder__choice > .wfrp1ed-checkbox::before {
-			flex: 0 0 18px;
-			width: 18px;
-			height: 18px;
-			border: 2px solid rgb(235 211 167 / 92%);
+			border: 2px solid #d7c29c;
 			border-radius: 3px;
-			background: rgb(14 13 16 / 90%);
-			box-shadow:
-				0 0 0 1px rgb(0 0 0 / 72%),
-				inset 0 0 0 1px rgb(255 255 255 / 6%);
-			color: rgb(112 235 126);
+			background: #08080a;
+			box-shadow: 0 0 0 1px #000, inset 0 0 0 1px rgb(255 255 255 / 8%);
+			color: #fff;
 			font-family: Arial, Helvetica, sans-serif;
-			font-size: 15px;
+			font-size: 16px;
 			font-weight: 900;
 			line-height: 1;
-			text-shadow: 0 0 4px rgb(75 222 94 / 44%);
+			opacity: 1 !important;
 		}
 
-		.career-package-builder__choice > .wfrp1ed-checkbox:has(> input:checked)::before {
+		.career-package-builder__choice .wfrp1ed-checkbox:has(input[type="checkbox"]:checked)::before {
 			content: "✓";
-			border-color: rgb(124 235 137 / 100%);
-			background: rgb(17 55 26 / 96%);
-			box-shadow:
-				0 0 0 1px rgb(0 0 0 / 72%),
-				0 0 7px rgb(75 222 94 / 24%),
-				inset 0 0 0 1px rgb(255 255 255 / 8%);
-			color: rgb(119 244 133);
+			border-color: #9ce6a7;
+			background: #23552d;
+			box-shadow: 0 0 0 1px #000, 0 0 8px rgb(121 226 139 / 34%), inset 0 0 0 1px rgb(255 255 255 / 10%);
+			color: #ffffff;
+			text-shadow: 0 1px 1px #000;
 		}
 
-		.career-package-builder__choice:has(.wfrp1ed-checkbox > input:checked) {
-			background: rgb(35 91 45 / 30%);
-			box-shadow: inset 3px 0 0 rgb(112 235 126 / 88%);
-			color: rgb(247 239 220);
+		/* Base selected-row presentation reads the actual native input state. */
+		.career-package-builder__choice:has(input[type="checkbox"]:checked),
+		.career-package-add-dialog .career-package-builder__choice:has(input[type="checkbox"]:checked) {
+			background: #294631 !important;
+			box-shadow: inset 4px 0 0 #8edb9d;
+			color: #fff8e9;
 		}
 
-		.career-package-builder__choice:has(.wfrp1ed-checkbox > input:checked):hover,
-		.career-package-builder__choice:has(.wfrp1ed-checkbox > input:checked):focus-within {
-			background: rgb(40 108 52 / 38%);
+		.career-package-builder__choice:has(input[type="checkbox"]:checked) > span,
+		.career-package-add-dialog .career-package-builder__choice:has(input[type="checkbox"]:checked) > span {
+			color: #fff8e9;
 		}
 
-		/* A locked seed member is selected by definition. Keep it clearly visible
-		 * instead of applying the global disabled-checkbox fade. */
+		.career-package-builder__choice:has(input[type="checkbox"]:checked):hover,
+		.career-package-builder__choice:has(input[type="checkbox"]:checked):focus-within,
+		.career-package-add-dialog .career-package-builder__choice:has(input[type="checkbox"]:checked):hover,
+		.career-package-add-dialog .career-package-builder__choice:has(input[type="checkbox"]:checked):focus-within {
+			background: #31573a !important;
+		}
+
+		/* Seed member is selected and locked by package mechanics. Styling only. */
 		.career-package-builder__choice--seed {
-			background: rgb(35 91 45 / 24%);
+			background: #294631 !important;
+			box-shadow: inset 4px 0 0 #8edb9d;
 		}
 
-		.career-package-builder__choice--seed > .wfrp1ed-checkbox,
-		.career-package-builder__choice--seed > .wfrp1ed-checkbox::before,
-		.career-package-builder__choice--seed > .wfrp1ed-checkbox:has(> input:disabled)::before {
-			opacity: 1;
+		.career-package-builder__choice--seed .wfrp1ed-checkbox,
+		.career-package-builder__choice--seed .wfrp1ed-checkbox::before {
+			opacity: 1 !important;
 		}
 
 		.career-package-builder__choice--seed > small {
-			padding: 2px 6px;
-			border: 1px solid rgb(211 187 143 / 30%);
+			padding: 2px 7px;
+			border: 1px solid #9b896c;
 			border-radius: 999px;
-			background: rgb(255 236 197 / 7%);
-			color: rgb(225 209 180 / 90%);
-			opacity: 1;
+			background: #3a332c;
+			color: #f0dfc0;
 		}
 
-		.career-package-builder__choice > .wfrp1ed-checkbox:has(> input:focus-visible)::before {
-			outline: 2px solid rgb(248 224 176 / 100%);
+		.career-package-builder__choice .wfrp1ed-checkbox:has(input:focus-visible)::before {
+			outline: 2px solid #f8d88f;
 			outline-offset: 2px;
 		}
 
 		/* Package editor member list ----------------------------------------- */
 		.career-package-editor .career-package-editor__members {
-			border-color: rgb(211 187 143 / 48%);
-			background: rgb(12 11 14 / 26%);
+			border-color: #8e7b62;
+			background: #151318;
 		}
 
 		.career-package-editor .career-package-editor__member {
-			border-bottom-color: rgb(211 187 143 / 16%);
-			color: rgb(238 229 211 / 96%);
+			border-bottom-color: rgb(222 197 156 / 20%);
+			background: #1d1a20;
+			color: #f0e6d3;
+		}
+
+		.career-package-editor .career-package-editor__member:nth-child(even) {
+			background: #211e25;
 		}
 
 		.career-package-editor .career-package-editor__member:hover,
 		.career-package-editor .career-package-editor__member:focus-within {
-			background: rgb(255 236 197 / 7%);
+			background: #302a31;
 		}
 
 		.career-package-editor .career-package-editor__member button,
 		.career-package-editor [data-package-add] {
-			border-color: rgb(211 187 143 / 58%);
-			background: rgb(255 236 197 / 5%);
-			color: rgb(239 222 190);
+			border-color: #9b896c;
+			background: #29242a;
+			color: #f1dfbd;
 		}
 
 		.career-package-editor .career-package-editor__member button:hover,
 		.career-package-editor .career-package-editor__member button:focus-visible,
 		.career-package-editor [data-package-add]:hover,
 		.career-package-editor [data-package-add]:focus-visible {
-			background: rgb(255 236 197 / 14%);
-			color: rgb(255 242 213);
+			background: #443b40;
+			color: #fff2d5;
 		}
 
 		@media (max-width: 720px) {
