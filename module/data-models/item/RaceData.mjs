@@ -112,6 +112,7 @@ export class RaceData extends TypeDataModel {
 
 function languageField() {
 	return new SchemaField({
+		uuid: textField(),
 		rulesId: textField(),
 		name: textField(),
 	});
