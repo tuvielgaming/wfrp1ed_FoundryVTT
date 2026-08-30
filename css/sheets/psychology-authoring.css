@@ -1,0 +1,232 @@
+/******************************************************************/
+/*          WFRP 1e Psychology authoring / Character panel        */
+/******************************************************************/
+
+/* Race Psychology references ----------------------------------- */
+.race-item-sheet .race-psychology-authoring {
+	transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
+}
+
+.race-item-sheet .race-psychology-authoring.is-psychology-drag-over {
+	border-color: #9b1919;
+	background: rgb(132 0 0 / 9%);
+	box-shadow: inset 0 0 0 1px rgb(155 25 25 / 72%);
+}
+
+.race-item-sheet .race-psychology-heading-hint {
+	font-size: 11px;
+	font-style: italic;
+	color: #604c39;
+}
+
+.race-item-sheet .race-psychology-reference-list {
+	display: flex;
+	flex-direction: column;
+	min-height: 44px;
+	border: 1px dashed rgb(91 65 39 / 42%);
+	background: rgb(255 252 241 / 24%);
+}
+
+.race-item-sheet .race-psychology-empty {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 44px;
+	padding: 8px 10px;
+	font-size: 11px;
+	font-style: italic;
+	color: #665441;
+}
+
+.race-item-sheet .race-psychology-reference-row {
+	display: grid;
+	grid-template-columns: minmax(150px, 0.9fr) minmax(0, 1.5fr) minmax(100px, 0.55fr) 48px;
+	align-items: center;
+	gap: 7px;
+	min-height: 31px;
+	padding: 3px 5px 3px 8px;
+	border-bottom: 1px solid rgb(66 54 39 / 23%);
+	color: #261e17;
+}
+.race-item-sheet .race-psychology-reference-row:last-child { border-bottom: 0; }
+.race-item-sheet .race-psychology-reference-row:hover { background: rgb(255 250 235 / 42%); }
+
+.race-item-sheet .race-psychology-reference-row__identity {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+}
+.race-item-sheet .race-psychology-reference-row__identity strong,
+.race-item-sheet .race-psychology-reference-row__description {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.race-item-sheet .race-psychology-reference-row__identity strong { font-size: 12px; }
+.race-item-sheet .race-psychology-reference-row__description { font-size: 11px; color: #574838; }
+.race-item-sheet .race-psychology-reference-row__rules {
+	justify-self: end;
+	max-width: 135px;
+	padding: 1px 6px;
+	border: 1px solid rgb(72 52 35 / 46%);
+	border-radius: 4px;
+	background: rgb(248 235 203 / 72%);
+	overflow: hidden;
+	font-family: Arial, Helvetica, sans-serif;
+	font-size: 9px;
+	font-weight: 700;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.race-item-sheet .race-psychology-reference-row__controls {
+	display: flex;
+	justify-content: flex-end;
+	gap: 2px;
+}
+.race-item-sheet .race-psychology-icon-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	height: 22px;
+	min-height: 22px;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	border-radius: 2px;
+	background: transparent;
+	box-shadow: none;
+	font-size: 10px;
+	color: #3f3429;
+}
+.race-item-sheet .race-psychology-icon-button:hover { background: rgb(255 255 255 / 48%); color: #17120e; }
+
+/* Character printed Psychology sector --------------------------- */
+.wfrp1ed-classic-sheet .classic-psychology-sector {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+}
+
+.wfrp1ed-classic-sheet .classic-psychology-panel {
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
+	min-height: 0;
+	margin: 2px 3px 4px;
+	padding: 3px;
+	border: 1px solid transparent;
+	border-radius: 2px;
+	transition: border-color 100ms ease, background-color 100ms ease;
+}
+
+.wfrp1ed-classic-sheet .classic-psychology-panel.is-psychology-drag-over {
+	border-color: #a20f1e;
+	background: rgb(150 0 20 / 9%);
+	box-shadow: inset 0 0 0 1px rgb(162 15 30 / 45%);
+}
+
+.wfrp1ed-classic-sheet .classic-psychology-panel__heading {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 5px;
+	padding: 0 2px 2px;
+	border-bottom: 1px solid rgb(0 0 0 / 24%);
+	font-family: "Book Antiqua", "Times New Roman", serif;
+}
+.wfrp1ed-classic-sheet .classic-psychology-panel__heading strong { font-size: 11px; }
+.wfrp1ed-classic-sheet .classic-psychology-panel__heading span {
+	font-size: 8px;
+	font-style: italic;
+	opacity: 0.65;
+}
+
+.wfrp1ed-classic-sheet .classic-psychology-list {
+	flex: 1 1 auto;
+	min-height: 0;
+	overflow-y: auto;
+	overflow-x: hidden;
+	scrollbar-width: thin;
+}
+
+.wfrp1ed-classic-sheet .classic-psychology-empty {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 36px;
+	padding: 6px 4px;
+	font-size: 9px;
+	font-style: italic;
+	text-align: center;
+	opacity: 0.65;
+}
+
+.wfrp1ed-classic-sheet .classic-psychology-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto auto;
+	align-items: center;
+	gap: 2px;
+	min-height: 21px;
+	padding: 1px 2px;
+	border-bottom: 1px solid rgb(0 0 0 / 14%);
+}
+.wfrp1ed-classic-sheet .classic-psychology-row:hover { background: rgb(120 0 0 / 6%); }
+
+.wfrp1ed-classic-sheet .classic-psychology-row__name,
+.wfrp1ed-classic-sheet .classic-psychology-row__remove {
+	margin: 0;
+	border: 0;
+	background: transparent;
+	box-shadow: none;
+}
+.wfrp1ed-classic-sheet .classic-psychology-row__name {
+	display: block;
+	min-width: 0;
+	height: auto;
+	padding: 1px 2px;
+	overflow: hidden;
+	font-family: "Book Antiqua", "Times New Roman", serif;
+	font-size: 10px;
+	font-weight: 700;
+	line-height: 1.15;
+	text-align: left;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: #18120e;
+}
+.wfrp1ed-classic-sheet .classic-psychology-row__name:hover { color: darkred; }
+.wfrp1ed-classic-sheet .classic-psychology-row__source {
+	padding: 0 4px;
+	border: 1px solid rgb(98 61 35 / 45%);
+	border-radius: 4px;
+	background: rgb(235 219 183 / 72%);
+	font-size: 7px;
+	font-weight: 700;
+	line-height: 14px;
+}
+.wfrp1ed-classic-sheet .classic-psychology-row__remove {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 18px;
+	height: 18px;
+	min-height: 18px;
+	padding: 0;
+	font-size: 8px;
+	color: #3a3027;
+}
+.wfrp1ed-classic-sheet .classic-psychology-row__remove:hover { color: darkred; }
+
+.wfrp1ed-classic-sheet .classic-psychology-sector > .classic-health-categories {
+	flex: 0 0 auto;
+	margin-top: auto;
+}
+
+@media (max-width: 760px) {
+	.race-item-sheet .race-psychology-reference-row {
+		grid-template-columns: minmax(0, 1fr) 110px 48px;
+	}
+	.race-item-sheet .race-psychology-reference-row__description { display: none; }
+}
