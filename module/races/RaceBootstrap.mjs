@@ -11,6 +11,9 @@ const { DocumentSheetConfig } = foundry.applications.apps;
 const { Item } = foundry.documents;
 const CREATION_FLAG_SCOPE = "wfrp1ed";
 const CREATION_FLAG_KEY = "characterCreationMode";
+const CAREER_ACQUISITION_FLAG_KEY = "careerAcquisition";
+const CAREER_COMPANION_FLAG_KEY = "careerCompanion";
+const RACE_INITIAL_SKILL_GRANT_FLAG_KEY = "raceInitialSkillGrant";
 
 Hooks.once("init", () => {
 	CONFIG.Item.dataModels.race = RaceData;
@@ -146,14 +149,29 @@ Hooks.on("renderApplicationV2", (application, element) => {
 	}
 });
 
-for (const hookName of ["createItem", "deleteItem", "updateItem"]) {
-	Hooks.on(hookName, (item) => {
-		if (item?.type !== "race") return;
-		const actor = item.parent;
-		if (actor?.documentName !== "Actor" || actor.type !== "character") return;
-		if (actor.sheet?.rendered) void actor.sheet.render({ force: true });
-	});
-}
+Hooks.on("createItem", (item) => {
+	if (item?.type !== "race") return;
+	const actor = item.parent;
+	if (actor?.documentName !== "Actor" || actor.type !== "character") return;
+	void syncStoredRaceName(actor, item.name).catch(reportRaceError);
+	if (actor.sheet?.rendered) void actor.sheet.render({ force: true });
+});
+
+Hooks.on("updateItem", (item) => {
+	if (item?.type !== "race") return;
+	const actor = item.parent;
+	if (actor?.documentName !== "Actor" || actor.type !== "character") return;
+	void syncStoredRaceName(actor, item.name).catch(reportRaceError);
+	if (actor.sheet?.rendered) void actor.sheet.render({ force: true });
+});
+
+Hooks.on("deleteItem", (item) => {
+	if (item?.type !== "race") return;
+	const actor = item.parent;
+	if (actor?.documentName !== "Actor" || actor.type !== "character") return;
+	if (!getEmbeddedRace(actor)) void syncStoredRaceName(actor, "").catch(reportRaceError);
+	if (actor.sheet?.rendered) void actor.sheet.render({ force: true });
+});
 
 export function getEmbeddedRace(actor) {
 	if (actor?.documentName !== "Actor" || actor.type !== "character") return null;
@@ -183,10 +201,13 @@ export async function assignRace(actor, race) {
 	}
 
 	const current = getEmbeddedRace(actor);
-	if (current?.uuid === race.uuid) return current;
+	if (current?.uuid === race.uuid) {
+		await syncStoredRaceName(actor, current.name);
+		return current;
+	}
 
 	if (current) {
-		await resetInitialCharacteristics(actor);
+		await resetRaceDependentCreationState(actor);
 		await actor.deleteEmbeddedDocuments("Item", [current.id]);
 	}
 
@@ -197,6 +218,7 @@ export async function assignRace(actor, race) {
 	delete data.ownership;
 
 	const [created] = await actor.createEmbeddedDocuments("Item", [data]);
+	await syncStoredRaceName(actor, created?.name ?? race.name ?? "");
 	return created ?? null;
 }
 
@@ -261,26 +283,107 @@ async function removeRace(actor) {
 
 	const confirmed = await foundry.applications.api.DialogV2.confirm({
 		content: localize(
-			`Remove Race '${current.name}' from ${actor.name}? Starting Characteristics will be reset.`,
-			`Usunąć Rasę „${current.name}” z postaci ${actor.name}? Charakterystyki Początkowe zostaną wyzerowane.`,
+			`Remove Race '${current.name}' from ${actor.name}? Race-derived starting Characteristics, Career Class, initial Career and generated initial Skills will be reset.`,
+			`Usunąć Rasę „${current.name}” z postaci ${actor.name}? Początkowe Cechy zależne od Rasy, Klasa Zawodowa, Profesja początkowa oraz wygenerowane Umiejętności początkowe zostaną zresetowane.`,
 		),
 		rejectClose: false,
 		modal: true,
 	});
 	if (!confirmed) return;
 
-	await resetInitialCharacteristics(actor);
+	await resetRaceDependentCreationState(actor);
 	await actor.deleteEmbeddedDocuments("Item", [current.id]);
+	await syncStoredRaceName(actor, "");
 }
 
-async function resetInitialCharacteristics(actor) {
-	const updates = Object.fromEntries(
-		RACE_CHARACTERISTIC_IDS.map((id) => [
-			`system.characteristics.${id}.initial`,
-			0,
-		]),
-	);
+async function resetRaceDependentCreationState(actor) {
+	await removeRaceGeneratedInitialSkills(actor);
+	await resetInitialCareer(actor);
+
+	const updates = {
+		"system.details.careerClass": "",
+		"system.details.currentCareer": "",
+		"system.details.careerHistory": [],
+		"system.details.careerExits": [],
+	};
+
+	for (const id of RACE_CHARACTERISTIC_IDS) {
+		updates[`system.characteristics.${id}.initial`] = 0;
+		updates[`system.characteristics.${id}.career`] = 0;
+	}
+
 	await actor.update(updates);
+}
+
+async function removeRaceGeneratedInitialSkills(actor) {
+	const ids = [...(actor.items ?? [])]
+		.filter((item) => item?.type === "skill" && Boolean(item.getFlag?.(
+			CREATION_FLAG_SCOPE,
+			RACE_INITIAL_SKILL_GRANT_FLAG_KEY,
+		)))
+		.map((item) => item.id)
+		.filter(Boolean);
+	if (ids.length) await actor.deleteEmbeddedDocuments("Item", ids);
+}
+
+async function resetInitialCareer(actor) {
+	const careers = [...(actor.items ?? [])].filter((item) => {
+		if (item?.type !== "career") return false;
+		const acquisition = item.getFlag?.(CREATION_FLAG_SCOPE, CAREER_ACQUISITION_FLAG_KEY);
+		return item.system?.current === true || acquisition?.kind === "initial";
+	});
+
+	for (const career of careers) {
+		const acquisition = career.getFlag?.(CREATION_FLAG_SCOPE, CAREER_ACQUISITION_FLAG_KEY);
+		if (acquisition?.kind === "initial") {
+			await rollbackInitialCareerAcquisition(actor, acquisition);
+		}
+	}
+
+	const careerIds = careers
+		.map((career) => career.id)
+		.filter((id) => id && actor.items?.has?.(id));
+	if (careerIds.length) await actor.deleteEmbeddedDocuments("Item", careerIds);
+}
+
+async function rollbackInitialCareerAcquisition(actor, acquisition) {
+	const itemIds = Array.isArray(acquisition?.createdItemIds)
+		? acquisition.createdItemIds.filter((id) => actor.items?.has?.(id))
+		: [];
+	if (itemIds.length) await actor.deleteEmbeddedDocuments("Item", itemIds);
+
+	for (const uuid of acquisition?.createdActorUuids ?? []) {
+		try {
+			const companion = await foundry.utils.fromUuid(String(uuid));
+			if (
+				companion instanceof foundry.documents.Actor &&
+				companion.getFlag?.(CREATION_FLAG_SCOPE, CAREER_COMPANION_FLAG_KEY)?.ownerCharacterUuid === actor.uuid
+			) await companion.delete();
+		} catch (_error) {
+			// Missing/deleted companion is already equivalent to successful rollback.
+		}
+	}
+
+	const magic = acquisition?.magicPoints;
+	if (
+		magic &&
+		nonNegativeInteger(actor.system?.status?.magicPoints) === nonNegativeInteger(magic.after)
+	) {
+		await actor.update({
+			"system.status.magicPoints": nonNegativeInteger(magic.before),
+		});
+	}
+}
+
+async function syncStoredRaceName(actor, name) {
+	const value = String(name ?? "").trim();
+	if (String(actor.system?.details?.race ?? "") === value) return;
+	await actor.update({ "system.details.race": value });
+}
+
+function nonNegativeInteger(value) {
+	const number = Number(value);
+	return Number.isFinite(number) ? Math.max(0, Math.trunc(number)) : 0;
 }
 
 function isCharacterCreationMode(actor) {
