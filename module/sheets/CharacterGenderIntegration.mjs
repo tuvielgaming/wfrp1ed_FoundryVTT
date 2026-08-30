@@ -1,3 +1,5 @@
+import { CharacterCreationMode } from "../creation/CharacterCreationModeIntegration.mjs";
+
 export const CHARACTER_GENDER = Object.freeze({
 	MALE: "male",
 	FEMALE: "female",
@@ -41,6 +43,7 @@ function installCharacterGenderSelector() {
 	Hooks.on("renderApplicationV2", (application, element) => {
 		const actor = application?.document;
 		if (actor?.documentName !== "Actor" || actor.type !== "character") return;
+		if (!CharacterCreationMode.enabled(actor)) return;
 
 		const root = asElement(element) ?? asElement(application?.element);
 		const sheet = classicSheetRoot(root);
