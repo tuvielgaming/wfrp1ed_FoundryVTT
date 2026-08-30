@@ -1,3 +1,4 @@
+import "../authoring/PackageRowDragIntegration.mjs";
 import { CareerItemSheet } from "../sheets/CareerItemSheet.mjs";
 
 const TABS = Object.freeze(["skills", "trappings", "exits"]);
