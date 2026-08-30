@@ -217,6 +217,16 @@
 		opacity 0.15s ease;
 }
 
+/* Font Awesome d20 (U+F6CF). Override the individual generator's legacy dice
+ * class at the presentation layer so every Character Creation roll action has
+ * one canonical glyph as well as one canonical badge style. */
+.wfrp1ed-character-creation-mode .wfrp1ed-race-characteristic-roll > i::before,
+.wfrp1ed-character-creation-mode .wfrp1ed-race-profile-roll-all > i::before,
+.wfrp1ed-character-creation-mode .wfrp1ed-race-age-roll > i::before,
+.wfrp1ed-character-creation-mode .wfrp1ed-race-fate-roll > i::before {
+	content: "\f6cf";
+}
+
 .wfrp1ed-character-creation-mode .wfrp1ed-race-characteristic-roll:hover,
 .wfrp1ed-character-creation-mode .wfrp1ed-race-characteristic-roll:focus-visible,
 .wfrp1ed-character-creation-mode .wfrp1ed-race-profile-roll-all:hover,
