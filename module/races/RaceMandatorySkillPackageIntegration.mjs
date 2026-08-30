@@ -8,18 +8,11 @@ const { DialogV2 } = foundry.applications.api;
 installRaceMandatorySkillPackages();
 
 /**
- * Give Race mandatory-Skill authoring the same interaction language as Career:
- *
- * - dropping a Skill into the mandatory-Skill section always creates one free
- *   standalone entry;
- * - grouping is an explicit package action from a free row;
- * - a package dialog selects other free rows and owns mode/choose;
- * - package members can be detached back to free rows without deleting them;
- * - the Race-only `minInitialSkills` condition remains entry/package metadata.
- *
- * Career's acquisition `chance` is deliberately NOT copied here. RAW racial
- * mandatory Skills are conditional on initial-Skill count, not percentile
- * acquisition chance.
+ * Race mandatory-Skill authoring intentionally mirrors Career package UX:
+ * free rows are created by normal sheet drops, grouping is explicit, and
+ * package dialogs can additionally accept Skill Items dragged straight from
+ * the sidebar. Existing free rows are moved into packages; external Skill
+ * drops become package choices only when the Skill is not already represented.
  */
 function installRaceMandatorySkillPackages() {
 	if (RaceItemSheet.prototype.__wfrpRaceMandatoryPackagesInstalled === true) return;
@@ -47,8 +40,8 @@ function renderMandatorySkillWorkspace(sheet, root) {
 	const hint = section?.querySelector?.(".race-sheet-hint");
 	if (hint instanceof HTMLElement) {
 		hint.textContent = localize(
-			"Drop a Skill in this section to add it as a free row. Use the package button on a Skill row to group it with other free Skills, exactly like Career packages.",
-			"Upuść Umiejętność w tej sekcji, aby dodać ją jako wolny wpis. Użyj przycisku pakietu przy wpisie Umiejętności, aby połączyć ją z innymi wolnymi Umiejętnościami — tak samo jak w pakietach Profesji.",
+			"Drop a Skill in this section to add it as a free row. Use the package button on a Skill row to group it with other free Skills.",
+			"Upuść Umiejętność w tej sekcji, aby dodać ją jako wolny wpis. Użyj przycisku pakietu przy wpisie Umiejętności, aby połączyć ją z innymi wolnymi Umiejętnościami.",
 		);
 	}
 
@@ -66,26 +59,22 @@ function renderMandatorySkillWorkspace(sheet, root) {
 
 	for (const button of dropZone.querySelectorAll("[data-race-package-create]")) {
 		button.addEventListener("click", () => {
-			void createPackage(sheet, String(button.dataset.racePackageCreate ?? ""))
-				.catch(reportError);
+			void createPackage(sheet, String(button.dataset.racePackageCreate ?? "")).catch(reportError);
 		});
 	}
 	for (const button of dropZone.querySelectorAll("[data-race-package-edit]")) {
 		button.addEventListener("click", () => {
-			void editPackage(sheet, String(button.dataset.racePackageEdit ?? ""))
-				.catch(reportError);
+			void editPackage(sheet, String(button.dataset.racePackageEdit ?? "")).catch(reportError);
 		});
 	}
 	for (const button of dropZone.querySelectorAll("[data-race-entry-configure]")) {
 		button.addEventListener("click", () => {
-			void configureEntry(sheet, String(button.dataset.raceEntryConfigure ?? ""))
-				.catch(reportError);
+			void configureEntry(sheet, String(button.dataset.raceEntryConfigure ?? "")).catch(reportError);
 		});
 	}
 	for (const button of dropZone.querySelectorAll("[data-race-entry-delete]")) {
 		button.addEventListener("click", () => {
-			void deleteEntry(sheet, String(button.dataset.raceEntryDelete ?? ""))
-				.catch(reportError);
+			void deleteEntry(sheet, String(button.dataset.raceEntryDelete ?? "")).catch(reportError);
 		});
 	}
 }
@@ -154,13 +143,6 @@ async function createPackage(sheet, seedEntryId) {
 	const freeRows = freeCandidates(entries);
 	const seed = freeRows.find((row) => row.entryId === seedEntryId);
 	if (!seed) return;
-	if (freeRows.length < 2) {
-		ui.notifications.info(localize(
-			"At least two free Skills are required to create a package.",
-			"Do utworzenia pakietu potrzebne są co najmniej dwie wolne Umiejętności.",
-		));
-		return;
-	}
 
 	const result = await packageDialog({
 		title: localize("Create racial Skill package", "Utwórz pakiet rasowych Umiejętności"),
@@ -174,10 +156,13 @@ async function createPackage(sheet, seedEntryId) {
 
 	const selected = new Set(result.selectedEntryIds);
 	const selectedEntries = entries.filter((entry) => selected.has(String(entry?.id ?? "")));
-	if (selectedEntries.length < 2) return;
+	const choices = [
+		...selectedEntries.flatMap((entry) => cloneArray(entry.choices)),
+		...cloneArray(result.externalChoices),
+	];
+	if (choices.length < 2) return;
 
-	const choices = selectedEntries.flatMap((entry) => cloneArray(entry.choices));
-	const firstIndex = entries.findIndex((entry) => selected.has(String(entry?.id ?? "")));
+	const firstIndex = Math.max(0, entries.findIndex((entry) => selected.has(String(entry?.id ?? ""))));
 	const next = entries.filter((entry) => !selected.has(String(entry?.id ?? "")));
 	const packageEntry = {
 		id: foundry.utils.randomID(),
@@ -186,7 +171,7 @@ async function createPackage(sheet, seedEntryId) {
 		choose: clampChoose(result.choose, choices.length),
 		choices,
 	};
-	next.splice(Math.max(0, firstIndex), 0, packageEntry);
+	next.splice(Math.min(firstIndex, next.length), 0, packageEntry);
 	await sheet.document.update({ "system.mandatorySkills": next });
 }
 
@@ -196,30 +181,37 @@ async function editPackage(sheet, entryId) {
 	const packageEntry = entries[packageIndex];
 	if (!packageEntry || cloneArray(packageEntry.choices).length < 2) return;
 
+	const originalChoices = new Map(cloneArray(packageEntry.choices).map((choice) => [String(choice?.id ?? ""), choice]));
 	const freeRows = freeCandidates(entries);
+	const freeById = new Map(freeRows.map((row) => [row.entryId, row]));
 	const currentMembers = cloneArray(packageEntry.choices).map((choice) => ({
 		key: `package:${String(choice?.id ?? foundry.utils.randomID())}`,
 		origin: "package",
 		choiceId: String(choice?.id ?? ""),
 		label: choiceLabel(choice),
+		choice,
 	}));
-	const freeById = new Map(freeRows.map((row) => [row.entryId, row]));
 
 	const result = await editPackageDialog(packageEntry, currentMembers, freeRows);
 	if (!result) return;
 
-	const originalChoices = new Map(cloneArray(packageEntry.choices).map((choice) => [String(choice?.id ?? ""), choice]));
 	const newChoices = [];
 	const consumedFreeIds = new Set();
 	for (const member of result.members) {
 		if (member.origin === "package") {
 			const choice = originalChoices.get(member.choiceId);
 			if (choice) newChoices.push(choice);
-		} else {
+			continue;
+		}
+		if (member.origin === "free") {
 			const row = freeById.get(member.entryId);
 			if (!row) continue;
 			consumedFreeIds.add(member.entryId);
 			newChoices.push(...cloneArray(row.entry?.choices));
+			continue;
+		}
+		if (member.origin === "external" && member.choice) {
+			newChoices.push(foundry.utils.deepClone(member.choice));
 		}
 	}
 
@@ -227,7 +219,7 @@ async function editPackage(sheet, entryId) {
 		!result.members.some((member) => member.origin === "package" && member.choiceId === String(choice?.id ?? "")),
 	);
 
-	let next = entries.filter((entry) => !consumedFreeIds.has(String(entry?.id ?? "")));
+	const next = entries.filter((entry) => !consumedFreeIds.has(String(entry?.id ?? "")));
 	const currentIndex = next.findIndex((entry) => String(entry?.id ?? "") === entryId);
 	if (currentIndex < 0) return;
 
@@ -302,21 +294,15 @@ async function deleteEntry(sheet, entryId) {
 }
 
 async function packageDialog({ title, rows, seedEntryId, minInitialSkills, mode, choose }) {
+	const externalChoices = new Map();
 	const content = `
 		<div class="wfrp1ed career-package-builder">
 			<p class="career-package-builder__intro">${escapeHtml(localize(
-				"Select free Skills to join this Skill in one package.",
-				"Wybierz wolne Umiejętności, które razem z tą Umiejętnością utworzą jeden pakiet.",
+				"Select free Skills below, or drag a Skill directly from the sidebar into this list.",
+				"Wybierz wolne Umiejętności poniżej albo przeciągnij Umiejętność bezpośrednio z panelu bocznego na tę listę.",
 			))}</p>
-			<div class="career-package-builder__choices">
-				${rows.map((row) => {
-					const seed = row.entryId === seedEntryId;
-					return `<label class="career-package-builder__choice ${seed ? "career-package-builder__choice--seed" : ""}">
-						<input type="checkbox" name="packageMember" value="${escapeHtml(row.entryId)}" ${seed ? "checked disabled" : ""}>
-						<span>${escapeHtml(row.label)}</span>
-						${seed ? `<small>${escapeHtml(localize("Starting row", "Wpis początkowy"))}</small>` : ""}
-					</label>`;
-				}).join("")}
+			<div class="career-package-builder__choices" data-race-package-drop-target>
+				${rows.map((row) => candidateHtml(row, row.entryId === seedEntryId)).join("")}
 			</div>
 			<div class="career-package-builder__settings">
 				<label>${escapeHtml(localize("Applies from initial Skill count", "Obowiązuje od liczby początkowych Umiejętności"))}<input type="number" name="minInitialSkills" min="1" step="1" value="${Math.max(1, integer(minInitialSkills, 1))}"></label>
@@ -327,9 +313,10 @@ async function packageDialog({ title, rows, seedEntryId, minInitialSkills, mode,
 	return DialogV2.wait({
 		window: { title }, content, modal: true, rejectClose: false,
 		render: (_event, dialog) => {
+			const list = dialog.element.querySelector("[data-race-package-drop-target]");
+			const chooseInput = dialog.element.querySelector('input[name="choose"]');
 			const sync = () => {
 				const selected = dialog.element.querySelectorAll('input[name="packageMember"]:checked').length;
-				const chooseInput = dialog.element.querySelector('input[name="choose"]');
 				if (chooseInput instanceof HTMLInputElement) {
 					chooseInput.max = String(Math.max(1, selected));
 					chooseInput.value = String(clampChoose(chooseInput.value, Math.max(1, selected)));
@@ -337,20 +324,42 @@ async function packageDialog({ title, rows, seedEntryId, minInitialSkills, mode,
 				const button = dialog.element.querySelector('button[data-action="create"]');
 				if (button instanceof HTMLButtonElement) button.disabled = selected < 2;
 			};
-			for (const checkbox of dialog.element.querySelectorAll('input[name="packageMember"]')) checkbox.addEventListener("change", sync);
+
+			list?.addEventListener("change", sync);
+			installSkillDropTarget(list, async (skill) => {
+				const existing = rows.find((row) => choiceMatchesSkill(row.entry?.choices?.[0], skill));
+				if (existing) {
+					const checkbox = dialog.element.querySelector(`input[name="packageMember"][value="${cssEscape(existing.entryId)}"]`);
+					if (checkbox instanceof HTMLInputElement) checkbox.checked = true;
+					sync();
+					return;
+				}
+				if ([...externalChoices.values()].some((choice) => choiceMatchesSkill(choice, skill))) {
+					ui.notifications.info(localize("This Skill is already selected for the package.", "Ta Umiejętność jest już wybrana do pakietu."));
+					return;
+				}
+				const choice = choiceFromSkill(skill);
+				const key = `external:${choice.id}`;
+				externalChoices.set(key, choice);
+				list?.insertAdjacentHTML("beforeend", externalCandidateHtml(key, choice));
+				sync();
+			});
 			sync();
 		},
 		buttons: [{
 			action: "create", label: localize("Create package", "Utwórz pakiet"), default: true,
 			callback: (_event, button) => {
-				const selectedEntryIds = [...button.form.querySelectorAll('input[name="packageMember"]:checked')].map((input) => String(input.value));
-				if (selectedEntryIds.length < 2) return false;
+				const checked = [...button.form.querySelectorAll('input[name="packageMember"]:checked')].map((input) => String(input.value));
+				if (checked.length < 2) return false;
+				const selectedEntryIds = checked.filter((id) => !id.startsWith("external:"));
+				const selectedExternal = checked.map((id) => externalChoices.get(id)).filter(Boolean);
 				const data = new FormData(button.form);
 				return {
 					selectedEntryIds,
+					externalChoices: selectedExternal,
 					minInitialSkills: Math.max(1, integer(data.get("minInitialSkills"), 1)),
 					mode: normalizeMode(data.get("mode")),
-					choose: clampChoose(data.get("choose"), selectedEntryIds.length),
+					choose: clampChoose(data.get("choose"), checked.length),
 				};
 			},
 		}],
@@ -363,12 +372,13 @@ async function editPackageDialog(packageEntry, initialMembers, freeRows) {
 	const content = `
 		<div class="wfrp1ed career-package-editor">
 			<div class="career-package-editor__heading"><strong>${escapeHtml(localize("Package members", "Elementy pakietu"))}</strong><button type="button" data-package-add title="${escapeHtml(localize("Add free Skills", "Dodaj wolne Umiejętności"))}"><i class="fa-solid fa-plus"></i></button></div>
-			<div class="career-package-editor__members"></div>
+			<p class="career-package-builder__intro">${escapeHtml(localize("You can also drag a Skill directly from the sidebar into the member list.", "Możesz również przeciągnąć Umiejętność bezpośrednio z panelu bocznego na listę elementów."))}</p>
+			<div class="career-package-editor__members" data-race-package-drop-target></div>
 			<div class="career-package-builder__settings">
 				<label>${escapeHtml(localize("Applies from initial Skill count", "Obowiązuje od liczby początkowych Umiejętności"))}<input type="number" name="minInitialSkills" min="1" step="1" value="${Math.max(1, integer(packageEntry.minInitialSkills, 1))}"></label>
 				${modeControls(packageEntry.mode, packageEntry.choose, Math.max(1, initialMembers.length))}
 			</div>
-			<p class="hint">${escapeHtml(localize("Removing a member returns it to the free racial Skill list; it does not delete the Skill.", "Usunięcie elementu przenosi go z powrotem na listę wolnych rasowych Umiejętności; nie usuwa Umiejętności."))}</p>
+			<p class="hint">${escapeHtml(localize("Removing a member returns existing Race entries to the free racial Skill list; it does not delete the Skill.", "Usunięcie elementu przenosi istniejące wpisy Rasy z powrotem na listę wolnych rasowych Umiejętności; nie usuwa Umiejętności."))}</p>
 		</div>`;
 
 	return DialogV2.wait({
@@ -376,21 +386,49 @@ async function editPackageDialog(packageEntry, initialMembers, freeRows) {
 		render: (_event, dialog) => {
 			const list = dialog.element.querySelector(".career-package-editor__members");
 			const add = dialog.element.querySelector("[data-package-add]");
+			const chooseInput = dialog.element.querySelector('input[name="choose"]');
+
 			const render = () => {
-				if (list instanceof HTMLElement) list.innerHTML = state.members.map((member) => `<div class="career-package-editor__member"><span>${escapeHtml(member.label)}</span><button type="button" data-remove="${escapeHtml(member.key)}"><i class="fa-solid fa-xmark"></i></button></div>`).join("");
+				if (list instanceof HTMLElement) {
+					list.innerHTML = state.members.length
+						? state.members.map((member) => `<div class="career-package-editor__member"><span>${escapeHtml(member.label)}</span><button type="button" data-remove="${escapeHtml(member.key)}"><i class="fa-solid fa-xmark"></i></button></div>`).join("")
+						: `<p class="career-package-editor__empty">${escapeHtml(localize("Drop a Skill here or use + to add an existing free entry.", "Upuść tutaj Umiejętność albo użyj +, aby dodać istniejący wolny wpis."))}</p>`;
+				}
 				for (const button of list?.querySelectorAll?.("[data-remove]") ?? []) button.addEventListener("click", () => { state.members = state.members.filter((member) => member.key !== String(button.dataset.remove)); render(); });
 				if (add instanceof HTMLButtonElement) add.disabled = freeRows.every((row) => state.members.some((member) => member.entryId === row.entryId));
+				if (chooseInput instanceof HTMLInputElement) {
+					chooseInput.max = String(Math.max(1, state.members.length));
+					chooseInput.value = String(clampChoose(chooseInput.value, Math.max(1, state.members.length)));
+				}
 			};
+
 			add?.addEventListener("click", async () => {
 				const available = freeRows.filter((row) => !state.members.some((member) => member.entryId === row.entryId));
 				if (!available.length) return;
 				const selected = await selectFreeRows(available);
 				for (const id of selected ?? []) {
 					const row = freeById.get(id);
-					if (row) state.members.push({ key: `free:${id}`, origin: "free", entryId: id, label: row.label });
+					if (row) state.members.push({ key: `free:${id}`, origin: "free", entryId: id, label: row.label, choice: cloneArray(row.entry?.choices)[0] });
 				}
 				render();
 			});
+
+			installSkillDropTarget(list, async (skill) => {
+				if (state.members.some((member) => memberChoiceMatchesSkill(member, freeById, skill))) {
+					ui.notifications.info(localize("This Skill is already in the package.", "Ta Umiejętność już znajduje się w pakiecie."));
+					return;
+				}
+				const free = freeRows.find((row) => choiceMatchesSkill(row.entry?.choices?.[0], skill));
+				if (free) {
+					state.members.push({ key: `free:${free.entryId}`, origin: "free", entryId: free.entryId, label: free.label, choice: cloneArray(free.entry?.choices)[0] });
+				} else {
+					const choice = choiceFromSkill(skill);
+					state.members.push({ key: `external:${choice.id}`, origin: "external", label: choiceLabel(choice), choice });
+				}
+				render();
+			});
+
+			chooseInput?.addEventListener("input", render);
 			render();
 		},
 		buttons: [{
@@ -398,7 +436,7 @@ async function editPackageDialog(packageEntry, initialMembers, freeRows) {
 			callback: (_event, button) => {
 				const data = new FormData(button.form);
 				return {
-					members: state.members.map((member) => ({ origin: member.origin, choiceId: member.choiceId ?? "", entryId: member.entryId ?? "" })),
+					members: state.members.map((member) => ({ origin: member.origin, choiceId: member.choiceId ?? "", entryId: member.entryId ?? "", choice: member.origin === "external" ? foundry.utils.deepClone(member.choice) : null })),
 					minInitialSkills: Math.max(1, integer(data.get("minInitialSkills"), 1)),
 					mode: normalizeMode(data.get("mode")),
 					choose: clampChoose(data.get("choose"), Math.max(1, state.members.length)),
@@ -414,6 +452,14 @@ async function selectFreeRows(rows) {
 		content: `<div class="wfrp1ed career-package-builder__choices">${rows.map((row) => `<label class="career-package-builder__choice"><input type="checkbox" name="freeRow" value="${escapeHtml(row.entryId)}"><span>${escapeHtml(row.label)}</span></label>`).join("")}</div>`,
 		buttons: [{ action: "add", label: localize("Add", "Dodaj"), default: true, callback: (_event, button) => [...button.form.querySelectorAll('input[name="freeRow"]:checked')].map((input) => String(input.value)) }],
 	});
+}
+
+function candidateHtml(row, seed) {
+	return `<label class="career-package-builder__choice ${seed ? "career-package-builder__choice--seed" : ""}"><input type="checkbox" name="packageMember" value="${escapeHtml(row.entryId)}" ${seed ? "checked disabled" : ""}><span>${escapeHtml(row.label)}</span>${seed ? `<small>${escapeHtml(localize("Starting row", "Wpis początkowy"))}</small>` : ""}</label>`;
+}
+
+function externalCandidateHtml(key, choice) {
+	return `<label class="career-package-builder__choice"><input type="checkbox" name="packageMember" value="${escapeHtml(key)}" checked><span>${escapeHtml(choiceLabel(choice))}</span><small>${escapeHtml(localize("Dropped from sidebar", "Upuszczono z panelu bocznego"))}</small></label>`;
 }
 
 function modeControls(mode, choose, maxChoose) {
@@ -446,6 +492,90 @@ function standaloneFromChoice(choice, minInitialSkills) {
 	};
 }
 
+async function installSkillDropTarget(element, onSkill) {
+	if (!(element instanceof HTMLElement)) return;
+	element.addEventListener("dragover", (event) => {
+		event.preventDefault();
+		element.classList.add("is-drag-over");
+	});
+	element.addEventListener("dragleave", (event) => {
+		if (!element.contains(event.relatedTarget)) element.classList.remove("is-drag-over");
+	});
+	element.addEventListener("drop", (event) => {
+		event.preventDefault();
+		event.stopPropagation();
+		element.classList.remove("is-drag-over");
+		void resolveDroppedSkill(event).then((skill) => {
+			if (skill) return onSkill(skill);
+			return null;
+		}).catch(reportError);
+	});
+}
+
+async function resolveDroppedSkill(event) {
+	let data;
+	try {
+		data = TextEditor.getDragEventData(event);
+	} catch (_error) {
+		return null;
+	}
+	if (!data || data.type !== "Item") return null;
+	const uuid = String(data.uuid ?? "");
+	if (!uuid) return null;
+	const document = await fromUuid(uuid);
+	if (!(document instanceof foundry.documents.Item)) return null;
+	if (document.type !== "skill") {
+		ui.notifications.warn(localize("Only Skill Items can be dropped into a racial Skill package.", "Do pakietu rasowych Umiejętności można upuszczać wyłącznie Przedmioty typu Umiejętność."));
+		return null;
+	}
+	return document;
+}
+
+function choiceFromSkill(document) {
+	const grant = skillReference(document);
+	return {
+		id: foundry.utils.randomID(),
+		label: grantDisplayName(grant),
+		grants: [grant],
+	};
+}
+
+function skillReference(document) {
+	return {
+		uuid: String(document.uuid ?? ""),
+		rulesId: String(document.system?.rulesId ?? ""),
+		name: String(document.name ?? ""),
+		specialisation: String(document.system?.specialisation ?? ""),
+	};
+}
+
+function choiceMatchesSkill(choice, skill) {
+	const reference = cloneArray(choice?.grants)[0];
+	return sameReference(reference, skillReference(skill));
+}
+
+function memberChoiceMatchesSkill(member, freeById, skill) {
+	if (member?.choice && choiceMatchesSkill(member.choice, skill)) return true;
+	if (member?.origin === "free") {
+		const row = freeById.get(member.entryId);
+		return choiceMatchesSkill(row?.entry?.choices?.[0], skill);
+	}
+	return false;
+}
+
+function sameReference(a, b) {
+	const aRules = String(a?.rulesId ?? "");
+	const bRules = String(b?.rulesId ?? "");
+	if (aRules && bRules) return aRules === bRules && String(a?.specialisation ?? "") === String(b?.specialisation ?? "");
+	return Boolean(String(a?.uuid ?? "")) && String(a?.uuid ?? "") === String(b?.uuid ?? "");
+}
+
+function grantDisplayName(grant) {
+	const name = String(grant?.name ?? grant?.rulesId ?? "").trim() || "—";
+	const specialisation = String(grant?.specialisation ?? "").trim();
+	return specialisation ? `${name} (${specialisation})` : name;
+}
+
 function metaLabel(entry, choiceCount, packageNumber) {
 	const threshold = Math.max(1, integer(entry?.minInitialSkills, 1));
 	const thresholdText = localize(`from ${threshold} Skills`, `od ${threshold} Umiejętności`);
@@ -467,18 +597,12 @@ function metaLabel(entry, choiceCount, packageNumber) {
 function choiceLabel(choice) {
 	const explicit = String(choice?.label ?? "").trim();
 	if (explicit) return explicit;
-	return cloneArray(choice?.grants).map((grant) => {
-		const name = String(grant?.name ?? grant?.rulesId ?? "").trim();
-		const spec = String(grant?.specialisation ?? "").trim();
-		return spec ? `${name} (${spec})` : name;
-	}).filter(Boolean).join(" + ") || "—";
+	return cloneArray(choice?.grants).map((grant) => grantDisplayName(grant)).filter(Boolean).join(" + ") || "—";
 }
 
 function normalizeMode(value) {
 	const candidate = String(value ?? "");
-	return Object.values(RACE_INITIAL_SKILL_MODE).includes(candidate)
-		? candidate
-		: RACE_INITIAL_SKILL_MODE.ALL;
+	return Object.values(RACE_INITIAL_SKILL_MODE).includes(candidate) ? candidate : RACE_INITIAL_SKILL_MODE.ALL;
 }
 
 function clampChoose(value, maximum) {
@@ -493,6 +617,10 @@ function integer(value, fallback = 0) {
 function cloneArray(value) {
 	const source = value?.toObject?.() ?? value;
 	return Array.isArray(source) ? foundry.utils.deepClone(source) : [];
+}
+
+function cssEscape(value) {
+	return globalThis.CSS?.escape?.(String(value ?? "")) ?? String(value ?? "").replaceAll('"', '\\"');
 }
 
 function escapeHtml(value) {
