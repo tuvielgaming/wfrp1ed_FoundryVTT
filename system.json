@@ -36,6 +36,7 @@
 		"module/careers/CareerTabWorkspace.mjs",
 		"module/careers/CareerSkillDropHintIntegration.mjs",
 		"module/authoring/UnifiedSkillDragIntegration.mjs",
+		"module/authoring/SkillAuthoringUxPolish.mjs",
 		"module/careers/CareerProgressionIntegration.mjs",
 		"module/careers/CareerCompletionIntegration.mjs",
 		"module/experience/ExperienceSheetIntegration.mjs",
