@@ -1,0 +1,48 @@
+<section class="language-sheet-content">
+	<header class="language-sheet-header wfrp1ed-item-header">
+		<img
+			class="language-sheet-image wfrp1ed-item-header__image"
+			data-wfrp1ed-item-image
+			src="{{item.img}}"
+			alt="{{item.name}}"
+		>
+
+		<div class="language-sheet-field language-sheet-field--name">
+			<label for="language-name-{{item.id}}">{{ui.name}}</label>
+			<input
+				id="language-name-{{item.id}}"
+				type="text"
+				name="name"
+				value="{{item.name}}"
+				autocomplete="off"
+				required
+				{{#unless editable}}disabled{{/unless}}
+			>
+		</div>
+	</header>
+
+	<div class="language-sheet-field language-sheet-field--rules-id">
+		<label
+			for="language-rules-id-{{item.id}}"
+			data-tooltip="{{ui.rulesIdHint}}"
+		>{{ui.rulesId}}</label>
+		<input
+			id="language-rules-id-{{item.id}}"
+			type="text"
+			name="system.rulesId"
+			value="{{system.rulesId}}"
+			autocomplete="off"
+			{{#unless editable}}disabled{{/unless}}
+		>
+	</div>
+
+	<div class="language-sheet-field language-sheet-field--description">
+		<label for="language-description-{{item.id}}">{{ui.description}}</label>
+		<textarea
+			id="language-description-{{item.id}}"
+			name="system.description"
+			spellcheck="true"
+			{{#unless editable}}disabled{{/unless}}
+		>{{system.description}}</textarea>
+	</div>
+</section>
