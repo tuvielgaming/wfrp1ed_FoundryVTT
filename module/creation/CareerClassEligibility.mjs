@@ -1,6 +1,7 @@
 import { CharacterCreationMode } from "./CharacterCreationModeIntegration.mjs";
 import "./RaceCharacteristicGeneration.mjs";
 import "./RaceSecondaryGeneration.mjs";
+import "./RaceInitialSkillGeneration.mjs";
 
 const CAREER_CLASSES = Object.freeze([
 	Object.freeze({ id: "warrior", pl: "Wojownik", en: "Warrior" }),
