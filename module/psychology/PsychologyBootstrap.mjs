@@ -2,6 +2,7 @@ import { PsychologyData } from "../data-models/item/PsychologyData.mjs";
 import { PsychologyItemSheet } from "../sheets/PsychologyItemSheet.mjs";
 import "../races/RacePsychologyAuthoringIntegration.mjs";
 import "./CharacterPsychologyIntegration.mjs";
+import "../authoring/SingleDestinationItemDropIntegration.mjs";
 
 const { DocumentSheetConfig } = foundry.applications.apps;
 const { Item } = foundry.documents;
