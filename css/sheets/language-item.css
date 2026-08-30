@@ -1,0 +1,88 @@
+/******************************************************************/
+/*                   WFRP 1e Language Item Sheet                  */
+/******************************************************************/
+
+.language-item-sheet {
+	--language-border: rgb(0 0 0 / 48%);
+	--language-field: #e8dfcc;
+	--language-focus: #f8f1e2;
+	--language-text: #1c1812;
+	font-family: "Book Antiqua", "Times New Roman", serif;
+}
+
+.language-item-sheet .window-content {
+	overflow-y: auto;
+}
+
+.language-item-sheet .language-sheet-content {
+	display: grid;
+	gap: 14px;
+	width: 100%;
+	padding: 16px;
+}
+
+.language-item-sheet .language-sheet-image {
+	border: 1px solid var(--language-border);
+}
+
+.language-item-sheet .language-sheet-field {
+	display: grid;
+	grid-template-columns: 130px minmax(0, 1fr);
+	align-items: center;
+	gap: 10px;
+	min-width: 0;
+}
+
+.language-item-sheet .language-sheet-header .language-sheet-field--name,
+.language-item-sheet .language-sheet-field--description {
+	grid-template-columns: 1fr;
+	grid-template-rows: auto auto;
+	align-items: stretch;
+	gap: 5px;
+}
+
+.language-item-sheet .language-sheet-field > label {
+	font-size: 14px;
+	font-weight: 700;
+	line-height: 1.2;
+}
+
+.language-item-sheet .language-sheet-field > input,
+.language-item-sheet .language-sheet-field > textarea {
+	width: 100%;
+	min-width: 0;
+	margin: 0;
+	border: 1px solid var(--language-border);
+	border-radius: 3px;
+	background: var(--language-field);
+	box-shadow: none;
+	font: inherit;
+	color: var(--language-text);
+}
+
+.language-item-sheet .language-sheet-field > input {
+	height: 34px;
+	padding: 4px 8px;
+	font-size: 15px;
+}
+
+.language-item-sheet .language-sheet-field > textarea {
+	min-height: 210px;
+	padding: 8px;
+	font-size: 14px;
+	line-height: 1.35;
+	resize: vertical;
+}
+
+.language-item-sheet .language-sheet-field > input:focus,
+.language-item-sheet .language-sheet-field > textarea:focus {
+	outline: 1px solid #7a0019;
+	outline-offset: -1px;
+	background: var(--language-focus);
+}
+
+.language-item-sheet .language-sheet-field > input:disabled,
+.language-item-sheet .language-sheet-field > textarea:disabled {
+	cursor: default;
+	opacity: 0.55;
+}
