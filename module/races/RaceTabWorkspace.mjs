@@ -66,6 +66,7 @@ function prepareWorkspace(root) {
 			continue;
 		}
 		panel.dataset.racePanel = tab;
+		panel.classList.toggle("race-skills-panel", tab === "skills");
 	}
 
 	const skillTablePanel = root.querySelector('[data-race-drop-zone="skillTable"]')?.closest?.(".race-sheet-panel");
@@ -74,6 +75,63 @@ function prepareWorkspace(root) {
 	const careerHeading = careerTablePanel?.querySelector?.("h2");
 	if (skillHeading) skillHeading.textContent = localize("Random Initial Skills", "Losowe Umiejętności Początkowe");
 	if (careerHeading) careerHeading.textContent = localize("Random Initial Professions", "Losowe Profesje Początkowe");
+
+	enhanceSkillsWorkspace(root);
+}
+
+function enhanceSkillsWorkspace(root) {
+	const agePanel = root.querySelector('[data-action="addAgeBand"]')?.closest?.(".race-sheet-panel");
+	agePanel?.classList?.add("race-skills-panel--age");
+
+	const mandatory = root.querySelector(".race-mandatory-section");
+	if (mandatory instanceof HTMLElement) {
+		mandatory.classList.add("race-skills-panel--mandatory");
+
+		const heading = mandatory.querySelector("h2");
+		if (heading instanceof HTMLElement && !(heading.parentElement?.classList?.contains("race-mandatory-heading"))) {
+			const wrapper = document.createElement("div");
+			wrapper.className = "race-mandatory-heading";
+			heading.before(wrapper);
+			wrapper.append(heading);
+
+			const help = document.createElement("button");
+			help.type = "button";
+			help.className = "race-help-badge";
+			help.innerHTML = '<i class="fa-solid fa-circle-question" aria-hidden="true"></i>';
+			const helpText = localize(
+				"Mandatory racial Skills are resolved before the remaining random initial Skills. Drop a Skill anywhere in this section to add a standalone entry. Use the package icon on a Skill row to group free Skills. 'Applies from initial Skill count' means the minimum total number of starting Skills required before that racial rule becomes active.",
+				"Obowiązkowe Umiejętności rasowe są rozpatrywane przed losowaniem pozostałych Umiejętności początkowych. Upuść Umiejętność w dowolnym miejscu tej sekcji, aby dodać pojedynczy wpis. Użyj ikony pakietu przy wpisie, aby połączyć wolne Umiejętności w grupę. „Obowiązuje od liczby początkowych Umiejętności” oznacza minimalną łączną liczbę Umiejętności początkowych, od której dana reguła rasowa zaczyna obowiązywać.",
+			);
+			help.title = helpText;
+			help.dataset.tooltip = helpText;
+			help.setAttribute("aria-label", helpText);
+			wrapper.append(help);
+		}
+
+		const hint = mandatory.querySelector(".race-sheet-hint");
+		if (hint instanceof HTMLElement) {
+			hint.textContent = localize(
+				"Drop a Skill here to add a standalone mandatory Skill. Use the package icon on a row to create or edit a choice group.",
+				"Upuść tutaj Umiejętność, aby dodać pojedynczą obowiązkową Umiejętność. Użyj ikony pakietu przy wpisie, aby utworzyć lub edytować grupę wyboru.",
+			);
+		}
+
+		const empty = mandatory.querySelector(".race-mandatory-drop-surface .career-empty");
+		if (empty instanceof HTMLElement) {
+			empty.className = "race-mandatory-empty";
+			empty.innerHTML = `
+				<i class="fa-solid fa-boxes-stacked" aria-hidden="true"></i>
+				<strong>${escapeHtml(localize("No mandatory racial Skills defined", "Brak zdefiniowanych obowiązkowych Umiejętności rasowych"))}</strong>
+				<span>${escapeHtml(localize(
+					"Drop a Skill into this area to add the first entry. Packages are created later from the package icon on existing rows.",
+					"Upuść Umiejętność w tym obszarze, aby dodać pierwszy wpis. Pakiety tworzy się później ikoną pakietu przy istniejących wpisach.",
+				))}</span>
+			`;
+		}
+	}
+
+	const skillTablePanel = root.querySelector('[data-race-drop-zone="skillTable"]')?.closest?.(".race-sheet-panel");
+	skillTablePanel?.classList?.add("race-skills-panel--random");
 }
 
 function classifyPanel(panel) {
@@ -110,6 +168,15 @@ function activateTab(root, selected) {
 function normalizedTab(value) {
 	const tab = String(value ?? "").trim();
 	return TABS.includes(tab) ? tab : "";
+}
+
+function escapeHtml(value) {
+	return String(value ?? "")
+		.replaceAll("&", "&amp;")
+		.replaceAll("<", "&lt;")
+		.replaceAll(">", "&gt;")
+		.replaceAll('"', "&quot;")
+		.replaceAll("'", "&#039;");
 }
 
 function localize(english, polish) {
