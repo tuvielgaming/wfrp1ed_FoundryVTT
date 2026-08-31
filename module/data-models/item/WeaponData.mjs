@@ -14,6 +14,7 @@ import {
 	normalizeAmmunitionType,
 	normalizeCustomId,
 } from "./AmmunitionTypes.mjs";
+import { coreSkillSpecialisationId } from "../../core/CoreSkillSpecialisationCatalog.mjs";
 
 const {
 	BooleanField,
@@ -56,31 +57,15 @@ const WEAPON_MODIFIER_KEYS = Object.freeze([
 /**
  * Native Foundry v14 data model for a WFRP 1e Weapon Item.
  *
- * The Core combat procedure uses a held weapon as one input to an attack. The
- * weapon stores stable equipment state and authored rule facts; combat remains
- * responsible for attack economy, tests, damage, parry and ranged timing.
+ * Weapon mechanics are described by explicit structured fields: kind, group,
+ * Specialist Weapon binding, handedness, range, ammunition compatibility,
+ * firing cycle and Item-owned Active Effects.
  *
- * Weapon mechanics are identified by explicit structured fields such as kind,
- * group, specialist Skill binding, handedness, range, ammunition compatibility,
- * firing cycle and Item-owned ActiveEffects. A second generic `rulesId` is
- * intentionally not stored because it has no independent consumer.
- *
- * `optionalModifiers` mirrors the optional melee Weapon Modifiers table. The
- * values stay on the common Weapon data model so an Item can be re-authored,
- * but ranged presentation and ranged attack resolution must not consume them.
- *
- * Range bands deliberately preserve the printed-table dash (`-`) instead of
- * coercing it to numeric zero. A dash means that band does not exist for this
- * weapon; resolution skips it and proceeds to the next authored band.
- *
- * Ranged cadence uses one canonical Reload value. It is the number of complete
- * preparation rounds which must pass before another firing round is available.
- * `shotsPerFireRound` and magazine fields are separate because repeating
- * weapons can fire more than once in their legal firing round and may require a
- * distinct magazine-refill procedure.
- *
- * `ammunitionType` is compatibility only. The concrete Equipment Item selected
- * for a shot remains the ammunition variant and may carry its own ActiveEffects.
+ * `specialistSkillId` stores a stable language-neutral id from the audited Core
+ * Specialist Weapon catalogue. The value "custom" means the homebrew binding is
+ * stored in `specialistSkillCustom`. The historical free-text `weaponClass`
+ * field is intentionally discarded: it had no independent mechanical consumer
+ * and duplicated the structured fields above.
  */
 export class WeaponData extends TypeDataModel {
 	static defineSchema() {
@@ -92,18 +77,14 @@ export class WeaponData extends TypeDataModel {
 				],
 			}),
 
-			weaponClass: textField(),
 			kind: textField(WEAPON_KIND.MELEE),
 			group: textField(WEAPON_GROUP.ORDINARY),
 			specialistSkillId: textField(),
+			specialistSkillCustom: textField(),
 			handedness: textField(WEAPON_HANDEDNESS.ONE),
 
 			parry: new SchemaField({
-				suitable: new BooleanField({
-					required: true,
-					nullable: false,
-					initial: true,
-				}),
+				suitable: new BooleanField({ required: true, nullable: false, initial: true }),
 				bonus: integerField(),
 			}),
 
@@ -142,15 +123,10 @@ export class WeaponData extends TypeDataModel {
 		}
 
 		const migrated = migrateInventoryData(source, {
-			allowedModes: [
-				INVENTORY_MODE.CARRIED,
-				INVENTORY_MODE.HELD,
-			],
+			allowedModes: [INVENTORY_MODE.CARRIED, INVENTORY_MODE.HELD],
 			legacyEquippedMode: INVENTORY_MODE.HELD,
 		});
-		const sourceObject = source && typeof source === "object"
-			? source
-			: {};
+		const sourceObject = source && typeof source === "object" ? source : {};
 		const oldParry = objectValue(sourceObject.parry);
 		const optional = objectValue(sourceObject.optionalModifiers);
 		const range = objectValue(sourceObject.range);
@@ -161,20 +137,33 @@ export class WeaponData extends TypeDataModel {
 			inferWeaponKind(sourceObject, range),
 		);
 
-		/* Discard the transitional generic identity. Weapon behaviour is defined
-		 * by explicit structured fields and ActiveEffects. */
 		delete migrated.rulesId;
+		delete migrated.weaponClass;
 
-		migrated.weaponClass = unwrapText(sourceObject.weaponClass);
 		migrated.kind = kind;
 		migrated.group = normalizeAllowed(
 			sourceObject.group,
 			Object.values(WEAPON_GROUP),
 			WEAPON_GROUP.ORDINARY,
 		);
-		migrated.specialistSkillId = unwrapText(
-			sourceObject.specialistSkillId,
-		);
+
+		const oldSpecialist = unwrapText(sourceObject.specialistSkillId);
+		const knownSpecialist = coreSkillSpecialisationId("specialistWeapon", oldSpecialist);
+		const explicitCustom = unwrapText(sourceObject.specialistSkillCustom);
+		if (knownSpecialist) {
+			migrated.specialistSkillId = knownSpecialist;
+			migrated.specialistSkillCustom = "";
+		} else if (oldSpecialist === "custom") {
+			migrated.specialistSkillId = "custom";
+			migrated.specialistSkillCustom = explicitCustom;
+		} else if (oldSpecialist) {
+			migrated.specialistSkillId = "custom";
+			migrated.specialistSkillCustom = explicitCustom || oldSpecialist;
+		} else {
+			migrated.specialistSkillId = "";
+			migrated.specialistSkillCustom = explicitCustom;
+		}
+
 		migrated.handedness = normalizeAllowed(
 			sourceObject.handedness,
 			Object.values(WEAPON_HANDEDNESS),
@@ -182,20 +171,14 @@ export class WeaponData extends TypeDataModel {
 		);
 
 		migrated.parry = {
-			suitable: Object.hasOwn(oldParry, "suitable")
-				? toBoolean(oldParry.suitable)
-				: true,
+			suitable: Object.hasOwn(oldParry, "suitable") ? toBoolean(oldParry.suitable) : true,
 			bonus: toInteger(oldParry.bonus),
 		};
 
 		migrated.optionalModifiers = {
 			initiative: legacyModifier(optional, "initiative", sourceObject.initiative),
 			toHit: legacyModifier(optional, "toHit", sourceObject.weaponSkill),
-			damage: legacyModifier(
-				optional,
-				"damage",
-				kind === WEAPON_KIND.MELEE ? sourceObject.damage : 0,
-			),
+			damage: legacyModifier(optional, "damage", kind === WEAPON_KIND.MELEE ? sourceObject.damage : 0),
 			parry: legacyModifier(optional, "parry", sourceObject.parry),
 		};
 
@@ -228,16 +211,9 @@ export class WeaponData extends TypeDataModel {
 
 		migrated.firingCycle = {
 			reloadRounds: migratedReloadRounds(sourceObject, firingCycle),
-			shotsPerFireRound: positiveIntegerValue(
-				unwrapValue(firingCycle.shotsPerFireRound),
-				1,
-			),
-			magazineCapacity: toNonNegativeInteger(
-				unwrapValue(firingCycle.magazineCapacity),
-			),
-			magazineReloadRounds: toNonNegativeInteger(
-				unwrapValue(firingCycle.magazineReloadRounds),
-			),
+			shotsPerFireRound: positiveIntegerValue(unwrapValue(firingCycle.shotsPerFireRound), 1),
+			magazineCapacity: toNonNegativeInteger(unwrapValue(firingCycle.magazineCapacity)),
+			magazineReloadRounds: toNonNegativeInteger(unwrapValue(firingCycle.magazineReloadRounds)),
 		};
 
 		return super.migrateData(migrated, options);
@@ -248,115 +224,57 @@ function migratedReloadRounds(sourceObject, firingCycle) {
 	if (Object.hasOwn(firingCycle, "reloadRounds")) {
 		return toNonNegativeInteger(unwrapValue(firingCycle.reloadRounds));
 	}
-
 	const splitLoad = Object.hasOwn(firingCycle, "loadRounds")
-		? toNonNegativeInteger(unwrapValue(firingCycle.loadRounds))
-		: 0;
+		? toNonNegativeInteger(unwrapValue(firingCycle.loadRounds)) : 0;
 	const splitRecovery = Object.hasOwn(firingCycle, "recoveryRounds")
-		? toNonNegativeInteger(unwrapValue(firingCycle.recoveryRounds))
-		: 0;
-
+		? toNonNegativeInteger(unwrapValue(firingCycle.recoveryRounds)) : 0;
 	if (splitLoad > 0) return splitLoad;
 	if (splitRecovery > 0) return splitRecovery;
-
 	const legacyReload = toNonNegativeInteger(unwrapValue(sourceObject.reload));
-	if (legacyReload > 0) return legacyReload;
-	return 0;
+	return legacyReload > 0 ? legacyReload : 0;
 }
 
 function textField(initial = "") {
-	return new StringField({
-		required: true,
-		nullable: false,
-		blank: true,
-		initial,
-		trim: true,
-	});
+	return new StringField({ required: true, nullable: false, blank: true, initial, trim: true });
 }
-
 function rangeField(initial = "0") {
-	return new StringField({
-		required: true,
-		nullable: false,
-		blank: false,
-		initial,
-		trim: true,
-	});
+	return new StringField({ required: true, nullable: false, blank: false, initial, trim: true });
 }
-
 function integerField(initial = 0) {
-	return new NumberField({
-		required: true,
-		nullable: false,
-		integer: true,
-		initial,
-	});
+	return new NumberField({ required: true, nullable: false, integer: true, initial });
 }
-
 function nonNegativeIntegerField(initial = 0) {
-	return new NumberField({
-		required: true,
-		nullable: false,
-		integer: true,
-		initial,
-		min: 0,
-	});
+	return new NumberField({ required: true, nullable: false, integer: true, initial, min: 0 });
 }
-
 function positiveIntegerField(initial = 1) {
-	return new NumberField({
-		required: true,
-		nullable: false,
-		integer: true,
-		initial,
-		min: 1,
-	});
+	return new NumberField({ required: true, nullable: false, integer: true, initial, min: 1 });
 }
-
 function positiveIntegerValue(value, fallback = 1) {
 	const number = Number(value);
-	return Number.isFinite(number) && Number.isInteger(number) && number > 0
-		? number
-		: fallback;
+	return Number.isFinite(number) && Number.isInteger(number) && number > 0 ? number : fallback;
 }
-
 function legacyModifier(container, key, legacyValue) {
-	if (Object.hasOwn(container, key)) {
-		return toInteger(unwrapValue(container[key]));
-	}
-	return toInteger(unwrapValue(legacyValue));
+	return Object.hasOwn(container, key) ? toInteger(unwrapValue(container[key])) : toInteger(unwrapValue(legacyValue));
 }
-
 function inferWeaponKind(source, range) {
 	if (source?.isRanged === true) return WEAPON_KIND.RANGED;
 	if (source?.isRanged === false) return WEAPON_KIND.MELEE;
-	return [range.short, range.long, range.max].some(
-		(value) => (rangeNumericValue(value) ?? 0) > 0,
-	)
-		? WEAPON_KIND.RANGED
-		: WEAPON_KIND.MELEE;
+	return [range.short, range.long, range.max].some((value) => (rangeNumericValue(value) ?? 0) > 0)
+		? WEAPON_KIND.RANGED : WEAPON_KIND.MELEE;
 }
-
 function normalizeAllowed(value, allowed, fallback) {
 	const normalized = unwrapText(value);
 	return allowed.includes(normalized) ? normalized : fallback;
 }
-
 function objectValue(value) {
-	return value && typeof value === "object" && !Array.isArray(value)
-		? value
-		: {};
+	return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
-
 function normalizeRangeValue(value) {
 	const raw = unwrapValue(value);
 	const text = String(raw ?? "").trim();
 	if (text === "-" || text === "—") return "-";
 	const number = Number(text);
-	if (!Number.isFinite(number) || !Number.isInteger(number) || number < 0) {
-		return "0";
-	}
-	return String(number);
+	return Number.isFinite(number) && Number.isInteger(number) && number >= 0 ? String(number) : "0";
 }
 
 export function rangeNumericValue(value) {
@@ -364,9 +282,7 @@ export function rangeNumericValue(value) {
 	const text = String(raw ?? "").trim();
 	if (text === "-" || text === "—") return null;
 	const number = Number(text);
-	return Number.isFinite(number) && Number.isInteger(number) && number >= 0
-		? number
-		: null;
+	return Number.isFinite(number) && Number.isInteger(number) && number >= 0 ? number : null;
 }
 
 export function rangeDisplayValue(value) {
@@ -380,11 +296,7 @@ export function rangeDisplayValue(value) {
 export function weaponOptionalModifierSnapshot(weapon) {
 	if (weapon?.type !== "weapon") return null;
 	const source = weapon.system?.optionalModifiers ?? {};
-	return Object.freeze(
-		Object.fromEntries(
-			WEAPON_MODIFIER_KEYS.map((key) => [key, toInteger(source[key])]),
-		),
-	);
+	return Object.freeze(Object.fromEntries(WEAPON_MODIFIER_KEYS.map((key) => [key, toInteger(source[key])])));
 }
 
 export function weaponRangedCycleSnapshot(weapon) {
@@ -395,16 +307,11 @@ export function weaponRangedCycleSnapshot(weapon) {
 		reloadRounds: toNonNegativeInteger(source.reloadRounds),
 		shotsPerFireRound: positiveIntegerValue(source.shotsPerFireRound, 1),
 		magazineCapacity,
-		magazineReloadRounds: magazineCapacity > 0
-			? toNonNegativeInteger(source.magazineReloadRounds)
-			: 0,
+		magazineReloadRounds: magazineCapacity > 0 ? toNonNegativeInteger(source.magazineReloadRounds) : 0,
 	});
 }
 
 export function weaponAmmunitionSnapshot(weapon) {
 	if (weapon?.type !== "weapon") return null;
-	return ammunitionIdentity({
-		type: weapon.system?.ammunitionType,
-		customId: weapon.system?.ammunitionCustomId,
-	});
+	return ammunitionIdentity({ type: weapon.system?.ammunitionType, customId: weapon.system?.ammunitionCustomId });
 }
