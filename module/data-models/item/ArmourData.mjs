@@ -5,7 +5,6 @@ import {
 	toBoolean,
 	toInteger,
 	toNonNegativeInteger,
-	unwrapText,
 	unwrapValue,
 } from "./InventoryItemFields.mjs";
 
@@ -71,6 +70,10 @@ export const ARMOUR_LOCATIONS = Object.freeze([
  * is location-based and may be layered only in the explicit Core combinations.
  * The equip validator owns that legality; this model stores the authored facts.
  *
+ * `piece` is the canonical structured Core armour identity used by layering and
+ * equipment rules. A second generic Rules ID is intentionally not stored: it
+ * would duplicate `piece` without adding a separate mechanical role.
+ *
  * Shields are represented as armour because their main-rule function is AP 1
  * over all body areas. A shield may additionally be authored as a parrying
  * item with the Core +20 WS parry bonus.
@@ -86,7 +89,6 @@ export class ArmourData extends TypeDataModel {
 				],
 			}),
 
-			rulesId: textField(),
 			armourClass: textField(ARMOUR_CLASS.OTHER),
 			piece: textField(ARMOUR_PIECE.CUSTOM),
 			armourPoints: nonNegativeIntegerField(),
@@ -125,7 +127,11 @@ export class ArmourData extends TypeDataModel {
 			: [];
 		const parry = objectValue(sourceObject.parry);
 
-		migrated.rulesId = unwrapText(sourceObject.rulesId);
+		/* `rulesId` was an early generic identity field. Armour now uses the
+		 * structured `piece` identity exclusively, so legacy values are discarded
+		 * rather than migrated into another redundant field. */
+		delete migrated.rulesId;
+
 		migrated.armourClass = normalizeAllowed(
 			sourceObject.armourClass ?? sourceObject.armorClass,
 			Object.values(ARMOUR_CLASS),
@@ -260,7 +266,7 @@ function nonNegativeIntegerField(initial = 0) {
 }
 
 function normalizeAllowed(value, allowed, fallback) {
-	const normalized = unwrapText(value);
+	const normalized = String(value ?? "").trim();
 	return allowed.includes(normalized) ? normalized : fallback;
 }
 
