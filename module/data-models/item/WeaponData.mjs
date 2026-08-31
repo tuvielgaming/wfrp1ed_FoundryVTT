@@ -60,6 +60,11 @@ const WEAPON_MODIFIER_KEYS = Object.freeze([
  * weapon stores stable equipment state and authored rule facts; combat remains
  * responsible for attack economy, tests, damage, parry and ranged timing.
  *
+ * Weapon mechanics are identified by explicit structured fields such as kind,
+ * group, specialist Skill binding, handedness, range, ammunition compatibility,
+ * firing cycle and Item-owned ActiveEffects. A second generic `rulesId` is
+ * intentionally not stored because it has no independent consumer.
+ *
  * `optionalModifiers` mirrors the optional melee Weapon Modifiers table. The
  * values stay on the common Weapon data model so an Item can be re-authored,
  * but ranged presentation and ranged attack resolution must not consume them.
@@ -87,7 +92,6 @@ export class WeaponData extends TypeDataModel {
 				],
 			}),
 
-			rulesId: textField(),
 			weaponClass: textField(),
 			kind: textField(WEAPON_KIND.MELEE),
 			group: textField(WEAPON_GROUP.ORDINARY),
@@ -157,7 +161,10 @@ export class WeaponData extends TypeDataModel {
 			inferWeaponKind(sourceObject, range),
 		);
 
-		migrated.rulesId = unwrapText(sourceObject.rulesId);
+		/* Discard the transitional generic identity. Weapon behaviour is defined
+		 * by explicit structured fields and ActiveEffects. */
+		delete migrated.rulesId;
+
 		migrated.weaponClass = unwrapText(sourceObject.weaponClass);
 		migrated.kind = kind;
 		migrated.group = normalizeAllowed(
