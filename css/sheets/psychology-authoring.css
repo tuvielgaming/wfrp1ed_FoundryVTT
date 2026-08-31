@@ -40,7 +40,7 @@
 
 .race-item-sheet .race-psychology-reference-row {
 	display: grid;
-	grid-template-columns: minmax(150px, 0.9fr) minmax(0, 1.5fr) minmax(100px, 0.55fr) 48px;
+	grid-template-columns: minmax(150px, 0.9fr) minmax(0, 1.5fr) 48px;
 	align-items: center;
 	gap: 7px;
 	min-height: 31px;
@@ -65,20 +65,6 @@
 }
 .race-item-sheet .race-psychology-reference-row__identity strong { font-size: 12px; }
 .race-item-sheet .race-psychology-reference-row__description { font-size: 11px; color: #574838; }
-.race-item-sheet .race-psychology-reference-row__rules {
-	justify-self: end;
-	max-width: 135px;
-	padding: 1px 6px;
-	border: 1px solid rgb(72 52 35 / 46%);
-	border-radius: 4px;
-	background: rgb(248 235 203 / 72%);
-	overflow: hidden;
-	font-family: Arial, Helvetica, sans-serif;
-	font-size: 9px;
-	font-weight: 700;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
 .race-item-sheet .race-psychology-reference-row__controls {
 	display: flex;
 	justify-content: flex-end;
@@ -225,7 +211,7 @@
 
 @media (max-width: 760px) {
 	.race-item-sheet .race-psychology-reference-row {
-		grid-template-columns: minmax(0, 1fr) 110px 48px;
+		grid-template-columns: minmax(0, 1fr) 48px;
 	}
 	.race-item-sheet .race-psychology-reference-row__description { display: none; }
 }
