@@ -70,6 +70,7 @@ export const STANDARD_TEST_SKILL_IDENTITIES = deepFreeze({
 	silentMoveUrban: identity("Silent Move Urban"),
 	sing: identity("Sing"),
 	smithing: identity("Smithing"),
+	specialistWeapon: localizedIdentity("Specialist Weapon", "Specjalna broń"),
 	stoneworking: identity("Stoneworking"),
 	storyTelling: identity("Story Telling"),
 	strongman: identity("Strongman"),
