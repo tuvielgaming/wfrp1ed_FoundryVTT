@@ -41,8 +41,8 @@ function renderLanguageAuthoring(section, race, editable) {
 	help.className = "race-sheet-hint race-language-help";
 	help.textContent = editable
 		? localize(
-			"Drag Language Items from the sidebar into this panel. Race Languages are references to Language Items; their Rules ID and name are edited on the Language Item.",
-			"Przeciągnij Przedmioty Języka z panelu bocznego do tej sekcji. Języki Rasy są odwołaniami do Przedmiotów Języka; ID reguły i nazwę edytuj na Przedmiocie Języka.",
+			"Drag Language Items from the sidebar into this panel. Race Languages are references to reusable Language Items; edit their name and description on the Language Item.",
+			"Przeciągnij Przedmioty Języka z panelu bocznego do tej sekcji. Języki Rasy są odwołaniami do wielokrotnego użytku; nazwę i opis edytuj na Przedmiocie Języka.",
 		)
 		: localize("Languages granted by this Race.", "Języki przyznawane przez tę Rasę.");
 	section.append(help);
@@ -86,12 +86,6 @@ function languageRow(entry, index, race, editable) {
 	name.textContent = displayName(entry);
 	identity.append(name);
 	row.append(identity);
-
-	const rules = document.createElement("span");
-	rules.className = "race-language-reference-row__rules";
-	rules.textContent = String(entry?.rulesId ?? "").trim() || localize("No Rules ID", "Brak ID reguły");
-	rules.title = localize("Rules ID", "ID reguły");
-	row.append(rules);
 
 	if (editable) {
 		const controls = document.createElement("div");
@@ -309,7 +303,7 @@ function ensureLanguageStyles() {
 	}
 	.race-item-sheet .race-language-reference-row {
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) minmax(110px, 180px) 48px;
+		grid-template-columns: minmax(0, 1fr) 48px;
 		align-items: center;
 		gap: 8px;
 		min-height: 30px;
@@ -337,20 +331,6 @@ function ensureLanguageStyles() {
 		font-size: 13px;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-	}
-	.race-item-sheet .race-language-reference-row__rules {
-		overflow: hidden;
-		padding: 2px 6px;
-		border: 1px solid rgb(72 52 35 / 42%);
-		border-radius: 4px;
-		background: rgb(248 235 203 / 66%);
-		font-family: Arial, Helvetica, sans-serif;
-		font-size: 10px;
-		font-weight: 700;
-		text-align: center;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-		color: #3f3023;
 	}
 	.race-item-sheet .race-language-reference-row__controls {
 		display: flex;
@@ -400,22 +380,6 @@ function ensureLanguageStyles() {
 	.race-item-sheet .race-language-authoring.is-language-drag-over .race-language-reference-list {
 		border-color: #8c1f1f;
 		background: rgb(133 24 24 / 8%);
-	}
-	@media (max-width: 760px) {
-		.race-item-sheet .race-language-reference-row {
-			grid-template-columns: minmax(0, 1fr) 48px;
-			gap: 5px;
-		}
-		.race-item-sheet .race-language-reference-row__rules {
-			grid-column: 1;
-			grid-row: 2;
-			justify-self: start;
-			max-width: 180px;
-		}
-		.race-item-sheet .race-language-reference-row__controls {
-			grid-column: 2;
-			grid-row: 1 / 3;
-		}
 	}
 	`;
 	document.head.append(style);
