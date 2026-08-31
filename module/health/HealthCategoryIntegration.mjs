@@ -6,8 +6,8 @@ const CRITICAL_WOUND_CATEGORY = "criticalWound";
  * Activate the compact health-category launcher rendered by the Classic sheet.
  *
  * The sheet owns only category entry points. Each category owns its own window
- * and item lifecycle, allowing Critical Wounds, diseases, mutations, and later
- * health-state document types to evolve independently.
+ * and item lifecycle, allowing Critical Wounds and later health-state document
+ * types to evolve independently.
  */
 Hooks.on(
 	"renderApplicationV2",
@@ -46,7 +46,6 @@ for (const hookName of ["createItem", "updateItem", "deleteItem"]) {
 }
 
 function prepareCriticalWoundLauncher(button, actor) {
-	const label = localize("Critical Wounds", "Rany krytyczne");
 	const count = [...(actor.items ?? [])].filter(
 		(item) => item.type === CRITICAL_WOUND_CATEGORY,
 	).length;
@@ -57,7 +56,18 @@ function prepareCriticalWoundLauncher(button, actor) {
 		"[data-health-category-label]",
 	);
 
-	if (labelElement) labelElement.textContent = label;
+	if (labelElement) {
+		labelElement.classList.add("classic-health-category__label--two-lines");
+		labelElement.replaceChildren();
+		const lines = game.i18n.lang === "pl"
+			? ["Rany", "krytyczne"]
+			: ["Critical", "Wounds"];
+		for (const lineText of lines) {
+			const line = document.createElement("span");
+			line.textContent = lineText;
+			labelElement.append(line);
+		}
+	}
 
 	if (countElement) {
 		countElement.textContent = String(count);
