@@ -7,33 +7,16 @@ const {
 const FLAG_SCOPE = "wfrp1ed";
 const RACE_GRANT_FLAG = "racePsychologyGrant";
 
-/**
- * Large management surface for Character Psychology and Health records.
- *
- * Categories are registered only when their native Item type is actually
- * implemented. This avoids placeholder tabs while keeping one stable manager
- * architecture for Core Psychology, Diseases, Disorders and occupational
- * magical diseases as those subsystems are added.
- */
+/** Large management surface for Character Psychology and Health records. */
 export class PsychologyHealthManagerWindow extends HandlebarsApplicationMixin(
 	ApplicationV2,
 ) {
 	static #instances = new Map();
 
 	static DEFAULT_OPTIONS = {
-		classes: [
-			"wfrp1ed",
-			"psychology-health-manager-window",
-			"wfrp1ed-parchment-window",
-		],
-		position: {
-			width: 760,
-			height: 600,
-		},
-		window: {
-			icon: "fas fa-brain",
-			resizable: true,
-		},
+		classes: ["wfrp1ed", "psychology-health-manager-window", "wfrp1ed-parchment-window"],
+		position: { width: 760, height: 600 },
+		window: { icon: "fas fa-brain", resizable: true },
 		actions: {
 			selectTab: this.#selectTab,
 			openItem: this.#openItem,
@@ -42,19 +25,12 @@ export class PsychologyHealthManagerWindow extends HandlebarsApplicationMixin(
 	};
 
 	static PARTS = {
-		body: {
-			template: "systems/wfrp1ed/templates/apps/psychology-health-manager-window.hbs",
-		},
+		body: { template: "systems/wfrp1ed/templates/apps/psychology-health-manager-window.hbs" },
 	};
 
 	constructor(actor, options = {}) {
-		if (!isCharacter(actor)) {
-			throw new Error("Psychology and Health Manager requires a Character Actor.");
-		}
-		super({
-			...options,
-			id: options.id ?? `wfrp1ed-psychology-health-${safeApplicationId(actor.uuid)}`,
-		});
+		if (!isCharacter(actor)) throw new Error("Psychology and Health Manager requires a Character Actor.");
+		super({ ...options, id: options.id ?? `wfrp1ed-psychology-health-${safeApplicationId(actor.uuid)}` });
 		this.actor = actor;
 		this.activeTab = validTab(options.tab) ?? "psychology";
 	}
@@ -64,18 +40,10 @@ export class PsychologyHealthManagerWindow extends HandlebarsApplicationMixin(
 	}
 
 	get canEdit() {
-		return Boolean(
-			game.user?.isGM ||
-			this.actor.testUserPermission(
-				game.user,
-				CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER,
-			),
-		);
+		return Boolean(game.user?.isGM || this.actor.testUserPermission(game.user, CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER));
 	}
 
-	static categories() {
-		return implementedCategories();
-	}
+	static categories() { return implementedCategories(); }
 
 	static count(actor) {
 		if (!isCharacter(actor)) return 0;
@@ -84,16 +52,12 @@ export class PsychologyHealthManagerWindow extends HandlebarsApplicationMixin(
 	}
 
 	static async open(actor, { tab = "psychology" } = {}) {
-		if (!isCharacter(actor)) {
-			throw new Error("Psychology and Health Manager requires a Character Actor.");
-		}
+		if (!isCharacter(actor)) throw new Error("Psychology and Health Manager requires a Character Actor.");
 		let application = this.#instances.get(actor.uuid);
 		if (!application) {
 			application = new PsychologyHealthManagerWindow(actor, { tab });
 			this.#instances.set(actor.uuid, application);
-		} else {
-			application.activeTab = validTab(tab) ?? application.activeTab;
-		}
+		} else application.activeTab = validTab(tab) ?? application.activeTab;
 		await application.render({ force: true });
 		application.bringToFront();
 		return application;
@@ -109,9 +73,7 @@ export class PsychologyHealthManagerWindow extends HandlebarsApplicationMixin(
 	async _prepareContext(options) {
 		const context = await super._prepareContext(options);
 		const categories = implementedCategories();
-		if (!categories.some((category) => category.id === this.activeTab)) {
-			this.activeTab = categories[0]?.id ?? "psychology";
-		}
+		if (!categories.some((category) => category.id === this.activeTab)) this.activeTab = categories[0]?.id ?? "psychology";
 		const active = categories.find((category) => category.id === this.activeTab) ?? categories[0];
 		const records = active ? categoryItems(this.actor, active).map(itemPresentation) : [];
 
@@ -156,12 +118,9 @@ export class PsychologyHealthManagerWindow extends HandlebarsApplicationMixin(
 
 	_onClose(options) {
 		super._onClose(options);
-		if (PsychologyHealthManagerWindow.#instances.get(this.actor.uuid) === this) {
-			PsychologyHealthManagerWindow.#instances.delete(this.actor.uuid);
-		}
+		if (PsychologyHealthManagerWindow.#instances.get(this.actor.uuid) === this) this.#instances.delete(this.actor.uuid);
 	}
 
-	/** @this {PsychologyHealthManagerWindow} */
 	static async #selectTab(event, target) {
 		event.preventDefault();
 		const tab = validTab(target?.dataset?.tab);
@@ -170,14 +129,12 @@ export class PsychologyHealthManagerWindow extends HandlebarsApplicationMixin(
 		await this.render({ force: true });
 	}
 
-	/** @this {PsychologyHealthManagerWindow} */
 	static async #openItem(event, target) {
 		event.preventDefault();
 		const item = itemFromTarget(this.actor, target, this.activeTab);
 		await item.sheet?.render?.({ force: true });
 	}
 
-	/** @this {PsychologyHealthManagerWindow} */
 	static async #removeItem(event, target) {
 		event.preventDefault();
 		if (!this.canEdit) return;
@@ -191,10 +148,7 @@ export class PsychologyHealthManagerWindow extends HandlebarsApplicationMixin(
 		}
 		const confirmed = await DialogV2.confirm({
 			window: { title: localize("Remove entry", "Usuń wpis") },
-			content: localize(
-				`Remove '${item.name}' from this character?`,
-				`Usunąć „${item.name}” z tej postaci?`,
-			),
+			content: localize(`Remove '${item.name}' from this character?`, `Usunąć „${item.name}” z tej postaci?`),
 			rejectClose: false,
 			modal: true,
 		});
@@ -214,14 +168,21 @@ const CATEGORY_DEFINITIONS = Object.freeze([
 		hintEn: "Psychological traits and conditions carried by this character.",
 		hintPl: "Cechy i stany psychologiczne tej postaci.",
 	}),
-	/* Disease, Disorder and occupational magical-disease categories are added
-	 * here only after their Core-backed native Item models are implemented. */
+	Object.freeze({
+		id: "diseases",
+		itemType: "disease",
+		icon: "fas fa-virus",
+		en: "Diseases",
+		pl: "Choroby",
+		hintEn: "Diseases and infections currently affecting this character.",
+		hintPl: "Choroby i zakażenia dotykające obecnie tej postaci.",
+	}),
+	/* Disorders and occupational magical diseases are added only after their
+	 * Core-backed native Item models are implemented. */
 ]);
 
 function implementedCategories() {
-	return CATEGORY_DEFINITIONS.filter((category) => {
-		return Boolean(CONFIG.Item?.dataModels?.[category.itemType]);
-	});
+	return CATEGORY_DEFINITIONS.filter((category) => Boolean(CONFIG.Item?.dataModels?.[category.itemType]));
 }
 
 function validTab(value) {
@@ -232,9 +193,7 @@ function validTab(value) {
 function categoryItems(actor, category) {
 	return [...(actor.items ?? [])]
 		.filter((item) => item?.type === category.itemType)
-		.sort((a, b) => String(a.name ?? "").localeCompare(
-			String(b.name ?? ""), game.i18n.lang, { sensitivity: "base" },
-		));
+		.sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? ""), game.i18n.lang, { sensitivity: "base" }));
 }
 
 function itemPresentation(item) {
@@ -256,9 +215,7 @@ function itemFromTarget(actor, target, tab) {
 	const category = implementedCategories().find((entry) => entry.id === tab);
 	const id = String(target?.closest?.("[data-item-id]")?.dataset?.itemId ?? "");
 	const item = actor.items?.get?.(id);
-	if (!item || !category || item.type !== category.itemType) {
-		throw new Error("Psychology/Health Item could not be resolved.");
-	}
+	if (!item || !category || item.type !== category.itemType) throw new Error("Psychology/Health Item could not be resolved.");
 	return item;
 }
 
@@ -301,10 +258,7 @@ async function embedUnique(actor, source) {
 	if (source.parent === actor) return;
 	const identity = canonicalIdentity(source);
 	if ([...(actor.items ?? [])].some((item) => item.type === source.type && canonicalIdentity(item) === identity)) {
-		ui.notifications.warn(localize(
-			`${source.name} is already on this Character.`,
-			`${source.name} jest już na tej Postaci.`,
-		));
+		ui.notifications.warn(localize(`${source.name} is already on this Character.`, `${source.name} jest już na tej Postaci.`));
 		return;
 	}
 	const data = source.toObject();
@@ -323,52 +277,18 @@ function draggedItemSync(event) {
 		if (typeof resolver !== "function") return null;
 		const item = resolver(String(data?.uuid ?? ""));
 		return item instanceof foundry.documents.Item ? item : null;
-	} catch (_error) {
-		return null;
-	}
+	} catch (_error) { return null; }
 }
 
-function canonicalIdentity(item) {
-	return normalize(item?.system?.rulesId) || normalize(item?.name);
-}
-
-function categoryLabel(category) {
-	return localize(category.en, category.pl);
-}
-
-function categoryHint(category) {
-	return localize(category.hintEn, category.hintPl);
-}
-
-function preview(value, limit) {
-	if (!value || value.length <= limit) return value;
-	return `${value.slice(0, Math.max(0, limit - 1)).trimEnd()}…`;
-}
-
-function safeApplicationId(value) {
-	return String(value ?? "actor")
-		.replace(/[^A-Za-z0-9_-]+/g, "-")
-		.replace(/^-+|-+$/g, "") || "actor";
-}
-
-function isCharacter(value) {
-	return value?.documentName === "Actor" && value.type === "character";
-}
-
-function asElement(value) {
-	if (value instanceof HTMLElement) return value;
-	if (value?.[0] instanceof HTMLElement) return value[0];
-	return null;
-}
-
-function normalize(value) {
-	return String(value ?? "").trim().toLocaleLowerCase();
-}
-
-function localize(english, polish) {
-	return game.i18n.lang === "pl" ? polish : english;
-}
-
+function canonicalIdentity(item) { return normalize(item?.system?.rulesId) || normalize(item?.name); }
+function categoryLabel(category) { return localize(category.en, category.pl); }
+function categoryHint(category) { return localize(category.hintEn, category.hintPl); }
+function preview(value, limit) { return !value || value.length <= limit ? value : `${value.slice(0, Math.max(0, limit - 1)).trimEnd()}…`; }
+function safeApplicationId(value) { return String(value ?? "actor").replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || "actor"; }
+function isCharacter(value) { return value?.documentName === "Actor" && value.type === "character"; }
+function asElement(value) { return value instanceof HTMLElement ? value : value?.[0] instanceof HTMLElement ? value[0] : null; }
+function normalize(value) { return String(value ?? "").trim().toLocaleLowerCase(); }
+function localize(english, polish) { return game.i18n.lang === "pl" ? polish : english; }
 function reportError(error) {
 	console.error("WFRP1ED | Psychology and Health Manager failed.", error);
 	ui.notifications.error(error?.message ?? String(error));
