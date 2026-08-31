@@ -1,0 +1,45 @@
+<section class="disease-sheet-content">
+	<header class="disease-sheet-header wfrp1ed-item-header">
+		<img
+			class="disease-sheet-image wfrp1ed-item-header__image"
+			data-wfrp1ed-item-image
+			src="{{item.img}}"
+			alt="{{item.name}}"
+		>
+
+		<div class="disease-sheet-field disease-sheet-field--name">
+			<label for="disease-name-{{item.id}}">{{ui.name}}</label>
+			<input
+				id="disease-name-{{item.id}}"
+				type="text"
+				name="name"
+				value="{{item.name}}"
+				autocomplete="off"
+				required
+				{{#unless editable}}disabled{{/unless}}
+			>
+		</div>
+	</header>
+
+	<div class="disease-sheet-field disease-sheet-field--rules-id">
+		<label for="disease-rules-id-{{item.id}}" data-tooltip="{{ui.rulesIdHint}}">{{ui.rulesId}}</label>
+		<input
+			id="disease-rules-id-{{item.id}}"
+			type="text"
+			name="system.rulesId"
+			value="{{system.rulesId}}"
+			autocomplete="off"
+			{{#unless editable}}disabled{{/unless}}
+		>
+	</div>
+
+	<div class="disease-sheet-field disease-sheet-field--description">
+		<label for="disease-description-{{item.id}}">{{ui.description}}</label>
+		<textarea
+			id="disease-description-{{item.id}}"
+			name="system.description"
+			spellcheck="true"
+			{{#unless editable}}disabled{{/unless}}
+		>{{system.description}}</textarea>
+	</div>
+</section>
