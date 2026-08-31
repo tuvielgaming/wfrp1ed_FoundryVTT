@@ -111,7 +111,7 @@ function ensurePsychologyLauncherStyles() {
 		position: absolute;
 		left: 6px;
 		right: 6px;
-		top: 70px;
+		top: 80px;
 		height: 40px;
 		display: flex;
 		align-items: center;
