@@ -212,11 +212,10 @@ function weaponUi() {
 	return Object.freeze({
 		name: localize("Name", "Nazwa"),
 		description: localize("Description", "Opis"),
-		rulesId: localize("Rules ID", "Identyfikator zasad"),
 		weaponClass: localize("Weapon class", "Rodzaj broni"),
 		kind: localize("Combat kind", "Rodzaj walki"),
 		group: localize("Weapon group", "Grupa broni"),
-		specialistSkillId: localize("Specialist Skill ID", "ID umiejętności specjalistycznej"),
+		specialistSkillId: localize("Specialist Skill binding", "Powiązana Umiejętność Specjalistyczna"),
 		handedness: localize("Handedness", "Sposób trzymania"),
 		mode: localize("Current state", "Aktualny stan"),
 		hand: localize("Preferred hand", "Preferowana dłoń"),
@@ -239,7 +238,7 @@ function weaponUi() {
 		effectiveStrength: localize("Effective Strength", "Siła efektywna"),
 		effectiveStrengthMode: localize("Effective Strength source", "Źródło Siły efektywnej"),
 		ammunitionType: localize("Ammunition type", "Typ amunicji"),
-		ammunitionCustomId: localize("Custom ammunition ID", "Identyfikator własnej amunicji"),
+		ammunitionCustomId: localize("Custom ammunition family", "Własna kategoria amunicji"),
 		firingCycle: localize("Reload / firing cycle", "Przeładowanie / cykl strzału"),
 		firingCycleHint: localize(
 			"Reload is the number of complete preparation rounds between firing rounds. Use 0 for a weapon which may fire every round, 1 for a Crossbow and 2 for a Pistol. The system will use this as one countdown instead of modelling Draw/Load/Aim separately. Magazine fields apply only to repeating weapons.",
