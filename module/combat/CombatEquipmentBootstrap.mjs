@@ -33,9 +33,12 @@ import {
 } from "./CombatParryRules.mjs";
 import { CombatParrySelection } from "./CombatParrySelection.mjs";
 import { HandEquipValidator } from "./HandEquipValidator.mjs";
+import { installWeaponSpecialistBindingAuthoring } from "./WeaponSpecialistBindingIntegration.mjs";
 
 const { DocumentSheetConfig } = foundry.applications.apps;
 const { Item } = foundry.documents;
+
+installWeaponSpecialistBindingAuthoring();
 
 /**
  * Dependency-ordered bootstrap for the physical equipment contract required by
