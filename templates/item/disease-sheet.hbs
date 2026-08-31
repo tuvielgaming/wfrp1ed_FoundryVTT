@@ -1,45 +1,49 @@
 <section class="disease-sheet-content">
 	<header class="disease-sheet-header wfrp1ed-item-header">
-		<img
-			class="disease-sheet-image wfrp1ed-item-header__image"
-			data-wfrp1ed-item-image
-			src="{{item.img}}"
-			alt="{{item.name}}"
-		>
-
+		<img class="disease-sheet-image wfrp1ed-item-header__image" data-wfrp1ed-item-image src="{{item.img}}" alt="{{item.name}}">
 		<div class="disease-sheet-field disease-sheet-field--name">
 			<label for="disease-name-{{item.id}}">{{ui.name}}</label>
-			<input
-				id="disease-name-{{item.id}}"
-				type="text"
-				name="name"
-				value="{{item.name}}"
-				autocomplete="off"
-				required
-				{{#unless editable}}disabled{{/unless}}
-			>
+			<input id="disease-name-{{item.id}}" type="text" name="name" value="{{item.name}}" autocomplete="off" required {{#unless editable}}disabled{{/unless}}>
 		</div>
 	</header>
 
 	<div class="disease-sheet-field disease-sheet-field--rules-id">
 		<label for="disease-rules-id-{{item.id}}" data-tooltip="{{ui.rulesIdHint}}">{{ui.rulesId}}</label>
-		<input
-			id="disease-rules-id-{{item.id}}"
-			type="text"
-			name="system.rulesId"
-			value="{{system.rulesId}}"
-			autocomplete="off"
-			{{#unless editable}}disabled{{/unless}}
-		>
+		<input id="disease-rules-id-{{item.id}}" type="text" name="system.rulesId" value="{{system.rulesId}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}>
+	</div>
+
+	<div class="disease-sheet-field">
+		<label for="disease-exposure-{{item.id}}">{{ui.exposure}}</label>
+		<textarea id="disease-exposure-{{item.id}}" name="system.exposure" spellcheck="true" {{#unless editable}}disabled{{/unless}}>{{system.exposure}}</textarea>
+	</div>
+
+	<div class="disease-sheet-grid">
+		<div class="disease-sheet-field">
+			<label for="disease-modifier-{{item.id}}" data-tooltip="{{ui.testModifierHint}}">{{ui.testModifier}}</label>
+			<input id="disease-modifier-{{item.id}}" type="number" step="1" name="system.diseaseTestModifier" value="{{system.diseaseTestModifier}}" {{#unless editable}}disabled{{/unless}}>
+		</div>
+		<div class="disease-sheet-field">
+			<label for="disease-incubation-{{item.id}}" data-tooltip="{{ui.formulaHint}}">{{ui.incubation}}</label>
+			<input id="disease-incubation-{{item.id}}" type="text" name="system.incubationFormula" value="{{system.incubationFormula}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}>
+		</div>
+		<div class="disease-sheet-field">
+			<label for="disease-duration-{{item.id}}" data-tooltip="{{ui.formulaHint}}">{{ui.duration}}</label>
+			<input id="disease-duration-{{item.id}}" type="text" name="system.durationFormula" value="{{system.durationFormula}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}>
+		</div>
+	</div>
+
+	<div class="disease-sheet-field disease-sheet-field--rules-text">
+		<label for="disease-symptoms-{{item.id}}">{{ui.symptoms}}</label>
+		<textarea id="disease-symptoms-{{item.id}}" name="system.symptoms" spellcheck="true" {{#unless editable}}disabled{{/unless}}>{{system.symptoms}}</textarea>
+	</div>
+
+	<div class="disease-sheet-field disease-sheet-field--rules-text">
+		<label for="disease-recovery-{{item.id}}">{{ui.recovery}}</label>
+		<textarea id="disease-recovery-{{item.id}}" name="system.recovery" spellcheck="true" {{#unless editable}}disabled{{/unless}}>{{system.recovery}}</textarea>
 	</div>
 
 	<div class="disease-sheet-field disease-sheet-field--description">
 		<label for="disease-description-{{item.id}}">{{ui.description}}</label>
-		<textarea
-			id="disease-description-{{item.id}}"
-			name="system.description"
-			spellcheck="true"
-			{{#unless editable}}disabled{{/unless}}
-		>{{system.description}}</textarea>
+		<textarea id="disease-description-{{item.id}}" name="system.description" spellcheck="true" {{#unless editable}}disabled{{/unless}}>{{system.description}}</textarea>
 	</div>
 </section>
