@@ -37,7 +37,28 @@
 	font-family: inherit;
 }
 
-.disease-sheet-field--description textarea {
-	min-height: 260px;
+.disease-sheet-grid {
+	display: grid;
+	grid-template-columns: minmax(130px, .7fr) minmax(150px, 1fr) minmax(150px, 1fr);
+	gap: 10px;
+	align-items: end;
+}
+
+.disease-sheet-field textarea {
+	min-height: 74px;
 	resize: vertical;
+}
+
+.disease-sheet-field--rules-text textarea {
+	min-height: 120px;
+}
+
+.disease-sheet-field--description textarea {
+	min-height: 150px;
+}
+
+@media (max-width: 560px) {
+	.disease-sheet-grid {
+		grid-template-columns: 1fr;
+	}
 }
