@@ -118,7 +118,9 @@ export class PsychologyHealthManagerWindow extends HandlebarsApplicationMixin(
 
 	_onClose(options) {
 		super._onClose(options);
-		if (PsychologyHealthManagerWindow.#instances.get(this.actor.uuid) === this) this.#instances.delete(this.actor.uuid);
+		if (PsychologyHealthManagerWindow.#instances.get(this.actor.uuid) === this) {
+			PsychologyHealthManagerWindow.#instances.delete(this.actor.uuid);
+		}
 	}
 
 	static async #selectTab(event, target) {
