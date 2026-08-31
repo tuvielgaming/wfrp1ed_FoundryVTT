@@ -18,8 +18,6 @@ export class DiseaseItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
 		context.editable = this.isEditable;
 		context.ui = {
 			name: localize("Name", "Nazwa"),
-			rulesId: localize("Rules ID", "Identyfikator reguły"),
-			rulesIdHint: localize("Stable language-neutral identifier used by rules and references.", "Stały, niezależny od języka identyfikator używany przez reguły i odwołania."),
 			exposure: localize("Exposure / transmission", "Narażenie / sposób zarażenia"),
 			testModifier: localize("Disease Test modifier", "Modyfikator Testu Choroby"),
 			testModifierHint: localize("Base modifier from the disease description. Situational modifiers remain part of the actual Disease Test.", "Bazowy modyfikator z opisu choroby. Modyfikatory sytuacyjne pozostają częścią właściwego Testu Choroby."),
