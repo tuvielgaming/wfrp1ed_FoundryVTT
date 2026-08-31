@@ -5,6 +5,7 @@ import {
 	toBoolean,
 	toInteger,
 	toNonNegativeInteger,
+	unwrapText,
 	unwrapValue,
 } from "./InventoryItemFields.mjs";
 
@@ -266,7 +267,7 @@ function nonNegativeIntegerField(initial = 0) {
 }
 
 function normalizeAllowed(value, allowed, fallback) {
-	const normalized = String(value ?? "").trim();
+	const normalized = unwrapText(value);
 	return allowed.includes(normalized) ? normalized : fallback;
 }
 
