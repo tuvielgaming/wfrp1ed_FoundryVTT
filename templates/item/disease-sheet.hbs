@@ -7,11 +7,6 @@
 		</div>
 	</header>
 
-	<div class="disease-sheet-field disease-sheet-field--rules-id">
-		<label for="disease-rules-id-{{item.id}}" data-tooltip="{{ui.rulesIdHint}}">{{ui.rulesId}}</label>
-		<input id="disease-rules-id-{{item.id}}" type="text" name="system.rulesId" value="{{system.rulesId}}" autocomplete="off" {{#unless editable}}disabled{{/unless}}>
-	</div>
-
 	<div class="disease-sheet-field">
 		<label for="disease-exposure-{{item.id}}">{{ui.exposure}}</label>
 		<textarea id="disease-exposure-{{item.id}}" name="system.exposure" spellcheck="true" {{#unless editable}}disabled{{/unless}}>{{system.exposure}}</textarea>
