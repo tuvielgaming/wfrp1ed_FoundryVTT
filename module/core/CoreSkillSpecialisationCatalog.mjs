@@ -16,64 +16,99 @@
  * permit free-text specialisations, because WFRP 1e also contains qualified
  * Skills whose subject is player-, career-, or campaign-defined (for example
  * Divining and Secret Signs).
+ *
+ * Stable `id` values are language-neutral mechanical/content identities. Normal
+ * Skill authoring still stores the user's displayed specialisation text, while
+ * systems which need a language-neutral binding (for example Weapon ->
+ * Specialist Weapon requirement) may store the stable id and resolve it back to
+ * the localized Core label.
  */
 
 const CORE_SKILL_SPECIALISATIONS = Object.freeze({
 	arcaneLanguage: Object.freeze([
-		option("Magick", "Magiczny"),
-		option("Old Slann", "Stary Slann"),
-		option("Arcane Dwarf", "Tajemny krasnoludzki"),
-		option("Arcane Elf", "Tajemny elfi"),
-		option("Druidic", "Druidyczny"),
-		option("Demonic", "Demoniczny"),
+		option("magick", "Magick", "Magiczny"),
+		option("oldSlann", "Old Slann", "Stary Slann"),
+		option("arcaneDwarf", "Arcane Dwarf", "Tajemny krasnoludzki"),
+		option("arcaneElf", "Arcane Elf", "Tajemny elfi"),
+		option("druidic", "Druidic", "Druidyczny"),
+		option("demonic", "Demonic", "Demoniczny"),
 	]),
 	secretLanguage: Object.freeze([
-		option("Battle", "Bitewny"),
-		option("Ranger", "Rangerów"),
-		option("Thieves'", "Złodziei"),
-		option("Classical", "Klasyczny"),
-		option("Guilder", "Gildii"),
+		option("battle", "Battle", "Bitewny"),
+		option("ranger", "Ranger", "Rangerów"),
+		option("thieves", "Thieves'", "Złodziei"),
+		option("classical", "Classical", "Klasyczny"),
+		option("guilder", "Guilder", "Gildii"),
 	]),
 	specialistWeapon: Object.freeze([
-		option("Polearm", "Drzewcowa"),
-		option("Double-handed Weapons", "Dwuręczna"),
-		option("Flail Weapons", "Korbacz"),
-		option("Fencing Sword", "Szermiercza"),
-		option("Parrying Weapons", "Parująca"),
-		option("Lance", "Lanca"),
-		option("Net", "Sieć"),
-		option("Bomb", "Bomby"),
-		option("Incendiaries", "Zapalające"),
-		option("Lasso", "Lasso"),
-		option("Longbow", "Długi łuk"),
-		option("Repeating Crossbow", "Kusza samopowtarzalna"),
-		option("Crossbow Pistol", "Kusza pistoletowa"),
-		option("Throwing Weapons", "Rzucana"),
-		option("Sling", "Proca"),
-		option("Blowpipe", "Dmuchawka"),
-		option("Artillery", "Artyleria"),
-		option("Firearms", "Palna"),
-		option("Fist Weapons", "Uliczna"),
+		option("polearm", "Polearm", "Drzewcowa"),
+		option("doubleHanded", "Double-handed Weapons", "Dwuręczna"),
+		option("flail", "Flail Weapons", "Korbacz"),
+		option("fencingSword", "Fencing Sword", "Szermiercza"),
+		option("parrying", "Parrying Weapons", "Parująca"),
+		option("lance", "Lance", "Lanca"),
+		option("net", "Net", "Sieć"),
+		option("bomb", "Bomb", "Bomby"),
+		option("incendiaries", "Incendiaries", "Zapalające"),
+		option("lasso", "Lasso", "Lasso"),
+		option("longbow", "Longbow", "Długi łuk"),
+		option("repeatingCrossbow", "Repeating Crossbow", "Kusza samopowtarzalna"),
+		option("crossbowPistol", "Crossbow Pistol", "Kusza pistoletowa"),
+		option("throwing", "Throwing Weapons", "Rzucana"),
+		option("sling", "Sling", "Proca"),
+		option("blowpipe", "Blowpipe", "Dmuchawka"),
+		option("artillery", "Artillery", "Artyleria"),
+		option("firearms", "Firearms", "Palna"),
+		option("fistWeapons", "Fist Weapons", "Uliczna"),
 	]),
 });
 
-/**
- * Return localized Core suggestions for a canonical Skill rulesId.
- *
- * An empty array intentionally means that the Core does not define a finite
- * suggestion list for this Skill. It does not mean that the Skill cannot have
- * a specialisation.
- *
- * @param {string} rulesId Canonical Skill rulesId.
- * @param {string} language Foundry language code.
- * @returns {string[]}
- */
+/** Return localized Core suggestions for a canonical Skill rulesId. */
 export function coreSkillSpecialisationSuggestions(rulesId, language = "en") {
-	const choices = CORE_SKILL_SPECIALISATIONS[String(rulesId ?? "").trim()] ?? [];
-	const polish = String(language ?? "").toLocaleLowerCase().startsWith("pl");
-	return choices.map((choice) => polish ? choice.pl : choice.en);
+	return coreSkillSpecialisationOptions(rulesId, language).map((choice) => choice.label);
 }
 
-function option(en, pl) {
-	return Object.freeze({ en, pl });
+/**
+ * Return stable-id + localized-label options for a canonical Skill rulesId.
+ * @returns {{id:string,label:string,en:string,pl:string}[]}
+ */
+export function coreSkillSpecialisationOptions(rulesId, language = "en") {
+	const choices = CORE_SKILL_SPECIALISATIONS[String(rulesId ?? "").trim()] ?? [];
+	const polish = String(language ?? "").toLocaleLowerCase().startsWith("pl");
+	return choices.map((choice) => Object.freeze({
+		id: choice.id,
+		label: polish ? choice.pl : choice.en,
+		en: choice.en,
+		pl: choice.pl,
+	}));
+}
+
+/** Resolve a Core specialisation id or localized/English label to its stable id. */
+export function coreSkillSpecialisationId(rulesId, value) {
+	const normalized = normalize(value);
+	if (!normalized) return "";
+	const choices = CORE_SKILL_SPECIALISATIONS[String(rulesId ?? "").trim()] ?? [];
+	const match = choices.find((choice) =>
+		normalize(choice.id) === normalized ||
+		normalize(choice.en) === normalized ||
+		normalize(choice.pl) === normalized
+	);
+	return match?.id ?? "";
+}
+
+/** Resolve a stable Core specialisation id to the localized display label. */
+export function coreSkillSpecialisationLabel(rulesId, id, language = "en") {
+	const normalized = normalize(id);
+	const choice = (CORE_SKILL_SPECIALISATIONS[String(rulesId ?? "").trim()] ?? [])
+		.find((candidate) => normalize(candidate.id) === normalized);
+	if (!choice) return "";
+	return String(language ?? "").toLocaleLowerCase().startsWith("pl") ? choice.pl : choice.en;
+}
+
+function option(id, en, pl) {
+	return Object.freeze({ id, en, pl });
+}
+
+function normalize(value) {
+	return String(value ?? "").trim().toLocaleLowerCase();
 }
