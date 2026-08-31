@@ -38,8 +38,8 @@ function renderPsychologyAuthoring(section, race, editable) {
 	help.className = "race-sheet-hint";
 	help.textContent = editable
 		? localize(
-			"Drag Psychology Items from the sidebar into this panel. Race Psychology entries are references; edit their name, Rules ID and description on the Psychology Item itself.",
-			"Przeciągnij Przedmioty Psychologii z panelu bocznego do tej sekcji. Wpisy Psychologii Rasy są odwołaniami; nazwę, ID reguły i opis edytuj na samym Przedmiocie Psychologii.",
+			"Drag Psychology Items from the sidebar into this panel. Race Psychology entries are references to reusable Psychology Items; edit their name, description and mechanical effects on the Psychology Item itself.",
+			"Przeciągnij Przedmioty Psychologii z panelu bocznego do tej sekcji. Wpisy Psychologii Rasy są odwołaniami do wielokrotnego użytku; nazwę, opis i efekty mechaniczne edytuj na samym Przedmiocie Psychologii.",
 		)
 		: localize("Psychology granted by this Race.", "Psychologia przyznawana przez tę Rasę.");
 	section.append(help);
@@ -84,11 +84,6 @@ function psychologyRow(entry, index, race, editable) {
 	description.className = "race-psychology-reference-row__description";
 	description.textContent = String(entry?.description ?? "").trim() || "—";
 	row.append(description);
-
-	const rules = document.createElement("span");
-	rules.className = "race-psychology-reference-row__rules";
-	rules.textContent = String(entry?.rulesId ?? "").trim() || localize("No Rules ID", "Brak ID reguły");
-	row.append(rules);
 
 	if (editable) {
 		const controls = document.createElement("div");
