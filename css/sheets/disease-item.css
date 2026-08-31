@@ -1,0 +1,43 @@
+.disease-item-sheet .window-content {
+	padding: 12px;
+	overflow: auto;
+}
+
+.disease-sheet-content {
+	display: grid;
+	gap: 12px;
+	font-family: "Book Antiqua", "Times New Roman", serif;
+	color: #241b13;
+}
+
+.disease-sheet-header {
+	display: grid;
+	grid-template-columns: 72px minmax(0, 1fr);
+	gap: 12px;
+	align-items: end;
+}
+
+.disease-sheet-image {
+	width: 72px;
+	height: 72px;
+	object-fit: cover;
+}
+
+.disease-sheet-field {
+	display: grid;
+	gap: 4px;
+}
+
+.disease-sheet-field label {
+	font-weight: 700;
+}
+
+.disease-sheet-field input,
+.disease-sheet-field textarea {
+	font-family: inherit;
+}
+
+.disease-sheet-field--description textarea {
+	min-height: 260px;
+	resize: vertical;
+}
