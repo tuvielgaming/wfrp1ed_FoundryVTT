@@ -27,11 +27,6 @@ export class PsychologyItemSheet extends HandlebarsApplicationMixin(ItemSheetV2)
 		context.editable = this.isEditable;
 		context.ui = {
 			name: localize("Name", "Nazwa"),
-			rulesId: localize("Rules ID", "Identyfikator reguły"),
-			rulesIdHint: localize(
-				"Stable language-neutral identifier used by rules and references. Example: hatred-orcs, fear-undead.",
-				"Stały, niezależny od języka identyfikator używany przez reguły i odwołania. Przykład: hatred-orcs, fear-undead.",
-			),
 			description: localize("Description / rules", "Opis / zasady"),
 		};
 		return context;
