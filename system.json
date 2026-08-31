@@ -3,10 +3,7 @@
 	"title": "My WFRP 1ed",
 	"description": "WFRP 1st Edition system for Foundry Virtual Tabletop.",
 	"version": "1.0.1",
-	"compatibility": {
-		"minimum": 14,
-		"verified": 14
-	},
+	"compatibility": {"minimum": 14,"verified": 14},
 	"authors": [{"name":"Tuviel"}],
 	"esmodules": [
 		"module/effects/WfrpActiveEffectCompatibility.mjs",
@@ -22,6 +19,7 @@
 		"module/careers/CareerBootstrap.mjs",
 		"module/languages/LanguageBootstrap.mjs",
 		"module/psychology/PsychologyBootstrap.mjs",
+		"module/diseases/DiseaseBootstrap.mjs",
 		"module/races/RaceBootstrap.mjs",
 		"module/races/RaceMandatorySkillPackageIntegration.mjs",
 		"module/races/RaceSkillSpecialisationIntegration.mjs",
@@ -174,6 +172,7 @@
 		"css/sheets/skill-item.css",
 		"css/sheets/language-item.css",
 		"css/sheets/psychology-item.css",
+		"css/sheets/disease-item.css",
 		"css/sheets/psychology-authoring.css",
 		"css/sheets/psychology-health-manager-window.css",
 		"css/sheets/career-item.css",
@@ -235,7 +234,7 @@
 	"documentTypes": {
 		"ActiveEffect": {"wfrp": {}},
 		"Actor": {"character": {},"npc": {},"creature": {},"vehicle": {},"lootPile": {}},
-		"Item": {"career": {},"race": {},"skill": {},"language": {},"psychology": {},"criticalWound": {},"weapon": {},"armour": {},"equipment": {},"trait": {},"spell": {}}
+		"Item": {"career": {},"race": {},"skill": {},"language": {},"psychology": {},"disease": {},"criticalWound": {},"weapon": {},"armour": {},"equipment": {},"trait": {},"spell": {}}
 	},
 	"background": "systems/wfrp1ed/WFRP1ed.jpg",
 	"grid": {"distance": 5,"units":"ft"}
