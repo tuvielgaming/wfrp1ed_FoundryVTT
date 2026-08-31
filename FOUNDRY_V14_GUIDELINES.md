@@ -1,8 +1,8 @@
 # FOUNDRY_V14_GUIDELINES.md
 
-Version: 1.3
+Version: 1.4
 Status: ACTIVE
-Last Updated: 2026-08-26
+Last Updated: 2026-08-31
 
 ===============================================================================
 PURPOSE
@@ -223,6 +223,103 @@ Theme assets
 ThemeManager
 
 Never mix presentation into system.*
+
+===============================================================================
+RULE IDENTITY, RULE BINDINGS AND ACTIVE EFFECTS — HARD CONVENTION
+===============================================================================
+
+Stable identity and mechanical effects are different concerns and MUST NOT be
+combined into one generic "Rules ID" concept.
+
+Ask three separate questions for every Item type.
+
+1. Does this Item need a stable language-neutral content/rules identity?
+
+If NO:
+
+- Do not add a generic `rulesId` merely because the Item represents Core content.
+- Prefer explicit structured fields which describe the actual rules facts.
+
+Examples already following this pattern include Equipment and Critical Wounds.
+Armour pieces and Weapons should also prefer their structured mechanical fields
+instead of an otherwise-unused generic `rulesId`.
+
+If YES:
+
+- The identity must be independent from localized/user-editable `Item.name`.
+- It may be stored as `system.rulesId` or another domain-specific canonical key.
+- References, duplicate detection and compendium interoperability may use it.
+- A UUID identifies one Document instance; a stable rules/content identity may
+  identify equivalent content across localized packs and copied Documents.
+
+2. Does the engine need the identity to select special executable behaviour?
+
+If YES:
+
+- Expose a controlled, localized "rules binding" selector.
+- Store a canonical language-neutral key internally.
+- Never make ordinary users type arbitrary implementation strings.
+- The selectable values must come from an audited registry/provider owned by the
+  subsystem which executes that rule.
+
+Examples: Skills and Spells; Race may expose controlled Core identity/binding
+where creation rules require it.
+
+If NO, but stable identity is still useful:
+
+- Keep the identity internal metadata.
+- Do not expose the raw key as an ordinary authoring textbox.
+- User-created/homebrew Items may leave it blank unless a stable key is genuinely
+  required.
+- Core/system compendium build tooling may assign canonical identities.
+
+Examples: Language, Psychology, Disease and future Disorder/health content.
+
+3. Does the Item cause mechanical consequences?
+
+Mechanical consequences should normally be authored as native Foundry
+ActiveEffects plus WFRP1ED Rule Effects when those primitives can express the
+rule. The Item remains the reusable identity/content owner; its ActiveEffects
+represent mechanical consequences.
+
+Use Item-specific structured data for facts and lifecycle state which are not
+Active Effects, for example Disease exposure, incubation, duration, diagnosis,
+or other audited state-machine data.
+
+Use a dedicated audited procedure provider only when the rule cannot be
+expressed declaratively through structured Item data and Active/Rule Effects.
+Such a provider is selected by a controlled rules binding, never by comparing a
+localized Item name.
+
+Canonical relationship:
+
+Item identity/content
++
+Item-specific structured rules/state where required
++
+Item-owned ActiveEffects / WFRP Rule Effects
++
+controlled procedure binding only for genuinely procedural exceptions
+
+Do NOT:
+
+- hard-code mechanics against localized Item names;
+- use a generic `rulesId` as a substitute for proper structured rule data;
+- use ActiveEffects as the identity of an Item;
+- expose internal canonical IDs as ordinary free-text fields merely for
+  convenience;
+- give every Core Item a rules identifier when no consumer requires one.
+
+When reviewing an existing `rulesId`, `...Id`, "Rules ID", "Rule identifier",
+or "Rules binding" field, classify its role explicitly as one of:
+
+- stable content identity;
+- controlled procedure/rules binding;
+- domain compatibility key/reference;
+- legacy/redundant field to remove.
+
+Fields with different roles must not be treated as interchangeable simply
+because their names contain `Id`.
 
 ===============================================================================
 THEMEMANAGER
@@ -528,6 +625,10 @@ For every feature ask:
 
 □ Does every tabbed WFRP surface use the shared tab style and preserve the
   user's selected tab across rerenders?
+
+□ Has every rules/content identity been justified separately from its mechanical
+  effects, and are internal IDs hidden or controlled according to the Rule
+  Identity convention?
 
 If any answer is NO,
 
