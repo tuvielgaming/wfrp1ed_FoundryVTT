@@ -10,12 +10,12 @@
 	position: absolute;
 	left: 6px;
 	right: 6px;
-	bottom: 20px;
+	bottom: 14px;
 
 	display: flex;
-	flex-wrap: wrap;
-	gap: 4px;
-	align-items: center;
+	flex-direction: column;
+	gap: 5px;
+	align-items: stretch;
 
 	pointer-events: auto;
 }
@@ -24,52 +24,79 @@
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	gap: 4px;
+	gap: 6px;
 
+	width: 100%;
 	min-width: 0;
-	height: 24px;
+	height: 38px;
+	min-height: 38px;
 	margin: 0;
-	padding: 2px 6px;
+	padding: 3px 7px;
 
 	border: 1px solid rgb(74 49 31 / 48%);
 	border-radius: 999px;
-	background: rgb(246 236 210 / 82%);
+	background: rgb(246 236 210 / 88%);
 	box-shadow: 0 1px 2px rgb(0 0 0 / 14%);
 
 	font-family: inherit;
-	font-size: 10.5px;
+	font-size: 12.5px;
 	font-weight: 700;
-	line-height: 1;
+	line-height: 1.05;
 	color: #2b2118;
-	white-space: nowrap;
 
 	cursor: pointer;
 }
 
 .classic-actor-sheet .classic-health-category:hover,
 .classic-actor-sheet .classic-health-category:focus-visible {
-	background: rgb(252 246 228 / 94%);
+	background: rgb(252 246 228 / 96%);
 	border-color: rgb(91 22 22 / 72%);
 	color: #6c1f1f;
 }
 
+.classic-actor-sheet .classic-health-category > i {
+	flex: 0 0 auto;
+	font-size: 12px;
+}
+
 .classic-actor-sheet .classic-health-category__label {
+	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
 }
 
+.classic-actor-sheet .classic-health-category__label--two-lines {
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 0;
+	overflow: visible;
+	font-size: 12.5px;
+	line-height: 1.02;
+	text-align: center;
+	white-space: nowrap;
+}
+
+.classic-actor-sheet .classic-health-category__label--two-lines > span {
+	display: block;
+}
+
 .classic-actor-sheet .classic-health-category__count {
 	display: inline-flex;
+	flex: 0 0 auto;
 	align-items: center;
 	justify-content: center;
 
-	min-width: 16px;
-	height: 16px;
+	min-width: 18px;
+	height: 18px;
 	padding: 0 4px;
 
 	border-radius: 999px;
-	background: rgb(92 29 29 / 88%);
+	background: rgb(92 29 29 / 90%);
 	color: #fff8e8;
+	font-family: Arial, Helvetica, sans-serif;
 	font-size: 9px;
 	font-weight: 700;
 }
