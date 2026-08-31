@@ -138,7 +138,7 @@ export class PsychologyHealthManagerWindow extends HandlebarsApplicationMixin(
 			empty: localize("No entries in this category.", "Brak wpisów w tej kategorii."),
 			open: localize("Open entry", "Otwórz wpis"),
 			remove: localize("Remove entry", "Usuń wpis"),
-			race: localize("Race", "Rasa"),
+			race: localize("Racial", "Rasowy"),
 			drop: localize(
 				"Drop a matching Item anywhere in this window or on the Character sheet.",
 				"Upuść pasujący Przedmiot w dowolnym miejscu tego okna lub karty Postaci.",
@@ -184,8 +184,8 @@ export class PsychologyHealthManagerWindow extends HandlebarsApplicationMixin(
 		const item = itemFromTarget(this.actor, target, this.activeTab);
 		if (isRaceManaged(item)) {
 			ui.notifications.warn(localize(
-				"This Psychology entry is managed by the Character's Race and cannot be removed here.",
-				"Ten wpis Psychologii jest zarządzany przez Rasę Postaci i nie można go usunąć tutaj.",
+				"This Psychology entry is racial and is managed by the Character's Race, so it cannot be removed here.",
+				"Ten wpis Psychologii jest rasowy i jest zarządzany przez Rasę Postaci, dlatego nie można go usunąć tutaj.",
 			));
 			return;
 		}
