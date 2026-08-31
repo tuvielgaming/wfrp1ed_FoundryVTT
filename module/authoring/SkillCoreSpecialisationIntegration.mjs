@@ -41,23 +41,43 @@ function renderSpecialistWeaponSpecialisation(root, item, editable) {
 	custom.type = "text";
 	custom.name = "system.specialisation";
 	custom.autocomplete = "off";
-	custom.disabled = !editable;
-	custom.value = selected === CUSTOM ? currentText : localizedSelection(options, selected);
+	custom.disabled = !editable || selected !== CUSTOM;
+	custom.value = selected === CUSTOM ? currentText : "";
 	custom.hidden = selected !== CUSTOM;
 	custom.placeholder = localize("Custom Specialist Weapon category", "Własna kategoria Specjalnej broni");
 	field.append(custom);
 
+	/*
+	 * This select is an authoring proxy rather than a real form field. Foundry's
+	 * ItemSheetV2 uses submitOnChange for the surrounding form. If this synthetic
+	 * change bubbles to that handler while the direct Item update is running, two
+	 * competing updates can be submitted from different DOM snapshots. In
+	 * particular the older full-form snapshot can overwrite system.rulesId.
+	 *
+	 * Own the event here, persist both the selected specialisation and the
+	 * authoritative Core rules binding in one update, then let the document
+	 * rerender normally. This makes changing the category incapable of silently
+	 * turning Specialist Weapon back into an unbound custom Skill.
+	 */
 	select.addEventListener("change", (event) => {
+		event.preventDefault();
+		event.stopPropagation();
 		const value = String(event.currentTarget.value ?? "");
 		if (value === CUSTOM) {
 			custom.hidden = false;
+			custom.disabled = !editable;
 			custom.value = "";
 			custom.focus();
 			return;
 		}
+
 		custom.hidden = true;
+		custom.disabled = true;
 		const label = localizedSelection(options, value);
-		void item.update({ "system.specialisation": label }).catch(reportError);
+		void item.update({
+			"system.rulesId": SPECIALIST_RULES_ID,
+			"system.specialisation": label,
+		}).catch(reportError);
 	});
 }
 
