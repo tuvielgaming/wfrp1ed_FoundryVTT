@@ -7,6 +7,7 @@ import { CombatAttackEconomy } from "./CombatAttackEconomy.mjs";
 import { CombatEquipmentState } from "./CombatEquipmentState.mjs";
 import { CombatAttackResultChat } from "./CombatAttackResultChat.mjs";
 import { DamageRuleEffects } from "../damage/DamageRuleEffects.mjs";
+import { WeaponSpecialistTraining } from "./WeaponSpecialistTraining.mjs";
 
 export const COMBAT_ATTACK_TARGET_MODE = Object.freeze({
 	DEFENDER: "defender",
@@ -15,13 +16,6 @@ export const COMBAT_ATTACK_TARGET_MODE = Object.freeze({
 
 /** Execute one configured melee weapon Test with optional Combat automation. */
 export class CombatAttackResolution {
-	/**
-	 * Resolve whether this Actor is governed by the currently started Combat.
-	 *
-	 * No started encounter, or an Actor which is not a participant in it, means
-	 * an unmanaged attack: the Test is legal and no Combatant A is spent. An
-	 * Actor which *is* a participant must still be the active Combatant.
-	 */
 	static combatantFor(actor) {
 		const combat = game.combat;
 		if (!combat?.started) return null;
@@ -30,9 +24,7 @@ export class CombatAttackResolution {
 		if (matches.length === 0) return null;
 
 		const active = combat.combatant;
-		if (active && matches.some((entry) => entry.id === active.id)) {
-			return active;
-		}
+		if (active && matches.some((entry) => entry.id === active.id)) return active;
 
 		throw new Error(localize(
 			"This Actor is a Combat participant but is not the Combatant whose turn is currently active.",
@@ -40,16 +32,14 @@ export class CombatAttackResolution {
 		));
 	}
 
-	static async execute(
-		actor,
-		weapon,
-		configuration,
-		{
-			targetMode = COMBAT_ATTACK_TARGET_MODE.DEFENDER,
-			target = null,
-		} = {},
-	) {
+	static async execute(actor, weapon, configuration, { targetMode = COMBAT_ATTACK_TARGET_MODE.DEFENDER, target = null } = {}) {
 		this.#validate(actor, weapon, targetMode, target);
+
+		/* Validate Specialist Weapon authoring and resolve training before any
+		 * attack resource is spent. RAW permits untrained use, but at effective
+		 * WS 10 rather than the Actor's normal WS. */
+		const specialistTraining = WeaponSpecialistTraining.resolve(actor, weapon, "ws");
+		WeaponSpecialistTraining.warnIfUntrained(specialistTraining);
 
 		const combatant = this.combatantFor(actor);
 		const lifecycleCombat = game.combat?.started ? game.combat : null;
@@ -64,27 +54,23 @@ export class CombatAttackResolution {
 					"Ten uczestnik walki nie ma dostępnego Ataku w bieżącym oknie ataku.",
 				));
 			}
-
-			/* Revalidate and spend authoritatively at the moment of execution. */
 			economy = await CombatAttackEconomy.spendAttack(combatant, 1);
 			attackCost = 1;
 		}
 
-		const optionalWeaponModifiers =
-			WfrpRuleSettings.usesOptionalWeaponModifiers();
-		const weaponModifiers = optionalWeaponModifiers
-			? weaponOptionalModifierSnapshot(weapon)
-			: null;
+		const optionalWeaponModifiers = WfrpRuleSettings.usesOptionalWeaponModifiers();
+		const weaponModifiers = optionalWeaponModifiers ? weaponOptionalModifierSnapshot(weapon) : null;
 		const toHitModifier = integer(weaponModifiers?.toHit);
 		const testModifiers = [];
+
+		const specialistModifier = WeaponSpecialistTraining.modifierRow(specialistTraining);
+		if (specialistModifier) testModifiers.push(specialistModifier);
+
 		if (toHitModifier !== 0) {
 			testModifiers.push({
 				id: "weapon-optional-to-hit",
 				value: toHitModifier,
-				source: localize(
-					`Weapon modifier — ${weapon.name}`,
-					`Modyfikator broni — ${weapon.name}`,
-				),
+				source: localize(`Weapon modifier — ${weapon.name}`, `Modyfikator broni — ${weapon.name}`),
 				type: "weapon",
 				enabled: true,
 			});
@@ -96,147 +82,68 @@ export class CombatAttackResolution {
 			resultVisibility: configuration?.resultVisibility,
 			ruleEffects: mutableRuleEffects(configuration?.ruleEffects),
 		};
-
-		if (targetMode === COMBAT_ATTACK_TARGET_MODE.DEFENDER) {
-			options.target = target;
-		}
+		if (targetMode === COMBAT_ATTACK_TARGET_MODE.DEFENDER) options.target = target;
 
 		const result = await actor.rollTest("ws", options);
-		if (!result?.chatMessage) {
-			throw new Error(
-				"The melee attack roll did not produce its expected Test chat message.",
-			);
-		}
+		if (!result?.chatMessage) throw new Error("The melee attack roll did not produce its expected Test chat message.");
 
 		const attackState = {
 			version: 5,
 			family: WEAPON_KIND.MELEE,
 			status: "rolled",
 			managedByCombat: Boolean(combatant),
-			lifecycle: lifecycleCombat
-				? {
-					combatId: String(lifecycleCombat.id ?? ""),
-					round: positiveRound(lifecycleCombat.round),
-				}
-				: null,
-			attacker: {
-				uuid: actor.uuid,
-				name: String(actor.name ?? ""),
-				combatantId: String(combatant?.id ?? ""),
-			},
+			lifecycle: lifecycleCombat ? { combatId: String(lifecycleCombat.id ?? ""), round: positiveRound(lifecycleCombat.round) } : null,
+			attacker: { uuid: actor.uuid, name: String(actor.name ?? ""), combatantId: String(combatant?.id ?? "") },
 			weapon: {
 				uuid: weapon.uuid,
 				name: String(weapon.name ?? ""),
 				kind: WEAPON_KIND.MELEE,
-				effects: foundry.utils.deepClone(
-					DamageRuleEffects.activeEffectSnapshots(weapon),
-				),
+				effects: foundry.utils.deepClone(DamageRuleEffects.activeEffectSnapshots(weapon)),
+				specialistTraining: foundry.utils.deepClone(specialistTraining),
 				optionalModifiersApplied: optionalWeaponModifiers,
-				optionalModifiers: weaponModifiers
-					? foundry.utils.deepClone(weaponModifiers)
-					: null,
+				optionalModifiers: weaponModifiers ? foundry.utils.deepClone(weaponModifiers) : null,
 			},
 			targetMode,
-			target: targetMode === COMBAT_ATTACK_TARGET_MODE.DEFENDER
-				? {
-					uuid: String(target?.uuid ?? ""),
-					name: String(target?.name ?? ""),
-				}
-				: null,
+			target: targetMode === COMBAT_ATTACK_TARGET_MODE.DEFENDER ? { uuid: String(target?.uuid ?? ""), name: String(target?.name ?? "") } : null,
 			attackCost,
 			createdBy: game.user?.id ?? "",
 			createdAt: Date.now(),
 		};
 
-		await CombatAttackResultChat.attach(
-			result.chatMessage,
-			attackState,
-		);
-
-		return Object.freeze({
-			result,
-			message: result.chatMessage,
-			attack: Object.freeze(foundry.utils.deepClone(attackState)),
-			economy,
-		});
+		await CombatAttackResultChat.attach(result.chatMessage, attackState);
+		return Object.freeze({ result, message: result.chatMessage, attack: Object.freeze(foundry.utils.deepClone(attackState)), economy });
 	}
 
 	static #validate(actor, weapon, targetMode, target) {
-		if (actor?.documentName !== "Actor") {
-			throw new Error("Melee attack resolution requires an Actor.");
-		}
-		if (weapon?.type !== "weapon") {
-			throw new Error("Melee attack resolution requires a Weapon Item.");
-		}
-		if (weapon.parent?.uuid !== actor.uuid) {
-			throw new Error("The selected Weapon is not owned by this Actor.");
-		}
-		if (weapon.system?.kind !== WEAPON_KIND.MELEE) {
-			throw new Error(
-				"Ranged weapon execution is not enabled until its Load/Aim/Fire lifecycle is implemented.",
-			);
-		}
+		if (actor?.documentName !== "Actor") throw new Error("Melee attack resolution requires an Actor.");
+		if (weapon?.type !== "weapon") throw new Error("Melee attack resolution requires a Weapon Item.");
+		if (weapon.parent?.uuid !== actor.uuid) throw new Error("The selected Weapon is not owned by this Actor.");
+		if (weapon.system?.kind !== WEAPON_KIND.MELEE) throw new Error("Ranged weapon execution is not enabled until its Load/Aim/Fire lifecycle is implemented.");
 		if (!CombatEquipmentState.isUsed(weapon)) {
 			throw new Error(localize(
 				"The selected melee weapon must be equipped/held before it can attack.",
 				"Wybrana broń do walki wręcz musi być używana/trzymana, aby nią zaatakować.",
 			));
 		}
-		if (!Object.values(COMBAT_ATTACK_TARGET_MODE).includes(targetMode)) {
-			throw new Error(`Unknown combat attack target mode '${String(targetMode)}'.`);
-		}
-		if (
-			targetMode === COMBAT_ATTACK_TARGET_MODE.DEFENDER &&
-			target?.documentName !== "Actor"
-		) {
-			throw new Error("A defended melee attack requires a target Actor.");
-		}
+		if (!Object.values(COMBAT_ATTACK_TARGET_MODE).includes(targetMode)) throw new Error(`Unknown combat attack target mode '${String(targetMode)}'.`);
+		if (targetMode === COMBAT_ATTACK_TARGET_MODE.DEFENDER && target?.documentName !== "Actor") throw new Error("A defended melee attack requires a target Actor.");
 	}
 }
 
 function matchingCombatants(combat, actor) {
 	if (!actor) return [];
 	const combatants = [...(combat?.combatants ?? [])];
-	const exact = combatants.filter(
-		(combatant) => combatant.actor?.uuid === actor.uuid,
-	);
+	const exact = combatants.filter((combatant) => combatant.actor?.uuid === actor.uuid);
 	if (exact.length) return exact;
-
-	const sameId = combatants.filter(
-		(combatant) =>
-			combatant.actor?.id &&
-			actor.id &&
-			combatant.actor.id === actor.id,
-	);
+	const sameId = combatants.filter((combatant) => combatant.actor?.id && actor.id && combatant.actor.id === actor.id);
 	return sameId.length === 1 ? sameId : [];
 }
 
 function mutableRuleEffects(value) {
 	if (!Array.isArray(value)) return [];
-	return value.map((entry) => ({
-		...entry,
-		source: { ...(entry?.source ?? {}) },
-	}));
+	return value.map((entry) => ({ ...entry, source: { ...(entry?.source ?? {}) } }));
 }
-
-function positiveRound(value) {
-	const number = Number(value);
-	return Number.isInteger(number) && number > 0 ? number : null;
-}
-
-function integer(value) {
-	const number = Number(value);
-	return Number.isFinite(number) ? Math.trunc(number) : 0;
-}
-
-function finiteNumber(value, label) {
-	const number = Number(value);
-	if (!Number.isFinite(number)) {
-		throw new Error(`${label} must be a finite number.`);
-	}
-	return number;
-}
-
-function localize(english, polish) {
-	return game.i18n.lang === "pl" ? polish : english;
-}
+function positiveRound(value) { const number = Number(value); return Number.isInteger(number) && number > 0 ? number : null; }
+function integer(value) { const number = Number(value); return Number.isFinite(number) ? Math.trunc(number) : 0; }
+function finiteNumber(value, label) { const number = Number(value); if (!Number.isFinite(number)) throw new Error(`${label} must be a finite number.`); return number; }
+function localize(english, polish) { return game.i18n.lang === "pl" ? polish : english; }
