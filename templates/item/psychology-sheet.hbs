@@ -21,18 +21,6 @@
 		</div>
 	</header>
 
-	<div class="psychology-sheet-field psychology-sheet-field--rules-id">
-		<label for="psychology-rules-id-{{item.id}}" data-tooltip="{{ui.rulesIdHint}}">{{ui.rulesId}}</label>
-		<input
-			id="psychology-rules-id-{{item.id}}"
-			type="text"
-			name="system.rulesId"
-			value="{{system.rulesId}}"
-			autocomplete="off"
-			{{#unless editable}}disabled{{/unless}}
-		>
-	</div>
-
 	<div class="psychology-sheet-field psychology-sheet-field--description">
 		<label for="psychology-description-{{item.id}}">{{ui.description}}</label>
 		<textarea
