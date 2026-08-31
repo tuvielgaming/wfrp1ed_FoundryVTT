@@ -35,11 +35,6 @@ export class LanguageItemSheet extends HandlebarsApplicationMixin(ItemSheetV2) {
 		context.editable = this.isEditable;
 		context.ui = {
 			name: localize("Name", "Nazwa"),
-			rulesId: localize("Rules ID", "Identyfikator reguły"),
-			rulesIdHint: localize(
-				"Stable language-neutral identifier used by rules and references. Example: reikspiel, khazalid, eltharin.",
-				"Stały, niezależny od języka identyfikator używany przez reguły i odwołania. Przykład: reikspiel, khazalid, eltharin.",
-			),
 			description: localize("Description", "Opis"),
 		};
 		return context;
