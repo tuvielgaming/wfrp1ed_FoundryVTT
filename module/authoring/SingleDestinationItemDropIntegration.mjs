@@ -5,6 +5,7 @@ const ROUTES = Object.freeze({
 	}),
 	character: Object.freeze({
 		psychology: "character-psychology",
+		disease: "character-disease",
 		criticalWound: "character-critical-wound",
 	}),
 });
@@ -76,6 +77,9 @@ async function dispatchRoute(route, owner, source) {
 		case "character-psychology":
 			await embedUniqueItem(owner, source, "psychology");
 			return;
+		case "character-disease":
+			await embedUniqueItem(owner, source, "disease");
+			return;
 		case "character-critical-wound":
 			await embedItem(owner, source, "criticalWound");
 			return;
@@ -94,12 +98,8 @@ async function addRaceReference(race, source, path, expectedType) {
 		name: String(source.name ?? "").trim(),
 		...(expectedType === "psychology" ? { description: String(source.system?.description ?? "").trim() } : {}),
 	};
-
 	if (entries.some((entry) => sameReference(entry, reference))) {
-		ui.notifications.warn(localize(
-			`${source.name} is already assigned to this Race.`,
-			`${source.name} jest już przypisany do tej Rasy.`,
-		));
+		ui.notifications.warn(localize(`${source.name} is already assigned to this Race.`, `${source.name} jest już przypisany do tej Rasy.`));
 		return;
 	}
 	entries.push(reference);
@@ -110,10 +110,7 @@ async function embedUniqueItem(actor, source, expectedType) {
 	if (!(source instanceof foundry.documents.Item) || source.type !== expectedType) return;
 	const identity = itemIdentity(source);
 	if ([...(actor.items ?? [])].some((item) => item.type === expectedType && itemIdentity(item) === identity)) {
-		ui.notifications.warn(localize(
-			`${source.name} is already on this Character.`,
-			`${source.name} jest już na tej Postaci.`,
-		));
+		ui.notifications.warn(localize(`${source.name} is already on this Character.`, `${source.name} jest już na tej Postaci.`));
 		return;
 	}
 	await createEmbeddedCopy(actor, source);
@@ -152,11 +149,8 @@ function itemIdentity(item) {
 
 function draggedItemSync(event) {
 	let data;
-	try {
-		data = foundry.applications.ux.TextEditor.getDragEventData(event) ?? {};
-	} catch (_error) {
-		return null;
-	}
+	try { data = foundry.applications.ux.TextEditor.getDragEventData(event) ?? {}; }
+	catch (_error) { return null; }
 	if (String(data?.type ?? "") !== "Item") return null;
 	const uuid = String(data?.uuid ?? "").trim();
 	if (!uuid) return null;
@@ -165,9 +159,7 @@ function draggedItemSync(event) {
 	try {
 		const item = resolver(uuid);
 		return item instanceof foundry.documents.Item ? item : null;
-	} catch (_error) {
-		return null;
-	}
+	} catch (_error) { return null; }
 }
 
 function setHighlight(surface, ownerKind, itemType, active) {
@@ -179,7 +171,9 @@ function setHighlight(surface, ownerKind, itemType, active) {
 		const selector = itemType === "language" ? ".race-language-authoring" : ".race-psychology-authoring";
 		surface.querySelector(selector)?.classList.add("wfrp-single-destination-target");
 	} else if (ownerKind === "character") {
-		const selector = itemType === "psychology" ? ".classic-psychology-panel" : ".classic-health-categories";
+		const selector = itemType === "criticalWound"
+			? ".classic-health-categories"
+			: ".classic-psychology-panel";
 		surface.querySelector(selector)?.classList.add("wfrp-single-destination-target");
 	}
 }
@@ -187,9 +181,7 @@ function setHighlight(surface, ownerKind, itemType, active) {
 function clearHighlight(surface) {
 	surface.classList.remove("wfrp-single-destination-drag");
 	delete surface.dataset.wfrpSingleDestinationType;
-	for (const target of surface.querySelectorAll(".wfrp-single-destination-target")) {
-		target.classList.remove("wfrp-single-destination-target");
-	}
+	for (const target of surface.querySelectorAll(".wfrp-single-destination-target")) target.classList.remove("wfrp-single-destination-target");
 }
 
 function ensureRouterStyles() {
@@ -197,9 +189,7 @@ function ensureRouterStyles() {
 	const style = document.createElement("style");
 	style.id = "wfrp1ed-single-destination-drop-style";
 	style.textContent = `
-	[data-wfrp-single-destination-router="true"] {
-		transition: box-shadow 100ms ease, background-color 100ms ease;
-	}
+	[data-wfrp-single-destination-router="true"] { transition: box-shadow 100ms ease, background-color 100ms ease; }
 	[data-wfrp-single-destination-router="true"].wfrp-single-destination-drag {
 		box-shadow: inset 0 0 0 3px rgb(150 10 24 / 70%) !important;
 		background-color: rgb(130 0 15 / 3%);
@@ -222,20 +212,9 @@ function ensureRouterStyles() {
 	document.head.append(style);
 }
 
-function asElement(value) {
-	if (value instanceof HTMLElement) return value;
-	if (value?.[0] instanceof HTMLElement) return value[0];
-	return null;
-}
-
-function normalize(value) {
-	return String(value ?? "").trim().toLocaleLowerCase();
-}
-
-function localize(english, polish) {
-	return game.i18n.lang === "pl" ? polish : english;
-}
-
+function asElement(value) { return value instanceof HTMLElement ? value : value?.[0] instanceof HTMLElement ? value[0] : null; }
+function normalize(value) { return String(value ?? "").trim().toLocaleLowerCase(); }
+function localize(english, polish) { return game.i18n.lang === "pl" ? polish : english; }
 function reportError(error) {
 	console.error("WFRP1ED | Single-destination Item drop failed.", error);
 	ui.notifications.error(error?.message ?? String(error));
