@@ -203,7 +203,6 @@ function itemPresentation(item) {
 		id: item.id,
 		name: String(item.name ?? ""),
 		img: item.img || foundry.documents.Item.DEFAULT_ICON,
-		rulesId: String(item.system?.rulesId ?? "").trim(),
 		description: preview(String(item.system?.description ?? "").trim(), 320),
 		raceManaged: isRaceManaged(item),
 	};
@@ -282,6 +281,8 @@ function draggedItemSync(event) {
 	} catch (_error) { return null; }
 }
 
+/* Internal content identity is used for duplicate detection only. It is not
+ * presentation data and must not be exposed in the manager UI. */
 function canonicalIdentity(item) { return normalize(item?.system?.rulesId) || normalize(item?.name); }
 function categoryLabel(category) { return localize(category.en, category.pl); }
 function categoryHint(category) { return localize(category.hintEn, category.hintPl); }
