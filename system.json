@@ -21,6 +21,7 @@
 		"module/psychology/PsychologyBootstrap.mjs",
 		"module/diseases/DiseaseBootstrap.mjs",
 		"module/races/RaceBootstrap.mjs",
+		"module/races/RaceRulesBindingIntegration.mjs",
 		"module/races/RaceMandatorySkillPackageIntegration.mjs",
 		"module/races/RaceSkillSpecialisationIntegration.mjs",
 		"module/races/RaceTabWorkspace.mjs",
