@@ -129,7 +129,6 @@ function armourUi() {
 	return Object.freeze({
 		name: localize("Name", "Nazwa"),
 		description: localize("Description", "Opis"),
-		rulesId: localize("Rules ID", "Identyfikator zasad"),
 		armourClass: localize("Armour class", "Rodzaj pancerza"),
 		armourPiece: localize("Core armour piece", "Element pancerza z zasad"),
 		armourPoints: localize("Armour Points", "Punkty pancerza"),
