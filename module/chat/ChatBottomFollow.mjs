@@ -1,3 +1,5 @@
+import "./ChatLogDeliveryGuard.mjs";
+
 /*
  * Keep the ordinary "follow new chat" behaviour, but distinguish a genuinely
  * new local roll/result from a full ChatLog re-render. Fire Ball grouping does
