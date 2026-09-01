@@ -26,15 +26,15 @@
 
 	<div class="skill-sheet-field skill-sheet-field--rules-id">
 		<label
-			for="skill-rules-id-{{item.id}}"
+			for="skill-id-{{item.id}}"
 			data-tooltip="{{localize 'WFRP1ED.SkillSheet.RulesIdHint'}}"
 		>
 			{{localize "WFRP1ED.SkillSheet.RulesId"}}
 		</label>
 
 		<select
-			id="skill-rules-id-{{item.id}}"
-			name="system.rulesId"
+			id="skill-id-{{item.id}}"
+			name="system.skillId"
 			{{#unless editable}}disabled{{/unless}}
 		>
 			{{#each rulesIdOptions as |option|}}

@@ -1,23 +1,25 @@
 /**
- * Canonical WFRP 1e Core skill catalogue.
+ * Canonical WFRP 1e Core Skill catalogue.
  *
  * Mechanics authority: English Core Rulebook, Skills, printed p. 45 index and
  * pp. 46-58 descriptions. Polish labels/index positions are from the Polish
  * Core Rulebook, Umiejętności, printed p. 45 and following descriptions.
  *
- * The Polish edition contains one additional indexed skill,
- * "Wyczucie magicznego alarmu", which has no English-index counterpart.
- * English remains the mechanical authority, so that Polish-only record is kept
- * as unlinked catalogue content rather than being assigned an invented rulesId.
+ * The English edition indexes 133 Skills. The Polish edition indexes 134:
+ * "Wyczucie magicznego alarmu" is an additional Polish-edition Skill with no
+ * English-index counterpart. We preserve that published difference explicitly
+ * instead of inventing an English-Core equivalent or silently dropping it.
+ *
+ * `skillId` is stable content identity. It does not mean that executable
+ * mechanics are implemented for the Skill. Mechanical subsystems may use the
+ * same id as a lookup key only after the relevant WFRP 1e rule has been audited.
  *
  * Skill descriptions are deliberately not copied into this source yet. The
  * supplied Core PDFs are scanned images and descriptions must be individually
- * audited before being promoted to persistent rules content. The compendium
- * entries are nevertheless immediately useful because canonical names and
- * already-implemented rulesIds are stable.
+ * audited before being promoted to persistent rules content.
  */
 
-const CORE_CATALOG_VERSION = 1;
+const CORE_CATALOG_VERSION = 2;
 
 const SKILLS = Object.freeze([
 	skill("acrobatics", "Acrobatics", "Akrobatyka", 1, 1),
@@ -158,7 +160,7 @@ const SKILLS = Object.freeze([
 const POLISH_ONLY_SKILLS = Object.freeze([
 	Object.freeze({
 		catalogId: "polishSenseMagicAlarm",
-		rulesId: "",
+		skillId: "polishSenseMagicAlarm",
 		englishName: "",
 		polishName: "Wyczucie magicznego alarmu",
 		englishIndex: 0,
@@ -168,23 +170,69 @@ const POLISH_ONLY_SKILLS = Object.freeze([
 ]);
 
 /**
- * Stable rulesIds already consumed by executable subsystems.
+ * Skill ids already consumed by executable system mechanics.
  *
- * Other Core skills keep their canonical catalogue id in flags but leave
- * system.rulesId blank until their mechanic is audited and implemented.
+ * This is descriptive catalogue metadata only. Presence in this set does not
+ * change what `skillId` means: every Core Skill has a stable identity whether
+ * or not we currently automate any part of its rules.
  */
-export const IMPLEMENTED_CORE_SKILL_RULE_IDS = Object.freeze(new Set([
-	"acrobatics", "acting", "acuteHearing", "ambidextrous", "animalTraining",
-	"art", "boatBuilding", "bribery", "carpentry", "charm", "clown",
-	"comedian", "concealmentRural", "concealmentUrban", "contortionist",
-	"dance", "dodgeBlow", "engineer", "escapology", "etiquette", "evaluate",
-	"fireEating", "followTrail", "gamble", "haggle", "immunityToDisease",
-	"immunityToPoison", "jester", "juggle", "linguistics", "luck", "mimic",
-	"mining", "musicianship", "palmistry", "pickLock", "pickPocket",
-	"publicSpeaking", "ride", "scaleSheerSurface", "seduction", "shadowing",
-	"silentMoveRural", "silentMoveUrban", "sing", "smithing", "stoneworking",
-	"storyTelling", "strongman", "superNumerate", "swim", "tailor", "torture",
-	"trickRiding", "wit",
+export const IMPLEMENTED_CORE_SKILL_IDS = Object.freeze(new Set([
+	"acrobatics",
+	"acting",
+	"acuteHearing",
+	"ambidextrous",
+	"animalTraining",
+	"art",
+	"boatBuilding",
+	"bribery",
+	"carpentry",
+	"charm",
+	"clown",
+	"comedian",
+	"concealmentRural",
+	"concealmentUrban",
+	"contortionist",
+	"dance",
+	"dodgeBlow",
+	"engineer",
+	"escapology",
+	"etiquette",
+	"evaluate",
+	"fireEating",
+	"followTrail",
+	"gamble",
+	"haggle",
+	"immunityToDisease",
+	"immunityToPoison",
+	"jester",
+	"juggle",
+	"linguistics",
+	"luck",
+	"mimic",
+	"mining",
+	"musicianship",
+	"palmistry",
+	"pickLock",
+	"pickPocket",
+	"publicSpeaking",
+	"ride",
+	"scaleSheerSurface",
+	"seduction",
+	"shadowing",
+	"silentMoveRural",
+	"silentMoveUrban",
+	"sing",
+	"smithing",
+	"specialistWeapon",
+	"stoneworking",
+	"storyTelling",
+	"strongman",
+	"superNumerate",
+	"swim",
+	"tailor",
+	"torture",
+	"trickRiding",
+	"wit"
 ]));
 
 export function coreSkillDefinitions(language = "en") {
@@ -199,22 +247,40 @@ export function coreSkillDefinitions(language = "en") {
 	})));
 }
 
+/**
+ * Resolve one canonical Core Skill definition by stable Skill id.
+ *
+ * Polish-only content is resolvable in either UI language so existing documents
+ * never lose their identity merely because the client language changes.
+ */
+export function coreSkillDefinition(skillId, language = "en") {
+	const id = String(skillId ?? "").trim();
+	if (!id) return null;
+
+	const all = [...SKILLS, ...POLISH_ONLY_SKILLS];
+	const entry = all.find((candidate) => candidate.skillId === id);
+	if (!entry) return null;
+
+	const lang = normalizeLanguage(language);
+	return Object.freeze({
+		...entry,
+		name: lang === "pl"
+			? entry.polishName
+			: entry.englishName || entry.polishName,
+	});
+}
+
 /** Build raw Item sources suitable for Foundry compendium packing. */
 export function coreSkillItemSources(language = "en") {
 	const lang = normalizeLanguage(language);
 
-	return Object.freeze(coreSkillDefinitions(lang).map((entry) => {
-		const implementedRulesId =
-			entry.rulesId && IMPLEMENTED_CORE_SKILL_RULE_IDS.has(entry.rulesId)
-				? entry.rulesId
-				: "";
-
-		return Object.freeze({
+	return Object.freeze(coreSkillDefinitions(lang).map((entry) =>
+		Object.freeze({
 			name: entry.name,
 			type: "skill",
 			img: "icons/svg/book.svg",
 			system: {
-				rulesId: implementedRulesId,
+				skillId: entry.skillId,
 				description: "",
 				specialisation: "",
 			},
@@ -225,8 +291,9 @@ export function coreSkillItemSources(language = "en") {
 						version: CORE_CATALOG_VERSION,
 						kind: "skill",
 						catalogId: entry.catalogId,
-						canonicalRulesId: entry.rulesId,
-						mechanicsLinked: Boolean(implementedRulesId),
+						skillId: entry.skillId,
+						mechanicsLinked:
+							IMPLEMENTED_CORE_SKILL_IDS.has(entry.skillId),
 						englishName: entry.englishName,
 						polishName: entry.polishName,
 						englishIndex: entry.englishIndex,
@@ -234,20 +301,22 @@ export function coreSkillItemSources(language = "en") {
 						polishOnly: entry.polishOnly === true,
 						descriptionStatus: "pending-individual-audit",
 						source: {
-							english: "Core Skills index p. 45; descriptions pp. 46-58",
-							polish: "Core Umiejętności index p. 45; descriptions pp. 46-58",
+							english:
+								"Core Skills index p. 45; descriptions pp. 46-58",
+							polish:
+								"Core Umiejętności index p. 45; descriptions pp. 46-58",
 						},
 					},
 				},
 			},
-		});
-	}));
+		}),
+	));
 }
 
-function skill(rulesId, englishName, polishName, englishIndex, polishIndex) {
+function skill(skillId, englishName, polishName, englishIndex, polishIndex) {
 	return Object.freeze({
-		catalogId: rulesId,
-		rulesId,
+		catalogId: skillId,
+		skillId,
 		englishName,
 		polishName,
 		englishIndex,

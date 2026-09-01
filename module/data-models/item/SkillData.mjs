@@ -22,10 +22,10 @@ export class SkillData extends TypeDataModel {
 	 *
 	 * The Item's root `name` owns the displayed skill name.
 	 *
-	 * `rulesId` is a stable, language-neutral identifier for an audited core
-	 * skill rule. It is deliberately independent of Item.name so localization,
-	 * user-visible renaming and specialisations cannot break mechanical lookup.
-	 * Custom or not-yet-mapped skills leave it blank.
+	 * `skillId` is the stable, language-neutral identity of the Skill definition.
+	 * It identifies which WFRP 1e Skill the Item represents; it is not an
+	 * executable procedure id. Core Skills use ids from CoreSkillCatalog while
+	 * custom Skills may leave the field blank.
 	 *
 	 * `description` stores the rules/content description of the skill.
 	 *
@@ -35,56 +35,78 @@ export class SkillData extends TypeDataModel {
 	 *
 	 * No generic characteristic, target number, or modifier is stored here.
 	 * Those concepts are not universal properties of WFRP 1e skills. Audited
-	 * mechanics are resolved from `rulesId` by the subsystem which owns the
-	 * relevant procedure, such as Standard Tests.
+	 * mechanics may use `skillId` as a stable lookup key without coupling rules
+	 * to localized or user-editable Item names.
 	 *
 	 * @returns {Object}
 	 */
 	static defineSchema() {
 		return {
-			rulesId: textField(),
+			skillId: textField(),
 			description: textField(),
 			specialisation: textField(),
 		};
 	}
 
 	/**
-	 * Normalize early or transitional Skill data into the canonical model.
+	 * Transitional read-only compatibility alias.
 	 *
-	 * Although Skill was not part of the previous native Item contract,
-	 * accepting the common American-spelling `specialization` key makes the
-	 * migration deterministic if any Skill Documents were created during the
-	 * transition between manifest registration and this TypeDataModel.
+	 * Older system code still reads `system.rulesId`. Keeping that name as a
+	 * derived getter lets the persistent model move to `skillId` first, before
+	 * the remaining consumers and nested Race/Career references are renamed in
+	 * the next audited slice. No `rulesId` field is persisted by SkillData.
 	 *
-	 * Legacy `{ value }` text records are also unwrapped without preserving
-	 * their presentation wrapper.
+	 * @returns {string}
+	 */
+	get rulesId() {
+		return this.skillId;
+	}
+
+	/**
+	 * Normalize transitional Skill data into the canonical model.
 	 *
-	 * Existing Skill Items predate the stable rules identity contract. Their
-	 * `rulesId` therefore migrates safely to an empty string rather than being
-	 * guessed from a localized or user-editable Item name.
+	 * Existing development-world Skills which still persist `rulesId` are
+	 * migrated deterministically into `skillId`; the legacy field is then
+	 * discarded. We never guess identity from localized or user-editable names.
+	 *
+	 * The common American-spelling `specialization` key is also accepted during
+	 * the transition and normalized to `specialisation`.
 	 *
 	 * @param {Object} source
 	 * @param {Object} options
 	 * @returns {Object}
 	 */
 	static migrateData(source, options = {}) {
-		const migrated = foundry.utils.deepClone(
-			source ?? {},
-		);
+		const raw = source && typeof source === "object"
+			? source
+			: {};
+		const migrated = foundry.utils.deepClone(raw);
 
-		migrated.rulesId = normalizeText(
-			migrated.rulesId,
-		);
+		if (
+			Object.hasOwn(raw, "skillId") ||
+			Object.hasOwn(raw, "rulesId")
+		) {
+			migrated.skillId = normalizeText(
+				raw.skillId ?? raw.rulesId,
+			);
+		}
 
-		migrated.description = unwrapText(
-			migrated.description,
-		);
+		if (Object.hasOwn(raw, "description")) {
+			migrated.description = unwrapText(
+				raw.description,
+			);
+		}
 
-		migrated.specialisation = unwrapText(
-			migrated.specialisation ??
-				migrated.specialization,
-		);
+		if (
+			Object.hasOwn(raw, "specialisation") ||
+			Object.hasOwn(raw, "specialization")
+		) {
+			migrated.specialisation = unwrapText(
+				raw.specialisation ?? raw.specialization,
+			);
+		}
 
+		delete migrated.rulesId;
 		delete migrated.specialization;
 
 		return super.migrateData(
