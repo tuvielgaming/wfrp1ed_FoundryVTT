@@ -146,7 +146,6 @@
 		"module/chat/CompactResolvedChatCards.mjs",
 		"module/chat/ChatDisclosureStatePreservation.mjs",
 		"module/criticals/SuddenDeathResultGenerationGuard.mjs",
-		"module/chat/ChatBottomFollow.mjs"
 	],
 	"styles": [
 		"css/myOwn.css",
