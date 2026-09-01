@@ -1,75 +1,135 @@
 const FLAG_SCOPE = "wfrp1ed";
-const pending = new Map();
+const deferredMessageIds = new Set();
+let flushScheduled = false;
 
 /**
- * Foundry v14 persists ChatMessage Documents independently from displaying them
- * in the sidebar ChatLog. Normally core's createChatMessage handling calls
- * ChatLog.postOne(), but WFRP result messages can be created and then enriched
- * while another sidebar tab is active. In that state Foundry may show the
- * notification card without the persistent message being logged into the hidden
- * ChatLog.
+ * Keep WFRP ChatMessage persistence and ChatLog presentation separate.
  *
- * Do not activate Chat and do not manipulate scroll state. Give core one frame
- * to perform its ordinary delivery, then use the supported ChatLog.postOne()
- * API only when ChatMessage.logged still reports false.
+ * ChatMessage.create() owns persistence in game.messages. Foundry v14 may show
+ * a notification for a message created while another Sidebar tab is active,
+ * while the hidden ChatLog has no rendered card for that message yet. Trying to
+ * post/render into that inactive ChatLog proved unreliable because its DOM is
+ * virtualized by the Sidebar lifecycle.
+ *
+ * Therefore every newly-created WFRP message is remembered by id. If Chat is
+ * already active we verify delivery after core has completed its own create
+ * handling. If Chat is inactive we wait for the official changeSidebarTab hook
+ * and only then post any still-missing cards from authoritative game.messages.
  */
 Hooks.on("createChatMessage", (message) => {
 	if (!isWfrpMessage(message)) return;
-	queueDelivery(message, { notify: true });
+	remember(message);
+	if (isChatActive()) scheduleFlush();
 });
 
-/* Combat layers attack/defence state onto an already-created generic Test
- * message. If that message was created while Chat was inactive, re-check its
- * delivery when the WFRP flags change rather than assuming the create hook was
- * enough. */
+/* Combat enriches a generic TestResult after creation. If the original create
+ * was missed by an older world state or another module, an update is another
+ * safe opportunity to remember the same persistent message. */
 Hooks.on("updateChatMessage", (message, changes) => {
 	if (!isWfrpMessage(message) && !changesTouchWfrp(changes)) return;
-	queueDelivery(message, { notify: false });
+	remember(message);
+	if (isChatActive()) scheduleFlush();
 });
 
-function queueDelivery(message, { notify }) {
+Hooks.on("deleteChatMessage", (message) => {
 	const id = String(message?.id ?? "").trim();
-	if (!id) return;
+	if (id) deferredMessageIds.delete(id);
+});
 
-	const existing = pending.get(id);
-	if (existing) {
-		existing.notify ||= notify === true;
-		return;
-	}
+/* Foundry v14 documents changeSidebarTab(app) as the authoritative notification
+ * that one SidebarTab application has become active. Do not guess from hidden
+ * DOM state; wait for this lifecycle event and synchronize Chat at that point. */
+Hooks.on("changeSidebarTab", (app) => {
+	if (!isChatApplication(app)) return;
+	scheduleFlush();
+});
 
-	const request = { notify: notify === true };
-	pending.set(id, request);
+function remember(message) {
+	const id = String(message?.id ?? "").trim();
+	if (id) deferredMessageIds.add(id);
+}
 
-	requestAnimationFrame(() => {
-		setTimeout(() => {
-			pending.delete(id);
-			void ensureLogged(message, request.notify);
-		}, 0);
+function scheduleFlush() {
+	if (flushScheduled || !deferredMessageIds.size) return;
+	flushScheduled = true;
+
+	queueMicrotask(() => {
+		requestAnimationFrame(() => {
+			requestAnimationFrame(() => {
+				flushScheduled = false;
+				void flushDeferredMessages();
+			});
+		});
 	});
 }
 
-async function ensureLogged(message, notify) {
-	if (!message?.id || message.logged === true) return;
+async function flushDeferredMessages() {
+	if (!isChatActive() || !deferredMessageIds.size) return;
 
 	const chat = ui.chat;
 	if (typeof chat?.postOne !== "function") {
 		console.warn(
-			"WFRP1ED | ChatLog.postOne is unavailable; persistent message delivery cannot be repaired.",
+			"WFRP1ED | ChatLog.postOne is unavailable; deferred chat delivery skipped.",
 		);
 		return;
 	}
 
-	try {
-		await chat.postOne(message, {
-			notify: notify === true,
-			scroll: false,
-		});
-	} catch (error) {
-		console.error(
-			"WFRP1ED | Unable to deliver persistent WFRP ChatMessage to ChatLog.",
-			error,
-		);
+	/* Resolve from game.messages now, not from stale Document references retained
+	 * across an inactive Sidebar interval. Keep creation order so several queued
+	 * Test/combat cards appear in the same order as the authoritative collection. */
+	const messages = [...deferredMessageIds]
+		.map((id) => game.messages?.get(id) ?? null)
+		.filter(Boolean)
+		.sort((left, right) => messageOrder(left) - messageOrder(right));
+
+	for (const message of messages) {
+		const id = String(message.id ?? "");
+		if (!id) continue;
+
+		if (chatContainsMessage(id)) {
+			deferredMessageIds.delete(id);
+			continue;
+		}
+
+		try {
+			await chat.postOne(message, {
+				notify: false,
+				scroll: false,
+			});
+		} catch (error) {
+			console.error(
+				`WFRP1ED | Unable to add deferred ChatMessage '${id}' to the active ChatLog.`,
+				error,
+			);
+			continue;
+		}
+
+		/* postOne is asynchronous and owns DOM insertion. If Foundry accepted the
+		 * request, remove the id even when a theme/module changes the final wrapper
+		 * selector; a later update hook can re-queue it if necessary. */
+		deferredMessageIds.delete(id);
 	}
+}
+
+function chatContainsMessage(messageId) {
+	const root = asElement(ui.chat?.element);
+	if (!(root instanceof HTMLElement)) return false;
+	const escaped = cssEscape(messageId);
+	return Boolean(root.querySelector?.(`[data-message-id="${escaped}"]`));
+}
+
+function isChatActive() {
+	const chat = ui.chat;
+	return Boolean(chat && chat.active === true);
+}
+
+function isChatApplication(app) {
+	return Boolean(app && (app === ui.chat || String(app.tabName ?? "") === "chat"));
+}
+
+function messageOrder(message) {
+	const timestamp = Number(message?.timestamp ?? message?._source?.timestamp ?? 0);
+	return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
 function isWfrpMessage(message) {
@@ -83,4 +143,17 @@ function changesTouchWfrp(changes) {
 	return Object.keys(changes).some((key) =>
 		String(key).startsWith(`flags.${FLAG_SCOPE}.`),
 	);
+}
+
+function asElement(value) {
+	if (value instanceof HTMLElement) return value;
+	if (value?.[0] instanceof HTMLElement) return value[0];
+	return null;
+}
+
+function cssEscape(value) {
+	const text = String(value ?? "");
+	return globalThis.CSS?.escape
+		? CSS.escape(text)
+		: text.replace(/["\\]/g, "\\$&");
 }
