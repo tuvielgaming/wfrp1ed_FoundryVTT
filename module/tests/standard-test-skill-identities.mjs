@@ -26,9 +26,13 @@ export const STANDARD_TEST_SKILL_IDENTITIES = deepFreeze(
 						? definition.polishName
 						: definition.englishName || definition.polishName;
 				},
+				/* Even the Polish-edition-only record receives a non-empty synthetic
+				 * localization key. Missing keys intentionally fall back to `label` in
+				 * SkillItemSheet instead of relying on how Foundry localizes an empty
+				 * string. */
 				labelKey: definition.englishName
 					? `WFRP1ED.Skill.${skillKey(definition.englishName)}`
-					: "",
+					: `WFRP1ED.Skill.${skillKey(definition.skillId)}`,
 			},
 		]),
 	),
