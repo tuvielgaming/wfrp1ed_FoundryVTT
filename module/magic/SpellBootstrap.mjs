@@ -4,7 +4,6 @@ import {
 	SpellData,
 } from "../data-models/item/SpellData.mjs";
 import { SpellItemSheet } from "../sheets/SpellItemSheet.mjs";
-import "../chat/DiceFirstChatReveal.mjs";
 import "../tests/TestResultOwnerAdjudicationIntegration.mjs";
 import "./CoreCastingFailureWorkflow.mjs";
 import "./SpellCastLinkage.mjs";
