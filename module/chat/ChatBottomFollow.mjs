@@ -1,30 +1,20 @@
-import "./ChatLogDeliveryGuard.mjs";
-
 /*
  * Keep the ordinary "follow new chat" behaviour, but distinguish a genuinely
  * new local roll/result from a full ChatLog re-render. Fire Ball grouping does
  * several forced renders while resolving one action; those renders can leave
  * Foundry's isAtBottom flag false even though the user has just clicked a roll.
- *
- * IMPORTANT: never drive ChatLog scrolling while the Chat UI is hidden behind a
- * different sidebar tab. Foundry can present a newly-created persistent
- * ChatMessage as a temporary off-tab preview. Calling scrollBottom({popout:true})
- * against that hidden/virtualized ChatLog can desynchronize its rendered history
- * from game.messages. We therefore touch bottom-follow state only when the real
- * ChatLog is currently visible.
  */
 Hooks.on("renderChatMessageHTML", (message) => {
 	if (!message?.id) return;
 	const chat = ui.chat;
-	if (!chat?.scrollBottom || !isChatVisible(chat)) return;
-	if (chat.isAtBottom === false) return;
+	if (!chat?.scrollBottom || chat.isAtBottom === false) return;
 	scheduleBottomFollow(String(message.id));
 });
 
 Hooks.on("createChatMessage", (message) => {
 	if (!message?.id) return;
 	const chat = ui.chat;
-	if (!chat?.scrollBottom || !isChatVisible(chat)) return;
+	if (!chat?.scrollBottom) return;
 
 	/* A Test/Damage card produced by this client is part of the action the user
 	 * just requested, so reveal it even if an intermediate forced chat render made
@@ -58,7 +48,7 @@ function scheduleBottomFollow(messageId) {
 
 async function scrollChatBottom(messageId) {
 	const chat = ui.chat;
-	if (!chat?.scrollBottom || !isChatVisible(chat)) return;
+	if (!chat?.scrollBottom) return;
 
 	try {
 		await chat.scrollBottom({
@@ -75,41 +65,10 @@ async function scrollChatBottom(messageId) {
 		 * user scroll occurs. Synchronize the actual scroll container and emit the
 		 * same native scroll event that a tiny manual wheel movement would cause. */
 		synchronizeNativeBottomState(chat, messageId);
-		requestAnimationFrame(() => {
-			if (isChatVisible(chat)) synchronizeNativeBottomState(chat, messageId);
-		});
+		requestAnimationFrame(() => synchronizeNativeBottomState(chat, messageId));
 	} catch (error) {
 		console.debug("WFRP1ED | Chat bottom follow skipped.", error);
 	}
-}
-
-function isChatVisible(chat) {
-	const root = asElement(chat?.element);
-	if (!(root instanceof HTMLElement) || !root.isConnected) return false;
-
-	/* Hidden sidebar tabs normally have no rendered client rectangles. The
-	 * computed-style fallback covers installations/themes which retain layout but
-	 * hide the inactive tab explicitly. */
-	if (root.getClientRects().length === 0) return false;
-	const style = getComputedStyle(root);
-	if (style.display === "none" || style.visibility === "hidden") return false;
-
-	/* A chat element can exist inside a hidden ancestor even when its own style is
-	 * visible. Walking ancestors prevents us from treating that inactive sidebar
-	 * panel as an interactive ChatLog. */
-	let ancestor = root.parentElement;
-	while (ancestor) {
-		const ancestorStyle = getComputedStyle(ancestor);
-		if (
-			ancestorStyle.display === "none" ||
-			ancestorStyle.visibility === "hidden"
-		) {
-			return false;
-		}
-		ancestor = ancestor.parentElement;
-	}
-
-	return true;
 }
 
 function synchronizeNativeBottomState(chat, messageId) {
