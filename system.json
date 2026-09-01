@@ -145,7 +145,7 @@
 		"module/criticals/CriticalResultLifecycleGuard.mjs",
 		"module/chat/CompactResolvedChatCards.mjs",
 		"module/chat/ChatDisclosureStatePreservation.mjs",
-		"module/criticals/SuddenDeathResultGenerationGuard.mjs",
+		"module/criticals/SuddenDeathResultGenerationGuard.mjs"
 	],
 	"styles": [
 		"css/myOwn.css",
