@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build:packs": "node scripts/build-packs.mjs"
+    "audit:skills": "node scripts/audit-skill-identities.mjs",
+    "build:packs": "npm run audit:skills && node scripts/build-packs.mjs"
   },
   "devDependencies": {
     "classic-level": "^3.0.0"
