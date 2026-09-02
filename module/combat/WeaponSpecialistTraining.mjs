@@ -75,7 +75,7 @@ export class WeaponSpecialistTraining {
 	}
 
 	static #matchesSkill(item, bindingId, custom) {
-		if (item?.type !== "skill" || String(item.system?.rulesId ?? "").trim() !== SPECIALIST_RULES_ID) return false;
+		if (item?.type !== "skill" || String(item.system?.skillId ?? "").trim() !== SPECIALIST_RULES_ID) return false;
 		const specialization = String(item.system?.specialisation ?? "").trim();
 		if (bindingId === CUSTOM_BINDING) return normalize(specialization) === normalize(custom);
 		return coreSkillSpecialisationId(SPECIALIST_RULES_ID, specialization) === bindingId;

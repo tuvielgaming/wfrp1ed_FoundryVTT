@@ -8,7 +8,7 @@ import {
  * This class deliberately does not decide whether a potentially relevant
  * skill applies in the current fictional situation. The core Standard Tests
  * rule explicitly leaves that decision to the GM. Instead, it groups owned
- * Skill Items by stable `system.rulesId` and returns the audited effects which
+ * Skill Items by stable `system.skillId` and returns the audited effects which
  * the future Standard Test dialog may present for selection.
  */
 export class StandardTestSkillResolver {
@@ -46,7 +46,7 @@ export class StandardTestSkillResolver {
 			}
 
 			const rulesId = String(
-				item.system?.rulesId ?? "",
+				item.system?.skillId ?? "",
 			).trim();
 
 			if (!rulesId) {

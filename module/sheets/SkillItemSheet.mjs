@@ -73,7 +73,7 @@ export class SkillItemSheet extends HandlebarsApplicationMixin(
 		context.system = this.document.system;
 		context.editable = this.isEditable;
 		context.rulesIdOptions = buildRulesIdOptions(
-			this.document.system?.rulesId,
+			this.document.system?.skillId,
 		);
 		context.ruleEffects = buildEffectPresentation(this.document);
 		context.effectUi = effectUiLabels();
