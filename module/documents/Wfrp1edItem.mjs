@@ -9,10 +9,18 @@ import {
 } from "../data-models/item/InventoryItemFields.mjs";
 import { ArmourEquipValidator } from "../combat/ArmourEquipValidator.mjs";
 import { HandEquipValidator } from "../combat/HandEquipValidator.mjs";
+import {
+	isStackingRepeatableSkill,
+	normalizeSkillAcquisitions,
+	skillAcquisitionPolicy,
+	SKILL_ACQUISITION_POLICY_KIND,
+} from "../skills/SkillAcquisitionPolicy.mjs";
 
 export class Wfrp1edItem extends Item {
 	/**
-	 * Reject duplicate Actor-owned Skills and normalize newly embedded physical
+	 * Reject accidental duplicate Actor-owned Skills, merge Core stacking
+	 * repeated acquisitions into one owned Skill Item, enforce audited limits
+	 * for qualified repeatable Skills, and normalize newly embedded physical
 	 * Items before they enter an Actor inventory.
 	 *
 	 * A World/Compendium Item may carry an equipped state which was valid for a
@@ -37,6 +45,8 @@ export class Wfrp1edItem extends Item {
 		}
 
 		const acceptedByActor = new Map();
+		const pendingStackingByActor = new Map();
+		const acceptedQualifiedCountsByActor = new Map();
 
 		for (let index = documents.length - 1; index >= 0; index -= 1) {
 			const item = documents[index];
@@ -45,7 +55,45 @@ export class Wfrp1edItem extends Item {
 
 			const identity = skillIdentityFromItem(item);
 			if (!identity) continue;
-			if (isRepeatableSkillIdentity(identity)) continue;
+
+			if (isStackingRepeatableSkill(identityRulesId(identity))) {
+				const existing = actorSkillByIdentity(actor, identity);
+				const incomingAcquisitions = normalizeSkillAcquisitions(
+					item.system?.acquisitions,
+				);
+
+				if (existing) {
+					await existing.update({
+						"system.acquisitions":
+							normalizeSkillAcquisitions(existing.system?.acquisitions) +
+							incomingAcquisitions,
+					});
+					documents.splice(index, 1);
+					continue;
+				}
+
+				let pending = pendingStackingByActor.get(actor.uuid);
+				if (!pending) {
+					pending = new Map();
+					pendingStackingByActor.set(actor.uuid, pending);
+				}
+
+				const key = skillIdentityKey(identity);
+				const acceptedPending = pending.get(key);
+				if (acceptedPending) {
+					acceptedPending.updateSource({
+						"system.acquisitions":
+							normalizeSkillAcquisitions(
+								acceptedPending.system?.acquisitions,
+							) + incomingAcquisitions,
+					});
+					documents.splice(index, 1);
+					continue;
+				}
+
+				pending.set(key, item);
+				continue;
+			}
 
 			let accepted = acceptedByActor.get(actor.uuid);
 			if (!accepted) {
@@ -64,6 +112,33 @@ export class Wfrp1edItem extends Item {
 				warnDuplicateSkill(identity, item.name);
 				continue;
 			}
+
+			const policy = skillAcquisitionPolicy(identityRulesId(identity));
+			if (policy?.kind === SKILL_ACQUISITION_POLICY_KIND.QUALIFIED) {
+				let counts = acceptedQualifiedCountsByActor.get(actor.uuid);
+				if (!counts) {
+					counts = new Map();
+					acceptedQualifiedCountsByActor.set(actor.uuid, counts);
+				}
+
+				const rulesId = identityRulesId(identity);
+				let acceptedCount = counts.get(rulesId);
+				if (acceptedCount === undefined) {
+					acceptedCount = actorSkillCountByRulesId(actor, rulesId);
+				}
+
+				if (
+					policy.maxAcquisitions !== null &&
+					acceptedCount >= policy.maxAcquisitions
+				) {
+					documents.splice(index, 1);
+					warnSkillAcquisitionLimit(item.name, policy.maxAcquisitions);
+					continue;
+				}
+
+				counts.set(rulesId, acceptedCount + 1);
+			}
+
 			accepted.add(key);
 		}
 
@@ -89,10 +164,21 @@ export class Wfrp1edItem extends Item {
 				),
 			});
 
+			const policy = skillAcquisitionPolicy(identityRulesId(identity));
 			if (
-				!isRepeatableSkillIdentity(identity) &&
-				wouldDuplicateActorSkill(this, identity)
+				policy?.kind === SKILL_ACQUISITION_POLICY_KIND.QUALIFIED &&
+				policy.maxAcquisitions !== null &&
+				actorSkillCountByRulesId(
+					this.actor,
+					identityRulesId(identity),
+					this.id,
+				) >= policy.maxAcquisitions
 			) {
+				warnSkillAcquisitionLimit(this.name, policy.maxAcquisitions);
+				return false;
+			}
+
+			if (wouldDuplicateActorSkill(this, identity)) {
 				warnDuplicateSkill(identity, this.name);
 				return false;
 			}
@@ -116,10 +202,6 @@ export class Wfrp1edItem extends Item {
 }
 
 const PHYSICAL_ITEM_TYPES = new Set(["weapon", "armour", "equipment"]);
-const REPEATABLE_SKILL_RULE_IDS = new Set([
-	"picklock",
-	"pickpocket",
-]);
 
 function resetPendingPhysicalItemState(item) {
 	const system = typeof item.system?.toObject === "function"
@@ -265,6 +347,25 @@ function warnInvalidEquipmentState() {
 	);
 }
 
+function actorSkillByIdentity(actor, identity) {
+	return [...(actor?.items ?? [])].find((existing) => {
+		if (existing.type !== "skill") return false;
+		return sameSkillIdentity(identity, skillIdentityFromItem(existing));
+	}) ?? null;
+}
+
+function actorSkillCountByRulesId(actor, rulesId, excludedItemId = "") {
+	const normalizedRulesId = normalizeIdentityText(rulesId);
+	if (!normalizedRulesId) return 0;
+	return [...(actor?.items ?? [])].filter((existing) => {
+		if (
+			existing.type !== "skill" ||
+			String(existing.id ?? "") === String(excludedItemId ?? "")
+		) return false;
+		return identityRulesId(skillIdentityFromItem(existing)) === normalizedRulesId;
+	}).length;
+}
+
 function wouldDuplicateActorSkill(item, identity = skillIdentityFromItem(item)) {
 	const actor = item?.actor;
 	if (item?.type !== "skill" || !actor || !identity) return false;
@@ -299,6 +400,10 @@ function skillIdentity({ name, rulesId, specialisation }) {
 	});
 }
 
+function identityRulesId(identity) {
+	return identity?.kind === "rules" ? identity.value : "";
+}
+
 function skillIdentityKey(identity) {
 	if (!identity) return "";
 	return [identity.kind, identity.value, identity.specialisation].join("::");
@@ -309,13 +414,6 @@ function sameSkillIdentity(first, second) {
 		first &&
 		second &&
 		skillIdentityKey(first) === skillIdentityKey(second),
-	);
-}
-
-function isRepeatableSkillIdentity(identity) {
-	return Boolean(
-		identity?.kind === "rules" &&
-		REPEATABLE_SKILL_RULE_IDS.has(identity.value),
 	);
 }
 
@@ -353,6 +451,14 @@ function warnDuplicateSkill(identity, fallbackName) {
 	const message = game.i18n.lang === "pl"
 		? `Postać posiada już Umiejętność „${label}”. Duplikat nie został dodany.`
 		: `This Actor already has the Skill “${label}”. The duplicate was not added.`;
+	ui.notifications.warn(message);
+}
+
+function warnSkillAcquisitionLimit(name, limit) {
+	const label = String(name ?? "").trim();
+	const message = game.i18n.lang === "pl"
+		? `Umiejętność „${label}” można nabyć najwyżej ${limit} razy.`
+		: `The Skill “${label}” can be acquired at most ${limit} times.`;
 	ui.notifications.warn(message);
 }
 
