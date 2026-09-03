@@ -1,5 +1,5 @@
 /******************************************************************/
-/* GM Active Effect adjudication in test-result chat cards        */
+/* Modifier adjudication in test-result chat cards                */
 /******************************************************************/
 
 .wfrp1e-test-card__modifier-source {
@@ -9,59 +9,19 @@
 	min-width: 0;
 }
 
+/*
+ * Checkbox artwork and native-input hiding belong to the shared
+ * `.wfrp1ed-checkbox` component in css/forms/checkbox.css. This file owns only
+ * which resolved modifier kinds expose that control on a Test result card.
+ */
 .wfrp1e-test-card__effect-toggle {
 	display: none;
-	position: relative;
-	flex: 0 0 14px;
-	width: 14px;
-	height: 14px;
-	margin: 0;
-	padding: 0;
-	cursor: pointer;
 }
 
+.wfrp1e-test-card__breakdown-row[data-modifier-type="skill"]
+	.wfrp1e-test-card__effect-toggle,
 .wfrp1e-test-card.is-gm-effect-editable
 	.wfrp1e-test-card__breakdown-row[data-modifier-type="active-effect"]
 	.wfrp1e-test-card__effect-toggle {
-	display: inline-grid;
-	place-items: center;
-}
-
-.wfrp1e-test-card__effect-toggle > input[type="checkbox"] {
-	position: absolute !important;
-	width: 1px !important;
-	height: 1px !important;
-	min-width: 1px !important;
-	margin: 0 !important;
-	padding: 0 !important;
-	opacity: 0 !important;
-	appearance: none !important;
-	-webkit-appearance: none !important;
-}
-
-.wfrp1e-test-card__effect-toggle-box {
-	display: inline-grid;
-	place-items: center;
-	width: 13px;
-	height: 13px;
-	border: 1px solid rgb(71 49 29 / 82%);
-	border-radius: 1px;
-	background: transparent;
-	box-shadow: none;
-	color: #2b2115;
-	font-family: Arial, sans-serif;
-	font-size: 11px;
-	font-weight: 700;
-	line-height: 1;
-}
-
-.wfrp1e-test-card__effect-toggle > input[type="checkbox"]:checked
-	+ .wfrp1e-test-card__effect-toggle-box::after {
-	content: "✓";
-}
-
-.wfrp1e-test-card__effect-toggle > input[type="checkbox"]:focus-visible
-	+ .wfrp1e-test-card__effect-toggle-box {
-	outline: 1px solid currentColor;
-	outline-offset: 1px;
+	display: flex;
 }

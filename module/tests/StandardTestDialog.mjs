@@ -590,11 +590,13 @@ export class StandardTestDialog {
 	 * Render owned Skill effects which can be represented safely as ordinary
 	 * additive Test modifiers.
 	 *
-	 * The Standard Test rules make Skill applicability situational, so these
-	 * effects are presented as explicit per-roll choices rather than being
-	 * silently enabled. Procedure, choice, derived, and target-side effects are
-	 * deliberately not coerced into numeric modifiers here; they remain owned by
-	 * their specialized rule executors.
+	 * A rules-linked owned Skill is enabled by default because its audited
+	 * Standard Test modifier is part of the character's capability. The checkbox
+	 * remains available for the exceptional fictional situation in which the GM
+	 * decides that the otherwise relevant Skill does not apply to this roll.
+	 * Procedure, choice, derived, and target-side effects are deliberately not
+	 * coerced into numeric modifiers here; they remain owned by their specialized
+	 * rule executors.
 	 *
 	 * @param {HTMLElement} section
 	 * @param {Actor} actor
@@ -654,13 +656,17 @@ export class StandardTestDialog {
 
 		for (const row of rows) {
 			const label = document.createElement("label");
-			label.classList.add("standard-test-skill-effect");
+			label.classList.add(
+				"standard-test-skill-effect",
+				"wfrp1ed-checkbox",
+			);
 			const checkbox = document.createElement("input");
 			checkbox.type = "checkbox";
 			checkbox.name = "standardSkillModifier";
 			checkbox.dataset.standardSkillModifier = "";
 			checkbox.dataset.skillId = row.candidate.rulesId;
 			checkbox.dataset.effectIndex = String(row.effectIndex);
+			checkbox.checked = true;
 
 			const text = document.createElement("span");
 			text.textContent = `${row.candidate.name} ${this._signed(row.modifier.value)}`;

@@ -16,8 +16,8 @@ const GENERAL_MODIFIER_ID = "general";
  * Mechanical test resolution happens before this controller receives a result.
  * The persisted chat snapshot stores the resolved base target, original d100
  * roll and modifier contributions. A later adjudication edit changes only the
- * general modifier and re-evaluates target/success/margin against that original
- * snapshot; Actor data and formula inputs are never re-read.
+ * stored modifier state and re-evaluates target/success/margin against that
+ * original snapshot; Actor data and formula inputs are never re-read.
  *
  * Mechanical adjudication belongs to the GM or an OWNER of the Actor whose roll
  * this is. Result-detail visibility remains a separate GM-only presentation
@@ -61,6 +61,10 @@ export class TestResultChat {
 	/**
 	 * Attach GM-or-Actor-OWNER adjudication behavior to one result card.
 	 *
+	 * The general numeric modifier remains editable exactly as before. Skill
+	 * modifiers additionally expose their persisted enabled state as checkboxes;
+	 * changing one re-renders the result against the original physical d100 roll.
+	 *
 	 * @param {ChatMessage} message
 	 * @param {HTMLElement|Object} html
 	 * @returns {void}
@@ -79,49 +83,80 @@ export class TestResultChat {
 		const card = rendered?.matches?.(".wfrp1e-test-card")
 			? rendered
 			: rendered?.querySelector?.(".wfrp1e-test-card");
-		const input = card?.querySelector?.(
+
+		if (!card) {
+			return;
+		}
+
+		const canAdjudicate = this._canAdjudicate(state);
+		const input = card.querySelector(
 			"[data-wfrp-test-general-modifier]",
 		);
 
-		if (!input) {
-			return;
+		if (input) {
+			if (!canAdjudicate) {
+				input.readOnly = true;
+				input.tabIndex = -1;
+				input.classList.add("is-readonly");
+				input.title = this._localize(
+					"WFRP1ED.TestResult.GMModifierReadOnly",
+					"The GM or an OWNER of this Actor can adjust this modifier.",
+					"Ten modyfikator może zmienić MG albo Właściciel tego Aktora.",
+				);
+			} else {
+				input.readOnly = false;
+				input.classList.add("is-editable");
+				input.title = this._localize(
+					"WFRP1ED.TestResult.GMModifierEdit",
+					"Edit the modifier, then press Enter or leave the field.",
+					"Zmień modyfikator, a następnie naciśnij Enter lub opuść pole.",
+				);
+
+				input.addEventListener("keydown", (event) => {
+					if (event.key !== "Enter") {
+						return;
+					}
+
+					event.preventDefault();
+					input.blur();
+				});
+
+				input.addEventListener("change", () => {
+					void this._updateGeneralModifier(
+						message,
+						input,
+					);
+				});
+			}
 		}
 
-		if (!this._canAdjudicate(state)) {
-			input.readOnly = true;
-			input.tabIndex = -1;
-			input.classList.add("is-readonly");
-			input.title = this._localize(
-				"WFRP1ED.TestResult.GMModifierReadOnly",
-				"The GM or an OWNER of this Actor can adjust this modifier.",
-				"Ten modyfikator może zmienić MG albo Właściciel tego Aktora.",
-			);
-			return;
-		}
-
-		input.readOnly = false;
-		input.classList.add("is-editable");
-		input.title = this._localize(
-			"WFRP1ED.TestResult.GMModifierEdit",
-			"Edit the modifier, then press Enter or leave the field.",
-			"Zmień modyfikator, a następnie naciśnij Enter lub opuść pole.",
+		const skillToggles = card.querySelectorAll(
+			'input[data-wfrp-test-modifier-toggle][data-modifier-type="skill"]',
 		);
 
-		input.addEventListener("keydown", (event) => {
-			if (event.key !== "Enter") {
-				return;
+		for (const toggle of skillToggles) {
+			if (!canAdjudicate) {
+				toggle.disabled = true;
+				continue;
 			}
 
-			event.preventDefault();
-			input.blur();
-		});
-
-		input.addEventListener("change", () => {
-			void this._updateGeneralModifier(
-				message,
-				input,
+			toggle.disabled = false;
+			toggle.title = this._localize(
+				"WFRP1ED.TestResult.SkillModifierToggle",
+				"Enable or disable this Skill modifier for this resolved test.",
+				"Włącz lub wyłącz ten modyfikator umiejętności dla tego rozstrzygniętego testu.",
 			);
-		});
+
+			toggle.addEventListener("change", () => {
+				const index = Number(toggle.dataset.modifierIndex);
+				void this._updateModifierEnabled(
+					message,
+					index,
+					toggle.checked,
+					"skill",
+				);
+			});
+		}
 	}
 
 	/**
@@ -396,6 +431,94 @@ export class TestResultChat {
 			ui.notifications.error(
 				error?.message ??
 					"Unable to update the test modifier.",
+			);
+		}
+	}
+
+	/**
+	 * Enable or disable one persisted non-general modifier and re-evaluate the
+	 * card against its immutable base target and physical d100 roll.
+	 *
+	 * `expectedType` is checked against the stored snapshot rather than trusting
+	 * DOM data, so this entry point cannot be used to toggle unrelated modifier
+	 * kinds which do not support post-roll adjudication.
+	 *
+	 * @param {ChatMessage} message
+	 * @param {number} index
+	 * @param {boolean} enabled
+	 * @param {string} expectedType
+	 * @returns {Promise<void>}
+	 * @protected
+	 */
+	static async _updateModifierEnabled(
+		message,
+		index,
+		enabled,
+		expectedType,
+	) {
+		try {
+			const state = message?.getFlag?.(
+				FLAG_SCOPE,
+				FLAG_KEY,
+			);
+
+			if (!state) {
+				throw new Error(
+					"This chat message has no editable test snapshot.",
+				);
+			}
+
+			if (!this._canAdjudicate(state)) {
+				throw new Error(
+					"Only the GM or an OWNER of the rolling Actor can change a resolved test modifier.",
+				);
+			}
+
+			const modifierIndex = Number(index);
+			const modifiers = Array.isArray(state.otherModifiers)
+				? state.otherModifiers
+				: [];
+
+			if (
+				!Number.isInteger(modifierIndex) ||
+				modifierIndex < 0 ||
+				modifierIndex >= modifiers.length
+			) {
+				throw new Error("Select a valid resolved test modifier.");
+			}
+
+			const requiredType = String(expectedType ?? "").trim();
+			const storedType = String(
+				modifiers[modifierIndex]?.type ?? "",
+			).trim();
+
+			if (!requiredType || storedType !== requiredType) {
+				throw new Error(
+					"This resolved test modifier cannot be toggled here.",
+				);
+			}
+
+			const updated = this._copyState(state);
+			updated.otherModifiers[modifierIndex].enabled =
+				enabled === true;
+			updated.updatedBy = game.user?.id ?? "";
+			updated.updatedAt = Date.now();
+
+			const content = await this._render(updated);
+
+			await message.update({
+				content,
+				[`flags.${FLAG_SCOPE}.${FLAG_KEY}`]: updated,
+			});
+		} catch (error) {
+			console.error(
+				"WFRP1ED | Unable to toggle resolved test modifier.",
+				error,
+			);
+
+			ui.notifications.error(
+				error?.message ??
+					"Unable to toggle the resolved test modifier.",
 			);
 		}
 	}
