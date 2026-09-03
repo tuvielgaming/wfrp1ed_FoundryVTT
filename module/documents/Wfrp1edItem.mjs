@@ -45,6 +45,7 @@ export class Wfrp1edItem extends Item {
 
 			const identity = skillIdentityFromItem(item);
 			if (!identity) continue;
+			if (isRepeatableSkillIdentity(identity)) continue;
 
 			let accepted = acceptedByActor.get(actor.uuid);
 			if (!accepted) {
@@ -88,7 +89,10 @@ export class Wfrp1edItem extends Item {
 				),
 			});
 
-			if (wouldDuplicateActorSkill(this, identity)) {
+			if (
+				!isRepeatableSkillIdentity(identity) &&
+				wouldDuplicateActorSkill(this, identity)
+			) {
 				warnDuplicateSkill(identity, this.name);
 				return false;
 			}
@@ -112,6 +116,10 @@ export class Wfrp1edItem extends Item {
 }
 
 const PHYSICAL_ITEM_TYPES = new Set(["weapon", "armour", "equipment"]);
+const REPEATABLE_SKILL_RULE_IDS = new Set([
+	"picklock",
+	"pickpocket",
+]);
 
 function resetPendingPhysicalItemState(item) {
 	const system = typeof item.system?.toObject === "function"
@@ -244,7 +252,7 @@ function warnValidation(validation) {
 		first?.message || (
 			game.i18n.lang === "pl"
 				? "Nie można użyć przedmiotu w tej konfiguracji."
-				: "The Item cannot be equipped in that configuration."
+				: "The Item cannot be equipped in that configuration.",
 		),
 	);
 }
@@ -301,6 +309,13 @@ function sameSkillIdentity(first, second) {
 		first &&
 		second &&
 		skillIdentityKey(first) === skillIdentityKey(second),
+	);
+}
+
+function isRepeatableSkillIdentity(identity) {
+	return Boolean(
+		identity?.kind === "rules" &&
+		REPEATABLE_SKILL_RULE_IDS.has(identity.value),
 	);
 }
 
