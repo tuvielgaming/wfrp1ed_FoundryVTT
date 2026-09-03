@@ -107,13 +107,16 @@ export class Wfrp1edItem extends Item {
 			}
 
 			const key = skillIdentityKey(identity);
-			if (accepted.has(key)) {
+			const policy = skillAcquisitionPolicy(identityRulesId(identity));
+			if (
+				accepted.has(key) &&
+				policy?.kind !== SKILL_ACQUISITION_POLICY_KIND.QUALIFIED
+			) {
 				documents.splice(index, 1);
 				warnDuplicateSkill(identity, item.name);
 				continue;
 			}
 
-			const policy = skillAcquisitionPolicy(identityRulesId(identity));
 			if (policy?.kind === SKILL_ACQUISITION_POLICY_KIND.QUALIFIED) {
 				let counts = acceptedQualifiedCountsByActor.get(actor.uuid);
 				if (!counts) {
@@ -145,6 +148,12 @@ export class Wfrp1edItem extends Item {
 		return result;
 	}
 
+	/**
+	 * Removing a stacking repeatable Skill removes one acquisition at a time.
+	 * Foundry v14 pre-delete operation hooks retain a document by removing its id
+	 * from `operation.ids`; mutating the supplied document array does not cancel
+	 * that requested deletion.
+	 */
 	static async _preDeleteOperation(documents, operation, user) {
 		const result = await super._preDeleteOperation(
 			documents,
@@ -153,8 +162,7 @@ export class Wfrp1edItem extends Item {
 		);
 		if (result === false) return false;
 
-		for (let index = documents.length - 1; index >= 0; index -= 1) {
-			const item = documents[index];
+		for (const item of documents) {
 			if (item?.type !== "skill" || !item.actor) continue;
 
 			const rulesId = String(item.system?.rulesId ?? "").trim();
@@ -168,7 +176,10 @@ export class Wfrp1edItem extends Item {
 			await item.update({
 				"system.acquisitions": acquisitions - 1,
 			});
-			documents.splice(index, 1);
+
+			operation.ids = (operation.ids ?? []).filter(
+				(id) => String(id) !== String(item.id),
+			);
 		}
 
 		return result;
