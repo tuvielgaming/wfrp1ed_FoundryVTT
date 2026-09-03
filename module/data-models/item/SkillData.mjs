@@ -85,8 +85,10 @@ export class SkillData extends TypeDataModel {
 	 * The common American-spelling `specialization` key is also accepted during
 	 * the transition and normalized to `specialisation`.
 	 *
-	 * Existing Skill Items predate the acquisition counter, so an absent or
-	 * invalid value migrates to one acquisition.
+	 * Existing Skill Items predate the acquisition counter, so an absent value
+	 * becomes one acquisition on a full migration. Partial updates deliberately
+	 * leave an omitted counter untouched so editing another Skill field cannot
+	 * reset an existing repeated-acquisition total.
 	 *
 	 * @param {Object} source
 	 * @param {Object} options
@@ -107,9 +109,13 @@ export class SkillData extends TypeDataModel {
 			);
 		}
 
-		migrated.acquisitions = normalizeAcquisitions(
-			raw.acquisitions,
-		);
+		if (Object.hasOwn(raw, "acquisitions")) {
+			migrated.acquisitions = normalizeAcquisitions(
+				raw.acquisitions,
+			);
+		} else if (options?.partial !== true) {
+			migrated.acquisitions = 1;
+		}
 
 		if (Object.hasOwn(raw, "description")) {
 			migrated.description = unwrapText(
