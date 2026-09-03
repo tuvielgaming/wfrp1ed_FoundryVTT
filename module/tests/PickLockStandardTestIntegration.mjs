@@ -30,7 +30,7 @@ const TEST_RESULT_FLAG_KEY = "testResultState";
  * per-lock attempt counter.
  */
 installPickLockDialogRules();
-registerPickLockResultNotice();
+registerPickLockResultPresentation();
 
 function installPickLockDialogRules() {
 	if (StandardTestDialog.__wfrpPickLockRulesInstalled === true) return;
@@ -187,45 +187,88 @@ function hasPickLockSkill(actor) {
 	);
 }
 
-function registerPickLockResultNotice() {
+function registerPickLockResultPresentation() {
 	Hooks.on("renderChatMessageHTML", (message, html) => {
 		const state = message?.getFlag?.(
 			FLAG_SCOPE,
 			TEST_RESULT_FLAG_KEY,
 		);
-		const hasUnskilledPenalty = Array.isArray(state?.otherModifiers) &&
-			state.otherModifiers.some(
+		const modifierIndex = Array.isArray(state?.otherModifiers)
+			? state.otherModifiers.findIndex(
 				(modifier) =>
 					String(modifier?.type ?? "") ===
 					UNSKILLED_PICK_LOCK_MODIFIER_TYPE,
-			);
+			)
+			: -1;
 
-		if (!hasUnskilledPenalty) return;
+		if (modifierIndex < 0) return;
 
 		const rendered = TestResultChat._asElement(html);
 		const card = rendered?.matches?.(".wfrp1e-test-card")
 			? rendered
 			: rendered?.querySelector?.(".wfrp1e-test-card");
-		if (!card || card.querySelector("[data-wfrp-pick-lock-unskilled-notice]")) {
-			return;
-		}
+		if (!card) return;
 
-		const header = card.querySelector(".wfrp1e-test-card__header");
-		if (!header) return;
-
-		const notice = document.createElement("div");
-		notice.classList.add("wfrp1e-test-card__breakdown");
-		notice.dataset.wfrpPickLockUnskilledNotice = "";
-		notice.setAttribute("role", "note");
-
-		const text = document.createElement("strong");
-		text.textContent = localize(
-			"Unskilled Pick Lock attempt: -30%. Only one attempt is allowed at this lock.",
-			"Próba otwarcia zamka bez umiejętności: -30%. Przy tym zamku dozwolona jest tylko jedna próba.",
+		activateUnskilledPenaltyToggle(
+			message,
+			state,
+			card,
+			modifierIndex,
 		);
-		notice.append(text);
-		header.insertAdjacentElement("afterend", notice);
+		renderUnskilledAttemptNotice(card);
 	});
+}
+
+function activateUnskilledPenaltyToggle(message, state, card, modifierIndex) {
+	const toggle = card.querySelector(
+		`input[data-wfrp-test-modifier-toggle]` +
+		`[data-modifier-index="${modifierIndex}"]` +
+		`[data-modifier-type="${UNSKILLED_PICK_LOCK_MODIFIER_TYPE}"]`,
+	);
+	if (!(toggle instanceof HTMLInputElement)) return;
+
+	const canAdjudicate = TestResultChat._canAdjudicate(state);
+	if (!canAdjudicate) {
+		toggle.disabled = true;
+		return;
+	}
+
+	toggle.disabled = false;
+	toggle.title = localize(
+		"Enable or disable the unskilled Pick Lock penalty for this resolved test.",
+		"Włącz lub wyłącz karę za próbę Otwierania zamków bez umiejętności dla tego rozstrzygniętego testu.",
+	);
+
+	toggle.addEventListener("change", () => {
+		void TestResultChat._updateModifierEnabled(
+			message,
+			modifierIndex,
+			toggle.checked,
+			UNSKILLED_PICK_LOCK_MODIFIER_TYPE,
+		);
+	});
+}
+
+function renderUnskilledAttemptNotice(card) {
+	if (card.querySelector("[data-wfrp-pick-lock-unskilled-notice]")) {
+		return;
+	}
+
+	const header = card.querySelector(".wfrp1e-test-card__header");
+	if (!header) return;
+
+	const notice = document.createElement("div");
+	notice.classList.add("wfrp1e-test-card__breakdown");
+	notice.dataset.wfrpPickLockUnskilledNotice = "";
+	notice.setAttribute("role", "note");
+
+	const text = document.createElement("strong");
+	text.textContent = localize(
+		"Unskilled Pick Lock attempt: -30%. Only one attempt is allowed at this lock.",
+		"Próba otwarcia zamka bez umiejętności: -30%. Przy tym zamku dozwolona jest tylko jedna próba.",
+	);
+	notice.append(text);
+	header.insertAdjacentElement("afterend", notice);
 }
 
 function localize(english, polish) {
