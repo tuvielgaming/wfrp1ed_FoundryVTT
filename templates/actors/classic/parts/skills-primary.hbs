@@ -41,7 +41,7 @@
 					</button>
 				</li>
 			{{else}}
-				{{#if (wfrp1edSkillAcquisitionVisible @root.display.actor.id skill.id)}}
+				{{#if (wfrp1edSkillAcquisitionVisible @root.display.actor.uuid skill.id)}}
 					<li
 						class="skill-row"
 						data-item-id="{{skill.id}}"
@@ -52,9 +52,9 @@
 							class="skill-name skill-name--open"
 							data-action="openSkill"
 							data-item-id="{{skill.id}}"
-							aria-label="{{localize 'WFRP1ED.SkillSheet.OpenSkill'}}: {{wfrp1edSkillAcquisitionDisplayName @root.display.actor.id skill.id skill.displayName}}"
+							aria-label="{{localize 'WFRP1ED.SkillSheet.OpenSkill'}}: {{wfrp1edSkillAcquisitionDisplayName @root.display.actor.uuid skill.id skill.displayName}}"
 						>
-							{{wfrp1edSkillAcquisitionDisplayName @root.display.actor.id skill.id skill.displayName}}
+							{{wfrp1edSkillAcquisitionDisplayName @root.display.actor.uuid skill.id skill.displayName}}
 						</button>
 
 						{{#if @root.editable}}
@@ -63,7 +63,7 @@
 								class="skill-control skill-control--remove"
 								data-action="removeSkill"
 								data-item-id="{{skill.id}}"
-								aria-label="{{localize 'WFRP1ED.SkillSheet.RemoveSkill'}}: {{wfrp1edSkillAcquisitionDisplayName @root.display.actor.id skill.id skill.displayName}}"
+								aria-label="{{localize 'WFRP1ED.SkillSheet.RemoveSkill'}}: {{wfrp1edSkillAcquisitionDisplayName @root.display.actor.uuid skill.id skill.displayName}}"
 								data-tooltip="{{localize 'WFRP1ED.SkillSheet.RemoveSkill'}}"
 							>
 								<i class="fa-solid fa-trash" aria-hidden="true"></i>
