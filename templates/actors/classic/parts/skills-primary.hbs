@@ -28,11 +28,8 @@
 		</li>
 
 		{{#each display.skills as |skill|}}
-			<li
-				class="skill-row{{#if skill.careerOffer}} skill-row--career-offer{{/if}}"
-				{{#unless skill.careerOffer}}data-item-id="{{skill.id}}" data-item-uuid="{{skill.uuid}}"{{/unless}}
-			>
-				{{#if skill.careerOffer}}
+			{{#if skill.careerOffer}}
+				<li class="skill-row skill-row--career-offer">
 					<button
 						type="button"
 						class="skill-name skill-name--career-offer"
@@ -42,31 +39,39 @@
 					>
 						{{skill.displayName}}
 					</button>
-				{{else}}
-					<button
-						type="button"
-						class="skill-name skill-name--open"
-						data-action="openSkill"
+				</li>
+			{{else}}
+				{{#if (wfrp1edSkillAcquisitionVisible @root.display.actor.id skill.id)}}
+					<li
+						class="skill-row"
 						data-item-id="{{skill.id}}"
-						aria-label="{{localize 'WFRP1ED.SkillSheet.OpenSkill'}}: {{skill.displayName}}"
+						data-item-uuid="{{skill.uuid}}"
 					>
-						{{skill.displayName}}
-					</button>
-
-					{{#if @root.editable}}
 						<button
 							type="button"
-							class="skill-control skill-control--remove"
-							data-action="removeSkill"
+							class="skill-name skill-name--open"
+							data-action="openSkill"
 							data-item-id="{{skill.id}}"
-							aria-label="{{localize 'WFRP1ED.SkillSheet.RemoveSkill'}}: {{skill.displayName}}"
-							data-tooltip="{{localize 'WFRP1ED.SkillSheet.RemoveSkill'}}"
+							aria-label="{{localize 'WFRP1ED.SkillSheet.OpenSkill'}}: {{wfrp1edSkillAcquisitionDisplayName @root.display.actor.id skill.id skill.displayName}}"
 						>
-							<i class="fa-solid fa-trash" aria-hidden="true"></i>
+							{{wfrp1edSkillAcquisitionDisplayName @root.display.actor.id skill.id skill.displayName}}
 						</button>
-					{{/if}}
+
+						{{#if @root.editable}}
+							<button
+								type="button"
+								class="skill-control skill-control--remove"
+								data-action="removeSkill"
+								data-item-id="{{skill.id}}"
+								aria-label="{{localize 'WFRP1ED.SkillSheet.RemoveSkill'}}: {{wfrp1edSkillAcquisitionDisplayName @root.display.actor.id skill.id skill.displayName}}"
+								data-tooltip="{{localize 'WFRP1ED.SkillSheet.RemoveSkill'}}"
+							>
+								<i class="fa-solid fa-trash" aria-hidden="true"></i>
+							</button>
+						{{/if}}
+					</li>
 				{{/if}}
-			</li>
+			{{/if}}
 		{{/each}}
 	</ol>
 </section>
