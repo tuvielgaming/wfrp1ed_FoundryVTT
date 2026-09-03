@@ -16,7 +16,7 @@
 .combat-item-sheet .combat-item-sheet__check {
 	position: relative;
 	display: flex;
-	align-items: baseline;
+	align-items: center;
 	gap: 7px;
 	min-width: 0;
 	cursor: pointer;
