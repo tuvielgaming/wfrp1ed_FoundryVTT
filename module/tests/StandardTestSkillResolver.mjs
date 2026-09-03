@@ -1,4 +1,7 @@
 import {
+	normalizeSkillAcquisitions,
+} from "../skills/SkillAcquisitionPolicy.mjs";
+import {
 	getStandardTestSkillRule,
 } from "./standard-test-skill-rules.mjs";
 
@@ -9,15 +12,16 @@ import {
  * skill applies in the current fictional situation. The core Standard Tests
  * rule explicitly leaves that decision to the GM. Instead, it groups owned
  * Skill Items by stable `system.skillId` and returns the audited effects which
- * the future Standard Test dialog may present for selection.
+ * the Standard Test dialog may present for adjudication.
  */
 export class StandardTestSkillResolver {
 	/**
 	 * Find all owned, rules-linked Skill Items with effects for `testId`.
 	 *
-	 * Repeated copies of the same rules id are grouped so rules such as Pick
-	 * Lock and Pick Pocket can later derive bonuses from additional
-	 * acquisitions without relying on localized Item names.
+	 * Canonical repeatable Skills store their acquisition total on the owned
+	 * Skill Item. Legacy development-world duplicates are still summed here so
+	 * old Actors continue to produce the correct modifier until their duplicate
+	 * rows are cleaned up.
 	 *
 	 * @param {Actor} actor
 	 * @param {string} testId
@@ -76,6 +80,7 @@ export class StandardTestSkillResolver {
 					rulesId,
 					name: item.name,
 					items: [],
+					acquisitions: 0,
 					effects,
 				};
 
@@ -83,13 +88,16 @@ export class StandardTestSkillResolver {
 			}
 
 			group.items.push(item);
+			group.acquisitions += normalizeSkillAcquisitions(
+				item.system?.acquisitions,
+			);
 		}
 
 		const candidates = [...groups.values()].map((group) =>
 			Object.freeze({
 				rulesId: group.rulesId,
 				name: group.name,
-				acquisitions: group.items.length,
+				acquisitions: group.acquisitions,
 				itemIds: Object.freeze(
 					group.items.map((item) => item.id),
 				),
