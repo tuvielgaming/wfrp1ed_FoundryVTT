@@ -5,6 +5,7 @@ import {
 	STANDARD_TEST_PROCEDURES,
 	standardTestProcedureName,
 } from "./standard-test-procedures.mjs";
+import { StandardTestSkillResolver } from "./StandardTestSkillResolver.mjs";
 import { TestDialog } from "./TestDialog.mjs";
 import { TestManager } from "./TestManager.mjs";
 
@@ -295,6 +296,10 @@ export class StandardTestDialog {
 		modifierGroup.input.placeholder = "0";
 		modifierGroup.root.dataset.standardD100Only = "";
 
+		const skillSection = document.createElement("div");
+		skillSection.dataset.standardSkillEffects = "";
+		skillSection.dataset.standardD100Only = "";
+
 		const effectsSection = RuleEffectRollSelection.buildSection(
 			actor,
 			entries[0]?.effectTargets ?? [],
@@ -309,6 +314,7 @@ export class StandardTestDialog {
 			leapGapGroup.root,
 			runUpGroup.root,
 			modifierGroup.root,
+			skillSection,
 			effectsSection,
 		);
 
@@ -448,6 +454,7 @@ export class StandardTestDialog {
 		const test = entry.test;
 		const options = {
 			modifier: TestDialog.readModifier(form),
+			modifiers: this._readSkillModifiers(actor, test.id, form),
 			resultVisibility: TestDialog.readResultVisibility(form),
 			ruleEffects,
 		};
@@ -542,6 +549,14 @@ export class StandardTestDialog {
 			element.hidden = entry?.kind !== "test";
 		}
 
+		const skillSection = body.querySelector(
+			"[data-standard-skill-effects]",
+		);
+
+		if (skillSection) {
+			this._renderSkillSection(skillSection, actor, entry);
+		}
+
 		const effectSection = body.querySelector(
 			"[data-wfrp-rule-effects]",
 		);
@@ -569,6 +584,173 @@ export class StandardTestDialog {
 					"Brak jednego celu na mapie. Kliknij Rzuć, aby wybrać go w czacie.",
 				);
 		}
+	}
+
+	/**
+	 * Render owned Skill effects which can be represented safely as ordinary
+	 * additive Test modifiers.
+	 *
+	 * The Standard Test rules make Skill applicability situational, so these
+	 * effects are presented as explicit per-roll choices rather than being
+	 * silently enabled. Procedure, choice, derived, and target-side effects are
+	 * deliberately not coerced into numeric modifiers here; they remain owned by
+	 * their specialized rule executors.
+	 *
+	 * @param {HTMLElement} section
+	 * @param {Actor} actor
+	 * @param {Object|undefined} entry
+	 * @returns {void}
+	 * @protected
+	 */
+	static _renderSkillSection(section, actor, entry) {
+		section.replaceChildren();
+
+		if (entry?.kind !== "test") {
+			section.hidden = true;
+			return;
+		}
+
+		const candidates = StandardTestSkillResolver.candidates(
+			actor,
+			entry.id,
+		);
+		const rows = [];
+
+		for (const candidate of candidates) {
+			candidate.effects.forEach((effect, effectIndex) => {
+				const modifier = this._skillModifierForEffect(
+					candidate,
+					effect,
+				);
+
+				if (!modifier || modifier.value === 0) {
+					return;
+				}
+
+				rows.push({
+					candidate,
+					effectIndex,
+					modifier,
+				});
+			});
+		}
+
+		if (rows.length === 0) {
+			section.hidden = true;
+			return;
+		}
+
+		section.hidden = false;
+
+		const group = this._formGroup(
+			this._localize(
+				"WFRP1ED.StandardTest.SkillModifiers",
+				"Applicable Skills",
+				"Odpowiednie umiejętności",
+			),
+		);
+		const list = document.createElement("div");
+		list.classList.add("standard-test-skill-effects");
+
+		for (const row of rows) {
+			const label = document.createElement("label");
+			label.classList.add("standard-test-skill-effect");
+			const checkbox = document.createElement("input");
+			checkbox.type = "checkbox";
+			checkbox.name = "standardSkillModifier";
+			checkbox.dataset.standardSkillModifier = "";
+			checkbox.dataset.skillId = row.candidate.rulesId;
+			checkbox.dataset.effectIndex = String(row.effectIndex);
+
+			const text = document.createElement("span");
+			text.textContent = `${row.candidate.name} ${this._signed(row.modifier.value)}`;
+
+			label.append(checkbox, text);
+			list.append(label);
+		}
+
+		group.control.append(list);
+		section.append(group.root);
+	}
+
+	/**
+	 * Read the Skill choices rendered for one Standard Test and convert them to
+	 * the existing TestContext modifier contract.
+	 *
+	 * @param {Actor} actor
+	 * @param {string} testId
+	 * @param {HTMLFormElement} form
+	 * @returns {Array<Object>}
+	 * @protected
+	 */
+	static _readSkillModifiers(actor, testId, form) {
+		const candidates = StandardTestSkillResolver.candidates(
+			actor,
+			testId,
+		);
+		const bySkillId = new Map(
+			candidates.map((candidate) => [candidate.rulesId, candidate]),
+		);
+		const modifiers = [];
+
+		for (const input of form?.querySelectorAll?.(
+			"input[data-standard-skill-modifier]:checked",
+		) ?? []) {
+			const skillId = String(input.dataset.skillId ?? "").trim();
+			const effectIndex = Number(input.dataset.effectIndex);
+			const candidate = bySkillId.get(skillId);
+			const effect = Number.isInteger(effectIndex)
+				? candidate?.effects?.[effectIndex]
+				: null;
+			const modifier = this._skillModifierForEffect(candidate, effect);
+
+			if (modifier) {
+				modifiers.push(modifier);
+			}
+		}
+
+		return modifiers;
+	}
+
+	/**
+	 * Convert one audited Skill effect to the generic Test modifier shape when
+	 * that conversion is mechanically exact.
+	 *
+	 * @param {Object|undefined} candidate
+	 * @param {Object|undefined} effect
+	 * @returns {Object|null}
+	 * @protected
+	 */
+	static _skillModifierForEffect(candidate, effect) {
+		if (!candidate || !effect || effect.condition) {
+			return null;
+		}
+
+		let value;
+
+		if (effect.type === "modifier") {
+			value = Number(effect.value);
+		} else if (effect.type === "repeated-acquisition-modifier") {
+			value =
+				Math.max(0, Number(candidate.acquisitions) - 1) *
+				Number(effect.valuePerExtraAcquisition);
+		} else {
+			return null;
+		}
+
+		if (!Number.isFinite(value)) {
+			throw new Error(
+				`Invalid Standard Test Skill modifier for '${candidate.rulesId}'.`,
+			);
+		}
+
+		return {
+			id: `skill:${candidate.rulesId}:${effect.type}`,
+			value,
+			source: candidate.name,
+			type: "skill",
+			enabled: true,
+		};
 	}
 
 	/**
@@ -642,6 +824,11 @@ export class StandardTestDialog {
 		}
 
 		return value;
+	}
+
+	static _signed(value) {
+		const number = Number(value);
+		return number >= 0 ? `+${number}` : String(number);
 	}
 
 	static _localize(key, englishFallback, polishFallback) {
