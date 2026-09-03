@@ -1,4 +1,5 @@
 const {
+	NumberField,
 	StringField,
 } = foundry.data.fields;
 
@@ -27,6 +28,11 @@ export class SkillData extends TypeDataModel {
 	 * executable procedure id. Core Skills use ids from CoreSkillCatalog while
 	 * custom Skills may leave the field blank.
 	 *
+	 * `acquisitions` is the number of times this exact Skill acquisition has been
+	 * obtained when the Core rules allow numerical repeated acquisition. Normal
+	 * Skills remain at 1. Pick Lock and Pick Pocket use values above 1 instead of
+	 * storing duplicate embedded Items.
+	 *
 	 * `description` stores the rules/content description of the skill.
 	 *
 	 * `specialisation` identifies the selected subject, language, weapon
@@ -43,6 +49,13 @@ export class SkillData extends TypeDataModel {
 	static defineSchema() {
 		return {
 			skillId: textField(),
+			acquisitions: new NumberField({
+				required: true,
+				nullable: false,
+				integer: true,
+				min: 1,
+				initial: 1,
+			}),
 			description: textField(),
 			specialisation: textField(),
 		};
@@ -72,6 +85,9 @@ export class SkillData extends TypeDataModel {
 	 * The common American-spelling `specialization` key is also accepted during
 	 * the transition and normalized to `specialisation`.
 	 *
+	 * Existing Skill Items predate the acquisition counter, so an absent or
+	 * invalid value migrates to one acquisition.
+	 *
 	 * @param {Object} source
 	 * @param {Object} options
 	 * @returns {Object}
@@ -90,6 +106,10 @@ export class SkillData extends TypeDataModel {
 				raw.skillId ?? raw.rulesId,
 			);
 		}
+
+		migrated.acquisitions = normalizeAcquisitions(
+			raw.acquisitions,
+		);
 
 		if (Object.hasOwn(raw, "description")) {
 			migrated.description = unwrapText(
@@ -166,4 +186,10 @@ function normalizeText(value) {
 	}
 
 	return String(value).trim();
+}
+
+function normalizeAcquisitions(value) {
+	const number = Number(value);
+	if (!Number.isFinite(number)) return 1;
+	return Math.max(1, Math.trunc(number));
 }
