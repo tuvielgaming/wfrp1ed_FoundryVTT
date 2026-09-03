@@ -252,7 +252,7 @@ function warnValidation(validation) {
 		first?.message || (
 			game.i18n.lang === "pl"
 				? "Nie można użyć przedmiotu w tej konfiguracji."
-				: "The Item cannot be equipped in that configuration.",
+				: "The Item cannot be equipped in that configuration."
 		),
 	);
 }
