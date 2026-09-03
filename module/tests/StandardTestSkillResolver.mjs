@@ -1,6 +1,6 @@
 import {
 	normalizeSkillAcquisitions,
-} from "../skills/SkillAcquisitionPolicy.mjs";
+} from "../skills/SkillAcquisitionBootstrap.mjs";
 import {
 	getStandardTestSkillRule,
 } from "./standard-test-skill-rules.mjs";
