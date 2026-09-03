@@ -12,9 +12,8 @@ import { HandEquipValidator } from "../combat/HandEquipValidator.mjs";
 
 export class Wfrp1edItem extends Item {
 	/**
-	 * Reject accidental duplicate Actor-owned Skills while preserving Core
-	 * Skills whose rules explicitly allow repeated acquisition, and normalize
-	 * newly embedded physical Items before they enter an Actor inventory.
+	 * Reject duplicate Actor-owned Skills and normalize newly embedded physical
+	 * Items before they enter an Actor inventory.
 	 *
 	 * A World/Compendium Item may carry an equipped state which was valid for a
 	 * different Actor. Resetting every newly embedded physical Item to Carried
@@ -46,11 +45,6 @@ export class Wfrp1edItem extends Item {
 
 			const identity = skillIdentityFromItem(item);
 			if (!identity) continue;
-
-			/* Pick Lock and Pick Pocket explicitly permit repeated acquisition in
-			 * both Core Rulebooks. Each embedded Skill Item is one acquisition, so
-			 * these identities must bypass the ordinary duplicate guard. */
-			if (isRepeatableSkillIdentity(identity)) continue;
 
 			let accepted = acceptedByActor.get(actor.uuid);
 			if (!accepted) {
@@ -86,11 +80,7 @@ export class Wfrp1edItem extends Item {
 		) {
 			const identity = skillIdentity({
 				name: changedValue(changes, "name", this.name),
-				skillId: changedValue(
-					changes,
-					"system.skillId",
-					this.system?.skillId,
-				),
+				rulesId: changedValue(changes, "system.rulesId", this.system?.rulesId),
 				specialisation: changedValue(
 					changes,
 					"system.specialisation",
@@ -98,10 +88,7 @@ export class Wfrp1edItem extends Item {
 				),
 			});
 
-			if (
-				!isRepeatableSkillIdentity(identity) &&
-				wouldDuplicateActorSkill(this, identity)
-			) {
+			if (wouldDuplicateActorSkill(this, identity)) {
 				warnDuplicateSkill(identity, this.name);
 				return false;
 			}
@@ -125,15 +112,6 @@ export class Wfrp1edItem extends Item {
 }
 
 const PHYSICAL_ITEM_TYPES = new Set(["weapon", "armour", "equipment"]);
-
-/* Core rules explicitly permit repeated acquisition only for the currently
- * audited canonical Skills below. Values are normalized because Skill identity
- * comparison is case-insensitive; custom/localized names never grant this
- * exception. */
-const REPEATABLE_SKILL_IDS = new Set([
-	"picklock",
-	"pickpocket",
-]);
 
 function resetPendingPhysicalItemState(item) {
 	const system = typeof item.system?.toObject === "function"
@@ -266,7 +244,7 @@ function warnValidation(validation) {
 		first?.message || (
 			game.i18n.lang === "pl"
 				? "Nie można użyć przedmiotu w tej konfiguracji."
-				: "The Item cannot be equipped in that configuration.",
+				: "The Item cannot be equipped in that configuration."
 		),
 	);
 }
@@ -293,20 +271,20 @@ function skillIdentityFromItem(item) {
 	if (!item) return null;
 	return skillIdentity({
 		name: item.name,
-		skillId: item.system?.skillId,
+		rulesId: item.system?.rulesId,
 		specialisation: item.system?.specialisation,
 	});
 }
 
-function skillIdentity({ name, skillId, specialisation }) {
-	const normalizedSkillId = normalizeIdentityText(skillId);
+function skillIdentity({ name, rulesId, specialisation }) {
+	const normalizedRulesId = normalizeIdentityText(rulesId);
 	const normalizedName = normalizeIdentityText(name);
 	const normalizedSpecialisation = normalizeIdentityText(specialisation);
-	if (!normalizedSkillId && !normalizedName) return null;
+	if (!normalizedRulesId && !normalizedName) return null;
 
 	return Object.freeze({
-		kind: normalizedSkillId ? "skillId" : "name",
-		value: normalizedSkillId || normalizedName,
+		kind: normalizedRulesId ? "rules" : "name",
+		value: normalizedRulesId || normalizedName,
 		specialisation: normalizedSpecialisation,
 		displayName: String(name ?? "").trim(),
 		displaySpecialisation: String(specialisation ?? "").trim(),
@@ -326,17 +304,10 @@ function sameSkillIdentity(first, second) {
 	);
 }
 
-function isRepeatableSkillIdentity(identity) {
-	return Boolean(
-		identity?.kind === "skillId" &&
-		REPEATABLE_SKILL_IDS.has(identity.value),
-	);
-}
-
 function skillIdentityChanged(changes) {
 	return (
 		Object.hasOwn(changes ?? {}, "name") ||
-		hasChangedPath(changes, "system.skillId") ||
+		hasChangedPath(changes, "system.rulesId") ||
 		hasChangedPath(changes, "system.specialisation")
 	);
 }
