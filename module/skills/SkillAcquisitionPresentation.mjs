@@ -1,3 +1,8 @@
+import {
+	isStackingRepeatableSkill,
+	normalizeSkillAcquisitions,
+} from "./SkillAcquisitionPolicy.mjs";
+
 /**
  * Register presentation-only helpers for repeated Skill acquisitions.
  *
@@ -33,7 +38,7 @@ function skillAcquisitionDisplayName(actorId, itemId, fallbackName) {
 	if (matches.length === 0) return label;
 
 	const acquisitions = matches.reduce(
-		(total, item) => total + normalizeAcquisitions(item.system?.acquisitions),
+		(total, item) => total + normalizeSkillAcquisitions(item.system?.acquisitions),
 		0,
 	);
 
@@ -45,25 +50,18 @@ function stackingMatches(actorId, itemId) {
 	const item = actor?.items?.get?.(String(itemId ?? ""));
 	if (!item || item.type !== "skill") return { item: null, matches: [] };
 
-	const skillId = normalizeText(item.system?.skillId);
-	if (!STACKING_SKILL_IDS.has(skillId)) return { item, matches: [] };
+	const skillId = String(item.system?.skillId ?? "").trim();
+	if (!isStackingRepeatableSkill(skillId)) return { item, matches: [] };
 
+	const normalizedSkillId = normalizeText(skillId);
 	const specialisation = normalizeText(item.system?.specialisation);
 	const matches = [...(actor.items ?? [])].filter((candidate) =>
 		candidate.type === "skill" &&
-		normalizeText(candidate.system?.skillId) === skillId &&
+		normalizeText(candidate.system?.skillId) === normalizedSkillId &&
 		normalizeText(candidate.system?.specialisation) === specialisation
 	);
 
 	return { item, matches };
-}
-
-const STACKING_SKILL_IDS = new Set(["picklock", "pickpocket"]);
-
-function normalizeAcquisitions(value) {
-	const number = Number(value);
-	if (!Number.isFinite(number)) return 1;
-	return Math.max(1, Math.trunc(number));
 }
 
 function normalizeText(value) {
