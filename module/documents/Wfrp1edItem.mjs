@@ -14,7 +14,7 @@ import {
 	normalizeSkillAcquisitions,
 	skillAcquisitionPolicy,
 	SKILL_ACQUISITION_POLICY_KIND,
-} from "../skills/SkillAcquisitionPolicy.mjs";
+} from "../skills/SkillAcquisitionBootstrap.mjs";
 
 export class Wfrp1edItem extends Item {
 	/**
@@ -140,6 +140,35 @@ export class Wfrp1edItem extends Item {
 			}
 
 			accepted.add(key);
+		}
+
+		return result;
+	}
+
+	static async _preDeleteOperation(documents, operation, user) {
+		const result = await super._preDeleteOperation(
+			documents,
+			operation,
+			user,
+		);
+		if (result === false) return false;
+
+		for (let index = documents.length - 1; index >= 0; index -= 1) {
+			const item = documents[index];
+			if (item?.type !== "skill" || !item.actor) continue;
+
+			const rulesId = String(item.system?.rulesId ?? "").trim();
+			if (!isStackingRepeatableSkill(rulesId)) continue;
+
+			const acquisitions = normalizeSkillAcquisitions(
+				item.system?.acquisitions,
+			);
+			if (acquisitions <= 1) continue;
+
+			await item.update({
+				"system.acquisitions": acquisitions - 1,
+			});
+			documents.splice(index, 1);
 		}
 
 		return result;
