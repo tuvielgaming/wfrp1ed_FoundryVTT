@@ -11,11 +11,16 @@ const POLICY_KIND = Object.freeze({
  * +30, etc. These are represented by one owned Skill Item with a persistent
  * acquisition count.
  *
- * Musicianship may be acquired a second or third time to extend the character's
- * competence across the three instrument fields (stringed, wind, percussion).
- * Divining may optionally be acquired a second time for another divination
- * form. Those acquisitions represent distinct qualifications, not repeated +10
- * stacking, so they remain separate specialised Skill Items.
+ * The remaining entries represent distinct qualifications rather than stacking
+ * bonuses: Musicianship covers three instrument fields, Divining may cover a
+ * second divination form, and Manufacture Drugs must be learned separately for
+ * natural and chemical sources. They therefore remain separate specialised
+ * Skill Items and use their Core limits only as acquisition caps.
+ *
+ * Parameterised Skill families such as Cast Spells, languages, and Specialist
+ * Weapon are intentionally not acquisition counters. Their separate level,
+ * language, or weapon qualifications are represented by specialisation/domain
+ * identity instead of an escalating repeated-acquisition value.
  */
 const CORE_REPEATABLE_SKILL_POLICIES = Object.freeze({
 	picklock: Object.freeze({
@@ -31,6 +36,10 @@ const CORE_REPEATABLE_SKILL_POLICIES = Object.freeze({
 		maxAcquisitions: 3,
 	}),
 	divining: Object.freeze({
+		kind: POLICY_KIND.QUALIFIED,
+		maxAcquisitions: 2,
+	}),
+	manufacturedrugs: Object.freeze({
 		kind: POLICY_KIND.QUALIFIED,
 		maxAcquisitions: 2,
 	}),
