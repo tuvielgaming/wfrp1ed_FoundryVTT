@@ -50,12 +50,12 @@
 						<div class="wfrp1e-test-card__breakdown-rows">
 							{{#each breakdown.variables}}
 								{{#if (wfrpIsTargetVariable key)}}
-									<div class="wfrp1e-test-card__breakdown-row" data-wfrp-gm-only>
+									<div class="wfrp1e-test-card__breakdown-row" data-wfrp-gm-only data-wfrp-test-variable-key="{{key}}">
 										<span>{{label}}</span>
 										<strong>{{value}}</strong>
 									</div>
 								{{else}}
-									<div class="wfrp1e-test-card__breakdown-row">
+									<div class="wfrp1e-test-card__breakdown-row" data-wfrp-test-variable-key="{{key}}">
 										<span>{{label}}</span>
 										<strong>{{value}}</strong>
 									</div>
