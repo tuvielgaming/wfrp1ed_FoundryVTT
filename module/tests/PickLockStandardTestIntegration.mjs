@@ -1,3 +1,4 @@
+import "./StandardTestPendingTargetCanvasIntegration.mjs";
 import "./StandardTestResultMetadataIntegration.mjs";
 import "./StandardTestRuleReminderIntegration.mjs";
 import "./StandardTestTargetIntegration.mjs";
