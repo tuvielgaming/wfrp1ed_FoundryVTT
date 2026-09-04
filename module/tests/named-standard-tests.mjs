@@ -12,6 +12,8 @@
  * registered here.
  */
 
+const TARGET_RESISTANCE_OUTCOME = "target-resistance";
+
 export const NAMED_STANDARD_TESTS = deepFreeze({
 	animosity: characteristicTest(
 		"animosity",
@@ -135,19 +137,35 @@ export const NAMED_STANDARD_TESTS = deepFreeze({
 		["requires-target"],
 	),
 
-	hypnotism: characteristicTest(
+	/*
+	 * Hypnotism and Interrogate are resistance procedures, not WP tests made by
+	 * the acting character. Core instructs the GM to test the victim's Will
+	 * Power. A successful victim WP test resists the procedure; a failed victim
+	 * WP test means the hypnotist/interrogator succeeds. The target-resistance
+	 * outcome mode therefore presents success from the acting character's point
+	 * of view while retaining the victim's WP as the roll-under resistance
+	 * threshold.
+	 */
+	hypnotism: formulaTest(
 		"hypnotism",
 		"Hypnotism",
 		"WFRP1ED.StandardTest.Hypnotism",
-		"wp",
+		"target.wp",
+		[],
+		["requires-target"],
+		0,
+		TARGET_RESISTANCE_OUTCOME,
 	),
 
-	interrogate: characteristicTest(
+	interrogate: formulaTest(
 		"interrogate",
 		"Interrogate",
 		"WFRP1ED.StandardTest.Interrogate",
-		"wp",
+		"target.wp",
 		["torture"],
+		["requires-target"],
+		0,
+		TARGET_RESISTANCE_OUTCOME,
 	),
 
 	listen: formulaTest(
@@ -284,6 +302,7 @@ function characteristicTest(
 	skills = [],
 	extraTags = [],
 	defaultModifier = 0,
+	outcomeMode = undefined,
 ) {
 	return {
 		id,
@@ -292,6 +311,7 @@ function characteristicTest(
 		characteristic,
 		skills,
 		defaultModifier,
+		outcomeMode,
 		tags: ["standard", ...extraTags],
 	};
 }
@@ -304,6 +324,7 @@ function formulaTest(
 	skills = [],
 	extraTags = [],
 	defaultModifier = 0,
+	outcomeMode = undefined,
 ) {
 	return {
 		id,
@@ -312,6 +333,7 @@ function formulaTest(
 		formula,
 		skills,
 		defaultModifier,
+		outcomeMode,
 		tags: ["standard", ...extraTags],
 	};
 }
