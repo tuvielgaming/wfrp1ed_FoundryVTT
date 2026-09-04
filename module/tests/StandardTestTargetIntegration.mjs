@@ -16,12 +16,14 @@ const STANDARD_DIALOG_CLASS = "wfrp1ed-standard-test-dialog";
  * - a single Foundry Target Token is adopted automatically before the dialog
  *   opens and while it remains open;
  * - visible scene-token Actors are available in the target dropdown;
- * - the first dropdown option means unresolved/deferred target data;
+ * - the first dropdown option means unresolved/deferred target data and is also
+ *   the sole way to clear an initial-dialog target;
  * - a raw target characteristic is available only while no Actor is selected;
  * - the initial dialog may continue with neither Actor nor raw value, producing
  *   a PendingStandardTest which can be resolved later in chat;
- * - after a resolved roll, GM/rolling-Actor OWNER may change the target Actor
- *   or clear it back to manual adjudication without rerolling the d100.
+ * - once the d100 is rolled, the selected Actor target is immutable, matching
+ *   resolved attack rolls. Only a test which was rolled without an Actor target
+ *   keeps its raw target characteristic adjudicable afterwards.
  *
  * Mechanics remain owned by FormulaResolver/TestResolver. This module only
  * supplies or adjudicates the target.* inputs consumed by those formulas.
@@ -126,13 +128,6 @@ function buildTargetPicker(initialEntry) {
 
 	const actions = document.createElement("div");
 	actions.classList.add("standard-test-target-actions");
-	actions.append(
-		targetButton(
-			"clear-target",
-			localize("Clear", "Usuń cel"),
-			"fa-solid fa-xmark",
-		),
-	);
 	if (game.user?.isGM) {
 		actions.append(
 			targetButton(
@@ -221,14 +216,7 @@ function activateTargetPicker(dialog, entries) {
 	for (const button of actions.querySelectorAll("[data-standard-target-action]")) {
 		button.addEventListener("click", async (event) => {
 			event.preventDefault();
-			const action = button.dataset.standardTargetAction;
-			if (action === "clear-target") {
-				selection.value = TARGET_SELECTION_PENDING;
-				uuid.value = "";
-				refresh();
-				return;
-			}
-			if (action !== "choose-actor" || !game.user?.isGM) return;
+			if (button.dataset.standardTargetAction !== "choose-actor" || !game.user?.isGM) return;
 			const target = await ActorTargetResolver.chooseActor();
 			if (!target) return;
 			setTarget(target);
@@ -398,10 +386,10 @@ function registerTargetResultAdjudication() {
 			: rendered?.querySelector?.(".wfrp1e-test-card");
 		if (!card) return;
 
-		const canAdjudicate = TestResultChat._canAdjudicate(state);
-		renderResolvedTargetSelector(message, state, card, canAdjudicate);
-
 		const actorSelected = Boolean(String(state.targetActorUuid ?? "").trim());
+		if (actorSelected) return;
+
+		const canAdjudicate = TestResultChat._canAdjudicate(state);
 		for (const variable of targetVariables) {
 			const key = String(variable.key);
 			const row = card.querySelector(
@@ -409,11 +397,6 @@ function registerTargetResultAdjudication() {
 			);
 			const value = row?.querySelector?.("strong");
 			if (!(row instanceof HTMLElement) || !(value instanceof HTMLElement)) continue;
-
-			/* A selected Actor is authoritative. Its characteristic is displayed but
-			 * cannot be manually overwritten. Clearing the target through the selector
-			 * returns the same row to manual adjudication. */
-			if (actorSelected) continue;
 
 			const input = document.createElement("input");
 			input.type = "number";
@@ -437,103 +420,6 @@ function registerTargetResultAdjudication() {
 	});
 }
 
-function renderResolvedTargetSelector(message, state, card, canAdjudicate) {
-	if (card.querySelector("[data-wfrp-resolved-target-selector]")) return;
-	const targetRow = card.querySelector('[data-wfrp-test-variable-key^="target."]');
-	const section = targetRow?.closest?.(".wfrp1e-test-card__breakdown-section");
-	if (!(section instanceof HTMLElement)) return;
-
-	const row = document.createElement("div");
-	row.classList.add("wfrp1e-test-card__breakdown-row");
-	row.dataset.wfrpResolvedTargetSelector = "";
-	const label = document.createElement("span");
-	label.textContent = localize("Target Actor", "Aktor celu");
-	const controls = document.createElement("span");
-	const select = document.createElement("select");
-	select.classList.add("wfrp1e-test-card__modifier-input");
-	appendOption(
-		select,
-		TARGET_SELECTION_PENDING,
-		localize("No target Actor — manual value", "Brak Aktora celu — wartość ręczna"),
-	);
-	for (const entry of ActorTargetResolver.sceneTokenTargets()) {
-		appendOption(select, entry.actorUuid, entry.name, entry.name);
-	}
-
-	const selectedUuid = String(state.targetActorUuid ?? "").trim();
-	if (selectedUuid) {
-		const selectedActor = ActorTargetResolver.actorFromUuidSync(selectedUuid);
-		if (selectedActor) ensureTargetOption(select, selectedActor);
-	}
-	select.value = selectedUuid || TARGET_SELECTION_PENDING;
-	select.disabled = !canAdjudicate;
-	controls.append(select);
-
-	if (canAdjudicate && game.user?.isGM) {
-		const choose = document.createElement("button");
-		choose.type = "button";
-		choose.title = localize("Choose world Actor", "Wybierz Aktora świata");
-		choose.innerHTML = '<i class="fa-solid fa-user" aria-hidden="true"></i>';
-		choose.addEventListener("click", async (event) => {
-			event.preventDefault();
-			const actor = await ActorTargetResolver.chooseActor();
-			if (actor) await updateResolvedTargetActor(message, actor);
-		});
-		controls.append(choose);
-	}
-
-	row.append(label, controls);
-	const subtitle = section.querySelector(".wfrp1e-test-card__section-subtitle");
-	if (subtitle) subtitle.insertAdjacentElement("afterend", row);
-	else section.prepend(row);
-
-	if (canAdjudicate) {
-		select.addEventListener("change", () => {
-			if (select.value === TARGET_SELECTION_PENDING) {
-				void updateResolvedTargetActor(message, null);
-				return;
-			}
-			const actor = ActorTargetResolver.actorFromUuidSync(select.value);
-			if (actor) void updateResolvedTargetActor(message, actor);
-		});
-	}
-}
-
-async function updateResolvedTargetActor(message, actor) {
-	try {
-		const state = message?.getFlag?.(FLAG_SCOPE, FLAG_KEY);
-		if (!state || !TestResultChat._canAdjudicate(state)) {
-			throw new Error(localize(
-				"Only the GM or an OWNER of the rolling Actor can change the target.",
-				"Tylko MG albo Właściciel rzucającego Aktora może zmienić cel.",
-			));
-		}
-		const updated = TestResultChat._copyState(state);
-		updated.targetActorUuid = String(actor?.uuid ?? "");
-
-		if (actor) {
-			for (const variable of updated.variables ?? []) {
-				const key = String(variable?.key ?? "");
-				if (!key.startsWith("target.")) continue;
-				const id = key.slice("target.".length);
-				variable.value = actorCharacteristicValue(actor, id);
-			}
-		}
-
-		updated.baseTarget = resolveSnapshotFormula(updated.formulaRaw, updated.variables);
-		updated.updatedBy = String(game.user?.id ?? "");
-		updated.updatedAt = Date.now();
-		const content = await TestResultChat._render(updated);
-		await message.update({
-			content,
-			[`flags.${FLAG_SCOPE}.${FLAG_KEY}`]: updated,
-		});
-	} catch (error) {
-		console.error("WFRP1ED | Unable to adjudicate Standard Test target Actor.", error);
-		ui.notifications.error(error?.message ?? "Unable to change the target Actor.");
-	}
-}
-
 async function updateTargetVariable(message, input) {
 	try {
 		const state = message?.getFlag?.(FLAG_SCOPE, FLAG_KEY);
@@ -545,8 +431,8 @@ async function updateTargetVariable(message, input) {
 		}
 		if (String(state.targetActorUuid ?? "").trim()) {
 			throw new Error(localize(
-				"Clear the target Actor before editing its characteristic manually.",
-				"Usuń Aktora celu, zanim ręcznie zmienisz jego cechę.",
+				"A resolved test with an Actor target uses that Actor's characteristic.",
+				"Rozstrzygnięty test z Aktorem celu używa cechy tego Aktora.",
 			));
 		}
 
@@ -602,19 +488,6 @@ function replaceVariable(formula, key, value) {
 		"g",
 	);
 	return String(formula).replace(pattern, (_match, prefix) => `${prefix}${value}`);
-}
-
-function actorCharacteristicValue(actor, id) {
-	const key = String(id ?? "").trim().toLowerCase();
-	if (typeof actor?.getCharacteristicValue === "function") {
-		const value = Number(actor.getCharacteristicValue(key));
-		if (Number.isFinite(value)) return value;
-	}
-	const value = Number(actor?.system?.characteristics?.[key]?.current);
-	if (!Number.isFinite(value)) {
-		throw new Error(`Target Actor '${actor?.name ?? actor?.id}' has no finite '${key}' characteristic.`);
-	}
-	return value;
 }
 
 function targetButton(action, label, iconClass) {
