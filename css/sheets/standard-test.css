@@ -274,24 +274,37 @@
 
 .wfrp1ed-pending-standard-test .pending-standard-test-manual {
 	display: grid;
-	gap: 4px;
+	gap: 6px;
 
 	padding-top: 7px;
 	border-top: 1px solid rgb(89 65 35 / 20%);
 }
 
-.wfrp1ed-pending-standard-test .pending-standard-test-manual > label {
-	font-size: 12px;
-	font-weight: 700;
+/* Current pending-test template renders one label/input pair per required
+ * target characteristic. Make that structure explicit instead of relying on
+ * Foundry's global label layout, which can collapse the nested numeric input. */
+.wfrp1ed-pending-standard-test .pending-standard-test-manual-field {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 64px;
+	align-items: center;
+	gap: 8px;
+
+	width: 100%;
+	margin: 0;
 }
 
-.wfrp1ed-pending-standard-test .pending-standard-test-manual-fields {
-	display: grid;
-	grid-template-columns: minmax(0, 1fr) auto;
-	gap: 6px;
+.wfrp1ed-pending-standard-test .pending-standard-test-manual-field > span {
+	min-width: 0;
+
+	font-size: 12px;
+	font-weight: 700;
+	line-height: 1.2;
 }
 
 .wfrp1ed-pending-standard-test .pending-standard-test-manual input {
+	display: block;
+	box-sizing: border-box;
+
 	width: 100%;
 	min-width: 0;
 	height: 30px;
@@ -300,6 +313,7 @@
 
 	font-family: inherit;
 	font-size: 13px;
+	text-align: right;
 }
 
 .wfrp1ed-pending-standard-test .pending-standard-test-waiting {
