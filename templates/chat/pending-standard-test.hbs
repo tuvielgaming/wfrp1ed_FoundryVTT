@@ -27,17 +27,18 @@
 			data-pending-standard-manual
 		>
 			{{#each manualInputs}}
-				<label class="pending-standard-test-manual-field">
+				<div class="pending-standard-test-manual-field">
 					<span>{{label}}</span>
 					<input
 						type="number"
 						step="1"
 						autocomplete="off"
+						placeholder="—"
 						value="{{value}}"
 						data-pending-standard-manual-value
 						data-characteristic-id="{{id}}"
 					>
-				</label>
+				</div>
 			{{/each}}
 		</div>
 
