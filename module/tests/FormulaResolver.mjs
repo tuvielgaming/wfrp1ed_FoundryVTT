@@ -29,8 +29,8 @@ export class FormulaResolver {
 	 *
 	 * Target-dependent and situational variables are included only when the
 	 * required context is available. A complete target Actor supplies its full
-	 * profile; an audited manually supplied target value may supply one required
-	 * `target.<characteristic>` variable instead. Missing data therefore still
+	 * profile. Manually supplied target values are fallback inputs only: a value
+	 * from a selected target Actor always takes precedence. Missing data still
 	 * causes formula resolution to fail instead of silently becoming zero.
 	 *
 	 * @param {Actor} actor
@@ -213,11 +213,10 @@ export class FormulaResolver {
 	}
 
 	/**
-	 * Add manually supplied target-characteristic values to the variable table.
+	 * Add manually supplied target-characteristic fallback values.
 	 *
-	 * Manual input is restricted to known profile characteristics. It can
-	 * override the equivalent value from a target Actor deliberately, although
-	 * current callers provide either an Actor or manual values, not both.
+	 * Manual input is restricted to known profile characteristics and never
+	 * overrides a value already obtained from a selected target Actor.
 	 *
 	 * @param {Record<string, number>} variables
 	 * @param {Object|null|undefined} targetValues
@@ -252,19 +251,27 @@ export class FormulaResolver {
 				);
 			}
 
+			const targetKey = `target.${canonicalId}`;
+			if (Object.hasOwn(variables, targetKey)) {
+				continue;
+			}
+
 			const value = this._finiteNumber(
 				rawValue,
 				`context.targetValues.${requestedId}`,
 			);
 
-			variables[`target.${canonicalId}`] = value;
+			variables[targetKey] = value;
 
 			for (
 				const [alias, aliasCanonicalId]
 				of Object.entries(CHARACTERISTIC_ALIASES)
 			) {
 				if (aliasCanonicalId === canonicalId) {
-					variables[`target.${alias}`] = value;
+					const aliasKey = `target.${alias}`;
+					if (!Object.hasOwn(variables, aliasKey)) {
+						variables[aliasKey] = value;
+					}
 				}
 			}
 		}
