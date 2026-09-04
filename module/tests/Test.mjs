@@ -2,6 +2,11 @@ import { TestResolver } from "./TestResolver.mjs";
 import { TestResult } from "./TestResult.mjs";
 import { TestContext } from "./TestContext.mjs";
 
+export const TEST_OUTCOME_MODE = Object.freeze({
+	ROLL_UNDER: "roll-under",
+	TARGET_RESISTANCE: "target-resistance",
+});
+
 export class Test {
 	/**
 	 * Create a reusable test definition.
@@ -41,6 +46,7 @@ export class Test {
 			"defaultModifier",
 		);
 		this.tags = Array.isArray(data.tags) ? [...data.tags] : [];
+		this.outcomeMode = normalizeOutcomeMode(data.outcomeMode);
 	}
 
 	/**
@@ -143,4 +149,10 @@ export class Test {
 
 		return number;
 	}
+}
+
+function normalizeOutcomeMode(value) {
+	const mode = String(value ?? TEST_OUTCOME_MODE.ROLL_UNDER).trim();
+	if (Object.values(TEST_OUTCOME_MODE).includes(mode)) return mode;
+	throw new Error(`Unsupported Test outcome mode '${mode}'.`);
 }
