@@ -6,23 +6,28 @@ import { TestResultChat } from "./TestResultChat.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
 const FLAG_KEY = "testResultState";
-const TARGET_SELECTION_MANUAL = "__manual__";
+const TARGET_SELECTION_PENDING = "__pending__";
+const STANDARD_DIALOG_CLASS = "wfrp1ed-standard-test-dialog";
 
 /*
- * Shared Standard Test target workflow.
+ * Target-dependent Standard Tests deliberately follow the already-verified
+ * combat-attack targeting interaction:
  *
- * Target-dependent Standard Tests use the same ActorTargetResolver service as
- * attacks: current canvas target, visible scene-token choices and GM world-Actor
- * choice. An explicit no-Actor/manual mode supplies the characteristic value
- * required by the registered Test formula.
+ * - a single Foundry Target Token is adopted automatically before the dialog
+ *   opens and while it remains open;
+ * - visible scene-token Actors are available in the target dropdown;
+ * - the first dropdown option means unresolved/deferred target data;
+ * - a raw target characteristic is available only while no Actor is selected;
+ * - the initial dialog may continue with neither Actor nor raw value, producing
+ *   a PendingStandardTest which can be resolved later in chat;
+ * - after a resolved roll, GM/rolling-Actor OWNER may change the target Actor
+ *   or clear it back to manual adjudication without rerolling the d100.
  *
- * The target Actor remains authoritative when present. Manual targetValues are
- * fallback inputs and are used only when no selected Actor value is available.
- * Formula-result snapshots keep the actual target.* variable editable in chat;
- * adjudication changes the stored result snapshot only and never mutates Actor
- * characteristics or rerolls the d100.
+ * Mechanics remain owned by FormulaResolver/TestResolver. This module only
+ * supplies or adjudicates the target.* inputs consumed by those formulas.
  */
 installTargetDialog();
+installLiveCanvasTargetSync();
 registerTargetResultAdjudication();
 
 function installTargetDialog() {
@@ -42,7 +47,6 @@ function installTargetDialog() {
 		const targetRoot = body?.querySelector?.('[data-standard-field="target"]');
 		const control = targetRoot?.querySelector?.(".form-fields");
 		if (!(control instanceof HTMLElement)) return content;
-
 		control.replaceChildren(buildTargetPicker(entries[0]));
 		return content;
 	};
@@ -60,33 +64,30 @@ function installTargetDialog() {
 		if (!entry?.tags?.includes("requires-target")) return response;
 
 		const selection = String(
-			form?.elements?.standardTargetSelection?.value ?? TARGET_SELECTION_MANUAL,
+			form?.elements?.standardTargetSelection?.value ?? TARGET_SELECTION_PENDING,
 		).trim();
 		const targetUuid = String(
 			form?.elements?.standardTargetUuid?.value ?? "",
 		).trim();
-		const target = selection !== TARGET_SELECTION_MANUAL
+		const target = selection !== TARGET_SELECTION_PENDING
 			? ActorTargetResolver.actorFromUuidSync(targetUuid || selection)
 			: null;
-		const targetValues = readManualTargetValues(form);
 
-		/* Explicit picker state overrides the old implicit single-canvas-target
-		 * fallback used by StandardTestDialog itself. */
+		/* Explicit picker state replaces StandardTestDialog's old implicit
+		 * game.user.targets lookup. */
 		delete response.options.target;
 		delete response.options.targetActor;
+		delete response.options.targetValues;
 
 		if (target) {
 			response.options.target = target;
+			return response;
 		}
 
-		/* Keep any entered values as fallback metadata even with a selected Actor.
-		 * FormulaResolver gives the Actor value priority. */
+		const targetValues = readManualTargetValues(form);
 		if (Object.keys(targetValues).length > 0) {
 			response.options.targetValues = targetValues;
-		} else {
-			delete response.options.targetValues;
 		}
-
 		return response;
 	};
 }
@@ -99,22 +100,19 @@ function buildTargetPicker(initialEntry) {
 	const selection = document.createElement("select");
 	selection.name = "standardTargetSelection";
 	selection.dataset.standardTargetSelection = "";
-
 	appendOption(
 		selection,
-		TARGET_SELECTION_MANUAL,
-		localize("No Actor — enter target value", "Bez Aktora — wpisz wartość celu"),
+		TARGET_SELECTION_PENDING,
+		localize("Choose scene token…", "Wybierz token ze sceny…"),
 	);
-
 	for (const entry of ActorTargetResolver.sceneTokenTargets()) {
 		appendOption(selection, entry.actorUuid, entry.name, entry.name);
 	}
-
 	if (initialTarget) {
 		ensureTargetOption(selection, initialTarget);
-		selection.value = initialTarget.uuid;
+		selection.value = String(initialTarget.uuid ?? "");
 	} else {
-		selection.value = TARGET_SELECTION_MANUAL;
+		selection.value = TARGET_SELECTION_PENDING;
 	}
 
 	const targetUuid = document.createElement("input");
@@ -130,17 +128,11 @@ function buildTargetPicker(initialEntry) {
 	actions.classList.add("standard-test-target-actions");
 	actions.append(
 		targetButton(
-			"current-target",
-			localize("Use current target", "Użyj aktualnego celu"),
-			"fa-solid fa-bullseye",
-		),
-		targetButton(
-			"manual-target",
-			localize("No Actor", "Bez Aktora"),
-			"fa-solid fa-keyboard",
+			"clear-target",
+			localize("Clear", "Usuń cel"),
+			"fa-solid fa-xmark",
 		),
 	);
-
 	if (game.user?.isGM) {
 		actions.append(
 			targetButton(
@@ -156,13 +148,7 @@ function buildTargetPicker(initialEntry) {
 	values.dataset.standardTargetValues = "";
 	populateManualInputs(values, initialEntry);
 
-	const warning = document.createElement("div");
-	warning.classList.add("standard-test-context-value");
-	warning.dataset.standardTargetWarning = "";
-	warning.setAttribute("role", "alert");
-	warning.hidden = true;
-
-	wrapper.append(selection, targetUuid, status, actions, values, warning);
+	wrapper.append(selection, targetUuid, status, actions, values);
 	return wrapper;
 }
 
@@ -173,7 +159,6 @@ function activateTargetPicker(dialog, entries) {
 	const status = root?.querySelector?.("[data-standard-target-picker-status]");
 	const actions = root?.querySelector?.(".standard-test-target-actions");
 	const values = root?.querySelector?.("[data-standard-target-values]");
-	const warning = root?.querySelector?.("[data-standard-target-warning]");
 	const testSelect = root?.querySelector?.('[name="testId"]');
 	const rollButton = root?.querySelector?.('button[data-action="roll"]');
 	const form = rollButton?.form ?? root?.querySelector?.("form");
@@ -197,132 +182,167 @@ function activateTargetPicker(dialog, entries) {
 		uuid.value = String(target.uuid ?? "");
 	};
 
-	const clearWarning = () => {
-		if (!warning) return;
-		warning.hidden = true;
-		warning.textContent = "";
-	};
-
 	const refresh = () => {
 		const entry = currentEntry();
 		populateManualInputs(values, entry, readManualTargetValues(form));
+		if (!entry?.tags?.includes("requires-target")) return;
 
-		if (!entry?.tags?.includes("requires-target")) {
-			clearWarning();
-			return;
-		}
-
-		const manual = selection.value === TARGET_SELECTION_MANUAL;
-		values.hidden = !manual;
-
-		if (manual) {
+		if (selection.value === TARGET_SELECTION_PENDING) {
 			uuid.value = "";
+			values.hidden = false;
 			status.textContent = localize(
-				"No target Actor — use the characteristic value below.",
-				"Brak Aktora celu — użyj poniższej wartości cechy.",
+				"No target selected — enter the characteristic below, or leave it blank and resolve the target in chat after Roll.",
+				"Nie wybrano celu — wpisz cechę poniżej albo pozostaw ją pustą i rozstrzygnij cel w czacie po kliknięciu Rzuć.",
 			);
 			return;
 		}
 
 		const target = ActorTargetResolver.actorFromUuidSync(selection.value);
-		if (target) {
-			uuid.value = String(target.uuid ?? "");
-			status.textContent = String(
-				selection.selectedOptions?.[0]?.dataset?.targetName ??
-				target.name ??
-				localize("Selected target", "Wybrany cel"),
-			);
+		if (!target) {
+			selection.value = TARGET_SELECTION_PENDING;
+			uuid.value = "";
+			values.hidden = false;
+			status.textContent = localize("No target selected", "Nie wybrano celu");
 			return;
 		}
 
-		selection.value = TARGET_SELECTION_MANUAL;
-		uuid.value = "";
-		values.hidden = false;
-		status.textContent = localize(
-			"No target Actor — use the characteristic value below.",
-			"Brak Aktora celu — użyj poniższej wartości cechy.",
+		uuid.value = String(target.uuid ?? "");
+		values.hidden = true;
+		status.textContent = String(
+			selection.selectedOptions?.[0]?.dataset?.targetName ??
+			target.name ??
+			localize("Selected target", "Wybrany cel"),
 		);
 	};
 
-	selection.addEventListener("change", () => {
-		clearWarning();
-		refresh();
-	});
-
-	testSelect.addEventListener("change", () => {
-		clearWarning();
-		refresh();
-	});
+	selection.addEventListener("change", refresh);
+	testSelect.addEventListener("change", refresh);
 
 	for (const button of actions.querySelectorAll("[data-standard-target-action]")) {
 		button.addEventListener("click", async (event) => {
 			event.preventDefault();
 			const action = button.dataset.standardTargetAction;
-
-			if (action === "manual-target") {
-				selection.value = TARGET_SELECTION_MANUAL;
-				clearWarning();
+			if (action === "clear-target") {
+				selection.value = TARGET_SELECTION_PENDING;
+				uuid.value = "";
 				refresh();
 				return;
 			}
-
-			let target = null;
-			if (action === "current-target") {
-				target = ActorTargetResolver.singleTargetActor();
-				if (!target) {
-					ui.notifications.warn(localize(
-						"Target exactly one token on the canvas, then press this button again.",
-						"Wskaż dokładnie jeden token na mapie, a następnie ponownie naciśnij ten przycisk.",
-					));
-					return;
-				}
-			} else if (action === "choose-actor" && game.user?.isGM) {
-				target = await ActorTargetResolver.chooseActor();
-			}
-
+			if (action !== "choose-actor" || !game.user?.isGM) return;
+			const target = await ActorTargetResolver.chooseActor();
 			if (!target) return;
 			setTarget(target);
-			clearWarning();
 			refresh();
 		});
 	}
 
-	const validate = (event) => {
-		const entry = currentEntry();
-		if (
-			!entry?.tags?.includes("requires-target") ||
-			selection.value !== TARGET_SELECTION_MANUAL
-		) return true;
+	/* Missing target data is intentionally NOT a validation error here. The
+	 * launcher is allowed to create a PendingStandardTest for later adjudication. */
+	refresh();
+}
 
-		const missing = [...values.querySelectorAll("input[data-target-characteristic]")]
-			.find((input) => {
-				const raw = String(input.value ?? "").trim();
-				return !raw || !Number.isFinite(Number(raw));
-			});
-		if (!missing) {
-			clearWarning();
-			return true;
+function installLiveCanvasTargetSync() {
+	const DialogV2 = foundry.applications?.api?.DialogV2;
+	if (!DialogV2 || DialogV2.__wfrpStandardCanvasTargetingInstalled === true) return;
+	const originalWait = DialogV2.wait;
+
+	DialogV2.wait = function wfrpStandardCanvasTargetingWait(config = {}, ...args) {
+		if (!Array.isArray(config?.classes) || !config.classes.includes(STANDARD_DIALOG_CLASS)) {
+			return originalWait.call(this, config, ...args);
 		}
 
-		event.preventDefault();
-		event.stopImmediatePropagation();
-		const label = missing.dataset.targetCharacteristicLabel ||
-			localize("target characteristic", "cecha celu");
-		const message = localize(
-			`Enter a valid ${label} value or select a target Actor before rolling.`,
-			`Wprowadź prawidłową wartość „${label}” albo wybierz Aktora celu przed rzutem.`,
-		);
-		if (warning) {
-			warning.textContent = message;
-			warning.hidden = false;
-		}
-		missing.focus();
-		return false;
+		const originalRender = config.render;
+		const originalClose = config.close;
+		let cleanupTargetHook = null;
+		const cleanup = () => {
+			if (typeof cleanupTargetHook === "function") cleanupTargetHook();
+			cleanupTargetHook = null;
+		};
+
+		const promise = originalWait.call(this, {
+			...config,
+			modal: false,
+			render: (...renderArgs) => {
+				const result = typeof originalRender === "function"
+					? originalRender(...renderArgs)
+					: undefined;
+				cleanup();
+				cleanupTargetHook = activateCanvasTargetSync(renderArgs[1]?.element);
+				return result;
+			},
+			close: (...closeArgs) => {
+				cleanup();
+				return typeof originalClose === "function"
+					? originalClose(...closeArgs)
+					: undefined;
+			},
+		}, ...args);
+		return Promise.resolve(promise).finally(cleanup);
 	};
 
-	rollButton?.addEventListener("click", validate, true);
-	form?.addEventListener("submit", validate, true);
-	refresh();
+	Object.defineProperty(DialogV2, "__wfrpStandardCanvasTargetingInstalled", {
+		value: true,
+		configurable: false,
+		enumerable: false,
+	});
+}
+
+function activateCanvasTargetSync(root) {
+	if (!root?.classList?.contains?.(STANDARD_DIALOG_CLASS)) return null;
+	const selection = root.querySelector('[name="standardTargetSelection"]');
+	const targetUuid = root.querySelector('[name="standardTargetUuid"]');
+	if (!(selection instanceof HTMLSelectElement) || !(targetUuid instanceof HTMLInputElement)) {
+		return null;
+	}
+
+	selection.title = localize(
+		"Choose a visible token on the current scene. You can also change the target directly on the canvas.",
+		"Wybierz widoczny token na bieżącej scenie. Możesz też normalnie zmieniać cel bezpośrednio na mapie.",
+	);
+
+	const syncFromFoundryTarget = () => {
+		const target = ActorTargetResolver.singleTargetActor();
+		if (!target) {
+			selection.value = TARGET_SELECTION_PENDING;
+			targetUuid.value = "";
+			selection.dispatchEvent(new Event("change", { bubbles: true }));
+			return;
+		}
+		const uuid = String(target.uuid ?? "");
+		if (!uuid) return;
+		ensureTargetOption(selection, target);
+		selection.value = uuid;
+		targetUuid.value = uuid;
+		selection.dispatchEvent(new Event("change", { bubbles: true }));
+	};
+
+	syncFromFoundryTarget();
+	releaseInitialDialogFocus(root);
+
+	const onChange = (event) => {
+		const control = event.target;
+		if (control instanceof HTMLSelectElement) releaseFocusAfterInteraction(control);
+	};
+	const onClick = (event) => {
+		const button = event.target?.closest?.("button");
+		if (button instanceof HTMLButtonElement && root.contains(button)) {
+			releaseFocusAfterInteraction(button);
+		}
+	};
+	root.addEventListener("change", onChange);
+	root.addEventListener("click", onClick);
+
+	const hookId = Hooks.on("targetToken", (user) => {
+		if (String(user?.id ?? "") !== String(game.user?.id ?? "")) return;
+		if (!root.isConnected) return;
+		syncFromFoundryTarget();
+	});
+
+	return () => {
+		Hooks.off("targetToken", hookId);
+		root.removeEventListener("change", onChange);
+		root.removeEventListener("click", onClick);
+	};
 }
 
 function populateManualInputs(container, entry, existing = {}) {
@@ -332,7 +352,6 @@ function populateManualInputs(container, entry, existing = {}) {
 		: [];
 	const current = { ...existing, ...readManualTargetValues(container.closest("form")) };
 	container.replaceChildren();
-
 	for (const id of requirements) {
 		const row = document.createElement("div");
 		row.classList.add("standard-test-target-value-row");
@@ -347,9 +366,7 @@ function populateManualInputs(container, entry, existing = {}) {
 		input.dataset.targetCharacteristic = id;
 		input.dataset.targetCharacteristicLabel = labelText;
 		input.placeholder = "—";
-		if (Number.isFinite(Number(current?.[id]))) {
-			input.value = String(current[id]);
-		}
+		if (Number.isFinite(Number(current?.[id]))) input.value = String(current[id]);
 		row.append(label, input);
 		container.append(row);
 	}
@@ -370,7 +387,6 @@ function registerTargetResultAdjudication() {
 	Hooks.on("renderChatMessageHTML", (message, html) => {
 		const state = message?.getFlag?.(FLAG_SCOPE, FLAG_KEY);
 		if (!state?.formulaRaw || !Array.isArray(state.variables)) return;
-
 		const targetVariables = state.variables.filter((entry) =>
 			String(entry?.key ?? "").startsWith("target."),
 		);
@@ -383,7 +399,9 @@ function registerTargetResultAdjudication() {
 		if (!card) return;
 
 		const canAdjudicate = TestResultChat._canAdjudicate(state);
+		renderResolvedTargetSelector(message, state, card, canAdjudicate);
 
+		const actorSelected = Boolean(String(state.targetActorUuid ?? "").trim());
 		for (const variable of targetVariables) {
 			const key = String(variable.key);
 			const row = card.querySelector(
@@ -391,6 +409,11 @@ function registerTargetResultAdjudication() {
 			);
 			const value = row?.querySelector?.("strong");
 			if (!(row instanceof HTMLElement) || !(value instanceof HTMLElement)) continue;
+
+			/* A selected Actor is authoritative. Its characteristic is displayed but
+			 * cannot be manually overwritten. Clearing the target through the selector
+			 * returns the same row to manual adjudication. */
+			if (actorSelected) continue;
 
 			const input = document.createElement("input");
 			input.type = "number";
@@ -402,28 +425,113 @@ function registerTargetResultAdjudication() {
 			input.classList.add("wfrp1e-test-card__modifier-input");
 			input.readOnly = !canAdjudicate;
 			if (!canAdjudicate) input.tabIndex = -1;
-			input.title = canAdjudicate
-				? localize(
-					"Edit the target characteristic for this resolved test; the original d100 roll is preserved.",
-					"Zmień cechę celu dla tego rozstrzygniętego testu; pierwotny rzut K100 zostanie zachowany.",
-				)
-				: localize(
-					"Only the GM or an OWNER of the rolling Actor can adjudicate this target value.",
-					"Tylko MG albo Właściciel rzucającego Aktora może zmienić tę wartość celu.",
-				);
 			value.replaceWith(input);
-
 			if (!canAdjudicate) continue;
 			input.addEventListener("keydown", (event) => {
 				if (event.key !== "Enter") return;
 				event.preventDefault();
 				input.blur();
 			});
-			input.addEventListener("change", () => {
-				void updateTargetVariable(message, input);
-			});
+			input.addEventListener("change", () => void updateTargetVariable(message, input));
 		}
 	});
+}
+
+function renderResolvedTargetSelector(message, state, card, canAdjudicate) {
+	if (card.querySelector("[data-wfrp-resolved-target-selector]")) return;
+	const targetRow = card.querySelector('[data-wfrp-test-variable-key^="target."]');
+	const section = targetRow?.closest?.(".wfrp1e-test-card__breakdown-section");
+	if (!(section instanceof HTMLElement)) return;
+
+	const row = document.createElement("div");
+	row.classList.add("wfrp1e-test-card__breakdown-row");
+	row.dataset.wfrpResolvedTargetSelector = "";
+	const label = document.createElement("span");
+	label.textContent = localize("Target Actor", "Aktor celu");
+	const controls = document.createElement("span");
+	const select = document.createElement("select");
+	select.classList.add("wfrp1e-test-card__modifier-input");
+	appendOption(
+		select,
+		TARGET_SELECTION_PENDING,
+		localize("No target Actor — manual value", "Brak Aktora celu — wartość ręczna"),
+	);
+	for (const entry of ActorTargetResolver.sceneTokenTargets()) {
+		appendOption(select, entry.actorUuid, entry.name, entry.name);
+	}
+
+	const selectedUuid = String(state.targetActorUuid ?? "").trim();
+	if (selectedUuid) {
+		const selectedActor = ActorTargetResolver.actorFromUuidSync(selectedUuid);
+		if (selectedActor) ensureTargetOption(select, selectedActor);
+	}
+	select.value = selectedUuid || TARGET_SELECTION_PENDING;
+	select.disabled = !canAdjudicate;
+	controls.append(select);
+
+	if (canAdjudicate && game.user?.isGM) {
+		const choose = document.createElement("button");
+		choose.type = "button";
+		choose.title = localize("Choose world Actor", "Wybierz Aktora świata");
+		choose.innerHTML = '<i class="fa-solid fa-user" aria-hidden="true"></i>';
+		choose.addEventListener("click", async (event) => {
+			event.preventDefault();
+			const actor = await ActorTargetResolver.chooseActor();
+			if (actor) await updateResolvedTargetActor(message, actor);
+		});
+		controls.append(choose);
+	}
+
+	row.append(label, controls);
+	const subtitle = section.querySelector(".wfrp1e-test-card__section-subtitle");
+	if (subtitle) subtitle.insertAdjacentElement("afterend", row);
+	else section.prepend(row);
+
+	if (canAdjudicate) {
+		select.addEventListener("change", () => {
+			if (select.value === TARGET_SELECTION_PENDING) {
+				void updateResolvedTargetActor(message, null);
+				return;
+			}
+			const actor = ActorTargetResolver.actorFromUuidSync(select.value);
+			if (actor) void updateResolvedTargetActor(message, actor);
+		});
+	}
+}
+
+async function updateResolvedTargetActor(message, actor) {
+	try {
+		const state = message?.getFlag?.(FLAG_SCOPE, FLAG_KEY);
+		if (!state || !TestResultChat._canAdjudicate(state)) {
+			throw new Error(localize(
+				"Only the GM or an OWNER of the rolling Actor can change the target.",
+				"Tylko MG albo Właściciel rzucającego Aktora może zmienić cel.",
+			));
+		}
+		const updated = TestResultChat._copyState(state);
+		updated.targetActorUuid = String(actor?.uuid ?? "");
+
+		if (actor) {
+			for (const variable of updated.variables ?? []) {
+				const key = String(variable?.key ?? "");
+				if (!key.startsWith("target.")) continue;
+				const id = key.slice("target.".length);
+				variable.value = actorCharacteristicValue(actor, id);
+			}
+		}
+
+		updated.baseTarget = resolveSnapshotFormula(updated.formulaRaw, updated.variables);
+		updated.updatedBy = String(game.user?.id ?? "");
+		updated.updatedAt = Date.now();
+		const content = await TestResultChat._render(updated);
+		await message.update({
+			content,
+			[`flags.${FLAG_SCOPE}.${FLAG_KEY}`]: updated,
+		});
+	} catch (error) {
+		console.error("WFRP1ED | Unable to adjudicate Standard Test target Actor.", error);
+		ui.notifications.error(error?.message ?? "Unable to change the target Actor.");
+	}
 }
 
 async function updateTargetVariable(message, input) {
@@ -435,6 +543,12 @@ async function updateTargetVariable(message, input) {
 				"Tylko MG albo Właściciel rzucającego Aktora może zmienić wartość celu.",
 			));
 		}
+		if (String(state.targetActorUuid ?? "").trim()) {
+			throw new Error(localize(
+				"Clear the target Actor before editing its characteristic manually.",
+				"Usuń Aktora celu, zanim ręcznie zmienisz jego cechę.",
+			));
+		}
 
 		const raw = String(input?.value ?? "").trim();
 		const value = Number(raw);
@@ -444,7 +558,6 @@ async function updateTargetVariable(message, input) {
 				"Wprowadź prawidłową liczbową wartość cechy celu.",
 			));
 		}
-
 		const key = String(input.dataset.variableKey ?? "").trim();
 		const updated = TestResultChat._copyState(state);
 		const variable = updated.variables.find((entry) => entry.key === key);
@@ -455,7 +568,6 @@ async function updateTargetVariable(message, input) {
 		updated.baseTarget = resolveSnapshotFormula(updated.formulaRaw, updated.variables);
 		updated.updatedBy = String(game.user?.id ?? "");
 		updated.updatedAt = Date.now();
-
 		const content = await TestResultChat._render(updated);
 		await message.update({
 			content,
@@ -475,15 +587,11 @@ async function updateTargetVariable(message, input) {
 function resolveSnapshotFormula(formula, variables) {
 	let expression = String(formula ?? "").trim();
 	if (!expression) throw new Error("Resolved Test snapshot has no raw formula.");
-
 	const ordered = [...variables]
 		.map((entry) => ({ key: String(entry?.key ?? ""), value: Number(entry?.value) }))
 		.filter((entry) => entry.key && Number.isFinite(entry.value))
 		.sort((first, second) => second.key.length - first.key.length);
-
-	for (const entry of ordered) {
-		expression = replaceVariable(expression, entry.key, entry.value);
-	}
+	for (const entry of ordered) expression = replaceVariable(expression, entry.key, entry.value);
 	return FormulaResolver.evaluate(expression);
 }
 
@@ -494,6 +602,19 @@ function replaceVariable(formula, key, value) {
 		"g",
 	);
 	return String(formula).replace(pattern, (_match, prefix) => `${prefix}${value}`);
+}
+
+function actorCharacteristicValue(actor, id) {
+	const key = String(id ?? "").trim().toLowerCase();
+	if (typeof actor?.getCharacteristicValue === "function") {
+		const value = Number(actor.getCharacteristicValue(key));
+		if (Number.isFinite(value)) return value;
+	}
+	const value = Number(actor?.system?.characteristics?.[key]?.current);
+	if (!Number.isFinite(value)) {
+		throw new Error(`Target Actor '${actor?.name ?? actor?.id}' has no finite '${key}' characteristic.`);
+	}
+	return value;
 }
 
 function targetButton(action, label, iconClass) {
@@ -511,8 +632,8 @@ function targetButton(action, label, iconClass) {
 
 function appendOption(select, value, label, targetName = "") {
 	const option = document.createElement("option");
-	option.value = value;
-	option.textContent = label;
+	option.value = String(value);
+	option.textContent = String(label);
 	if (targetName) option.dataset.targetName = targetName;
 	select.append(option);
 }
@@ -520,29 +641,52 @@ function appendOption(select, value, label, targetName = "") {
 function ensureTargetOption(select, target) {
 	const uuid = String(target?.uuid ?? "");
 	if (!uuid) return;
-	if ([...select.options].some((option) => option.value === uuid)) return;
-	appendOption(select, uuid, String(target.name ?? uuid), String(target.name ?? ""));
+	let option = [...select.options].find((entry) => entry.value === uuid);
+	const sceneEntry = ActorTargetResolver.sceneTokenTargets().find(
+		(entry) => String(entry.actorUuid ?? "") === uuid,
+	);
+	const displayName = String(sceneEntry?.name || target?.name || uuid);
+	if (!option) {
+		option = document.createElement("option");
+		option.value = uuid;
+		select.append(option);
+	}
+	option.textContent = displayName;
+	option.dataset.targetName = displayName;
 }
 
 function targetCharacteristicLabel(id) {
 	const labels = {
-		m: ["Movement", "Szybkość"],
-		ws: ["Weapon Skill", "Walka Wręcz"],
-		bs: ["Ballistic Skill", "Umiejętności Strzeleckie"],
-		s: ["Strength", "Siła"],
-		t: ["Toughness", "Wytrzymałość"],
-		w: ["Wounds", "Żywotność"],
-		i: ["Initiative", "Inicjatywa"],
-		a: ["Attacks", "Atak"],
-		dex: ["Dexterity", "Zręczność"],
-		ld: ["Leadership", "Cechy Przywódcze"],
-		int: ["Intelligence", "Inteligencja"],
-		cl: ["Cool", "Opanowanie"],
-		wp: ["Will Power", "Siła Woli"],
-		fel: ["Fellowship", "Ogłada"],
+		m: ["Movement", "Szybkość"], ws: ["Weapon Skill", "Walka Wręcz"],
+		bs: ["Ballistic Skill", "Umiejętności Strzeleckie"], s: ["Strength", "Siła"],
+		t: ["Toughness", "Wytrzymałość"], w: ["Wounds", "Żywotność"],
+		i: ["Initiative", "Inicjatywa"], a: ["Attacks", "Atak"],
+		dex: ["Dexterity", "Zręczność"], ld: ["Leadership", "Cechy Przywódcze"],
+		int: ["Intelligence", "Inteligencja"], cl: ["Cool", "Opanowanie"],
+		wp: ["Will Power", "Siła Woli"], fel: ["Fellowship", "Ogłada"],
 	};
 	const pair = labels[String(id ?? "").toLowerCase()] ?? [String(id), String(id)];
 	return localize(`Target ${pair[0]}`, `${pair[1]} celu`);
+}
+
+function releaseInitialDialogFocus(root) {
+	requestAnimationFrame(() => {
+		if (!root?.isConnected) return;
+		const active = document.activeElement;
+		if (!active || !root.contains(active)) return;
+		if (
+			active instanceof HTMLButtonElement ||
+			active instanceof HTMLSelectElement ||
+			(active instanceof HTMLInputElement &&
+				(active.type === "checkbox" || active.type === "radio"))
+		) active.blur();
+	});
+}
+
+function releaseFocusAfterInteraction(control) {
+	queueMicrotask(() => {
+		if (document.activeElement === control) control.blur();
+	});
 }
 
 function cssEscape(value) {
@@ -552,5 +696,7 @@ function cssEscape(value) {
 }
 
 function localize(english, polish) {
-	return game.i18n.lang === "pl" ? polish : english;
+	return String(game.i18n?.lang ?? "").toLowerCase().startsWith("pl")
+		? polish
+		: english;
 }
