@@ -121,6 +121,36 @@
 	min-width: 0;
 }
 
+/* The target picker is injected inside the target group's .form-fields.
+ * Flatten those wrappers into the parent two-column grid so dynamically
+ * generated target characteristic rows use exactly the same label | control
+ * geometry as Test, Modifier, and Result Visibility. */
+.wfrp1ed-standard-test-dialog
+	.standard-test-form-group[data-standard-field="target"]
+	> .form-fields,
+.wfrp1ed-standard-test-dialog .standard-test-target-picker,
+.wfrp1ed-standard-test-dialog .standard-test-target-values,
+.wfrp1ed-standard-test-dialog .standard-test-target-value-row {
+	display: contents;
+}
+
+.wfrp1ed-standard-test-dialog .standard-test-target-picker > select,
+.wfrp1ed-standard-test-dialog .standard-test-target-picker > input[type="hidden"],
+.wfrp1ed-standard-test-dialog .standard-test-target-picker > .standard-test-context-value,
+.wfrp1ed-standard-test-dialog .standard-test-target-picker > .standard-test-target-actions {
+	grid-column: 2;
+}
+
+.wfrp1ed-standard-test-dialog .standard-test-target-value-row > label {
+	grid-column: 1;
+	font-weight: 700;
+	line-height: 1.2;
+}
+
+.wfrp1ed-standard-test-dialog .standard-test-target-value-row > input {
+	grid-column: 2;
+}
+
 .wfrp1ed-standard-test-dialog .standard-test-form-group select,
 .wfrp1ed-standard-test-dialog .standard-test-form-group input {
 	width: 100%;
@@ -332,6 +362,17 @@
 	.wfrp1ed-standard-test-dialog .standard-test-form-group {
 		grid-template-columns: 1fr;
 		gap: 5px;
+	}
+
+	.wfrp1ed-standard-test-dialog
+		.standard-test-form-group[data-standard-field="target"]
+		> label,
+	.wfrp1ed-standard-test-dialog .standard-test-target-value-row > label,
+	.wfrp1ed-standard-test-dialog .standard-test-target-picker > select,
+	.wfrp1ed-standard-test-dialog .standard-test-target-picker > .standard-test-context-value,
+	.wfrp1ed-standard-test-dialog .standard-test-target-picker > .standard-test-target-actions,
+	.wfrp1ed-standard-test-dialog .standard-test-target-value-row > input {
+		grid-column: 1;
 	}
 
 	.wfrp1ed-pending-standard-test .pending-standard-test-actions {
