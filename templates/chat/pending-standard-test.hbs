@@ -14,65 +14,71 @@
 
 	<div
 		class="pending-standard-test-gm-controls"
-		data-pending-gm-controls
+		data-pending-standard-controls
 		hidden
 	>
+		<label class="pending-standard-test-scene-target">
+			<span>{{targetLabel}}</span>
+			<select data-pending-standard-scene-target></select>
+		</label>
+
 		<div
-			class="pending-standard-test-drop"
-			data-pending-target-drop
-			tabindex="0"
+			class="pending-standard-test-manual"
+			data-pending-standard-manual
 		>
-			<i class="fa-solid fa-arrow-down-to-bracket" aria-hidden="true"></i>
-			<span>{{dropPrompt}}</span>
+			{{#each manualInputs}}
+				<label class="pending-standard-test-manual-field">
+					<span>{{label}}</span>
+					<input
+						type="number"
+						step="1"
+						autocomplete="off"
+						value="{{value}}"
+						data-pending-standard-manual-value
+						data-characteristic-id="{{id}}"
+					>
+				</label>
+			{{/each}}
 		</div>
 
-		<div class="pending-standard-test-actions">
-			<button
-				type="button"
-				data-pending-action="current-target"
+		<div
+			class="pending-standard-test-gm-only"
+			data-pending-standard-gm-only
+			hidden
+		>
+			<div
+				class="pending-standard-test-drop"
+				data-pending-standard-target-drop
+				tabindex="0"
 			>
-				<i class="fa-solid fa-bullseye" aria-hidden="true"></i>
-				{{useCurrentTargetLabel}}
-			</button>
+				<i class="fa-solid fa-arrow-down-to-bracket" aria-hidden="true"></i>
+				<span>{{dropPrompt}}</span>
+			</div>
 
 			<button
 				type="button"
-				data-pending-action="choose-actor"
+				data-pending-standard-action="choose-actor"
 			>
 				<i class="fa-solid fa-user" aria-hidden="true"></i>
 				{{chooseActorLabel}}
 			</button>
 		</div>
 
-		{{#if manualAllowed}}
-			<div class="pending-standard-test-manual">
-				<label>
-					{{manualLabel}} — {{requirementLabel}}
-				</label>
-
-				<div class="pending-standard-test-manual-fields">
-					<input
-						type="number"
-						step="1"
-						autocomplete="off"
-						data-pending-manual-value
-					>
-
-					<button
-						type="button"
-						data-pending-action="manual"
-					>
-						{{useValueLabel}}
-					</button>
-				</div>
-			</div>
-		{{/if}}
+		<button
+			type="button"
+			class="pending-standard-test-roll"
+			data-pending-standard-action="roll"
+			data-target-resolved="{{targetResolved}}"
+		>
+			<i class="fa-solid fa-dice-d100" aria-hidden="true"></i>
+			{{rollLabel}}
+		</button>
 	</div>
 
 	<p
 		class="pending-standard-test-waiting"
-		data-pending-player-status
+		data-pending-standard-player-status
 	>
-		{{waitingGmLabel}}
+		{{waitingLabel}}
 	</p>
 </section>
