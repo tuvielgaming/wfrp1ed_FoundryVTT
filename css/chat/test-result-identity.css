@@ -64,14 +64,15 @@
 	align-items: center;
 	min-width: 0;
 	padding: 3px 7px;
-	overflow: hidden;
+	overflow: visible;
+	overflow-wrap: anywhere;
 	background: rgb(255 255 255 / 38%);
 	font-family: inherit;
 	font-size: 12px;
 	font-weight: 700;
-	line-height: 1.1;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+	line-height: 1.2;
+	text-overflow: clip;
+	white-space: normal;
 }
 
 .wfrp1e-combat-attack-context.is-compact {
