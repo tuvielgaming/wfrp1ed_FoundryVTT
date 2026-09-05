@@ -3,7 +3,7 @@ import {
 	coreSkillSpecialisationOptions,
 } from "../core/CoreSkillSpecialisationCatalog.mjs";
 
-const SPECIALIST_RULES_ID = "specialistWeapon";
+const SPECIALIST_SKILL_ID = "specialistWeapon";
 const CUSTOM = "custom";
 
 /** Controlled Core authoring for finite Skill specialisations. */
@@ -11,7 +11,7 @@ Hooks.once("ready", () => {
 	Hooks.on("renderApplicationV2", (application, element) => {
 		const item = application?.document;
 		if (item?.documentName !== "Item" || item.type !== "skill") return;
-		if (String(item.system?.rulesId ?? "").trim() !== SPECIALIST_RULES_ID) return;
+		if (String(item.system?.skillId ?? "").trim() !== SPECIALIST_SKILL_ID) return;
 		const root = asElement(element) ?? asElement(application.element);
 		if (!(root instanceof HTMLElement)) return;
 		renderSpecialistWeaponSpecialisation(root, item, application.isEditable === true);
@@ -24,9 +24,9 @@ function renderSpecialistWeaponSpecialisation(root, item, editable) {
 	if (!(field instanceof HTMLElement)) return;
 
 	const currentText = String(item.system?.specialisation ?? "").trim();
-	const currentId = coreSkillSpecialisationId(SPECIALIST_RULES_ID, currentText);
+	const currentId = coreSkillSpecialisationId(SPECIALIST_SKILL_ID, currentText);
 	const selected = currentId || (currentText ? CUSTOM : "");
-	const options = coreSkillSpecialisationOptions(SPECIALIST_RULES_ID, game.i18n.lang);
+	const options = coreSkillSpecialisationOptions(SPECIALIST_SKILL_ID, game.i18n.lang);
 
 	input.remove();
 	const select = document.createElement("select");
@@ -52,10 +52,10 @@ function renderSpecialistWeaponSpecialisation(root, item, editable) {
 	 * ItemSheetV2 uses submitOnChange for the surrounding form. If this synthetic
 	 * change bubbles to that handler while the direct Item update is running, two
 	 * competing updates can be submitted from different DOM snapshots. In
-	 * particular the older full-form snapshot can overwrite system.rulesId.
+	 * particular the older full-form snapshot can overwrite system.skillId.
 	 *
 	 * Own the event here, persist both the selected specialisation and the
-	 * authoritative Core rules binding in one update, then let the document
+	 * authoritative Core Skill binding in one update, then let the document
 	 * rerender normally. This makes changing the category incapable of silently
 	 * turning Specialist Weapon back into an unbound custom Skill.
 	 */
@@ -75,7 +75,7 @@ function renderSpecialistWeaponSpecialisation(root, item, editable) {
 		custom.disabled = true;
 		const label = localizedSelection(options, value);
 		void item.update({
-			"system.rulesId": SPECIALIST_RULES_ID,
+			"system.skillId": SPECIALIST_SKILL_ID,
 			"system.specialisation": label,
 		}).catch(reportError);
 	});
