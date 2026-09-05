@@ -27,37 +27,61 @@ Hooks.on("renderChatMessageHTML", (message, html) => {
 		: root?.querySelector?.(".wfrp1e-test-card");
 	if (!card) return;
 
-	decorateIdentity(message, card);
+	decorateTestIdentity(message, card);
 	compactAttackContext(message, card);
 });
 
-function decorateIdentity(message, card) {
-	const header = card.querySelector(".wfrp1e-test-card__header");
+/**
+ * Apply the system's canonical Test identity header to any Test-style card.
+ *
+ * Most callers rely on ChatMessage speaker/flags. Specialized procedure cards
+ * may provide explicit identity values while still reusing the exact same
+ * portrait + Test/Target rows and CSS as verified Test/Attack result cards.
+ *
+ * @param {ChatMessage} message
+ * @param {HTMLElement} card
+ * @param {Object} overrides
+ * @param {Actor|null} overrides.actor
+ * @param {string|null} overrides.displayName
+ * @param {string|null} overrides.targetName
+ * @returns {void}
+ */
+export function decorateTestIdentity(
+	message,
+	card,
+	{
+		actor = null,
+		displayName = null,
+		targetName = null,
+	} = {},
+) {
+	const header = card?.querySelector?.(".wfrp1e-test-card__header");
 	if (!header || header.dataset.wfrpIdentityDecorated === "true") return;
 
 	const originalTitle = header.querySelector("h2");
 	if (!originalTitle) return;
 
-	const actor = actorForTestMessage(message);
-	const displayName = testDisplayName(message, originalTitle.textContent);
+	const resolvedActor = actor ?? actorForTestMessage(message);
+	const resolvedDisplayName = displayName ??
+		testDisplayName(message, originalTitle.textContent);
+	const resolvedTargetName = targetName ?? targetDisplayName(message);
 	const identity = document.createElement("div");
 	identity.classList.add("wfrp1e-test-card__identity");
 
 	const portrait = document.createElement("img");
 	portrait.classList.add("wfrp1e-test-card__portrait");
-	portrait.src = String(actor?.img ?? "icons/svg/mystery-man.svg");
-	portrait.alt = String(actor?.name ?? "");
+	portrait.src = String(resolvedActor?.img ?? "icons/svg/mystery-man.svg");
+	portrait.alt = String(resolvedActor?.name ?? "");
 	portrait.loading = "lazy";
 
 	const fields = document.createElement("div");
 	fields.classList.add("wfrp1e-test-card__identity-fields");
-	fields.append(identityRow(localize("Test", "Test"), displayName, {
+	fields.append(identityRow(localize("Test", "Test"), resolvedDisplayName, {
 		valueData: "wfrpTestDisplayName",
 	}));
 
-	const targetName = targetDisplayName(message);
-	if (targetName) {
-		fields.append(identityRow(localize("Target", "Cel"), targetName));
+	if (resolvedTargetName) {
+		fields.append(identityRow(localize("Target", "Cel"), resolvedTargetName));
 	}
 
 	identity.append(portrait, fields);
