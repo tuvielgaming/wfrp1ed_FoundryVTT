@@ -1,5 +1,6 @@
 import { DamageApplication } from "../damage/DamageApplication.mjs";
 import { MovementStandardTest } from "../tests/MovementStandardTest.mjs";
+import { TEST_OUTCOME_MODE } from "../tests/Test.mjs";
 import { TestManager } from "../tests/TestManager.mjs";
 import { STANDARD_TEST_PROCEDURES } from "../tests/standard-test-procedures.mjs";
 
@@ -95,7 +96,10 @@ function localizeTestResult(message, html) {
 	const test = resolveStoredTest(state);
 	const target = resolvedTestTarget(state);
 	const roll = finiteNumber(state.roll, 0);
-	const success = roll <= target;
+	const success = resolvedTestSuccess(state, test, roll, target);
+
+	card.classList.toggle("is-success", success);
+	card.classList.toggle("is-failure", !success);
 
 	const title = card.querySelector(".wfrp1e-test-card__header h2");
 	if (title) {
@@ -525,6 +529,16 @@ function resolvedTestTarget(state) {
 		? 0
 		: finiteNumber(state?.generalModifier?.value, 0);
 	return finiteNumber(state?.baseTarget, 0) + total + general;
+}
+
+function resolvedTestSuccess(state, test, roll, target) {
+	const outcomeMode = String(
+		state?.outcomeMode ?? test?.outcomeMode ?? TEST_OUTCOME_MODE.ROLL_UNDER,
+	).trim();
+
+	return outcomeMode === TEST_OUTCOME_MODE.TARGET_RESISTANCE
+		? roll > target
+		: roll <= target;
 }
 
 function testResultState(message) {
