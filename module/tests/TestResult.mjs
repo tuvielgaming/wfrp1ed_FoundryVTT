@@ -145,6 +145,7 @@ export class TestResult {
 				);
 
 				return {
+					id: String(modifier?.id ?? ""),
 					source: this._modifierSource(modifier?.source),
 					type: String(modifier?.type ?? "untyped"),
 					value,
