@@ -4,10 +4,14 @@ const FLAG_SCOPE = "wfrp1ed";
 const FLAG_KEY = "testResultState";
 const PICK_LOCK_TEST_ID = "pickLock";
 const PICK_POCKET_TEST_ID = "pickPocket";
+const ESTIMATE_TEST_ID = "estimate";
+const EVALUATE_MODIFIER_ID = "skill:evaluate:modifier";
 const UNSKILLED_PICK_LOCK_TYPE = "pick-lock-unskilled";
 
 /*
- * Non-mechanical reminders for easy-to-forget Standard Test limits.
+ * Non-mechanical reminders for easy-to-forget Standard Test limits and
+ * secondary Skill effects which the generic percentile result cannot express
+ * numerically by itself.
  *
  * Mechanics authority:
  * - English Core Rulebook, Standard Tests — Pick Lock, printed pp.70-71:
@@ -16,10 +20,16 @@ const UNSKILLED_PICK_LOCK_TYPE = "pick-lock-unskilled";
  * - English Core Rulebook, Standard Tests — Pick Pocket, printed p.71:
  *   one test per day; prolonged pick-pocketing suffers a cumulative -10% per
  *   consecutive day (-10 second day, -20 third, etc.); unskilled attempts -30%.
+ * - English Core Rulebook, Evaluate Skill, printed p.50, together with Standard
+ *   Tests — Estimate, printed p.68: Evaluate gives +10% to Estimate and reduces
+ *   the Estimate margin of error from 10% to 5% in all cases. Therefore a
+ *   successful Estimate with Evaluate is accurate to within +/-5%, while a
+ *   failed Estimate is out by more than 5%.
  *
- * These reminders intentionally do not create attempt/day counters because the
- * current test context has no stable identity for a specific lock or campaign
- * day sequence. They keep the RAW limit visible at the point of resolution.
+ * These reminders intentionally do not create attempt/day counters or invent an
+ * estimated numeric value. They keep the RAW consequences visible at the point
+ * of resolution while leaving information which Core assigns to the GM in the
+ * GM's hands.
  */
 Hooks.on("renderChatMessageHTML", (message, html) => {
 	const state = message?.getFlag?.(FLAG_SCOPE, FLAG_KEY);
@@ -60,8 +70,31 @@ Hooks.on("renderChatMessageHTML", (message, html) => {
 				"Doliniarstwo: można wykonać tylko 1 test dziennie. Kolejne dni ciągłego kieszonkostwa nakładają kumulatywną karę -10% (-10% drugiego dnia, -20% trzeciego itd.). Postać bez Doliniarstwa otrzymuje karę -30%.",
 			),
 		);
+		return;
+	}
+
+	if (
+		state.testId === ESTIMATE_TEST_ID &&
+		hasEnabledModifier(state, EVALUATE_MODIFIER_ID)
+	) {
+		insertReminder(
+			card,
+			"estimate-evaluate",
+			localize(
+				"Evaluate: a successful Estimate is accurate to within +/-5%; a failed Estimate is out by more than 5%.",
+				"Szacowanie: udana Ocena jest dokładna do +/-5%; nieudana Ocena myli się o więcej niż 5%.",
+			),
+		);
 	}
 });
+
+function hasEnabledModifier(state, modifierId) {
+	return Array.isArray(state?.otherModifiers) && state.otherModifiers.some(
+		(modifier) =>
+			String(modifier?.id ?? "") === modifierId &&
+			modifier?.enabled !== false,
+	);
+}
 
 function insertReminder(card, id, text) {
 	if (card.querySelector(`[data-wfrp-standard-test-reminder="${id}"]`)) return;
