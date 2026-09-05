@@ -108,6 +108,39 @@ export class RaceData extends TypeDataModel {
 			basicCareerTables: percentileTablesField(careerTableRowField),
 		};
 	}
+
+	/**
+	 * Transitional nested-reference migration.
+	 *
+	 * Race Skill references historically persisted their Skill identity as the
+	 * generic `rulesId`. During this audited migration slice we backfill the
+	 * explicit `skillId` at the data-model boundary while retaining `rulesId` so
+	 * existing Race generation/authoring consumers continue to behave exactly as
+	 * before. Once those consumers are migrated, the legacy nested field can be
+	 * removed without needing name-based identity inference.
+	 *
+	 * Only Skill references are touched here. The Race's own `rulesId`, Language,
+	 * Psychology, and Career references remain unchanged because they belong to
+	 * separate domain-identity migrations.
+	 */
+	static migrateData(source, options = {}) {
+		const raw = source && typeof source === "object"
+			? source
+			: {};
+		const migrated = foundry.utils.deepClone(raw);
+
+		if (Object.hasOwn(raw, "mandatorySkills")) {
+			migrated.mandatorySkills = migrateMandatorySkillReferences(
+				raw.mandatorySkills,
+			);
+		}
+
+		if (Object.hasOwn(raw, "skillTables")) {
+			migrated.skillTables = migrateSkillTableReferences(raw.skillTables);
+		}
+
+		return super.migrateData(migrated, options);
+	}
 }
 
 function languageField() {
@@ -196,6 +229,56 @@ function percentileTablesField(rowFactory) {
 			new ArrayField(rowFactory(), arrayOptions()),
 		]),
 	));
+}
+
+function migrateMandatorySkillReferences(value) {
+	if (!Array.isArray(value)) return value;
+	return value.map((entry) => {
+		if (!entry || typeof entry !== "object") return entry;
+		const migrated = foundry.utils.deepClone(entry);
+		if (!Array.isArray(entry.choices)) return migrated;
+		migrated.choices = entry.choices.map((choice) => {
+			if (!choice || typeof choice !== "object") return choice;
+			const nextChoice = foundry.utils.deepClone(choice);
+			if (Array.isArray(choice.grants)) {
+				nextChoice.grants = choice.grants.map(migrateSkillReference);
+			}
+			return nextChoice;
+		});
+		return migrated;
+	});
+}
+
+function migrateSkillTableReferences(value) {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+	const migrated = foundry.utils.deepClone(value);
+	for (const careerClass of RACE_CAREER_CLASSES) {
+		const rows = value[careerClass];
+		if (!Array.isArray(rows)) continue;
+		migrated[careerClass] = rows.map((row) => {
+			if (!row || typeof row !== "object") return row;
+			const nextRow = foundry.utils.deepClone(row);
+			if (row.grant && typeof row.grant === "object") {
+				nextRow.grant = migrateSkillReference(row.grant);
+			}
+			return nextRow;
+		});
+	}
+	return migrated;
+}
+
+function migrateSkillReference(reference) {
+	if (!reference || typeof reference !== "object" || Array.isArray(reference)) {
+		return reference;
+	}
+	const migrated = foundry.utils.deepClone(reference);
+	const skillId = normalizeText(reference.skillId ?? reference.rulesId);
+	if (skillId) migrated.skillId = skillId;
+	return migrated;
+}
+
+function normalizeText(value) {
+	return String(value ?? "").trim();
 }
 
 function arrayOptions() {
