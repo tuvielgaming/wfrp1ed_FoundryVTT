@@ -310,6 +310,7 @@ export class TestResultChat {
 							message,
 							TEST_RESULT_VISIBILITY.GM_ONLY,
 						);
+					}
 				},
 			},
 		);
@@ -738,6 +739,9 @@ export class TestResultChat {
 	/**
 	 * Resolve a ChatMessage from Foundry's ChatLog context-menu target.
 	 *
+	 * Foundry v14 uses native HTMLElements, while compatibility layers may
+	 * still pass a jQuery-like wrapper. Both forms are accepted here.
+	 *
 	 * @param {*} target
 	 * @returns {ChatMessage|null}
 	 * @protected
@@ -789,10 +793,6 @@ export class TestResultChat {
 	/**
 	 * Normalize one modifier presentation record.
 	 *
-	 * Stable modifier ids are persisted when present. They are mechanics-facing
-	 * identity used by Standard-Test-specific secondary effects and must not be
-	 * reconstructed from localized/user-visible source labels.
-	 *
 	 * @param {Object} modifier
 	 * @returns {Object}
 	 * @protected
@@ -820,40 +820,50 @@ export class TestResultChat {
 		return ActorRollPolicy.canAdjudicate(actor, game.user);
 	}
 
-	/** @protected */
+	/**
+	 * Normalize Foundry's render hook HTML argument.
+	 *
+	 * @param {*} html
+	 * @returns {HTMLElement|null}
+	 * @protected
+	 */
+	static _asElement(html) {
+		if (html instanceof HTMLElement) {
+			return html;
+		}
+
+		if (html?.[0] instanceof HTMLElement) {
+			return html[0];
+		}
+
+		return null;
+	}
+
+	static _signed(value) {
+		return value >= 0 ? `+${value}` : String(value);
+	}
+
 	static _finiteNumber(value, label) {
 		const number = Number(value);
 
 		if (!Number.isFinite(number)) {
 			throw new Error(
-				`TestResultChat expected finite ${label}.`,
+				`TestResultChat '${label}' must be finite: ${String(value)}`,
 			);
 		}
 
 		return number;
 	}
 
-	/** @protected */
-	static _signed(value) {
-		const number = Number(value);
-		return `${number >= 0 ? "+" : ""}${number}`;
-	}
-
-	/** @protected */
-	static _localize(key, english, polish) {
+	static _localize(key, englishFallback, polishFallback) {
 		const localized = game.i18n.localize(key);
 
 		if (localized !== key) {
 			return localized;
 		}
 
-		return game.i18n.lang === "pl" ? polish : english;
-	}
-
-	/** @protected */
-	static _asElement(value) {
-		if (value instanceof HTMLElement) return value;
-		if (value?.[0] instanceof HTMLElement) return value[0];
-		return null;
+		return game.i18n.lang === "pl"
+			? polishFallback
+			: englishFallback;
 	}
 }
