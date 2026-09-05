@@ -127,6 +127,7 @@
 		"module/criticals/SuddenDeathManualRollIntegration.mjs",
 		"module/chat/TestResultIdentityChat.mjs",
 		"module/tests/TestResultModifierToggle.mjs",
+		"module/tests/StandardTestRuleReminderIntegration.mjs",
 		"module/tests/PickLockStandardTestIntegration.mjs",
 		"module/tests/RiskConsequenceIntegration.mjs",
 		"module/tests/RiskConsequenceManualRollIntegration.mjs",
