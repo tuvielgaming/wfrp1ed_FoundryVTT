@@ -28,8 +28,12 @@ export class ActorTestRequestWorkflow {
 		description = "",
 		source = null,
 		testOptions = null,
+		speakerActor = null,
 	} = {}) {
 		if (!(actor instanceof foundry.documents.Actor)) throw new Error("ActorTestRequest requires an Actor.");
+		if (speakerActor !== null && !(speakerActor instanceof foundry.documents.Actor)) {
+			throw new Error("ActorTestRequest speakerActor must be an Actor when provided.");
+		}
 		const state = {
 			version: 2,
 			status: "pending",
@@ -45,7 +49,7 @@ export class ActorTestRequestWorkflow {
 			createdAt: Date.now(),
 		};
 		return ChatMessage.create({
-			speaker: ChatMessage.getSpeaker({ actor }),
+			speaker: ChatMessage.getSpeaker({ actor: speakerActor ?? actor }),
 			content: `<section class="wfrp1ed actor-test-request" data-wfrp-actor-test-request></section>`,
 			flags: { [FLAG_SCOPE]: { [FLAG_KEY]: state } },
 		});
