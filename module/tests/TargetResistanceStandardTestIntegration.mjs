@@ -33,9 +33,10 @@ const TARGET_SKILL_MODIFIER_PREFIX = "target-skill:";
  * Target-characteristic Skill effects are resolved from the initiating Actor
  * but applied to the target's actual resistance Test. This is the exact model
  * required by Torture: the torturer owns the Skill, while the victim rolls the
- * reduced Will Power. The modifier remains an ordinary persisted `skill`
- * modifier on the target TestResult so GM/OWNER adjudication and reconciliation
- * use the same verified checkbox workflow as other Skill modifiers.
+ * reduced Will Power. The modifier is shown in the existing Applicable Skills
+ * section before the roll, enabled by default, and remains an ordinary persisted
+ * `skill` modifier on the target TestResult afterward. The same verified
+ * checkbox/adjudication workflow therefore applies before and after the roll.
  *
  * The request ChatMessage is deliberately spoken by the initiating Actor. It is
  * the authoritative procedure card: Test + target while pending, and the final
@@ -53,14 +54,32 @@ const TARGET_SKILL_MODIFIER_PREFIX = "target-skill:";
  *
  * A raw target characteristic remains a deliberate fallback when no Actor is
  * available. In that case the existing target-resistance Test executes directly
- * and its card is annotated with the inverse success condition. Audited
- * target-characteristic Skill modifiers are appended to that direct snapshot as
- * well, so the rule is identical whether the target is an Actor or a raw value.
+ * and carries the same selected target-characteristic Skill modifier snapshot.
  */
+installTargetCharacteristicSkillDialogBridge();
 installInitialDialogDispatch();
 installPendingTargetDispatch();
 registerResistancePresentation();
 registerLinkedResultReconciliation();
+
+function installTargetCharacteristicSkillDialogBridge() {
+	if (StandardTestDialog.__wfrpTargetCharacteristicSkillBridgeInstalled === true) {
+		return;
+	}
+
+	const originalSkillModifierForEffect = StandardTestDialog._skillModifierForEffect;
+	StandardTestDialog._skillModifierForEffect = function (candidate, effect) {
+		const ordinary = originalSkillModifierForEffect.call(this, candidate, effect);
+		if (ordinary) return ordinary;
+		return targetSkillModifierForEffect(candidate, effect);
+	};
+
+	Object.defineProperty(
+		StandardTestDialog,
+		"__wfrpTargetCharacteristicSkillBridgeInstalled",
+		{ value: true, configurable: false, enumerable: false },
+	);
+}
 
 function installInitialDialogDispatch() {
 	if (StandardTestDialog.__wfrpTargetResistanceDispatchInstalled === true) return;
@@ -78,14 +97,8 @@ function installInitialDialogDispatch() {
 		);
 		if (!target) {
 			/* Manual/raw target-value fallback remains on the existing direct path.
-			 * Add only the audited target-characteristic Skill effects here; the
-			 * original Standard Test configuration remains otherwise unchanged. */
-			configured.options ??= {};
-			configured.options.modifiers = mergeTargetSkillModifiers(
-				configured.options.modifiers,
-				actor,
-				test,
-			);
+			 * The Standard Test dialog already persisted the user's target-side Skill
+			 * checkbox selection into options.modifiers. */
 			return configured;
 		}
 
@@ -179,9 +192,14 @@ function resistanceTestOptions(initiator, test, options = {}) {
 	}
 
 	/* Do not copy ordinary initiator-side Skill modifiers or Active Effects onto
-	 * the target Actor. Resolve only effects whose audited rule explicitly says
-	 * that the initiating Skill changes the target characteristic. */
-	const modifiers = targetCharacteristicSkillModifiers(initiator, test);
+	 * the target Actor. Carry only target-side Skill choices made in the Standard
+	 * Test dialog. Programmatic/legacy callers without a modifiers snapshot fall
+	 * back to the audited default set. */
+	const modifiers = selectedTargetCharacteristicSkillModifiers(
+		initiator,
+		test,
+		options,
+	);
 	if (modifiers.length > 0) {
 		result.modifiers = modifiers;
 	}
@@ -189,17 +207,23 @@ function resistanceTestOptions(initiator, test, options = {}) {
 	return result;
 }
 
-function mergeTargetSkillModifiers(existing, initiator, test) {
-	const retained = Array.isArray(existing)
-		? existing.filter(
-			(modifier) =>
-				!String(modifier?.id ?? "").startsWith(TARGET_SKILL_MODIFIER_PREFIX),
-		)
-		: [];
-	return [
-		...retained,
-		...targetCharacteristicSkillModifiers(initiator, test),
-	];
+function selectedTargetCharacteristicSkillModifiers(initiator, test, options) {
+	if (Array.isArray(options?.modifiers)) {
+		return options.modifiers
+			.filter((modifier) =>
+				String(modifier?.id ?? "").startsWith(TARGET_SKILL_MODIFIER_PREFIX),
+			)
+			.map((modifier) => ({
+				id: String(modifier.id),
+				value: Number(modifier.value),
+				source: String(modifier.source ?? ""),
+				type: "skill",
+				enabled: modifier.enabled !== false,
+			}))
+			.filter((modifier) => Number.isFinite(modifier.value));
+	}
+
+	return targetCharacteristicSkillModifiers(initiator, test);
 }
 
 function targetCharacteristicSkillModifiers(initiator, test) {
@@ -212,33 +236,47 @@ function targetCharacteristicSkillModifiers(initiator, test) {
 		initiator,
 		String(test.id),
 	)) {
-		candidate.effects.forEach((effect, effectIndex) => {
+		for (const effect of candidate.effects) {
 			if (
 				effect?.type !== "target-characteristic-modifier" ||
 				effect.condition ||
 				String(effect.characteristic ?? "").trim().toLowerCase() !== characteristicId
 			) {
-				return;
+				continue;
 			}
 
-			const value = Number(effect.value);
-			if (!Number.isFinite(value) || value === 0) {
-				throw new Error(
-					`Invalid target-characteristic Skill modifier for '${candidate.rulesId}'.`,
-				);
-			}
-
-			modifiers.push({
-				id: `${TARGET_SKILL_MODIFIER_PREFIX}${candidate.rulesId}:${characteristicId}:${effectIndex}`,
-				value,
-				source: String(candidate.name ?? candidate.rulesId),
-				type: "skill",
-				enabled: true,
-			});
-		});
+			const modifier = targetSkillModifierForEffect(candidate, effect);
+			if (modifier) modifiers.push(modifier);
+		}
 	}
 
 	return modifiers;
+}
+
+function targetSkillModifierForEffect(candidate, effect) {
+	if (
+		!candidate ||
+		!effect ||
+		effect.condition ||
+		effect.type !== "target-characteristic-modifier"
+	) {
+		return null;
+	}
+
+	const value = Number(effect.value);
+	if (!Number.isFinite(value)) {
+		throw new Error(
+			`Invalid target-characteristic Skill modifier for '${candidate.rulesId}'.`,
+		);
+	}
+
+	return {
+		id: `${TARGET_SKILL_MODIFIER_PREFIX}${candidate.rulesId}:${String(effect.testId ?? "")}:${String(effect.characteristic ?? "").trim().toLowerCase()}`,
+		value,
+		source: String(candidate.name ?? candidate.rulesId),
+		type: "skill",
+		enabled: true,
+	};
 }
 
 function registerResistancePresentation() {
