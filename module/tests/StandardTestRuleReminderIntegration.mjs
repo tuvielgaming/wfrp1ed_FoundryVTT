@@ -5,7 +5,9 @@ const FLAG_KEY = "testResultState";
 const PICK_LOCK_TEST_ID = "pickLock";
 const PICK_POCKET_TEST_ID = "pickPocket";
 const ESTIMATE_TEST_ID = "estimate";
+const LISTEN_TEST_ID = "listen";
 const EVALUATE_MODIFIER_ID = "skill:evaluate:modifier";
+const ACUTE_HEARING_MODIFIER_ID = "skill:acuteHearing:modifier";
 const UNSKILLED_PICK_LOCK_TYPE = "pick-lock-unskilled";
 
 /*
@@ -25,6 +27,8 @@ const UNSKILLED_PICK_LOCK_TYPE = "pick-lock-unskilled";
  *   the Estimate margin of error from 10% to 5% in all cases. Therefore a
  *   successful Estimate with Evaluate is accurate to within +/-5%, while a
  *   failed Estimate is out by more than 5%.
+ * - English Core Rulebook, Acute Hearing Skill, printed Skills section: Acute
+ *   Hearing gives +10% to Listen Tests and increases hearing distance by 2 yards.
  *
  * These reminders intentionally do not create attempt/day counters or invent an
  * estimated numeric value. They keep the RAW consequences visible at the point
@@ -83,6 +87,21 @@ Hooks.on("renderChatMessageHTML", (message, html) => {
 			localize(
 				"Evaluate: a successful Estimate is accurate to within +/-5%; a failed Estimate is out by more than 5%.",
 				"Szacowanie: udana Ocena jest dokładna do +/-5%; nieudana Ocena myli się o więcej niż 5%.",
+			),
+		);
+		return;
+	}
+
+	if (
+		state.testId === LISTEN_TEST_ID &&
+		hasEnabledModifier(state, ACUTE_HEARING_MODIFIER_ID)
+	) {
+		insertReminder(
+			card,
+			"listen-acute-hearing",
+			localize(
+				"Acute Hearing: hearing distance is increased by 2 yards.",
+				"Czuły słuch: zasięg słyszenia zwiększa się o 2 metry.",
 			),
 		);
 	}
