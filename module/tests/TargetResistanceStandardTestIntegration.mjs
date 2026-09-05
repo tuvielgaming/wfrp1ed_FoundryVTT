@@ -33,6 +33,12 @@ const SOURCE_KIND = "standard-target-resistance";
  * procedure SUCCESS/FAILURE after the target resistance resolves. Its identity
  * header reuses the exact shared renderer used by verified Test/Attack cards.
  *
+ * Post-roll adjudication follows the same reconciliation principle as combat:
+ * the target TestResult remains the source of truth, while the primary GM
+ * persists the derived procedureSuccess state back onto the linked request
+ * message. Updating that authoritative message makes Foundry rerender it for
+ * every client; a global chat rerender is not used as state synchronization.
+ *
  * ActorTestRequestWorkflow already owns socket authority and the shared
  * Automatic GM Rolls policy for Actors with no non-GM OWNER.
  *
@@ -43,7 +49,7 @@ const SOURCE_KIND = "standard-target-resistance";
 installInitialDialogDispatch();
 installPendingTargetDispatch();
 registerResistancePresentation();
-registerLinkedResultRefresh();
+registerLinkedResultReconciliation();
 
 function installInitialDialogDispatch() {
 	if (StandardTestDialog.__wfrpTargetResistanceDispatchInstalled === true) return;
@@ -296,16 +302,59 @@ function decorateManualFallback(message, html) {
 	);
 }
 
-function registerLinkedResultRefresh() {
+function registerLinkedResultReconciliation() {
 	Hooks.on("updateChatMessage", (message, changes) => {
 		const provenance = message?.getFlag?.(FLAG_SCOPE, RESULT_SOURCE_FLAG_KEY);
 		if (!resistanceSource(provenance?.source)) return;
 		if (!testResultChanged(changes)) return;
-		void ui.chat?.render?.({ force: true });
+		if (!ActorRollPolicy.isPrimaryActiveGM()) return;
+
+		void reconcileLinkedProcedureOutcome(message, provenance).catch((error) => {
+			console.error(
+				"WFRP1ED | Unable to reconcile target-resistance procedure outcome.",
+				error,
+			);
+		});
 	});
 }
 
+async function reconcileLinkedProcedureOutcome(resultMessage, provenance) {
+	const resultState = resultMessage?.getFlag?.(FLAG_SCOPE, TEST_RESULT_FLAG_KEY);
+	if (!resultState) return;
+
+	const requestMessageId = String(provenance?.requestMessageId ?? "").trim();
+	if (!requestMessageId) return;
+	const requestMessage = game.messages?.get(requestMessageId);
+	if (!requestMessage) return;
+
+	const requestState = foundry.utils.deepClone(
+		requestMessage.getFlag?.(FLAG_SCOPE, REQUEST_FLAG_KEY) ?? {},
+	);
+	if (!resistanceSource(requestState?.source)) return;
+	if (
+		String(requestState.resultMessageId ?? "") &&
+		String(requestState.resultMessageId) !== String(resultMessage.id ?? "")
+	) {
+		return;
+	}
+
+	const procedureSuccess = !currentTestSuccess(resultState);
+	if (requestState.procedureSuccess === procedureSuccess) return;
+
+	requestState.procedureSuccess = procedureSuccess;
+	requestState.reconciledBy = String(game.user?.id ?? "");
+	requestState.reconciledAt = Date.now();
+	await requestMessage.setFlag(FLAG_SCOPE, REQUEST_FLAG_KEY, requestState);
+}
+
 function procedureOutcomeFromRequest(requestState) {
+	if (typeof requestState?.procedureSuccess === "boolean") {
+		return requestState.procedureSuccess;
+	}
+
+	/* Backwards compatibility for already-created requests from before persisted
+	 * reconciliation existed. Their first render can still derive the outcome
+	 * from the linked result; any later adjudication persists procedureSuccess. */
 	const messageId = String(requestState?.resultMessageId ?? "").trim();
 	if (!messageId) return null;
 	const resultMessage = game.messages?.get(messageId);
