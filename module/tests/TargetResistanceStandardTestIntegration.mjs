@@ -3,6 +3,7 @@ import { decorateTestIdentity } from "../chat/TestResultIdentityChat.mjs";
 import { ActorTestRequestWorkflow } from "./ActorTestRequestWorkflow.mjs";
 import { PendingStandardTest } from "./PendingStandardTest.mjs";
 import { StandardTestDialog } from "./StandardTestDialog.mjs";
+import { StandardTestSkillResolver } from "./StandardTestSkillResolver.mjs";
 import { TEST_OUTCOME_MODE } from "./Test.mjs";
 import { TestManager } from "./TestManager.mjs";
 import { TestResultChat } from "./TestResultChat.mjs";
@@ -12,6 +13,7 @@ const REQUEST_FLAG_KEY = "actorTestRequest";
 const RESULT_SOURCE_FLAG_KEY = "actorTestRequestSource";
 const TEST_RESULT_FLAG_KEY = "testResultState";
 const SOURCE_KIND = "standard-target-resistance";
+const TARGET_SKILL_MODIFIER_PREFIX = "target-skill:";
 
 /*
  * WFRP 1e target-resistance Standard Tests (currently Hypnotism and
@@ -27,6 +29,13 @@ const SOURCE_KIND = "standard-target-resistance";
  *   initiator chooses target -> target OWNER/GM rolls its characteristic
  *   -> target TestResult remains fully editable/auditable
  *   -> procedure outcome is derived from the linked resistance result.
+ *
+ * Target-characteristic Skill effects are resolved from the initiating Actor
+ * but applied to the target's actual resistance Test. This is the exact model
+ * required by Torture: the torturer owns the Skill, while the victim rolls the
+ * reduced Will Power. The modifier remains an ordinary persisted `skill`
+ * modifier on the target TestResult so GM/OWNER adjudication and reconciliation
+ * use the same verified checkbox workflow as other Skill modifiers.
  *
  * The request ChatMessage is deliberately spoken by the initiating Actor. It is
  * the authoritative procedure card: Test + target while pending, and the final
@@ -44,7 +53,9 @@ const SOURCE_KIND = "standard-target-resistance";
  *
  * A raw target characteristic remains a deliberate fallback when no Actor is
  * available. In that case the existing target-resistance Test executes directly
- * and its card is annotated with the inverse success condition.
+ * and its card is annotated with the inverse success condition. Audited
+ * target-characteristic Skill modifiers are appended to that direct snapshot as
+ * well, so the rule is identical whether the target is an Actor or a raw value.
  */
 installInitialDialogDispatch();
 installPendingTargetDispatch();
@@ -66,7 +77,15 @@ function installInitialDialogDispatch() {
 			configured.options?.target ?? configured.options?.targetActor,
 		);
 		if (!target) {
-			/* Manual/raw target-value fallback remains on the existing direct path. */
+			/* Manual/raw target-value fallback remains on the existing direct path.
+			 * Add only the audited target-characteristic Skill effects here; the
+			 * original Standard Test configuration remains otherwise unchanged. */
+			configured.options ??= {};
+			configured.options.modifiers = mergeTargetSkillModifiers(
+				configured.options.modifiers,
+				actor,
+				test,
+			);
 			return configured;
 		}
 
@@ -137,7 +156,7 @@ async function createResistanceRequest({ initiator, target, test, options }) {
 		testId: characteristicId,
 		title: String(test.name),
 		description: "",
-		testOptions: resistanceTestOptions(options),
+		testOptions: resistanceTestOptions(initiator, test, options),
 		source: {
 			kind: SOURCE_KIND,
 			procedureTestId: String(test.id),
@@ -150,7 +169,7 @@ async function createResistanceRequest({ initiator, target, test, options }) {
 	});
 }
 
-function resistanceTestOptions(options = {}) {
+function resistanceTestOptions(initiator, test, options = {}) {
 	const result = {
 		modifier: finiteNumber(options?.modifier, 0),
 	};
@@ -159,12 +178,67 @@ function resistanceTestOptions(options = {}) {
 		result.resultVisibility = options.resultVisibility;
 	}
 
-	/*
-	 * Do not copy ordinary initiator-side Skill modifiers or Active Effects onto
-	 * the target Actor. Target-side modifiers such as Torture belong to their own
-	 * audited executor and will be attached explicitly when that rule is enabled.
-	 */
+	/* Do not copy ordinary initiator-side Skill modifiers or Active Effects onto
+	 * the target Actor. Resolve only effects whose audited rule explicitly says
+	 * that the initiating Skill changes the target characteristic. */
+	const modifiers = targetCharacteristicSkillModifiers(initiator, test);
+	if (modifiers.length > 0) {
+		result.modifiers = modifiers;
+	}
+
 	return result;
+}
+
+function mergeTargetSkillModifiers(existing, initiator, test) {
+	const retained = Array.isArray(existing)
+		? existing.filter(
+			(modifier) =>
+				!String(modifier?.id ?? "").startsWith(TARGET_SKILL_MODIFIER_PREFIX),
+		)
+		: [];
+	return [
+		...retained,
+		...targetCharacteristicSkillModifiers(initiator, test),
+	];
+}
+
+function targetCharacteristicSkillModifiers(initiator, test) {
+	if (!(initiator instanceof foundry.documents.Actor) || !test) return [];
+
+	const characteristicId = resistanceCharacteristicId(test);
+	const modifiers = [];
+
+	for (const candidate of StandardTestSkillResolver.candidates(
+		initiator,
+		String(test.id),
+	)) {
+		candidate.effects.forEach((effect, effectIndex) => {
+			if (
+				effect?.type !== "target-characteristic-modifier" ||
+				effect.condition ||
+				String(effect.characteristic ?? "").trim().toLowerCase() !== characteristicId
+			) {
+				return;
+			}
+
+			const value = Number(effect.value);
+			if (!Number.isFinite(value) || value === 0) {
+				throw new Error(
+					`Invalid target-characteristic Skill modifier for '${candidate.rulesId}'.`,
+				);
+			}
+
+			modifiers.push({
+				id: `${TARGET_SKILL_MODIFIER_PREFIX}${candidate.rulesId}:${characteristicId}:${effectIndex}`,
+				value,
+				source: String(candidate.name ?? candidate.rulesId),
+				type: "skill",
+				enabled: true,
+			});
+		});
+	}
+
+	return modifiers;
 }
 
 function registerResistancePresentation() {
