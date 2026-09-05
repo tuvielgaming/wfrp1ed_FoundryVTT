@@ -3,6 +3,7 @@ import "./StandardTestPendingTargetCanvasIntegration.mjs";
 import "./StandardTestResultMetadataIntegration.mjs";
 import "./StandardTestRuleReminderIntegration.mjs";
 import "./StandardTestTargetIntegration.mjs";
+import "./TargetResistanceStandardTestIntegration.mjs";
 import { StandardTestDialog } from "./StandardTestDialog.mjs";
 import { StandardTestSkillResolver } from "./StandardTestSkillResolver.mjs";
 import { TestResultChat } from "./TestResultChat.mjs";
