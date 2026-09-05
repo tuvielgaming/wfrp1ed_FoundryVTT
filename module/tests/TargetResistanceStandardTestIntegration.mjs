@@ -14,6 +14,7 @@ const RESULT_SOURCE_FLAG_KEY = "actorTestRequestSource";
 const TEST_RESULT_FLAG_KEY = "testResultState";
 const SOURCE_KIND = "standard-target-resistance";
 const TARGET_SKILL_MODIFIER_PREFIX = "target-skill:";
+const procedurePresentationFinalizers = new Set();
 
 /*
  * WFRP 1e target-resistance Standard Tests (currently Hypnotism and
@@ -43,6 +44,12 @@ const TARGET_SKILL_MODIFIER_PREFIX = "target-skill:";
  * procedure SUCCESS/FAILURE after the target resistance resolves. Its identity
  * header reuses the exact shared renderer used by verified Test/Attack cards.
  *
+ * The initial procedure outcome is presentation-gated by the target Test's Dice
+ * So Nice animation. The target TestResult remains authoritative immediately,
+ * but the initiator card does not reveal SUCCESS/FAILURE until that physical
+ * roll has finished. Later manual adjudication is not delayed because there is
+ * no new dice animation to wait for.
+ *
  * Post-roll adjudication follows the same reconciliation principle as combat:
  * the target TestResult remains the source of truth, while the primary GM
  * persists the derived procedureSuccess state back onto the linked request
@@ -61,6 +68,7 @@ installInitialDialogDispatch();
 installPendingTargetDispatch();
 registerResistancePresentation();
 registerLinkedResultReconciliation();
+registerResolvedProcedurePresentationBarrier();
 
 function installTargetCharacteristicSkillDialogBridge() {
 	if (StandardTestDialog.__wfrpTargetCharacteristicSkillBridgeInstalled === true) {
@@ -68,16 +76,68 @@ function installTargetCharacteristicSkillDialogBridge() {
 	}
 
 	const originalSkillModifierForEffect = StandardTestDialog._skillModifierForEffect;
+	const originalRenderSkillSection = StandardTestDialog._renderSkillSection;
+
 	StandardTestDialog._skillModifierForEffect = function (candidate, effect) {
 		const ordinary = originalSkillModifierForEffect.call(this, candidate, effect);
 		if (ordinary) return ordinary;
 		return targetSkillModifierForEffect(candidate, effect);
 	};
 
+	/*
+	 * The generic Skill row says only "<Skill> +/-N", which is correct for an
+	 * actor-side modifier but misleading for target-characteristic effects.
+	 * Keep the underlying modifier source unchanged (so the target's resolved
+	 * defence card still simply says "Torture -10") and clarify only the
+	 * pre-roll launcher label.
+	 */
+	StandardTestDialog._renderSkillSection = function (section, actor, entry) {
+		originalRenderSkillSection.call(this, section, actor, entry);
+		decorateTargetCharacteristicSkillRows(section, actor, entry);
+	};
+
 	Object.defineProperty(
 		StandardTestDialog,
 		"__wfrpTargetCharacteristicSkillBridgeInstalled",
 		{ value: true, configurable: false, enumerable: false },
+	);
+}
+
+function decorateTargetCharacteristicSkillRows(section, actor, entry) {
+	if (!(section instanceof HTMLElement) || entry?.kind !== "test") return;
+
+	const candidates = StandardTestSkillResolver.candidates(actor, entry.id);
+	const bySkillId = new Map(
+		candidates.map((candidate) => [candidate.rulesId, candidate]),
+	);
+
+	for (const input of section.querySelectorAll(
+		"input[data-standard-skill-modifier]",
+	)) {
+		const skillId = String(input.dataset.skillId ?? "").trim();
+		const effectIndex = Number(input.dataset.effectIndex);
+		const candidate = bySkillId.get(skillId);
+		const effect = Number.isInteger(effectIndex)
+			? candidate?.effects?.[effectIndex]
+			: null;
+
+		if (effect?.type !== "target-characteristic-modifier") continue;
+
+		const text = input.closest("label")?.querySelector("span");
+		if (!(text instanceof HTMLElement)) continue;
+
+		text.textContent = targetSkillDialogLabel(candidate, effect);
+	}
+}
+
+function targetSkillDialogLabel(candidate, effect) {
+	const name = String(candidate?.name ?? candidate?.rulesId ?? "");
+	const characteristic = characteristicName(effect?.characteristic);
+	const value = signedNumber(effect?.value);
+
+	return localize(
+		`${name}: target ${characteristic} ${value}`,
+		`${name}: ${characteristic} celu ${value}`,
 	);
 }
 
@@ -178,6 +238,7 @@ async function createResistanceRequest({ initiator, target, test, options }) {
 			targetActorUuid: String(target.uuid ?? ""),
 			targetName: String(target.name ?? ""),
 			resistanceCharacteristicId: characteristicId,
+			deferProcedureOutcomeUntilDiceComplete: true,
 		},
 	});
 }
@@ -430,6 +491,143 @@ function registerLinkedResultReconciliation() {
 	});
 }
 
+function registerResolvedProcedurePresentationBarrier() {
+	Hooks.on("updateChatMessage", (message) => {
+		queueResolvedProcedurePresentation(message);
+	});
+
+	Hooks.once("ready", () => {
+		if (!ActorRollPolicy.isPrimaryActiveGM()) return;
+		for (const message of game.messages ?? []) {
+			queueResolvedProcedurePresentation(message);
+		}
+	});
+}
+
+function queueResolvedProcedurePresentation(message) {
+	if (!ActorRollPolicy.isPrimaryActiveGM()) return;
+
+	const state = message?.getFlag?.(FLAG_SCOPE, REQUEST_FLAG_KEY);
+	const source = resistanceSource(state?.source);
+	if (
+		!state ||
+		source?.deferProcedureOutcomeUntilDiceComplete !== true ||
+		state.status !== "resolved" ||
+		state.presentationReady === true
+	) {
+		return;
+	}
+
+	void finalizeProcedurePresentationAfterDice(message).catch((error) => {
+		console.error(
+			"WFRP1ED | Unable to finalize target-resistance procedure presentation.",
+			error,
+		);
+	});
+}
+
+async function finalizeProcedurePresentationAfterDice(requestMessage) {
+	const key = String(requestMessage?.id ?? "").trim();
+	if (!key || procedurePresentationFinalizers.has(key)) return;
+	procedurePresentationFinalizers.add(key);
+
+	try {
+		const initialState = requestMessage.getFlag?.(
+			FLAG_SCOPE,
+			REQUEST_FLAG_KEY,
+		);
+		const resultMessageId = String(initialState?.resultMessageId ?? "").trim();
+		if (!resultMessageId) return;
+
+		const resultMessage = game.messages?.get(resultMessageId);
+		if (!resultMessage) return;
+
+		await waitForMessageDiceAnimation(resultMessage);
+
+		const currentRequestMessage = game.messages?.get(key);
+		if (!currentRequestMessage) return;
+
+		const currentRequestState = foundry.utils.deepClone(
+			currentRequestMessage.getFlag?.(FLAG_SCOPE, REQUEST_FLAG_KEY) ?? {},
+		);
+		const currentSource = resistanceSource(currentRequestState?.source);
+		if (
+			currentSource?.deferProcedureOutcomeUntilDiceComplete !== true ||
+			currentRequestState.status !== "resolved" ||
+			currentRequestState.presentationReady === true
+		) {
+			return;
+		}
+
+		const currentResultMessage = game.messages?.get(
+			String(currentRequestState.resultMessageId ?? ""),
+		);
+		const currentResultState = currentResultMessage?.getFlag?.(
+			FLAG_SCOPE,
+			TEST_RESULT_FLAG_KEY,
+		);
+		if (!currentResultState) return;
+
+		currentRequestState.procedureSuccess = !currentTestSuccess(currentResultState);
+		currentRequestState.presentationReady = true;
+		currentRequestState.presentationReadyBy = String(game.user?.id ?? "");
+		currentRequestState.presentationReadyAt = Date.now();
+
+		await currentRequestMessage.setFlag(
+			FLAG_SCOPE,
+			REQUEST_FLAG_KEY,
+			currentRequestState,
+		);
+	} finally {
+		procedurePresentationFinalizers.delete(key);
+	}
+}
+
+async function waitForMessageDiceAnimation(message) {
+	const dice3d = game.dice3d;
+	if (!dice3d) return;
+
+	const messageId = String(message?.id ?? "").trim();
+	if (!messageId) return;
+
+	/*
+	 * Same verified Dice So Nice barrier used by RiskConsequenceDiceAnimation.
+	 * The v6 API resolves correctly even if the animation has already completed.
+	 */
+	if (typeof dice3d.waitFor3DAnimationByMessageID === "function") {
+		await dice3d.waitFor3DAnimationByMessageID(messageId);
+		return;
+	}
+
+	await new Promise((resolve) => {
+		let hookId = null;
+		let timeoutId = null;
+		const finish = () => {
+			if (hookId !== null) Hooks.off("diceSoNiceRollComplete", hookId);
+			if (timeoutId !== null) clearTimeout(timeoutId);
+			resolve();
+		};
+
+		hookId = Hooks.on("diceSoNiceRollComplete", (...ids) => {
+			if (containsMessageId(ids, messageId)) finish();
+		});
+
+		/* Safety only: optional 3D presentation must never block the procedure. */
+		timeoutId = setTimeout(finish, 10000);
+	});
+}
+
+function containsMessageId(values, messageId) {
+	for (const value of values ?? []) {
+		if (Array.isArray(value)) {
+			if (containsMessageId(value, messageId)) return true;
+			continue;
+		}
+		if (String(value ?? "") === messageId) return true;
+	}
+	return false;
+}
+
 async function reconcileLinkedProcedureOutcome(resultMessage, provenance) {
 	const resultState = resultMessage?.getFlag?.(FLAG_SCOPE, TEST_RESULT_FLAG_KEY);
 	if (!resultState) return;
@@ -460,6 +658,14 @@ async function reconcileLinkedProcedureOutcome(resultMessage, provenance) {
 }
 
 function procedureOutcomeFromRequest(requestState) {
+	const source = resistanceSource(requestState?.source);
+	if (
+		source?.deferProcedureOutcomeUntilDiceComplete === true &&
+		requestState?.presentationReady !== true
+	) {
+		return null;
+	}
+
 	if (typeof requestState?.procedureSuccess === "boolean") {
 		return requestState.procedureSuccess;
 	}
@@ -519,6 +725,12 @@ function characteristicName(id) {
 	const key = `WFRP1ed.CHAR.${normalized === "m" ? "sp" : normalized}`;
 	const localized = game.i18n.localize(key);
 	return localized !== key ? localized : normalized.toUpperCase();
+}
+
+function signedNumber(value) {
+	const number = Number(value);
+	if (!Number.isFinite(number)) return String(value ?? "");
+	return number >= 0 ? `+${number}` : String(number);
 }
 
 function outcomeLabel(success) {
