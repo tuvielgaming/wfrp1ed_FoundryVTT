@@ -21,10 +21,17 @@ export class ActorTestRequestWorkflow {
 		Hooks.once("ready", () => game.socket?.on?.(SOCKET_CHANNEL, (payload) => void handleSocket(payload)));
 	}
 
-	static async create({ actor, testId, title, description = "", source = null } = {}) {
+	static async create({
+		actor,
+		testId,
+		title,
+		description = "",
+		source = null,
+		testOptions = null,
+	} = {}) {
 		if (!(actor instanceof foundry.documents.Actor)) throw new Error("ActorTestRequest requires an Actor.");
 		const state = {
-			version: 1,
+			version: 2,
 			status: "pending",
 			actorUuid: String(actor.uuid),
 			actorName: String(actor.name ?? ""),
@@ -32,6 +39,7 @@ export class ActorTestRequestWorkflow {
 			title: String(title ?? testId ?? "Test"),
 			description: String(description ?? ""),
 			source: source ? foundry.utils.deepClone(source) : null,
+			testOptions: serializeTestOptions(testOptions),
 			resultMessageId: null,
 			createdBy: String(game.user?.id ?? ""),
 			createdAt: Date.now(),
@@ -131,7 +139,12 @@ async function resolveAsAuthority(message, requestingUser) {
 	if (state.status === "resolved") return state;
 	active.add(key);
 	try {
-		const result = await actor.rollTest(state.testId, { modifier: 0 });
+		const options = state.testOptions && typeof state.testOptions === "object"
+			? foundry.utils.deepClone(state.testOptions)
+			: { modifier: 0 };
+		if (!Number.isFinite(Number(options.modifier))) options.modifier = 0;
+
+		const result = await actor.rollTest(state.testId, options);
 		if (!result?.chatMessage) throw new Error("The requested Test did not produce a result message.");
 
 		/* Persist request provenance directly on the canonical TestResult before the
@@ -164,6 +177,32 @@ function maybeAuto(message, actor) {
 	if (queued.has(key)) return;
 	queued.add(key);
 	queueMicrotask(() => void resolveAsAuthority(message, game.user).catch(reportError).finally(() => setTimeout(() => queued.delete(key), 250)));
+}
+
+function serializeTestOptions(options) {
+	const serialized = { modifier: 0 };
+	if (!options || typeof options !== "object" || Array.isArray(options)) {
+		return serialized;
+	}
+
+	if (Number.isFinite(Number(options.modifier))) {
+		serialized.modifier = Number(options.modifier);
+	}
+	if (options.resultVisibility !== undefined) {
+		serialized.resultVisibility = String(options.resultVisibility);
+	}
+	if (Array.isArray(options.modifiers)) {
+		serialized.modifiers = options.modifiers
+			.map((modifier) => ({
+				id: String(modifier?.id ?? ""),
+				value: Number(modifier?.value),
+				source: String(modifier?.source ?? ""),
+				type: String(modifier?.type ?? "modifier"),
+				enabled: modifier?.enabled !== false,
+			}))
+			.filter((modifier) => Number.isFinite(modifier.value));
+	}
+	return serialized;
 }
 
 function asElement(html) {
