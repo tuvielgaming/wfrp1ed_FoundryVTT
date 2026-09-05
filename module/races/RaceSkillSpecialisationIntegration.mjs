@@ -174,14 +174,14 @@ function specialisationFields(choices) {
 		const choice = choices[choiceIndex];
 		for (let grantIndex = 0; grantIndex < (choice?.grants ?? []).length; grantIndex += 1) {
 			const grant = choice.grants[grantIndex];
-			const rulesId = skillRulesId(grant);
+			const skillId = skillReferenceId(grant);
 			fields.push({
 				choiceIndex,
 				grantIndex,
 				controlName: `skillSpecialisation_${choiceIndex}_${grantIndex}`,
 				label: `${localize("Specialisation", "Specjalizacja")} — ${grantBaseName(grant)}`,
 				value: String(grant?.specialisation ?? "").trim(),
-				suggestions: coreSkillSpecialisationSuggestions(rulesId, game.i18n.lang),
+				suggestions: coreSkillSpecialisationSuggestions(skillId, game.i18n.lang),
 			});
 		}
 	}
@@ -254,27 +254,27 @@ function validateNoDuplicate(entries, editedEntryIndex, editedChoiceIndex, edite
 }
 
 function sameReference(left, right) {
-	const leftRules = String(left?.rulesId ?? "").trim();
-	const rightRules = String(right?.rulesId ?? "").trim();
+	const leftSkillId = String(left?.skillId ?? left?.rulesId ?? "").trim();
+	const rightSkillId = String(right?.skillId ?? right?.rulesId ?? "").trim();
 	const leftSpec = normalize(left?.specialisation);
 	const rightSpec = normalize(right?.specialisation);
-	if (leftRules && rightRules) return leftRules === rightRules && leftSpec === rightSpec;
+	if (leftSkillId && rightSkillId) return leftSkillId === rightSkillId && leftSpec === rightSpec;
 	const leftUuid = String(left?.uuid ?? "").trim();
 	const rightUuid = String(right?.uuid ?? "").trim();
 	if (leftUuid && rightUuid) return leftUuid === rightUuid && leftSpec === rightSpec;
 	return normalize(left?.name) === normalize(right?.name) && leftSpec === rightSpec;
 }
 
-function skillRulesId(grant) {
-	const direct = String(grant?.rulesId ?? "").trim();
+function skillReferenceId(grant) {
+	const direct = String(grant?.skillId ?? grant?.rulesId ?? "").trim();
 	if (direct) return direct;
 	const document = resolvedDocument(grant);
-	return String(document?.system?.rulesId ?? "").trim();
+	return String(document?.system?.skillId ?? document?.system?.rulesId ?? "").trim();
 }
 
 function grantBaseName(grant) {
 	const document = resolvedDocument(grant);
-	return String(document?.name ?? grant?.name ?? grant?.rulesId ?? "").trim() || "—";
+	return String(document?.name ?? grant?.name ?? grant?.skillId ?? grant?.rulesId ?? "").trim() || "—";
 }
 
 function choiceBaseName(choice) {
