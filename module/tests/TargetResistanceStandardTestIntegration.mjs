@@ -27,6 +27,11 @@ const SOURCE_KIND = "standard-target-resistance";
  *   -> target TestResult remains fully editable/auditable
  *   -> procedure outcome is derived from the linked resistance result.
  *
+ * The request ChatMessage is deliberately spoken by the initiating Actor. It is
+ * the authoritative procedure card: Test + target while pending, and the final
+ * procedure SUCCESS/FAILURE after the target resistance resolves. The target's
+ * separate TestResult card shows only that Actor's actual resistance Test.
+ *
  * ActorTestRequestWorkflow already owns socket authority and the shared
  * Automatic GM Rolls policy for Actors with no non-GM OWNER.
  *
@@ -118,22 +123,13 @@ async function createResistanceRequest({ initiator, target, test, options }) {
 	}
 
 	const characteristicId = resistanceCharacteristicId(test);
-	const characteristic = characteristicName(characteristicId);
-	const procedureName = test.name;
 
 	return ActorTestRequestWorkflow.create({
 		actor: target,
+		speakerActor: initiator,
 		testId: characteristicId,
-		title: localize(
-			`Resistance to ${procedureName} — ${characteristic}`,
-			`Obrona przed ${procedureName} — ${characteristic}`,
-		),
-		description: resistanceDescription(
-			procedureName,
-			characteristic,
-			initiator.name,
-			target.name,
-		),
+		title: String(test.name),
+		description: "",
 		testOptions: resistanceTestOptions(options),
 		source: {
 			kind: SOURCE_KIND,
@@ -187,48 +183,54 @@ function decorateResistanceRequest(message, html) {
 
 	const test = TestManager.get(source.procedureTestId);
 	const procedureName = test?.name ?? source.procedureTestId;
-	const characteristic = characteristicName(source.resistanceCharacteristicId);
+	const targetName = String(source.targetName ?? state.actorName ?? "—");
+	const existingButton = panel.querySelector("button");
 
-	const heading = panel.querySelector(":scope > strong");
-	if (heading) {
-		heading.textContent = localize(
-			`${procedureName} — resistance`,
-			`${procedureName} — obrona`,
-		);
-	}
-
-	const children = [...panel.children];
-	const description = children.find((entry) =>
-		entry instanceof HTMLElement &&
-		entry.tagName === "DIV" &&
-		!entry.classList.contains("combat-damage-context__status"),
+	panel.replaceChildren();
+	panel.classList.add(
+		"wfrp1e-test-card",
+		"wfrp1e-target-resistance-procedure-card",
 	);
-	if (description) {
-		description.textContent = resistanceDescription(
-			procedureName,
-			characteristic,
-			source.initiatorName,
-			source.targetName,
-		);
+	panel.classList.remove("is-success", "is-failure");
+
+	const header = document.createElement("div");
+	header.classList.add("wfrp1e-test-card__header", "has-test-identity");
+
+	const fields = document.createElement("div");
+	fields.classList.add("wfrp1e-test-card__identity-fields");
+	fields.append(
+		identityRow(localize("Test", "Test"), procedureName),
+		identityRow(localize("Target", "Cel"), targetName),
+	);
+	header.append(fields);
+
+	if (state.status === "resolved") {
+		const outcome = procedureOutcomeFromRequest(state);
+		if (outcome !== null) {
+			panel.classList.add(outcome ? "is-success" : "is-failure");
+			const status = document.createElement("span");
+			status.classList.add("wfrp1e-test-card__status");
+			status.textContent = outcomeLabel(outcome);
+			header.append(status);
+		}
+		panel.append(header);
+		return;
 	}
 
-	const button = panel.querySelector("button");
-	if (button instanceof HTMLButtonElement && state.status !== "resolved") {
-		button.textContent = localize(
-			`Roll resistance — ${characteristic}`,
-			`Rzuć obronę — ${characteristic}`,
+	panel.append(header);
+	if (existingButton instanceof HTMLButtonElement) {
+		existingButton.textContent = localize(
+			`${targetName} — Roll defence`,
+			`${targetName} — Rzuć obronę`,
 		);
-	}
-
-	if (state.status !== "resolved") return;
-	const outcome = procedureOutcomeFromRequest(state);
-	if (outcome === null) return;
-
-	const status = panel.querySelector(".combat-damage-context__status");
-	if (status) {
-		status.textContent = `${procedureName}: ${outcomeLabel(outcome)}`;
-		status.classList.toggle("is-applied", outcome);
-		status.classList.toggle("is-failure", !outcome);
+		if (!existingButton.disabled) {
+			existingButton.title = localize(
+				`Roll ${characteristicName(source.resistanceCharacteristicId)} resistance for ${targetName}.`,
+				`Rzuć test obronny ${characteristicName(source.resistanceCharacteristicId)} dla ${targetName}.`,
+			);
+		}
+		existingButton.classList.add("wfrp1e-target-resistance-procedure-action");
+		panel.append(existingButton);
 	}
 }
 
@@ -244,7 +246,6 @@ function decorateResistanceResult(message, html) {
 		? root
 		: root?.querySelector?.(".wfrp1e-test-card");
 	if (!(card instanceof HTMLElement)) return;
-	if (card.querySelector("[data-wfrp-target-resistance-summary]")) return;
 
 	const test = TestManager.get(source.procedureTestId);
 	const procedureName = test?.name ?? source.procedureTestId;
@@ -258,30 +259,6 @@ function decorateResistanceResult(message, html) {
 			`Obrona przed ${procedureName} — ${characteristic}`,
 		);
 	}
-
-	const resistanceSuccess = currentTestSuccess(state);
-	const procedureSuccess = !resistanceSuccess;
-	const summary = document.createElement("div");
-	summary.dataset.wfrpTargetResistanceSummary = "";
-	summary.classList.add("wfrp1e-test-card__breakdown");
-
-	const rule = document.createElement("div");
-	rule.textContent = localize(
-		`A successful ${characteristic} resistance means the target resists ${procedureName}; a failed resistance means ${procedureName} succeeds.`,
-		`Udany test obronny ${characteristic} oznacza, że cel opiera się procedurze ${procedureName}; nieudany test obronny oznacza sukces procedury ${procedureName}.`,
-	);
-
-	const outcome = document.createElement("strong");
-	outcome.textContent = `${localize(
-		"Procedure result",
-		"Wynik procedury",
-	)} — ${procedureName}: ${outcomeLabel(procedureSuccess)}`;
-
-	summary.append(rule, outcome);
-	card.querySelector(".wfrp1e-test-card__header")?.insertAdjacentElement(
-		"afterend",
-		summary,
-	);
 }
 
 function decorateManualFallback(message, html) {
@@ -369,18 +346,22 @@ function asActor(value) {
 	return null;
 }
 
+function identityRow(labelText, valueText) {
+	const row = document.createElement("div");
+	row.classList.add("wfrp1e-test-card__identity-row");
+	const label = document.createElement("span");
+	label.textContent = String(labelText ?? "");
+	const value = document.createElement("strong");
+	value.textContent = String(valueText ?? "—");
+	row.append(label, value);
+	return row;
+}
+
 function characteristicName(id) {
 	const normalized = String(id ?? "").trim().toLowerCase();
 	const key = `WFRP1ed.CHAR.${normalized === "m" ? "sp" : normalized}`;
 	const localized = game.i18n.localize(key);
 	return localized !== key ? localized : normalized.toUpperCase();
-}
-
-function resistanceDescription(procedureName, characteristic, initiatorName, targetName) {
-	return localize(
-		`${targetName} must make a ${characteristic} resistance Test against ${procedureName} initiated by ${initiatorName}. Success means the target resists; failure means ${procedureName} succeeds.`,
-		`${targetName} musi wykonać test obronny ${characteristic} przeciwko procedurze ${procedureName} rozpoczętej przez ${initiatorName}. Sukces testu obronnego oznacza opór celu; porażka oznacza sukces procedury ${procedureName}.`,
-	);
 }
 
 function outcomeLabel(success) {
