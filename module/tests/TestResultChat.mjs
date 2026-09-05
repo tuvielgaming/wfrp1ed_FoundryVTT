@@ -558,6 +558,7 @@ export class TestResultChat {
 		return {
 			version: 3,
 			actorUuid: String(result.actor?.uuid ?? ""),
+			testId: String(result.test.id ?? ""),
 			testName: String(result.test.name ?? result.test.id ?? "Test"),
 			roll: this._finiteNumber(result.roll, "roll"),
 			baseTarget: this._finiteNumber(
