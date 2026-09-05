@@ -1,4 +1,5 @@
 import { ActorRollPolicy } from "../core/ActorRollPolicy.mjs";
+import { decorateTestIdentity } from "../chat/TestResultIdentityChat.mjs";
 import { ActorTestRequestWorkflow } from "./ActorTestRequestWorkflow.mjs";
 import { PendingStandardTest } from "./PendingStandardTest.mjs";
 import { StandardTestDialog } from "./StandardTestDialog.mjs";
@@ -29,8 +30,8 @@ const SOURCE_KIND = "standard-target-resistance";
  *
  * The request ChatMessage is deliberately spoken by the initiating Actor. It is
  * the authoritative procedure card: Test + target while pending, and the final
- * procedure SUCCESS/FAILURE after the target resistance resolves. The target's
- * separate TestResult card shows only that Actor's actual resistance Test.
+ * procedure SUCCESS/FAILURE after the target resistance resolves. Its identity
+ * header reuses the exact shared renderer used by verified Test/Attack cards.
  *
  * ActorTestRequestWorkflow already owns socket authority and the shared
  * Automatic GM Rolls policy for Actors with no non-GM OWNER.
@@ -184,6 +185,7 @@ function decorateResistanceRequest(message, html) {
 	const test = TestManager.get(source.procedureTestId);
 	const procedureName = test?.name ?? source.procedureTestId;
 	const targetName = String(source.targetName ?? state.actorName ?? "—");
+	const initiator = ActorRollPolicy.actorFromUuidSync(source.initiatorActorUuid);
 	const existingButton = panel.querySelector("button");
 
 	panel.replaceChildren();
@@ -193,16 +195,20 @@ function decorateResistanceRequest(message, html) {
 	);
 	panel.classList.remove("is-success", "is-failure");
 
-	const header = document.createElement("div");
-	header.classList.add("wfrp1e-test-card__header", "has-test-identity");
+	const header = document.createElement("header");
+	header.classList.add("wfrp1e-test-card__header");
+	const title = document.createElement("h2");
+	title.textContent = procedureName;
+	header.append(title);
+	panel.append(header);
 
-	const fields = document.createElement("div");
-	fields.classList.add("wfrp1e-test-card__identity-fields");
-	fields.append(
-		identityRow(localize("Test", "Test"), procedureName),
-		identityRow(localize("Target", "Cel"), targetName),
-	);
-	header.append(fields);
+	/* Reuse the canonical portrait + Test/Target identity component instead of
+	 * maintaining a second look-alike card implementation for procedures. */
+	decorateTestIdentity(message, panel, {
+		actor: initiator,
+		displayName: procedureName,
+		targetName,
+	});
 
 	if (state.status === "resolved") {
 		const outcome = procedureOutcomeFromRequest(state);
@@ -213,11 +219,9 @@ function decorateResistanceRequest(message, html) {
 			status.textContent = outcomeLabel(outcome);
 			header.append(status);
 		}
-		panel.append(header);
 		return;
 	}
 
-	panel.append(header);
 	if (existingButton instanceof HTMLButtonElement) {
 		existingButton.textContent = localize(
 			`${targetName} — Roll defence`,
@@ -230,7 +234,10 @@ function decorateResistanceRequest(message, html) {
 			);
 		}
 		existingButton.classList.add("wfrp1e-target-resistance-procedure-action");
-		panel.append(existingButton);
+		const controls = document.createElement("div");
+		controls.classList.add("wfrp1e-test-card__breakdown");
+		controls.append(existingButton);
+		panel.append(controls);
 	}
 }
 
@@ -344,17 +351,6 @@ function asActor(value) {
 		return ActorRollPolicy.actorFromUuidSync(value);
 	}
 	return null;
-}
-
-function identityRow(labelText, valueText) {
-	const row = document.createElement("div");
-	row.classList.add("wfrp1e-test-card__identity-row");
-	const label = document.createElement("span");
-	label.textContent = String(labelText ?? "");
-	const value = document.createElement("strong");
-	value.textContent = String(valueText ?? "—");
-	row.append(label, value);
-	return row;
 }
 
 function characteristicName(id) {
