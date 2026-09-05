@@ -28,7 +28,10 @@ const TEST_RESULT_FLAG_KEY = "testResultState";
  *
  * The existing Standard Test definition and Skill resolver already own the
  * Dexterity-minus-Lock-Rating formula and repeated-acquisition bonuses. This
- * integration adds only the missing unskilled rule and user-facing validation.
+ * integration adds only the missing unskilled rule. The DialogV2 validation
+ * guard first verified for Lock Rating is also shared here by every required
+ * numeric Standard Test context field, so ordinary incomplete user input is
+ * handled inside the dialog instead of escaping as a rejected Promise.
  *
  * The current Standard Test context has a numeric Lock Rating but no stable
  * identity for the physical lock. Therefore the one-attempt limit is surfaced
@@ -51,7 +54,7 @@ function installPickLockDialogRules() {
 
 	StandardTestDialog._activateDialog = function (dialog, actor, entries) {
 		originalActivateDialog.call(this, dialog, actor, entries);
-		activateLockRatingValidation.call(this, dialog, entries);
+		activateRequiredContextValidation.call(this, dialog, entries);
 	};
 
 	StandardTestDialog._readForm = function (actor, form, entries) {
@@ -83,77 +86,141 @@ function installPickLockDialogRules() {
 	};
 }
 
-function activateLockRatingValidation(dialog, entries) {
+function activateRequiredContextValidation(dialog, entries) {
 	const root = dialog?.element;
 	const body = root?.querySelector?.(".standard-test-dialog-body");
 	const select = root?.querySelector?.('select[name="testId"]');
-	const lockInput = root?.querySelector?.('input[name="lockDifficulty"]');
 	const rollButton = root?.querySelector?.('button[data-action="roll"]');
 	const form = rollButton?.form ?? root?.querySelector?.("form");
 
 	if (
 		!(body instanceof HTMLElement) ||
-		!(select instanceof HTMLSelectElement) ||
-		!(lockInput instanceof HTMLInputElement)
+		!(select instanceof HTMLSelectElement)
 	) {
 		return;
 	}
+
+	const fieldDefinitions = [
+		{
+			tag: "requires-noise-level",
+			name: "noise",
+			englishLabel: "Base Listen chance",
+			polishLabel: "Bazowa szansa Słuchania",
+			positive: false,
+		},
+		{
+			tag: "requires-lock-rating",
+			name: "lockDifficulty",
+			englishLabel: "Lock Rating",
+			polishLabel: "Stopień trudności zamka",
+			positive: false,
+		},
+		{
+			tag: "requires-jump-height",
+			name: "jumpHeight",
+			englishLabel: "Jump height",
+			polishLabel: "Wysokość zeskoku",
+			positive: true,
+		},
+		{
+			tag: "requires-leap-gap",
+			name: "leapGap",
+			englishLabel: "Gap to clear",
+			polishLabel: "Dystans do pokonania",
+			positive: true,
+		},
+	]
+		.map((definition) => ({
+			...definition,
+			input: root?.querySelector?.(`input[name="${definition.name}"]`),
+		}))
+		.filter((definition) => definition.input instanceof HTMLInputElement);
 
 	const warning = document.createElement("div");
 	warning.classList.add("standard-test-context-value");
 	warning.dataset.standardValidationWarning = "";
 	warning.setAttribute("role", "alert");
+	warning.setAttribute("aria-live", "polite");
 	warning.hidden = true;
 	body.prepend(warning);
 
 	const currentEntry = () =>
 		entries.find((entry) => entry.id === select.value);
 
-	const validationMessage = () => {
+	const validationIssue = () => {
 		const entry = currentEntry();
-		if (!entry?.tags?.includes("requires-lock-rating")) return "";
+		const tags = entry?.tags ?? [];
 
-		const raw = String(lockInput.value ?? "").trim();
-		if (!raw) {
-			return localize(
-				"Enter the Lock Rating before rolling.",
-				"Wprowadź Stopień trudności zamka przed rzutem.",
-			);
+		for (const field of fieldDefinitions) {
+			if (!tags.includes(field.tag)) continue;
+
+			const raw = String(field.input.value ?? "").trim();
+			const label = localize(field.englishLabel, field.polishLabel);
+
+			if (!raw) {
+				return {
+					input: field.input,
+					message: localize(
+						`Enter ${field.englishLabel} before rolling.`,
+						`Uzupełnij pole „${field.polishLabel}” przed rzutem.`,
+					),
+				};
+			}
+
+			const value = Number(raw);
+			if (!Number.isFinite(value)) {
+				return {
+					input: field.input,
+					message: localize(
+						`Enter a valid numeric value for ${field.englishLabel} before rolling.`,
+						`Wprowadź prawidłową liczbę w polu „${field.polishLabel}” przed rzutem.`,
+					),
+				};
+			}
+
+			if (field.positive && value <= 0) {
+				return {
+					input: field.input,
+					message: localize(
+						`${field.englishLabel} must be greater than zero.`,
+						`Pole „${field.polishLabel}” musi mieć wartość większą od zera.`,
+					),
+				};
+			}
+
+			field.input.removeAttribute("aria-invalid");
 		}
 
-		if (!Number.isFinite(Number(raw))) {
-			return localize(
-				"Enter a valid numeric Lock Rating before rolling.",
-				"Wprowadź prawidłowy liczbowy Stopień trudności zamka przed rzutem.",
-			);
-		}
-
-		return "";
+		return null;
 	};
 
 	const clearWarning = () => {
 		warning.hidden = true;
 		warning.textContent = "";
-		lockInput.removeAttribute("aria-invalid");
+
+		for (const field of fieldDefinitions) {
+			field.input.removeAttribute("aria-invalid");
+		}
 	};
 
-	const showWarning = (message) => {
-		warning.textContent = message;
+	const showWarning = (issue) => {
+		clearWarning();
+		warning.textContent = issue.message;
 		warning.hidden = false;
-		lockInput.setAttribute("aria-invalid", "true");
-		lockInput.focus();
+		issue.input.setAttribute("aria-invalid", "true");
+		issue.input.focus();
 	};
 
 	const guardSubmission = (event) => {
-		const message = validationMessage();
-		if (!message) {
+		const issue = validationIssue();
+		if (!issue) {
 			clearWarning();
 			return true;
 		}
 
 		event.preventDefault();
 		event.stopImmediatePropagation();
-		showWarning(message);
+		showWarning(issue);
 		return false;
 	};
 
@@ -161,7 +228,8 @@ function activateLockRatingValidation(dialog, entries) {
 	 * DialogV2 routes action-button clicks through its own submit handler. The
 	 * capture listener stops an invalid Roll before that handler reaches the
 	 * existing _readForm validation, so ordinary missing input never becomes an
-	 * uncaught Promise rejection. The form listener also covers native submits.
+	 * uncaught Promise rejection. The form/keyboard guards cover alternate
+	 * submission paths without changing the defensive validation in _readForm.
 	 */
 	rollButton?.addEventListener("click", guardSubmission, true);
 	form?.addEventListener("submit", guardSubmission, true);
@@ -177,9 +245,13 @@ function activateLockRatingValidation(dialog, entries) {
 	);
 
 	select.addEventListener("change", clearWarning);
-	lockInput.addEventListener("input", () => {
-		if (!validationMessage()) clearWarning();
-	});
+
+	for (const field of fieldDefinitions) {
+		field.input.addEventListener("input", () => {
+			field.input.removeAttribute("aria-invalid");
+			if (!validationIssue()) clearWarning();
+		});
+	}
 }
 
 function hasPickLockSkill(actor) {
