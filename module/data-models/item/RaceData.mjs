@@ -172,6 +172,9 @@ function careerTableRowField() {
 function skillReferenceField() {
 	return new SchemaField({
 		uuid: textField(),
+		skillId: textField(),
+		/* Transitional persisted field. Race Skill consumers are being migrated
+		 * to skillId before legacy rulesId is removed from nested references. */
 		rulesId: textField(),
 		name: textField(),
 		specialisation: textField(),
