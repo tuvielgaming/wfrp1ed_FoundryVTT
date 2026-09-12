@@ -1,3 +1,5 @@
+import "./RaceMandatorySkillThresholdIntegration.mjs";
+
 const CORE_RACE_IDENTITIES = Object.freeze([
 	Object.freeze({ id: "", en: "Custom / no Core identity", pl: "Niestandardowa / bez tożsamości z zasad" }),
 	Object.freeze({ id: "human", en: "Human", pl: "Człowiek" }),
