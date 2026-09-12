@@ -450,7 +450,11 @@ function readInternal(event) {
 }
 
 function readFoundryData(event) {
-	try { return TextEditor.getDragEventData(event); } catch (_error) { return null; }
+	try {
+		return foundry.applications.ux.TextEditor.implementation.getDragEventData(event);
+	} catch (_error) {
+		return null;
+	}
 }
 
 function resolveItemSync(data) {
