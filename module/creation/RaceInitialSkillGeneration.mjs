@@ -263,7 +263,7 @@ function validateRaceInitialSkillDefinition(race, age, careerClass, table) {
 	if (gap) {
 		throw new RaceDefinitionError(race, localize(
 			`"Random Initial Skills" / ${classLabel(careerClass)} has a d100 gap at ${rangeText(gap.start, gap.end)}. Cover every result from 01 to 100.`,
-			`„Losowe Umiejętności Początkowe” / ${classLabel(careerClass)} ma lukę k100 w zakresie ${rangeText(gap.start, gap.end)}. Każdy wynik od 01 do 100 musi być pokryty.`,
+			`„Losowe Umiejętności Początkowe” / ${classLabel(careerClass)} ma lukę k100 w zakresie ${rangeText(gap.start, gap.end)}. Każdy wynik od 01 do 100 musi być pokryty dokładnie jeden raz.`,
 		));
 	}
 	const overlap = firstCoverageAboveOne(coverage);
@@ -421,17 +421,17 @@ async function resolveSkillReference(reference, race = null, location = "") {
 		throw new Error(detail);
 	}
 
-	const rulesId = String(reference?.rulesId ?? source?.system?.rulesId ?? "").trim();
+	const skillId = String(reference?.skillId ?? source?.system?.skillId ?? "").trim();
 	const specialisation = String(reference?.specialisation ?? source?.system?.specialisation ?? "").trim();
 	const name = String(reference?.name ?? source?.name ?? localize("Initial Skill", "Umiejętność Początkowa")).trim();
-	const identity = skillIdentity({ rulesId, specialisation, uuid, name });
+	const identity = skillIdentity({ skillId, specialisation, uuid, name });
 	if (!identity && race) {
 		throw new RaceDefinitionError(race, localize(
-			`${location}: Skill reference has no rulesId, UUID, or name and therefore has no stable identity. Re-add the Skill.`,
-			`${location}: odwołanie do Umiejętności nie ma rulesId, UUID ani nazwy, więc nie posiada stabilnej tożsamości. Dodaj Umiejętność ponownie.`,
+			`${location}: Skill reference has no skillId, UUID, or name and therefore has no stable identity. Re-add the Skill.`,
+			`${location}: odwołanie do Umiejętności nie ma skillId, UUID ani nazwy, więc nie posiada stabilnej tożsamości. Dodaj Umiejętność ponownie.`,
 		));
 	}
-	return { reference: foundry.utils.deepClone(reference ?? {}), source, rulesId, specialisation, name, identity };
+	return { reference: foundry.utils.deepClone(reference ?? {}), source, skillId, specialisation, name, identity };
 }
 
 function skillItemSource(entry, race, generationId) {
@@ -447,12 +447,12 @@ function skillItemSource(entry, race, generationId) {
 		source = {
 			name: entry.name,
 			type: "skill",
-			system: { rulesId: "", description: "", specialisation: "" },
+			system: { skillId: "", description: "", specialisation: "" },
 		};
 	}
 	source.name = entry.name || source.name;
 	source.system ??= {};
-	if (entry.rulesId) source.system.rulesId = entry.rulesId;
+	if (entry.skillId) source.system.skillId = entry.skillId;
 	if (entry.specialisation) source.system.specialisation = entry.specialisation;
 	source.flags ??= {};
 	source.flags[FLAG_SCOPE] ??= {};
@@ -483,17 +483,17 @@ function numericAge(actor) {
 
 function skillIdentityFromItem(item) {
 	return skillIdentity({
-		rulesId: item?.system?.rulesId,
+		skillId: item?.system?.skillId,
 		specialisation: item?.system?.specialisation,
 		uuid: item?.uuid,
 		name: item?.name,
 	});
 }
 
-function skillIdentity({ rulesId, specialisation, uuid, name }) {
+function skillIdentity({ skillId, specialisation, uuid, name }) {
 	const spec = normalize(specialisation);
-	const rid = normalize(rulesId);
-	if (rid) return `rules:${rid}::${spec}`;
+	const sid = normalize(skillId);
+	if (sid) return `skill:${sid}::${spec}`;
 	const stableUuid = String(uuid ?? "").trim();
 	if (stableUuid) return `uuid:${stableUuid}::${spec}`;
 	const normalizedName = normalize(name);
@@ -502,7 +502,7 @@ function skillIdentity({ rulesId, specialisation, uuid, name }) {
 
 function skillReferenceHasIdentity(reference) {
 	return Boolean(
-		String(reference?.rulesId ?? "").trim() ||
+		String(reference?.skillId ?? "").trim() ||
 		String(reference?.uuid ?? "").trim() ||
 		String(reference?.name ?? "").trim(),
 	);
