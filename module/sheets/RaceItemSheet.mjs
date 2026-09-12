@@ -455,7 +455,7 @@ function collectRanges(occupied, exact, output, greaterOrEqual = false) {
 }
 
 function skillReference(document) {
-	return { uuid: String(document.uuid ?? ""), rulesId: String(document.system?.rulesId ?? ""), name: String(document.name ?? ""), specialisation: String(document.system?.specialisation ?? "") };
+	return { uuid: String(document.uuid ?? ""), skillId: String(document.system?.skillId ?? ""), name: String(document.name ?? ""), specialisation: String(document.system?.specialisation ?? "") };
 }
 
 function documentReference(document) {
@@ -463,9 +463,9 @@ function documentReference(document) {
 }
 
 function sameReference(a, b) {
-	const aRules = String(a?.rulesId ?? "");
-	const bRules = String(b?.rulesId ?? "");
-	if (aRules && bRules) return aRules === bRules && String(a?.specialisation ?? "") === String(b?.specialisation ?? "");
+	const aSkillId = String(a?.skillId ?? "").trim() || String(a?.rulesId ?? "").trim();
+	const bSkillId = String(b?.skillId ?? "").trim() || String(b?.rulesId ?? "").trim();
+	if (aSkillId && bSkillId) return aSkillId === bSkillId && String(a?.specialisation ?? "") === String(b?.specialisation ?? "");
 	return String(a?.uuid ?? "") && String(a?.uuid ?? "") === String(b?.uuid ?? "");
 }
 
@@ -476,7 +476,7 @@ function grantDisplayName(grant) {
 }
 
 function referenceDisplayName(reference) {
-	return String(reference?.name ?? reference?.rulesId ?? "").trim() || "—";
+	return String(reference?.name ?? reference?.skillId ?? reference?.rulesId ?? "").trim() || "—";
 }
 
 async function deleteIndexed(document, path, rawIndex) {
