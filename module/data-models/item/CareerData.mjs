@@ -109,6 +109,7 @@ function choiceField() {
 function grantField() {
 	return new SchemaField({
 		uuid: textField(),
+		skillId: textField(),
 		rulesId: textField(),
 		name: textField(),
 		specialisation: textField(),
@@ -223,9 +224,11 @@ function simpleEntry(source, kind, index) {
 	const name = unwrapText(source?.name ?? source?.label ?? source?.value);
 	const uuid = text(source?.uuid);
 	const rulesId = text(source?.rulesId);
-	if (!name && !uuid && !rulesId) return null;
+	const skillId = kind === "skill" ? (text(source?.skillId) || rulesId) : text(source?.skillId);
+	if (!name && !uuid && !rulesId && !skillId) return null;
 	const grant = normalizeGrant({
 		uuid,
+		skillId,
 		rulesId,
 		name,
 		specialisation: source?.specialisation ?? source?.specialization,
@@ -265,9 +268,12 @@ function normalizeGrant(source, kind) {
 	const name = text(source.name);
 	const uuid = text(source.uuid);
 	const rulesId = text(source.rulesId);
-	if (!name && !uuid && !rulesId) return null;
+	const isSkill = kind === "skill" || text(source.documentSubtype) === "skill";
+	const skillId = isSkill ? (text(source.skillId) || rulesId) : text(source.skillId);
+	if (!name && !uuid && !rulesId && !skillId) return null;
 	return {
 		uuid,
+		skillId,
 		rulesId,
 		name,
 		specialisation: unwrapText(source.specialisation ?? source.specialization),
