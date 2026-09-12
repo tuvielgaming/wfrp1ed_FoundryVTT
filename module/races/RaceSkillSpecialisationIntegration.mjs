@@ -1,28 +1,42 @@
 import { coreSkillSpecialisationSuggestions } from "../core/CoreSkillSpecialisationCatalog.mjs";
+import { RACE_CAREER_CLASSES } from "../data-models/item/RaceData.mjs";
 import { RaceItemSheet } from "../sheets/RaceItemSheet.mjs";
 
 const { DialogV2 } = foundry.applications.api;
+const STYLE_ID = "wfrp1ed-race-random-skill-specialisation-style";
 
 install();
 
 /**
- * Race mandatory Skills use the same Skill-specialisation authoring contract as
- * Career Skills. The row gear always edits the racial Skill itself using one
- * consistent dialog, whether the Skill is standalone or belongs to a package.
- * Package membership/mode/choose remain owned by the package icon/editor.
+ * Race mandatory Skills and random initial-Skill table rows use one shared
+ * Skill-specialisation authoring contract. Mandatory rows additionally own the
+ * initial-Skill threshold; random-table rows edit only their Skill reference.
  */
 function install() {
 	if (RaceItemSheet.prototype.__wfrpRaceSkillSpecialisationInstalled === true) return;
+	installStyle();
 
 	const originalRender = RaceItemSheet.prototype._onRender;
 	RaceItemSheet.prototype._onRender = function raceSkillSpecialisationRender(context, options) {
 		originalRender.call(this, context, options);
 		const root = this.element;
 		if (!(root instanceof HTMLElement) || !this.isEditable) return;
+
+		decorateRandomSkillTables(root);
 		if (root.dataset.wfrpRaceSkillConfigBound === "true") return;
 		root.dataset.wfrpRaceSkillConfigBound = "true";
 
 		root.addEventListener("click", (event) => {
+			const randomTarget = event.target?.closest?.("[data-race-random-skill-configure]");
+			if (randomTarget instanceof HTMLElement) {
+				event.preventDefault();
+				event.stopImmediatePropagation();
+				const careerClass = String(randomTarget.dataset.careerClass ?? "");
+				const rowIndex = integer(randomTarget.dataset.index, -1);
+				void configureRandomTableSkill(this, careerClass, rowIndex).catch(reportError);
+				return;
+			}
+
 			const target = event.target?.closest?.(
 				"[data-race-entry-configure], [data-race-skill-configure]",
 			);
@@ -57,6 +71,36 @@ function install() {
 		"__wfrpRaceSkillSpecialisationInstalled",
 		{ value: true, configurable: false, enumerable: false },
 	);
+}
+
+function decorateRandomSkillTables(root) {
+	for (const deleteButton of root.querySelectorAll(
+		'[data-action="deleteTableRow"][data-table="skillTables"]',
+	)) {
+		if (!(deleteButton instanceof HTMLButtonElement)) continue;
+		const row = deleteButton.closest(".race-percentile-row");
+		if (!(row instanceof HTMLElement)) continue;
+		if (row.querySelector("[data-race-random-skill-configure]")) continue;
+
+		const careerClass = String(deleteButton.dataset.careerClass ?? "");
+		const rowIndex = integer(deleteButton.dataset.index, -1);
+		if (!RACE_CAREER_CLASSES.includes(careerClass) || rowIndex < 0) continue;
+
+		const controls = document.createElement("div");
+		controls.className = "race-percentile-row__skill-controls";
+
+		const configure = document.createElement("button");
+		configure.type = "button";
+		configure.className = "race-icon-button";
+		configure.dataset.raceRandomSkillConfigure = "true";
+		configure.dataset.careerClass = careerClass;
+		configure.dataset.index = String(rowIndex);
+		configure.title = localize("Configure Skill", "Konfiguruj Umiejętność");
+		configure.innerHTML = '<i class="fa-solid fa-gear"></i>';
+
+		deleteButton.before(controls);
+		controls.append(configure, deleteButton);
+	}
 }
 
 export async function configureRaceSkill(sheet, entryId, requestedChoiceId = "") {
@@ -96,6 +140,38 @@ export async function configureRaceSkill(sheet, entryId, requestedChoiceId = "")
 	if (!validateNoDuplicate(entries, entryIndex, choiceIndex, nextEntry)) return;
 	entries[entryIndex] = nextEntry;
 	await sheet.document.update({ "system.mandatorySkills": entries });
+}
+
+async function configureRandomTableSkill(sheet, careerClass, rowIndex) {
+	if (!sheet?.isEditable || !RACE_CAREER_CLASSES.includes(careerClass) || rowIndex < 0) return;
+	const tables = foundry.utils.deepClone(
+		sheet.document.system?.skillTables?.toObject?.() ?? sheet.document.system?.skillTables ?? {},
+	);
+	const rows = cloneArray(tables[careerClass]);
+	const row = rows[rowIndex];
+	if (!row?.grant) return;
+
+	const choice = {
+		id: "random-table-skill",
+		label: grantDisplayName(row.grant),
+		grants: [foundry.utils.deepClone(row.grant)],
+	};
+	const fields = specialisationFields([choice]);
+	const nextChoice = await randomSkillDialog(choice, fields);
+	if (!nextChoice?.grants?.[0]) return;
+	const nextGrant = nextChoice.grants[0];
+
+	if (rows.some((candidate, index) => index !== rowIndex && sameReference(candidate?.grant, nextGrant))) {
+		ui.notifications.warn(localize(
+			`${grantDisplayName(nextGrant)} is already listed in this random Skill table with the same specialisation.`,
+			`${grantDisplayName(nextGrant)} jest już wpisane w tej tabeli losowych Umiejętności z tą samą specjalizacją.`,
+		));
+		return;
+	}
+
+	rows[rowIndex] = { ...row, grant: nextGrant };
+	tables[careerClass] = rows;
+	await sheet.document.update({ "system.skillTables": tables });
 }
 
 async function skillDialog({ entry, choice, fields, packaged }) {
@@ -163,6 +239,47 @@ async function skillDialog({ entry, choice, fields, packaged }) {
 					minInitialSkills: Math.max(1, integer(data.get("minInitialSkills"), 1)),
 					choice: nextChoice,
 				};
+			},
+		}],
+	});
+}
+
+async function randomSkillDialog(choice, fields) {
+	const title = localize("Configure random racial Skill", "Konfiguruj losową rasową Umiejętność");
+	const effectiveFields = fields.length ? fields : [{
+		controlName: "skillSpecialisation_0_0",
+		choiceIndex: 0,
+		grantIndex: 0,
+		label: `${localize("Specialisation", "Specjalizacja")} — ${choiceBaseName(choice)}`,
+		value: String(choice?.grants?.[0]?.specialisation ?? "").trim(),
+		suggestions: [],
+	}];
+	const content = `
+		<div class="wfrp1ed career-entry-dialog wfrp1ed-race-skill-config">
+			<div class="wfrp1ed-career-skill-specialisations">
+				<p><strong>${escapeHtml(localize("Skill specialisation", "Specjalizacja Umiejętności"))}</strong></p>
+				${effectiveFields.map(specialisationFieldHtml).join("")}
+				<p class="hint">${escapeHtml(localize(
+					"This specialisation belongs to this random-table result only. Core suggestions copy a value into the free-text field.",
+					"Ta specjalizacja dotyczy tylko tego wyniku tabeli losowej. Propozycje z Księgi Głównej kopiują wartość do pola tekstowego.",
+				))}</p>
+			</div>
+		</div>`;
+
+	return DialogV2.wait({
+		window: { title },
+		content,
+		modal: true,
+		rejectClose: false,
+		render: (_event, dialog) => wireSuggestionSelectors(dialog, effectiveFields),
+		buttons: [{
+			action: "save",
+			label: localize("Save", "Zapisz"),
+			default: true,
+			callback: (_event, button) => {
+				const nextChoice = foundry.utils.deepClone(choice);
+				applySpecialisations([nextChoice], effectiveFields, new FormData(button.form));
+				return nextChoice;
 			},
 		}],
 	});
@@ -254,8 +371,8 @@ function validateNoDuplicate(entries, editedEntryIndex, editedChoiceIndex, edite
 }
 
 function sameReference(left, right) {
-	const leftSkillId = String(left?.skillId ?? left?.rulesId ?? "").trim();
-	const rightSkillId = String(right?.skillId ?? right?.rulesId ?? "").trim();
+	const leftSkillId = String(left?.skillId ?? "").trim() || String(left?.rulesId ?? "").trim();
+	const rightSkillId = String(right?.skillId ?? "").trim() || String(right?.rulesId ?? "").trim();
 	const leftSpec = normalize(left?.specialisation);
 	const rightSpec = normalize(right?.specialisation);
 	if (leftSkillId && rightSkillId) return leftSkillId === rightSkillId && leftSpec === rightSpec;
@@ -266,10 +383,10 @@ function sameReference(left, right) {
 }
 
 function skillReferenceId(grant) {
-	const direct = String(grant?.skillId ?? grant?.rulesId ?? "").trim();
+	const direct = String(grant?.skillId ?? "").trim() || String(grant?.rulesId ?? "").trim();
 	if (direct) return direct;
 	const document = resolvedDocument(grant);
-	return String(document?.system?.skillId ?? document?.system?.rulesId ?? "").trim();
+	return String(document?.system?.skillId ?? "").trim() || String(document?.system?.rulesId ?? "").trim();
 }
 
 function grantBaseName(grant) {
@@ -322,4 +439,23 @@ function reportError(error) {
 
 function localize(english, polish) {
 	return game.i18n.lang === "pl" ? polish : english;
+}
+
+function installStyle() {
+	if (document.getElementById(STYLE_ID)) return;
+	const style = document.createElement("style");
+	style.id = STYLE_ID;
+	style.textContent = `
+		.race-item-sheet .race-percentile-table[data-race-drop-zone="skillTable"] .race-percentile-row {
+			grid-template-columns: 52px 10px 52px minmax(0, 1fr) 60px;
+		}
+		.race-item-sheet .race-percentile-row__skill-controls {
+			display: flex;
+			align-items: center;
+			justify-content: flex-end;
+			gap: 2px;
+			width: 60px;
+		}
+	`;
+	document.head.append(style);
 }
