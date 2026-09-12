@@ -15,8 +15,8 @@ install();
  * Free row -> free row           -> package.
  * Free/package member -> package -> move into package.
  * Package member -> general area -> detach to standalone row.
- * Race random Skill table is a more specific external-drop target and is left
- * to RaceItemSheet's existing table authoring handler.
+ * Race random Skill table is a more specific external-drop target and remains
+ * persisted by RaceItemSheet after this layer validates the external drop.
  */
 function install() {
 	installStyle();
@@ -55,6 +55,7 @@ function decorateRace(sheet, root) {
 		row.dataset.raceChoiceId = String(entry?.choices?.[0]?.id ?? "");
 		row.draggable = true;
 		row.classList.add("wfrp1ed-skill-draggable");
+		ensureRaceThresholdMeta(row, entry);
 	}
 
 	for (const packageNode of root.querySelectorAll('.race-mandatory-compact-package[data-race-entry-id]')) {
@@ -74,6 +75,23 @@ function decorateRace(sheet, root) {
 		packageNode.querySelector(".race-mandatory-package-actions")?.remove();
 		ensurePackageDelete(packageNode, sheet, "race");
 	}
+}
+
+function ensureRaceThresholdMeta(row, entry) {
+	if (!(row instanceof HTMLElement) || !entry) return;
+	const threshold = Math.max(1, integer(entry?.minInitialSkills, 1));
+	let meta = row.querySelector(":scope > .career-compact-row__meta");
+	if (!(meta instanceof HTMLElement)) {
+		meta = document.createElement("span");
+		meta.className = "career-compact-row__meta";
+		const controls = row.querySelector(":scope > .career-compact-row__controls");
+		if (controls instanceof HTMLElement) controls.before(meta);
+		else row.append(meta);
+	}
+	meta.textContent = localize(
+		`from ${threshold} ${threshold === 1 ? "Skill" : "Skills"}`,
+		`od ${threshold} Umiejętności`,
+	);
 }
 
 function bindRoot(sheet, root, kind) {
@@ -125,10 +143,18 @@ function bindRoot(sheet, root, kind) {
 		const document = resolveItemSync(foundryData);
 		if (!(document instanceof foundry.documents.Item)) return;
 
-		/* Random initial-Skill tables are owned by RaceItemSheet. Do not consume
-		 * this drop; its existing handler appends the row and calculates the next
-		 * K100 range. We only provide the shared highlight above. */
-		if (kind === "race" && target.type === "random-table" && document.type === "skill") return;
+		/* RaceItemSheet remains the persistence owner for random initial-Skill
+		 * tables. This capture-phase layer only blocks a same-table duplicate; a
+		 * legal drop is deliberately allowed to continue to RaceItemSheet. */
+		if (kind === "race" && target.type === "random-table" && document.type === "skill") {
+			const grant = raceGrant(document);
+			if (raceRandomGrantPresent(sheet, target.careerClass, grant)) {
+				event.preventDefault();
+				event.stopImmediatePropagation();
+				notifyRandomTableDuplicate(grantName(grant));
+			}
+			return;
+		}
 		if (document.type !== "skill") return;
 
 		event.preventDefault();
@@ -162,7 +188,11 @@ function dropTarget(root, target, kind, { external }) {
 	if (kind === "race" && external) {
 		const randomTable = target.closest('[data-race-drop-zone="skillTable"]');
 		if (randomTable instanceof HTMLElement) {
-			return { type: "random-table", highlight: randomTable };
+			return {
+				type: "random-table",
+				careerClass: String(randomTable.dataset.careerClass ?? ""),
+				highlight: randomTable,
+			};
 		}
 	}
 
@@ -406,6 +436,12 @@ function grantPresent(entries, grant) {
 	));
 }
 
+function raceRandomGrantPresent(sheet, careerClass, grant) {
+	if (!careerClass) return false;
+	const rows = cloneArray(sheet.document.system?.skillTables?.[careerClass]);
+	return rows.some((row) => sameReference(row?.grant, grant));
+}
+
 function sameReference(left, right) {
 	const leftIdentity = String(left?.skillId ?? "").trim() || String(left?.rulesId ?? "").trim();
 	const rightIdentity = String(right?.skillId ?? "").trim() || String(right?.rulesId ?? "").trim();
@@ -440,6 +476,13 @@ function notifyDuplicate(kind, name) {
 	ui.notifications.info(kind === "career"
 		? localize(`${name} is already listed in this Career.`, `${name} jest już wpisane w tej Profesji.`)
 		: localize(`${name} is already listed in this Race.`, `${name} jest już wpisane w tej Rasie.`));
+}
+
+function notifyRandomTableDuplicate(name) {
+	ui.notifications.warn(localize(
+		`${name} is already listed in this random Skill table with the same specialisation.`,
+		`${name} jest już wpisane w tej tabeli losowych Umiejętności z tą samą specjalizacją.`,
+	));
 }
 
 function readInternal(event) {
@@ -524,6 +567,11 @@ function installStyle() {
 		}
 		.race-mandatory-compact-package .career-compact-package__delete { right: 42px; }
 		.race-mandatory-compact-package .career-compact-package__member .career-compact-row__controls { margin-left: auto; }
+		.race-item-sheet .race-mandatory-compact-package > .career-compact-package__meta {
+			left: auto;
+			right: 78px;
+			max-width: calc(100% - 90px);
+		}
 	`;
 	document.head.append(style);
 }
