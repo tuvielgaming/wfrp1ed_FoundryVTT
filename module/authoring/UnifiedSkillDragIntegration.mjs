@@ -390,7 +390,7 @@ function careerGrant(document) {
 function raceGrant(document) {
 	return {
 		uuid: String(document.uuid ?? ""),
-		rulesId: String(document.system?.rulesId ?? ""),
+		skillId: String(document.system?.skillId ?? ""),
 		name: String(document.name ?? ""),
 		specialisation: String(document.system?.specialisation ?? document.system?.specialization ?? ""),
 	};
@@ -407,16 +407,16 @@ function grantPresent(entries, grant) {
 }
 
 function sameReference(left, right) {
-	const leftRules = String(left?.rulesId ?? "");
-	const rightRules = String(right?.rulesId ?? "");
+	const leftIdentity = String(left?.skillId ?? "").trim() || String(left?.rulesId ?? "").trim();
+	const rightIdentity = String(right?.skillId ?? "").trim() || String(right?.rulesId ?? "").trim();
 	const leftSpec = String(left?.specialisation ?? "");
 	const rightSpec = String(right?.specialisation ?? "");
-	if (leftRules && rightRules) return leftRules === rightRules && leftSpec === rightSpec;
+	if (leftIdentity && rightIdentity) return leftIdentity === rightIdentity && leftSpec === rightSpec;
 	return Boolean(String(left?.uuid ?? "")) && String(left?.uuid ?? "") === String(right?.uuid ?? "") && leftSpec === rightSpec;
 }
 
 function grantName(grant) {
-	const name = String(grant?.name ?? grant?.rulesId ?? "").trim() || "—";
+	const name = String(grant?.name ?? grant?.skillId ?? grant?.rulesId ?? "").trim() || "—";
 	const spec = String(grant?.specialisation ?? "").trim();
 	return spec ? `${name} (${spec})` : name;
 }
