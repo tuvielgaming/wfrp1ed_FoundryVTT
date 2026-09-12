@@ -1,4 +1,5 @@
 import { CareerData } from "../data-models/item/CareerData.mjs";
+import "./CareerSkillIdentityMigration.mjs";
 
 const { TypeDataModel } = foundry.abstract;
 
