@@ -40,29 +40,100 @@ export class ExperienceLedgerService {
 			));
 		}
 
-		const now = Date.now();
-		const ledger = ExperienceTransactionService.ledger(actor);
-		const event = {
-			id: foundry.utils.randomID(),
+		const entry = manualEntry({
 			kind: "experience-adjustment",
-			state: "committed",
 			amount: signedAmount,
 			description: label,
-			createdAt: now,
-			userId: String(game.user?.id ?? ""),
-		};
-		const entry = {
-			id: foundry.utils.randomID(),
-			kind: "manual-experience",
-			createdAt: now,
-			committedAt: now,
-			userId: String(game.user?.id ?? ""),
-			events: [event],
-		};
+		});
+		const ledger = ExperienceTransactionService.ledger(actor);
 		ledger.push(entry);
 
 		await actor.update({
 			"system.experience.totalAwarded": nextTotal,
+			[`flags.${FLAG_SCOPE}.${LEDGER_FLAG}`]: ledger,
+		});
+		return foundry.utils.deepClone(entry);
+	}
+
+	/**
+	 * Audit a direct GM edit of the Total field. This is mechanically the same
+	 * signed change to totalAwarded as addAdjustment, but the generated label
+	 * records that the compact sheet field itself was used as a correction.
+	 */
+	static async setTotal(actor, nextValue) {
+		assertCharacter(actor);
+		assertGameMaster();
+
+		const experience = actor.system?.experience ?? {};
+		const previous = nonNegativeInteger(experience.totalAwarded);
+		const spent = nonNegativeInteger(experience.spent);
+		const next = nonNegativeInteger(nextValue);
+		if (next < spent) {
+			throw new Error(localize(
+				`Total Experience cannot be lower than already spent Experience (${spent}).`,
+				`Całkowite Punkty Doświadczenia nie mogą być niższe od już wydanych (${spent}).`,
+			));
+		}
+		if (next === previous) return null;
+
+		const delta = next - previous;
+		const entry = manualEntry({
+			kind: "experience-adjustment",
+			amount: delta,
+			description: localize(
+				`GM Total XP correction: ${previous} → ${next}`,
+				`Korekta MG Całkowitych PD: ${previous} → ${next}`,
+			),
+			source: "sheet-total",
+		});
+		const ledger = ExperienceTransactionService.ledger(actor);
+		ledger.push(entry);
+
+		await actor.update({
+			"system.experience.totalAwarded": next,
+			[`flags.${FLAG_SCOPE}.${LEDGER_FLAG}`]: ledger,
+		});
+		return foundry.utils.deepClone(entry);
+	}
+
+	/**
+	 * Audit a direct GM edit of Current XP without pretending that XP was newly
+	 * awarded. Current = Total - Spent, so this changes spent while Total remains
+	 * fixed. The signed event amount describes the visible Current-XP delta.
+	 */
+	static async setCurrent(actor, nextValue) {
+		assertCharacter(actor);
+		assertGameMaster();
+
+		const experience = actor.system?.experience ?? {};
+		const total = nonNegativeInteger(experience.totalAwarded);
+		const previousSpent = nonNegativeInteger(experience.spent);
+		const previous = Math.max(0, total - previousSpent);
+		const next = nonNegativeInteger(nextValue);
+		if (next > total) {
+			throw new Error(localize(
+				"Current Experience cannot exceed Total Experience.",
+				"Aktualne Punkty Doświadczenia nie mogą przekraczać Całkowitych Punktów Doświadczenia.",
+			));
+		}
+		if (next === previous) return null;
+
+		const nextSpent = total - next;
+		const delta = next - previous;
+		const entry = manualEntry({
+			kind: "experience-balance-adjustment",
+			amount: delta,
+			description: localize(
+				`GM Current XP correction: ${previous} → ${next}`,
+				`Korekta MG Aktualnych PD: ${previous} → ${next}`,
+			),
+			source: "sheet-current",
+		});
+		const ledger = ExperienceTransactionService.ledger(actor);
+		ledger.push(entry);
+
+		await actor.update({
+			"system.experience.spent": nextSpent,
 			[`flags.${FLAG_SCOPE}.${LEDGER_FLAG}`]: ledger,
 		});
 		return foundry.utils.deepClone(entry);
@@ -106,6 +177,28 @@ export class ExperienceLedgerService {
 
 		await actor.update({ [`flags.${FLAG_SCOPE}.${LEDGER_FLAG}`]: ledger });
 	}
+}
+
+function manualEntry({ kind, amount, description, source = "manual-log" }) {
+	const now = Date.now();
+	const event = {
+		id: foundry.utils.randomID(),
+		kind,
+		state: "committed",
+		amount: integer(amount),
+		description: String(description ?? "").trim(),
+		source,
+		createdAt: now,
+		userId: String(game.user?.id ?? ""),
+	};
+	return {
+		id: foundry.utils.randomID(),
+		kind: "manual-experience",
+		createdAt: now,
+		committedAt: now,
+		userId: String(game.user?.id ?? ""),
+		events: [event],
+	};
 }
 
 function assertGameMaster() {
