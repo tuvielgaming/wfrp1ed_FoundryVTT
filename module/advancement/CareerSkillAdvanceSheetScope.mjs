@@ -57,6 +57,7 @@ CareerProgression.purchaseSkill = async function transactionAwareCareerSkillPurc
 			skillItemId: skill.id,
 			skillUuid: skill.uuid,
 		});
+		void actor.sheet?.render?.();
 		return Object.freeze({
 			...result,
 			experienceEventId: prepared.id,
