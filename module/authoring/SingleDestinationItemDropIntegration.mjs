@@ -149,7 +149,7 @@ function itemIdentity(item) {
 
 function draggedItemSync(event) {
 	let data;
-	try { data = foundry.applications.ux.TextEditor.getDragEventData(event) ?? {}; }
+	try { data = foundry.applications.ux.TextEditor.implementation.getDragEventData(event) ?? {}; }
 	catch (_error) { return null; }
 	if (String(data?.type ?? "") !== "Item") return null;
 	const uuid = String(data?.uuid ?? "").trim();
