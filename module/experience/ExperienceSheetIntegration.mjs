@@ -2,6 +2,7 @@ import "../advancement/CharacteristicAdvanceSheetScope.mjs";
 import "../advancement/CareerSkillAdvanceSheetScope.mjs";
 import "../advancement/CareerTransferAdvanceSheetScope.mjs";
 import "./ExperienceTransactionIndicatorIntegration.mjs";
+import "./ExperienceAwardChatIntegration.mjs";
 import { ExperienceLedgerService } from "./ExperienceLedgerService.mjs";
 import { ExperienceLogWindow } from "./ExperienceLogWindow.mjs";
 
