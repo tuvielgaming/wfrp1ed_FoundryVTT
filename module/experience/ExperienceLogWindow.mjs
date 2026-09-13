@@ -5,6 +5,9 @@ const {
 	HandlebarsApplicationMixin,
 } = foundry.applications.api;
 
+const FLAG_SCOPE = "wfrp1ed";
+const LEDGER_FLAG = "experienceLedger";
+
 export class ExperienceLogWindow extends HandlebarsApplicationMixin(ApplicationV2) {
 	static #instances = new Map();
 
@@ -99,6 +102,28 @@ export class ExperienceLogWindow extends HandlebarsApplicationMixin(ApplicationV
 			ExperienceLogWindow.#instances.delete(this.actor.uuid);
 		}
 	}
+}
+
+/* Keep an already-open Experience Log synchronized with its Actor. The window
+ * is deliberately refreshed only for changes which can alter its visible
+ * summary or committed ledger, rather than on every unrelated Actor update. */
+Hooks.on("updateActor", (actor, changes) => {
+	if (!isCharacter(actor) || !experienceLogAffected(changes)) return;
+	void ExperienceLogWindow.refresh(actor).catch((error) => {
+		console.error("WFRP1ED | Unable to refresh Experience Log.", error);
+	});
+});
+
+function experienceLogAffected(changes) {
+	if (!changes || typeof changes !== "object") return false;
+	if (foundry.utils.getProperty(changes, "system.experience") !== undefined) return true;
+	if (Object.hasOwn(changes, "system.experience")) return true;
+	if (Object.keys(changes).some((key) => key.startsWith("system.experience."))) return true;
+
+	const ledgerPath = `flags.${FLAG_SCOPE}.${LEDGER_FLAG}`;
+	if (foundry.utils.getProperty(changes, ledgerPath) !== undefined) return true;
+	if (Object.hasOwn(changes, ledgerPath)) return true;
+	return Object.keys(changes).some((key) => key.startsWith(`${ledgerPath}.`));
 }
 
 function transactionPresentation(actor, entry) {
