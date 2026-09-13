@@ -103,6 +103,37 @@
 	pointer-events: none;
 }
 
+/* The Current Career field already has its own right-edge interaction badge.
+ * Keep the transaction marker out of that reserved area and preserve the exact
+ * normal header-field input geometry. Only the input receives the green tint;
+ * the surrounding positioned label remains visually/layout-identical. */
+.wfrp1ed-classic-sheet .header-field--current-career.is-experience-transaction-purchase {
+	background: transparent !important;
+	box-shadow: none;
+}
+
+.wfrp1ed-classic-sheet .header-field--current-career.is-experience-transaction-purchase > input {
+	display: block;
+	width: 100%;
+	height: 100%;
+	margin: 0;
+	padding: 2px 6px;
+	background-color: rgb(86 160 92 / 18%) !important;
+	box-shadow: inset 0 0 0 1px rgb(42 112 48 / 55%);
+	font-size: 17px;
+	font-weight: 700;
+	line-height: 1.1;
+	text-align: center;
+}
+
+.wfrp1ed-classic-sheet .header-field--current-career > .experience-transaction-purchase-badge {
+	left: 3px;
+	right: auto;
+	top: 50%;
+	transform: translateY(-50%);
+	z-index: 3;
+}
+
 /* Magic Points use the same Current/Total ledger language as Experience, but
  * fit inside the smaller printed Magic Points box on page two. */
 .wfrp1ed-classic-sheet .wfrp1ed-magic-points-panel {
