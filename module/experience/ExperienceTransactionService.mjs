@@ -4,6 +4,7 @@ const FLAG_SCOPE = "wfrp1ed";
 const TRANSACTION_FLAG = "experienceTransaction";
 const LEDGER_FLAG = "experienceLedger";
 const CAREER_GRANT_FLAG = "careerGrant";
+const LEGACY_CAREER_TRANSACTION_FLAG = "careerProgressionTransaction";
 const VERSION = 1;
 
 const sessions = new Map();
@@ -128,6 +129,46 @@ export class ExperienceTransactionService {
 		return foundry.utils.deepClone(event);
 	}
 
+	static async prepareCareerTransfer(actor, data = {}) {
+		assertCharacter(actor);
+		const transaction = await ensureOpenTransaction(actor);
+		const event = {
+			id: foundry.utils.randomID(),
+			kind: "career-transfer",
+			state: "prepared",
+			fromCareerItemId: String(data.fromCareerItemId ?? ""),
+			targetCareerUuid: String(data.targetCareerUuid ?? ""),
+			targetCareerName: String(data.targetCareerName ?? ""),
+			careerItemIdsBefore: [...(actor.items ?? [])]
+				.filter((item) => item?.type === "career")
+				.map((item) => String(item.id ?? ""))
+				.filter(Boolean),
+			detailsBefore: cloneDetails(actor),
+			schemeBefore: characteristicCareerSnapshot(actor),
+			spentBefore: nonNegativeInteger(actor.system?.experience?.spent),
+			createdAt: Date.now(),
+		};
+		transaction.events.push(event);
+		await actor.update({ [`flags.${FLAG_SCOPE}.${TRANSACTION_FLAG}`]: transaction });
+		return foundry.utils.deepClone(event);
+	}
+
+	static async markCareerTransferApplied(actor, eventId, data = {}) {
+		const transaction = requireOpenTransaction(actor);
+		const event = findEvent(transaction, eventId);
+		if (!event || event.kind !== "career-transfer") return null;
+		event.state = "applied";
+		event.appliedAt = Date.now();
+		event.toCareerItemId = String(data.toCareerItemId ?? "");
+		event.toCareerUuid = String(data.toCareerUuid ?? "");
+		event.cost = nonNegativeInteger(data.cost);
+		event.policy = String(data.policy ?? "");
+		event.spentAfter = nonNegativeInteger(data.spentAfter);
+		event.createdCareer = data.createdCareer === true;
+		await actor.update({ [`flags.${FLAG_SCOPE}.${TRANSACTION_FLAG}`]: transaction });
+		return foundry.utils.deepClone(event);
+	}
+
 	static async cancelPreparedEvent(actor, eventId) {
 		const transaction = this.current(actor);
 		if (transaction?.state !== "open") return;
@@ -244,8 +285,6 @@ export class ExperienceTransactionService {
 			));
 		}
 
-		/* Delete first. If the following Actor update fails, the still-open
-		 * transaction remains recoverable and its baseline XP is authoritative. */
 		await actor.deleteEmbeddedDocuments("Item", [itemId]);
 		events[eventIndex] = {
 			...event,
@@ -258,6 +297,112 @@ export class ExperienceTransactionService {
 			"system.experience.spent": currentSpent - cost,
 			[`flags.${FLAG_SCOPE}.${TRANSACTION_FLAG}`]: transaction,
 		});
+		return foundry.utils.deepClone(events[eventIndex]);
+	}
+
+	static careerTransferUndoPreview(actor) {
+		const transaction = this.current(actor);
+		if (transaction?.state !== "open") return null;
+		const events = cloneArray(transaction.events);
+		for (let index = events.length - 1; index >= 0; index -= 1) {
+			const event = events[index];
+			if (event?.kind !== "career-transfer" || event?.state !== "applied") continue;
+			const dependent = events.slice(index + 1).filter((candidate) => candidate?.state === "applied");
+			return {
+				event: foundry.utils.deepClone(event),
+				dependentCount: dependent.length,
+				refund: Math.max(0, nonNegativeInteger(actor.system?.experience?.spent) - nonNegativeInteger(event.spentBefore)),
+			};
+		}
+		return null;
+	}
+
+	static async undoCareerTransfer(actor) {
+		assertCharacter(actor);
+		const transaction = requireOpenTransaction(actor);
+		const events = cloneArray(transaction.events);
+		let eventIndex = -1;
+		for (let index = events.length - 1; index >= 0; index -= 1) {
+			if (events[index]?.kind === "career-transfer" && events[index]?.state === "applied") {
+				eventIndex = index;
+				break;
+			}
+		}
+		if (eventIndex < 0) {
+			throw new Error(localize(
+				"The current Career was not purchased in this Experience transaction.",
+				"Aktualna Profesja nie została wykupiona w tej transakcji Punktów Doświadczenia.",
+			));
+		}
+
+		const event = events[eventIndex];
+		const toCareerItemId = String(event.toCareerItemId ?? "");
+		const fromCareerItemId = String(event.fromCareerItemId ?? "");
+		if (!fromCareerItemId || !actor.items?.has?.(fromCareerItemId)) {
+			throw new Error(localize(
+				"The previous Career no longer exists on the character, so the Career change cannot be safely undone.",
+				"Poprzednia Profesja nie istnieje już na postaci, więc zmiany Profesji nie można bezpiecznie cofnąć.",
+			));
+		}
+
+		const deleteSkillIds = [];
+		const characteristicUpdates = {};
+		for (let index = events.length - 1; index > eventIndex; index -= 1) {
+			const candidate = events[index];
+			if (candidate?.state !== "applied") continue;
+			if (candidate.kind === "career-skill") {
+				const itemId = String(candidate.skillItemId ?? "");
+				if (itemId && actor.items?.has?.(itemId)) deleteSkillIds.push(itemId);
+			} else if (candidate.kind === "characteristic-advance") {
+				const storageKey = String(candidate.storageKey ?? "");
+				const currentPurchased = nonNegativeInteger(actor.system?.characteristics?.[storageKey]?.purchased);
+				if (storageKey && currentPurchased > 0) {
+					characteristicUpdates[`system.characteristics.${storageKey}.purchased`] = Math.max(
+						0,
+						(characteristicUpdates[`system.characteristics.${storageKey}.purchased`] ?? currentPurchased) - 1,
+					);
+				}
+			}
+			events[index] = {
+				...candidate,
+				state: "reverted",
+				revertedAt: Date.now(),
+				revertedBy: String(game.user?.id ?? ""),
+				revertedByCareerTransfer: event.id,
+			};
+		}
+
+		if (deleteSkillIds.length) {
+			await actor.deleteEmbeddedDocuments("Item", [...new Set(deleteSkillIds)]);
+		}
+		if (event.createdCareer === true && toCareerItemId && actor.items?.has?.(toCareerItemId)) {
+			await actor.deleteEmbeddedDocuments("Item", [toCareerItemId]);
+		}
+
+		const careerUpdates = [...(actor.items ?? [])]
+			.filter((item) => item?.type === "career" && actor.items?.has?.(item.id))
+			.map((item) => ({
+				_id: item.id,
+				"system.current": String(item.id) === fromCareerItemId,
+			}));
+		if (careerUpdates.length) await actor.updateEmbeddedDocuments("Item", careerUpdates);
+
+		events[eventIndex] = {
+			...event,
+			state: "reverted",
+			revertedAt: Date.now(),
+			revertedBy: String(game.user?.id ?? ""),
+		};
+		transaction.events = events;
+		const update = {
+			...characteristicUpdates,
+			...characteristicCareerUpdate(event.schemeBefore),
+			"system.details": foundry.utils.deepClone(event.detailsBefore ?? {}),
+			"system.experience.spent": nonNegativeInteger(event.spentBefore),
+			[`flags.${FLAG_SCOPE}.${TRANSACTION_FLAG}`]: transaction,
+			[`flags.${FLAG_SCOPE}.${LEGACY_CAREER_TRANSACTION_FLAG}`]: null,
+		};
+		await actor.update(update);
 		return foundry.utils.deepClone(events[eventIndex]);
 	}
 
@@ -302,6 +447,13 @@ export class ExperienceTransactionService {
 			await actor.deleteEmbeddedDocuments("Item", skillIds);
 		}
 
+		const careerTransfer = cloneArray(current.events).find((event) =>
+			event?.kind === "career-transfer" && event?.state !== "reverted",
+		) ?? null;
+		if (careerTransfer) {
+			await restoreCareerTransferRecovery(actor, current, careerTransfer);
+		}
+
 		const update = {};
 		const baselines = new Map();
 		for (const event of cloneArray(current.events)) {
@@ -312,6 +464,11 @@ export class ExperienceTransactionService {
 		}
 		for (const [storageKey, purchased] of baselines) {
 			update[`system.characteristics.${storageKey}.purchased`] = purchased;
+		}
+		if (careerTransfer) {
+			Object.assign(update, characteristicCareerUpdate(careerTransfer.schemeBefore));
+			update["system.details"] = foundry.utils.deepClone(careerTransfer.detailsBefore ?? {});
+			update[`flags.${FLAG_SCOPE}.${LEGACY_CAREER_TRANSACTION_FLAG}`] = null;
 		}
 		update["system.experience.spent"] = nonNegativeInteger(current.spentBefore);
 		update[`flags.${FLAG_SCOPE}.${TRANSACTION_FLAG}`] = {
@@ -406,10 +563,6 @@ function careerSkillRollbackIds(actor, transaction) {
 	const careerIds = new Set(events.map((event) => String(event.careerItemId ?? "")).filter(Boolean));
 	const openedAt = Number(transaction.openedAt) || 0;
 
-	/* A prepared event may have crashed after Item creation but before the Item
-	 * id was written back to the transaction. CareerProgression already stamps
-	 * every purchased Skill with careerGrant metadata, so the transaction's
-	 * sheet-open timestamp gives us a durable fallback locator. */
 	for (const item of actor.items ?? []) {
 		if (item?.type !== "skill") continue;
 		const grant = item.getFlag?.(FLAG_SCOPE, CAREER_GRANT_FLAG);
@@ -419,6 +572,67 @@ function careerSkillRollbackIds(actor, transaction) {
 		ids.add(String(item.id ?? ""));
 	}
 	return [...ids].filter(Boolean);
+}
+
+async function restoreCareerTransferRecovery(actor, transaction, baseline) {
+	const baselineIds = new Set(
+		Array.isArray(baseline.careerItemIdsBefore) ? baseline.careerItemIdsBefore.map(String) : [],
+	);
+	const deleteIds = new Set();
+	for (const event of cloneArray(transaction.events)) {
+		if (event?.kind !== "career-transfer" || event?.state === "reverted") continue;
+		const toId = String(event.toCareerItemId ?? "");
+		if (event.createdCareer === true && toId && actor.items?.has?.(toId)) deleteIds.add(toId);
+	}
+
+	const activeCareer = [...(actor.items ?? [])].find((item) =>
+		item?.type === "career" && readBoolean(item.system?.current),
+	);
+	if (
+		activeCareer?.id &&
+		!baselineIds.has(String(activeCareer.id)) &&
+		String(activeCareer.id) !== String(baseline.fromCareerItemId ?? "")
+	) {
+		deleteIds.add(String(activeCareer.id));
+	}
+	if (deleteIds.size) await actor.deleteEmbeddedDocuments("Item", [...deleteIds]);
+
+	const fromCareerItemId = String(baseline.fromCareerItemId ?? "");
+	const careerUpdates = [...(actor.items ?? [])]
+		.filter((item) => item?.type === "career" && actor.items?.has?.(item.id))
+		.map((item) => ({
+			_id: item.id,
+			"system.current": String(item.id) === fromCareerItemId,
+		}));
+	if (careerUpdates.length) await actor.updateEmbeddedDocuments("Item", careerUpdates);
+}
+
+function characteristicCareerSnapshot(actor) {
+	const snapshot = {};
+	for (const [storageKey, characteristic] of Object.entries(actor.system?.characteristics ?? {})) {
+		snapshot[storageKey] = nonNegativeInteger(characteristic?.career);
+	}
+	return snapshot;
+}
+
+function characteristicCareerUpdate(snapshot) {
+	const update = {};
+	for (const [storageKey, value] of Object.entries(snapshot ?? {})) {
+		update[`system.characteristics.${storageKey}.career`] = nonNegativeInteger(value);
+	}
+	return update;
+}
+
+function cloneDetails(actor) {
+	const systemSource = actor.system?.toObject?.() ?? foundry.utils.deepClone(actor.system ?? {});
+	return foundry.utils.deepClone(systemSource.details ?? {});
+}
+
+function readBoolean(value) {
+	if (value && typeof value === "object" && !Array.isArray(value) && Object.hasOwn(value, "value")) {
+		return value.value === true;
+	}
+	return value === true;
 }
 
 function sessionKey(actor, userId) {
