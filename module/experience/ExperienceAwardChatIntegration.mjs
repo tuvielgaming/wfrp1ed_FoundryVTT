@@ -15,7 +15,8 @@ Hooks.on("renderApplicationV2", (application, element) => {
 	const toolbar = element?.querySelector?.(".experience-log__toolbar");
 	if (!(toolbar instanceof HTMLElement) || toolbar.querySelector("[data-wfrp-create-xp-award]")) return;
 
-	const button = document.createElement("button");
+	const ownerDocument = toolbar.ownerDocument ?? document;
+	const button = ownerDocument.createElement("button");
 	button.type = "button";
 	button.dataset.wfrpCreateXpAward = "true";
 	button.innerHTML = `<i class="fas fa-gift" aria-hidden="true"></i><span>${localize("Award XP in chat", "Przyznaj PD przez czat")}</span>`;
@@ -193,10 +194,14 @@ function requestClaim(message, recipient) {
 function queueClaim(payload) {
 	const key = String(payload.messageId ?? "");
 	const previous = messageQueues.get(key) ?? Promise.resolve();
-	const next = previous.then(() => processClaim(payload)).catch((error) => sendResponse(payload, false, error?.message ?? String(error)));
-	messageQueues.set(key, next.finally(() => {
-		if (messageQueues.get(key) === next) messageQueues.delete(key);
-	}));
+	let queued;
+	queued = previous
+		.then(() => processClaim(payload))
+		.catch((error) => sendResponse(payload, false, error?.message ?? String(error)))
+		.finally(() => {
+			if (messageQueues.get(key) === queued) messageQueues.delete(key);
+		});
+	messageQueues.set(key, queued);
 }
 
 async function processClaim(payload) {
@@ -210,7 +215,7 @@ async function processClaim(payload) {
 	const user = game.users?.get(String(payload.requestUserId ?? ""));
 	if (!actor || !user || !canClaimActor(actor, user)) throw new Error(localize("You do not control this character.", "Nie kontrolujesz tej postaci."));
 
-	await grantAwardOnce(actor, state);
+	await grantAwardOnce(actor, state, message.id);
 	const latest = foundry.utils.deepClone(message.getFlag(FLAG_SCOPE, MESSAGE_FLAG_KEY));
 	const target = latest?.recipients?.find((entry) => String(entry.actorUuid ?? "") === String(payload.actorUuid ?? ""));
 	if (target && !target.claimedAt) {
@@ -222,7 +227,7 @@ async function processClaim(payload) {
 	sendResponse(payload, true, "");
 }
 
-async function grantAwardOnce(actor, state) {
+async function grantAwardOnce(actor, state, messageId) {
 	const awardId = String(state.awardId ?? "");
 	const ledger = ExperienceTransactionService.ledger(actor);
 	const existing = ledger.find((entry) => (entry.events ?? []).some((event) => String(event?.sourceAwardId ?? "") === awardId));
@@ -240,7 +245,7 @@ async function grantAwardOnce(actor, state) {
 		description: reason,
 		source: "chat-award",
 		sourceAwardId: awardId,
-		sourceMessageId: String(state.messageId ?? ""),
+		sourceMessageId: String(messageId ?? ""),
 		createdAt: now,
 		userId: String(game.user?.id ?? ""),
 	};
