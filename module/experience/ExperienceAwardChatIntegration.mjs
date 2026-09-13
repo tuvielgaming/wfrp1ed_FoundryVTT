@@ -62,7 +62,7 @@ async function createAwardFromDialog() {
 	if (!actors.length) throw new Error(localize("No player-owned characters are available.", "Brak postaci należących do graczy."));
 
 	const rows = actors.map((actor) => `
-		<label style="display:flex;gap:6px;align-items:center">
+		<label class="wfrp1ed-checkbox">
 			<input type="checkbox" name="actorUuid" value="${escapeHtml(actor.uuid)}">
 			<span>${escapeHtml(actor.name)}</span>
 		</label>`).join("");
