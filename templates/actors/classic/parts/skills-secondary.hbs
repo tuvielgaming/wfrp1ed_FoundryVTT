@@ -14,7 +14,7 @@
 						class="skill-name skill-name--career-offer"
 						data-career-skill-offer="{{skill.careerOfferKey}}"
 						aria-label="{{skill.displayName}} — {{skill.cost}} PD"
-						title="{{skill.careerName}} — {{skill.cost}} PD"
+						title="Ctrl/Cmd + {{#if (eq @root.lang 'pl')}}klik: kup{{else}}click: buy{{/if}}. {{skill.careerName}} — {{skill.cost}} {{#if (eq @root.lang 'pl')}}PD{{else}}XP{{/if}}"
 					>
 						{{skill.displayName}}
 					</button>
