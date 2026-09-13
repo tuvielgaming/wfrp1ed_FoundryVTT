@@ -246,8 +246,15 @@ function transactionPresentation(actor, entry, canEdit) {
 
 function eventPresentation(actor, entry, event, canEdit) {
 	const kind = String(event?.kind ?? "");
-	const manual = entry?.kind === "manual-experience" && kind === "experience-adjustment";
+	const manual = entry?.kind === "manual-experience" && [
+		"experience-adjustment",
+		"experience-balance-adjustment",
+	].includes(kind);
 	const signedAmount = manual ? integer(event?.amount) : -nonNegativeInteger(event?.cost);
+	const userEditable =
+		canEdit &&
+		kind === "experience-adjustment" &&
+		String(event?.source ?? "manual-log") === "manual-log";
 	return {
 		id: String(event?.id ?? ""),
 		kind,
@@ -255,7 +262,7 @@ function eventPresentation(actor, entry, event, canEdit) {
 		amount: signedAmount > 0 ? `+${signedAmount}` : String(signedAmount),
 		positive: signedAmount > 0,
 		negative: signedAmount < 0,
-		editable: canEdit && manual,
+		editable: userEditable,
 	};
 }
 
@@ -293,6 +300,7 @@ function manualEvent(actor, eventId) {
 		for (const event of entry?.events ?? []) {
 			if (
 				event?.kind === "experience-adjustment" &&
+				String(event?.source ?? "manual-log") === "manual-log" &&
 				String(event?.id ?? "") === String(eventId ?? "")
 			) return event;
 		}
