@@ -5,16 +5,32 @@
 		<div><span>{{ui.spent}}</span><strong>{{summary.spent}}</strong></div>
 	</header>
 
+	{{#if canEdit}}
+		<div class="experience-log__toolbar">
+			<button type="button" data-action="addAdjustment">
+				<i class="fas fa-plus" aria-hidden="true"></i>
+				<span>{{ui.add}}</span>
+			</button>
+		</div>
+	{{/if}}
+
 	{{#if hasTransactions}}
 		<div class="experience-log__transactions">
 			{{#each transactions as |transaction|}}
-				<section class="experience-log__transaction" data-transaction-id="{{transaction.id}}">
+				<section class="experience-log__transaction" data-transaction-id="{{transaction.id}}" data-transaction-kind="{{transaction.kind}}">
 					<header class="experience-log__transaction-date">{{transaction.date}}</header>
 					<div class="experience-log__events">
 						{{#each transaction.events as |event|}}
 							<div class="experience-log__event" data-event-id="{{event.id}}" data-event-kind="{{event.kind}}">
 								<span class="experience-log__event-label">{{event.label}}</span>
-								<strong class="experience-log__event-amount">{{event.amount}}</strong>
+								<div class="experience-log__event-actions">
+									<strong class="experience-log__event-amount{{#if event.positive}} experience-log__event-amount--positive{{/if}}{{#if event.negative}} experience-log__event-amount--negative{{/if}}">{{event.amount}}</strong>
+									{{#if event.editable}}
+										<button type="button" data-action="editAdjustment" data-event-id="{{event.id}}" title="{{../../ui.edit}}" aria-label="{{../../ui.edit}}">
+											<i class="fas fa-pen" aria-hidden="true"></i>
+										</button>
+									{{/if}}
+								</div>
 							</div>
 						{{/each}}
 					</div>
