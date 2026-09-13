@@ -6,6 +6,7 @@
 	"compatibility": {"minimum": 14,"verified": 14},
 	"authors": [{"name":"Tuviel"}],
 	"esmodules": [
+		"module/ui/TextEditorV14Compatibility.mjs",
 		"module/effects/WfrpActiveEffectCompatibility.mjs",
 		"module/settings/WfrpRuleSettings.mjs",
 		"module/loot/LootPileBootstrap.mjs",
@@ -40,6 +41,7 @@
 		"module/authoring/SkillAuthoringUxPolish.mjs",
 		"module/authoring/SkillCoreSpecialisationIntegration.mjs",
 		"module/careers/CareerProgressionIntegration.mjs",
+		"module/careers/CareerSkillOfferTooltipIntegration.mjs",
 		"module/careers/CareerCompletionIntegration.mjs",
 		"module/experience/ExperienceSheetIntegration.mjs",
 		"module/tests/TestResultAudienceVisibility.mjs",
