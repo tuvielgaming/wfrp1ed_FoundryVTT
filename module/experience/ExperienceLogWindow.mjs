@@ -188,7 +188,7 @@ async function adjustmentDialog({ title, amount, description, allowAmount }) {
 		? `<input type="number" name="amount" step="1" value="${integer(amount)}" required>`
 		: `<input type="number" value="${integer(amount)}" disabled>`;
 	const content = `
-		<div class="experience-ledger-dialog">
+		<div class="wfrp1ed experience-ledger-dialog">
 			<label>${escapeHtml(localize("Amount", "Wartość"))}
 				${amountControl}
 			</label>
