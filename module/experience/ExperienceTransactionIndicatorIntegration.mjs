@@ -16,6 +16,7 @@ Hooks.on("renderApplicationV2", (application, element) => {
 
 	markCharacteristicPurchases(actor, element);
 	markCareerSkillPurchases(actor, element);
+	markCareerTransfer(actor, element);
 });
 
 function markCharacteristicPurchases(actor, root) {
@@ -67,6 +68,27 @@ function markCareerSkillPurchases(actor, root) {
 	}
 }
 
+function markCareerTransfer(actor, root) {
+	const events = ExperienceTransactionService.activeEvents(actor, "career-transfer");
+	if (!events.length) return;
+	const latest = events.at(-1);
+	if (!latest) return;
+
+	const currentCareer = [...(actor.items ?? [])].find((item) =>
+		item?.type === "career" && readBoolean(item.system?.current),
+	);
+	if (!currentCareer || String(currentCareer.id) !== String(latest.toCareerItemId ?? "")) return;
+
+	const field = root.querySelector(".header-field--current-career");
+	if (!(field instanceof HTMLElement)) return;
+	field.classList.add(PURCHASE_CLASS);
+	field.dataset.experienceTransactionPurchases = "1";
+	appendBadge(field, 1, localize(
+		"Career changed in the current Experience transaction. Shift + click the current Career to undo the change.",
+		"Profesję zmieniono w bieżącej transakcji PD. Shift + kliknięcie aktualnej Profesji cofa zmianę.",
+	));
+}
+
 function appendBadge(container, count, title) {
 	if (container.querySelector(`.${BADGE_CLASS}`)) return;
 	const badge = document.createElement("span");
@@ -81,6 +103,13 @@ function appendBadge(container, count, title) {
 function normalizeCharacteristic(value) {
 	const key = String(value ?? "").trim().toLowerCase();
 	return key === "sp" ? "m" : key;
+}
+
+function readBoolean(value) {
+	if (value && typeof value === "object" && !Array.isArray(value) && Object.hasOwn(value, "value")) {
+		return value.value === true;
+	}
+	return value === true;
 }
 
 function localize(english, polish) {
