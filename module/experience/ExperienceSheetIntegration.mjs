@@ -2,6 +2,7 @@ import "../advancement/CharacteristicAdvanceSheetScope.mjs";
 import "../advancement/CareerSkillAdvanceSheetScope.mjs";
 import "../advancement/CareerTransferAdvanceSheetScope.mjs";
 import "./ExperienceTransactionIndicatorIntegration.mjs";
+import { ExperienceLedgerService } from "./ExperienceLedgerService.mjs";
 import { ExperienceLogWindow } from "./ExperienceLogWindow.mjs";
 
 const SHEET_SELECTOR = ".wfrp1ed-classic-sheet";
@@ -102,8 +103,9 @@ function wireExperienceField(actor, root, kind) {
 	const input = root.querySelector(`[data-wfrp-experience-${kind}]`);
 	if (!(input instanceof HTMLInputElement)) return;
 
-	/* Experience corrections are deliberately GM-only. Players can still see
-	 * both values, while normal purchases continue through the Actor API. */
+	/* Direct Experience corrections are deliberately GM-only. They remain
+	 * convenient on the printed sheet, but are now routed through the durable
+	 * ledger rather than silently mutating Actor totals. */
 	input.disabled = game.user?.isGM !== true;
 	if (input.disabled) return;
 
@@ -136,30 +138,12 @@ async function persistExperience(actor, kind, input) {
 
 	try {
 		if (kind === "current") {
-			if (next > ledger.totalAwarded) {
-				throw new Error(localize(
-					"Current Experience cannot exceed Total Experience.",
-					"Aktualne Punkty Doświadczenia nie mogą przekraczać Całkowitych Punktów Doświadczenia.",
-				));
-			}
-
-			await actor.update({
-				"system.experience.spent": ledger.totalAwarded - next,
-			});
+			await ExperienceLedgerService.setCurrent(actor, next);
 			return;
 		}
 
 		if (kind === "total") {
-			if (next < ledger.spent) {
-				throw new Error(localize(
-					`Total Experience cannot be lower than already spent Experience (${ledger.spent}).`,
-					`Całkowite Punkty Doświadczenia nie mogą być niższe od już wydanych (${ledger.spent}).`,
-				));
-			}
-
-			await actor.update({
-				"system.experience.totalAwarded": next,
-			});
+			await ExperienceLedgerService.setTotal(actor, next);
 		}
 	} catch (error) {
 		input.value = kind === "current"
