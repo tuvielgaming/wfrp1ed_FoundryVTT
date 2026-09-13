@@ -1,5 +1,6 @@
 import "../advancement/CharacteristicAdvanceSheetScope.mjs";
 import "../advancement/CareerSkillAdvanceSheetScope.mjs";
+import "../advancement/CareerTransferAdvanceSheetScope.mjs";
 import "./ExperienceTransactionIndicatorIntegration.mjs";
 
 const SHEET_SELECTOR = ".wfrp1ed-classic-sheet";
