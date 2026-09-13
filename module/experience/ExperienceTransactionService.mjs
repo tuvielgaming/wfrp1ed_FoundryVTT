@@ -3,6 +3,7 @@ import { ClassicActorSheet } from "../sheets/ClassicActorSheet.mjs";
 const FLAG_SCOPE = "wfrp1ed";
 const TRANSACTION_FLAG = "experienceTransaction";
 const LEDGER_FLAG = "experienceLedger";
+const CAREER_GRANT_FLAG = "careerGrant";
 const VERSION = 1;
 
 const sessions = new Map();
@@ -93,6 +94,40 @@ export class ExperienceTransactionService {
 		return foundry.utils.deepClone(event);
 	}
 
+	static async prepareCareerSkill(actor, data) {
+		assertCharacter(actor);
+		const transaction = await ensureOpenTransaction(actor);
+		const event = {
+			id: foundry.utils.randomID(),
+			kind: "career-skill",
+			state: "prepared",
+			careerItemId: String(data.careerItemId ?? ""),
+			careerUuid: String(data.careerUuid ?? ""),
+			offerKey: String(data.offerKey ?? ""),
+			skillIdentity: String(data.skillIdentity ?? ""),
+			sourceUuid: String(data.sourceUuid ?? ""),
+			cost: nonNegativeInteger(data.cost),
+			spentBefore: nonNegativeInteger(data.spentBefore),
+			spentAfter: nonNegativeInteger(data.spentAfter),
+			createdAt: Date.now(),
+		};
+		transaction.events.push(event);
+		await actor.update({ [`flags.${FLAG_SCOPE}.${TRANSACTION_FLAG}`]: transaction });
+		return foundry.utils.deepClone(event);
+	}
+
+	static async markCareerSkillApplied(actor, eventId, data = {}) {
+		const transaction = requireOpenTransaction(actor);
+		const event = findEvent(transaction, eventId);
+		if (!event || event.kind !== "career-skill") return null;
+		event.state = "applied";
+		event.appliedAt = Date.now();
+		event.skillItemId = String(data.skillItemId ?? "");
+		event.skillUuid = String(data.skillUuid ?? "");
+		await actor.update({ [`flags.${FLAG_SCOPE}.${TRANSACTION_FLAG}`]: transaction });
+		return foundry.utils.deepClone(event);
+	}
+
 	static async cancelPreparedEvent(actor, eventId) {
 		const transaction = this.current(actor);
 		if (transaction?.state !== "open") return;
@@ -169,6 +204,63 @@ export class ExperienceTransactionService {
 		return foundry.utils.deepClone(events[eventIndex]);
 	}
 
+	static async undoCareerSkill(actor, skillItemId) {
+		assertCharacter(actor);
+		const transaction = requireOpenTransaction(actor);
+		const events = cloneArray(transaction.events);
+		let eventIndex = -1;
+		for (let index = events.length - 1; index >= 0; index -= 1) {
+			const candidate = events[index];
+			if (
+				candidate?.kind === "career-skill" &&
+				candidate?.state === "applied" &&
+				String(candidate.skillItemId ?? "") === String(skillItemId ?? "")
+			) {
+				eventIndex = index;
+				break;
+			}
+		}
+		if (eventIndex < 0) {
+			throw new Error(localize(
+				"This Skill was not purchased in the current Experience transaction.",
+				"Ta Umiejętność nie została wykupiona w bieżącej transakcji Punktów Doświadczenia.",
+			));
+		}
+
+		const event = events[eventIndex];
+		const itemId = String(event.skillItemId ?? "");
+		if (!actor.items?.has?.(itemId)) {
+			throw new Error(localize(
+				"The purchased Skill no longer exists on the character.",
+				"Wykupiona Umiejętność nie istnieje już na postaci.",
+			));
+		}
+		const currentSpent = nonNegativeInteger(actor.system?.experience?.spent);
+		const cost = nonNegativeInteger(event.cost);
+		if (currentSpent < cost) {
+			throw new Error(localize(
+				"Experience data no longer permits this refund.",
+				"Stan Punktów Doświadczenia nie pozwala już na ten zwrot.",
+			));
+		}
+
+		/* Delete first. If the following Actor update fails, the still-open
+		 * transaction remains recoverable and its baseline XP is authoritative. */
+		await actor.deleteEmbeddedDocuments("Item", [itemId]);
+		events[eventIndex] = {
+			...event,
+			state: "reverted",
+			revertedAt: Date.now(),
+			revertedBy: String(game.user?.id ?? ""),
+		};
+		transaction.events = events;
+		await actor.update({
+			"system.experience.spent": currentSpent - cost,
+			[`flags.${FLAG_SCOPE}.${TRANSACTION_FLAG}`]: transaction,
+		});
+		return foundry.utils.deepClone(events[eventIndex]);
+	}
+
 	static async commit(actor, sheetSessionId = "") {
 		const transaction = this.current(actor);
 		if (transaction?.state !== "open") return null;
@@ -204,6 +296,11 @@ export class ExperienceTransactionService {
 	static async rollbackOpen(actor, transaction = null, reason = "recovery") {
 		const current = transaction ?? this.current(actor);
 		if (current?.state !== "open") return null;
+
+		const skillIds = careerSkillRollbackIds(actor, current);
+		if (skillIds.length) {
+			await actor.deleteEmbeddedDocuments("Item", skillIds);
+		}
 
 		const update = {};
 		const baselines = new Map();
@@ -295,6 +392,33 @@ function currentSession(actor) {
 
 function findEvent(transaction, eventId) {
 	return transaction.events?.find((event) => String(event?.id ?? "") === String(eventId ?? "")) ?? null;
+}
+
+function careerSkillRollbackIds(actor, transaction) {
+	const events = cloneArray(transaction.events).filter((event) =>
+		event?.kind === "career-skill" && event?.state !== "reverted",
+	);
+	if (!events.length) return [];
+
+	const ids = new Set(
+		events.map((event) => String(event.skillItemId ?? "")).filter((id) => actor.items?.has?.(id)),
+	);
+	const careerIds = new Set(events.map((event) => String(event.careerItemId ?? "")).filter(Boolean));
+	const openedAt = Number(transaction.openedAt) || 0;
+
+	/* A prepared event may have crashed after Item creation but before the Item
+	 * id was written back to the transaction. CareerProgression already stamps
+	 * every purchased Skill with careerGrant metadata, so the transaction's
+	 * sheet-open timestamp gives us a durable fallback locator. */
+	for (const item of actor.items ?? []) {
+		if (item?.type !== "skill") continue;
+		const grant = item.getFlag?.(FLAG_SCOPE, CAREER_GRANT_FLAG);
+		if (!isObject(grant) || grant.kind !== "purchased-skill") continue;
+		if (careerIds.size && !careerIds.has(String(grant.careerItemId ?? ""))) continue;
+		if ((Number(grant.createdAt) || 0) < openedAt) continue;
+		ids.add(String(item.id ?? ""));
+	}
+	return [...ids].filter(Boolean);
 }
 
 function sessionKey(actor, userId) {
