@@ -2,6 +2,7 @@ import "../advancement/CharacteristicAdvanceSheetScope.mjs";
 import "../advancement/CareerSkillAdvanceSheetScope.mjs";
 import "../advancement/CareerTransferAdvanceSheetScope.mjs";
 import "./ExperienceTransactionIndicatorIntegration.mjs";
+import { ExperienceLogWindow } from "./ExperienceLogWindow.mjs";
 
 const SHEET_SELECTOR = ".wfrp1ed-classic-sheet";
 const PAGE_SELECTOR = '.classic-sheet-page[data-page="2"]';
@@ -27,6 +28,7 @@ Hooks.on("renderApplicationV2", (application, element) => {
 
 	wireExperienceField(actor, panel, "current");
 	wireExperienceField(actor, panel, "total");
+	wireExperienceLog(actor, panel);
 });
 
 function ensureExperiencePanel(actor, root) {
@@ -53,6 +55,7 @@ function ensureExperiencePanel(actor, root) {
 	panel.replaceChildren(
 		buildExperienceField("current", localize("Current", "Aktualne"), ledger.available),
 		buildExperienceField("total", localize("Total", "Całkowite"), ledger.totalAwarded),
+		buildExperienceLogButton(),
 	);
 	return panel;
 }
@@ -84,6 +87,17 @@ function buildExperienceField(kind, labelText, value) {
 	return label;
 }
 
+function buildExperienceLogButton() {
+	const button = document.createElement("button");
+	button.type = "button";
+	button.className = "wfrp1ed-experience-log-button";
+	button.dataset.wfrpExperienceLog = "true";
+	button.innerHTML = `<i class="fas fa-book-open" aria-hidden="true"></i><span>${localize("Experience Log", "Dziennik PD")}</span>`;
+	button.title = localize("Open Experience Log", "Otwórz Dziennik PD");
+	button.setAttribute("aria-label", button.title);
+	return button;
+}
+
 function wireExperienceField(actor, root, kind) {
 	const input = root.querySelector(`[data-wfrp-experience-${kind}]`);
 	if (!(input instanceof HTMLInputElement)) return;
@@ -101,6 +115,18 @@ function wireExperienceField(actor, root, kind) {
 		if (event.key !== "Enter") return;
 		event.preventDefault();
 		input.blur();
+	});
+}
+
+function wireExperienceLog(actor, root) {
+	const button = root.querySelector("[data-wfrp-experience-log]");
+	if (!(button instanceof HTMLButtonElement)) return;
+	button.addEventListener("click", (event) => {
+		event.preventDefault();
+		void ExperienceLogWindow.open(actor).catch((error) => {
+			console.error("WFRP1ED | Unable to open Experience Log.", error);
+			ui.notifications.error(error?.message ?? String(error));
+		});
 	});
 }
 
