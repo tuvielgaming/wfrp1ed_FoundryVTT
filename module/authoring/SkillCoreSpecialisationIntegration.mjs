@@ -3,38 +3,58 @@ import {
 	coreSkillSpecialisationOptions,
 } from "../core/CoreSkillSpecialisationCatalog.mjs";
 
-const SPECIALIST_SKILL_ID = "specialistWeapon";
 const CUSTOM = "custom";
 
-/** Controlled Core authoring for finite Skill specialisations. */
+/**
+ * Controlled Core authoring for Skills with an audited finite specialisation
+ * list. The integration is intentionally catalog-driven rather than keyed to a
+ * single Skill. Adding another Skill to CoreSkillSpecialisationCatalog makes
+ * the same selector available automatically in every ordinary Skill Item sheet.
+ */
 Hooks.once("ready", () => {
 	Hooks.on("renderApplicationV2", (application, element) => {
 		const item = application?.document;
 		if (item?.documentName !== "Item" || item.type !== "skill") return;
-		if (String(item.system?.skillId ?? "").trim() !== SPECIALIST_SKILL_ID) return;
+
+		const skillId = String(item.system?.skillId ?? "").trim();
+		if (!skillId) return;
+		const options = coreSkillSpecialisationOptions(skillId, game.i18n.lang);
+		if (!options.length) return;
+
 		const root = asElement(element) ?? asElement(application.element);
 		if (!(root instanceof HTMLElement)) return;
-		renderSpecialistWeaponSpecialisation(root, item, application.isEditable === true);
+		renderCoreSkillSpecialisation(
+			root,
+			item,
+			skillId,
+			options,
+			application.isEditable === true,
+		);
 	});
 });
 
-function renderSpecialistWeaponSpecialisation(root, item, editable) {
+function renderCoreSkillSpecialisation(root, item, skillId, options, editable) {
 	const input = root.querySelector('input[name="system.specialisation"]');
 	const field = input?.closest?.(".skill-sheet-field") ?? input?.closest?.("label");
 	if (!(field instanceof HTMLElement)) return;
 
 	const currentText = String(item.system?.specialisation ?? "").trim();
-	const currentId = coreSkillSpecialisationId(SPECIALIST_SKILL_ID, currentText);
+	const currentId = coreSkillSpecialisationId(skillId, currentText);
 	const selected = currentId || (currentText ? CUSTOM : "");
-	const options = coreSkillSpecialisationOptions(SPECIALIST_SKILL_ID, game.i18n.lang);
 
 	input.remove();
 	const select = document.createElement("select");
-	select.dataset.specialistWeaponSpecialisation = "true";
+	select.dataset.coreSkillSpecialisation = skillId;
 	select.disabled = !editable;
 	select.append(optionElement("", localize("None", "Brak"), selected === ""));
-	for (const option of options) select.append(optionElement(option.id, option.label, selected === option.id));
-	select.append(optionElement(CUSTOM, localize("Custom / homebrew", "Własna / autorska"), selected === CUSTOM));
+	for (const option of options) {
+		select.append(optionElement(option.id, option.label, selected === option.id));
+	}
+	select.append(optionElement(
+		CUSTOM,
+		localize("Custom / homebrew", "Własna / autorska"),
+		selected === CUSTOM,
+	));
 	field.append(select);
 
 	const custom = document.createElement("input");
@@ -44,20 +64,17 @@ function renderSpecialistWeaponSpecialisation(root, item, editable) {
 	custom.disabled = !editable || selected !== CUSTOM;
 	custom.value = selected === CUSTOM ? currentText : "";
 	custom.hidden = selected !== CUSTOM;
-	custom.placeholder = localize("Custom Specialist Weapon category", "Własna kategoria Specjalnej broni");
+	custom.placeholder = localize(
+		"Custom Skill specialisation",
+		"Własna specjalizacja Umiejętności",
+	);
 	field.append(custom);
 
 	/*
-	 * This select is an authoring proxy rather than a real form field. Foundry's
-	 * ItemSheetV2 uses submitOnChange for the surrounding form. If this synthetic
-	 * change bubbles to that handler while the direct Item update is running, two
-	 * competing updates can be submitted from different DOM snapshots. In
-	 * particular the older full-form snapshot can overwrite system.skillId.
-	 *
-	 * Own the event here, persist both the selected specialisation and the
-	 * authoritative Core Skill binding in one update, then let the document
-	 * rerender normally. This makes changing the category incapable of silently
-	 * turning Specialist Weapon back into an unbound custom Skill.
+	 * The selector is an authoring proxy rather than a submitted system field.
+	 * Own its change event and persist the authoritative skillId together with
+	 * the selected localized specialisation. This avoids ItemSheetV2
+	 * submitOnChange racing a direct update with an older DOM snapshot.
 	 */
 	select.addEventListener("change", (event) => {
 		event.preventDefault();
@@ -75,7 +92,7 @@ function renderSpecialistWeaponSpecialisation(root, item, editable) {
 		custom.disabled = true;
 		const label = localizedSelection(options, value);
 		void item.update({
-			"system.skillId": SPECIALIST_SKILL_ID,
+			"system.skillId": skillId,
 			"system.specialisation": label,
 		}).catch(reportError);
 	});
@@ -104,6 +121,6 @@ function localize(english, polish) {
 }
 
 function reportError(error) {
-	console.error("WFRP1ED | Specialist Weapon Skill authoring failed.", error);
+	console.error("WFRP1ED | Core Skill specialisation authoring failed.", error);
 	ui.notifications.error(error?.message ?? String(error));
 }
