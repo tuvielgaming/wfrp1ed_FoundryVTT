@@ -1,0 +1,27 @@
+<section class="experience-log">
+	<header class="experience-log__summary">
+		<div><span>{{ui.current}}</span><strong>{{summary.current}}</strong></div>
+		<div><span>{{ui.total}}</span><strong>{{summary.total}}</strong></div>
+		<div><span>{{ui.spent}}</span><strong>{{summary.spent}}</strong></div>
+	</header>
+
+	{{#if hasTransactions}}
+		<div class="experience-log__transactions">
+			{{#each transactions as |transaction|}}
+				<section class="experience-log__transaction" data-transaction-id="{{transaction.id}}">
+					<header class="experience-log__transaction-date">{{transaction.date}}</header>
+					<div class="experience-log__events">
+						{{#each transaction.events as |event|}}
+							<div class="experience-log__event" data-event-id="{{event.id}}" data-event-kind="{{event.kind}}">
+								<span class="experience-log__event-label">{{event.label}}</span>
+								<strong class="experience-log__event-amount">{{event.amount}}</strong>
+							</div>
+						{{/each}}
+					</div>
+				</section>
+			{{/each}}
+		</div>
+	{{else}}
+		<p class="experience-log__empty">{{ui.empty}}</p>
+	{{/if}}
+</section>
