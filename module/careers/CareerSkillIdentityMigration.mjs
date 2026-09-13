@@ -3,17 +3,24 @@ const NORMALIZE_GUARD = "wfrp1edCareerSkillIdentityNormalization";
 install();
 
 /**
- * Transitional Career Skill identity bridge.
+ * Transitional Career Skill identity boundary.
  *
- * CareerData now owns `grant.skillId`, matching SkillData and Race Skill
- * references. Existing Career documents and several still-unmigrated Career
- * consumers historically use `grant.rulesId`, so this first migration stage is
- * deliberately behavior-preserving:
+ * CareerData owns `grant.skillId`, matching SkillData and Race Skill
+ * references. Older Career documents may still persist `grant.rulesId`, while
+ * some authoring paths can still emit that legacy spelling during the staged
+ * migration.
  *
- * - every Skill grant gains canonical `skillId` when the legacy id is known;
- * - the legacy `rulesId` value is retained temporarily as a compatibility
- *   shadow until all Career readers/writers have moved to `skillId`;
- * - Trapping grants and Career Exit `rulesId` values are untouched.
+ * This boundary makes persistence canonical without changing Career mechanics:
+ *
+ * - every Skill grant resolves identity as non-empty `skillId`, otherwise the
+ *   legacy `rulesId`;
+ * - every newly created or updated Career Skill grant persists that identity in
+ *   `skillId`;
+ * - the legacy `rulesId` property is removed from Skill grants in the outgoing
+ *   Career update so new writes no longer extend the legacy data contract;
+ * - Trapping grants and Career Exit `rulesId` values are untouched;
+ * - untouched legacy Career documents remain readable through CareerData and
+ *   the still-transitional readers until their dedicated reader migration.
  *
  * Full Career loads are normalized by CareerData.migrateData(). This hook is
  * needed for Foundry v14 differential updates, because CareerPartialMigrationFix
@@ -65,6 +72,7 @@ export function normalizeSkillEntries(source) {
 				const skillId = String(grant?.skillId ?? "").trim() ||
 					String(grant?.rulesId ?? "").trim();
 				if (skillId) grant.skillId = skillId;
+				delete grant.rulesId;
 			}
 		}
 	}
