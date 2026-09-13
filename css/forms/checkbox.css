@@ -3,10 +3,11 @@
 /******************************************************************/
 
 /*
- * System-owned checkbox rows use one stable parchment-safe presentation.
- * The real checkbox remains in the document for native form semantics, but
- * the label draws the visible box/check so Foundry Accent Color does not alter
- * individual system sheets differently.
+ * System-owned checkbox rows use one stable presentation across parchment
+ * sheets and Foundry's dark ApplicationV2 surfaces. The real checkbox remains
+ * in the document for native form semantics, while the label draws the visible
+ * box/check. Using currentColor keeps the same geometry and artwork while
+ * adapting contrast to the surrounding system-owned UI.
  *
  * Existing Standard Test effect rows are one of the canonical consumers; the
  * combat Item sheets intentionally reuse the exact same artwork.
@@ -46,11 +47,11 @@
 	flex: 0 0 16px;
 	width: 16px;
 	height: 16px;
-	border: 1px solid rgb(71 49 29 / 82%);
+	border: 1px solid currentColor;
 	border-radius: 1px;
 	background: transparent;
 	box-shadow: none;
-	color: #2b2115;
+	color: currentColor;
 	font-family: Arial, sans-serif;
 	font-size: 14px;
 	font-weight: 700;
