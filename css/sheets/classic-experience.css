@@ -70,6 +70,35 @@
 	color: inherit;
 }
 
+.wfrp1ed-classic-sheet .wfrp1ed-experience-log-button {
+	position: absolute;
+	left: 50%;
+	top: 126px;
+	transform: translateX(-50%);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 5px;
+	min-width: 112px;
+	height: 24px;
+	padding: 2px 8px;
+	border: 1px solid rgb(25 20 15 / 38%);
+	border-radius: 3px;
+	background: rgb(255 255 255 / 50%);
+	font-size: 11px;
+	font-weight: 700;
+	line-height: 1;
+	pointer-events: auto;
+	cursor: pointer;
+}
+
+.wfrp1ed-classic-sheet .wfrp1ed-experience-log-button:hover,
+.wfrp1ed-classic-sheet .wfrp1ed-experience-log-button:focus-visible {
+	background: rgb(255 255 255 / 82%);
+	outline: 1px solid var(--focus-color);
+	outline-offset: -1px;
+}
+
 /* Current Experience transaction purchases stay visually distinct until the
  * Character Sheet closes and commits them. The badge is informational only;
  * the established Shift + click interaction remains the undo affordance. */
@@ -137,6 +166,101 @@
 	top: 50%;
 	transform: translateY(-50%);
 	z-index: 3;
+}
+
+.experience-log-window .window-content {
+	overflow: hidden;
+}
+
+.experience-log {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	height: 100%;
+	padding: 10px;
+}
+
+.experience-log__summary {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 8px;
+	flex: 0 0 auto;
+}
+
+.experience-log__summary > div {
+	display: grid;
+	gap: 2px;
+	padding: 6px 8px;
+	border: 1px solid rgb(84 68 45 / 35%);
+	background: rgb(255 255 255 / 24%);
+	text-align: center;
+}
+
+.experience-log__summary span {
+	font-size: 11px;
+	font-weight: 700;
+}
+
+.experience-log__summary strong {
+	font-size: 18px;
+	font-variant-numeric: tabular-nums;
+}
+
+.experience-log__transactions {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	min-height: 0;
+	overflow-y: auto;
+	padding-right: 3px;
+}
+
+.experience-log__transaction {
+	border: 1px solid rgb(84 68 45 / 35%);
+	background: rgb(255 255 255 / 16%);
+}
+
+.experience-log__transaction-date {
+	padding: 4px 7px;
+	border-bottom: 1px solid rgb(84 68 45 / 28%);
+	background: rgb(84 68 45 / 8%);
+	font-size: 11px;
+	font-weight: 700;
+}
+
+.experience-log__events {
+	display: grid;
+}
+
+.experience-log__event {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 12px;
+	align-items: center;
+	padding: 6px 8px;
+	border-bottom: 1px solid rgb(84 68 45 / 16%);
+}
+
+.experience-log__event:last-child {
+	border-bottom: 0;
+}
+
+.experience-log__event-label {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+
+.experience-log__event-amount {
+	min-width: 52px;
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+
+.experience-log__empty {
+	margin: auto;
+	padding: 20px;
+	text-align: center;
+	opacity: 0.75;
 }
 
 /* Magic Points use the same Current/Total ledger language as Experience, but
