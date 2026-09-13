@@ -75,6 +75,8 @@
 
 .classic-actor-sheet
 	.characteristic-current-wounds-readonly {
+	grid-column: 1 / -1;
+	justify-self: stretch;
 	display: block;
 	width: 100%;
 	line-height: 1;
