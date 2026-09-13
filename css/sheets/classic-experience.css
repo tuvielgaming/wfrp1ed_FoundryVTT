@@ -103,11 +103,13 @@
 	pointer-events: none;
 }
 
-/* The Current Career field already has its own right-edge interaction badge.
- * Keep the transaction marker out of that reserved area and preserve the exact
- * normal header-field input geometry. Only the input receives the green tint;
- * the surrounding positioned label remains visually/layout-identical. */
+/* Current Career is already an absolutely positioned header field. The generic
+ * transaction class above uses position:relative for ordinary rows/buttons,
+ * so restore the header field's positioning explicitly; otherwise the Career
+ * control is pulled into normal flow and no longer matches its non-transaction
+ * presentation. Keep the green tint on the input only. */
 .wfrp1ed-classic-sheet .header-field--current-career.is-experience-transaction-purchase {
+	position: absolute;
 	background: transparent !important;
 	box-shadow: none;
 }
@@ -126,9 +128,12 @@
 	text-align: center;
 }
 
+/* The normal Current Career control already reserves the far-right edge for its
+ * existing action/roll badge. Place the transaction minus immediately to the
+ * left of that badge rather than on the left border of the input. */
 .wfrp1ed-classic-sheet .header-field--current-career > .experience-transaction-purchase-badge {
-	left: 3px;
-	right: auto;
+	left: auto;
+	right: 22px;
 	top: 50%;
 	transform: translateY(-50%);
 	z-index: 3;
