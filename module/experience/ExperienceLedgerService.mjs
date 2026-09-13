@@ -56,6 +56,73 @@ export class ExperienceLedgerService {
 	}
 
 	/**
+	 * Grant one persisted chat award to one Character at most once. The award id
+	 * is stored in the Actor ledger itself, so retrying after a partial transport
+	 * failure cannot duplicate Experience even if the ChatMessage claim marker
+	 * was not saved yet.
+	 */
+	static async grantChatAward(actor, { awardId, messageId, amount, reason } = {}) {
+		assertCharacter(actor);
+		assertGameMaster();
+
+		const sourceAwardId = String(awardId ?? "").trim();
+		if (!sourceAwardId) {
+			throw new Error(localize(
+				"Experience award has no persistent award id.",
+				"Nagroda PD nie ma trwałego identyfikatora nagrody.",
+			));
+		}
+		const value = integer(amount);
+		if (value < 1) {
+			throw new Error(localize(
+				"Experience award must be at least 1.",
+				"Nagroda PD musi wynosić co najmniej 1.",
+			));
+		}
+		const description = String(reason ?? "").trim();
+		if (!description) {
+			throw new Error(localize(
+				"A reason for the Experience award is required.",
+				"Powód przyznania Punktów Doświadczenia jest wymagany.",
+			));
+		}
+
+		const ledger = ExperienceTransactionService.ledger(actor);
+		const existing = ledger.find((entry) =>
+			(entry?.events ?? []).some((event) =>
+				String(event?.sourceAwardId ?? "") === sourceAwardId,
+			),
+		);
+		if (existing) {
+			return {
+				entry: foundry.utils.deepClone(existing),
+				granted: false,
+			};
+		}
+
+		const entry = manualEntry({
+			kind: "experience-adjustment",
+			amount: value,
+			description,
+			source: "chat-award",
+		});
+		const event = entry.events[0];
+		event.sourceAwardId = sourceAwardId;
+		event.sourceMessageId = String(messageId ?? "").trim();
+		ledger.push(entry);
+
+		const currentTotal = nonNegativeInteger(actor.system?.experience?.totalAwarded);
+		await actor.update({
+			"system.experience.totalAwarded": currentTotal + value,
+			[`flags.${FLAG_SCOPE}.${LEDGER_FLAG}`]: ledger,
+		});
+		return {
+			entry: foundry.utils.deepClone(entry),
+			granted: true,
+		};
+	}
+
+	/**
 	 * Audit a direct GM edit of the Total field. This is mechanically the same
 	 * signed change to totalAwarded as addAdjustment, but the generated label
 	 * records that the compact sheet field itself was used as a correction.
