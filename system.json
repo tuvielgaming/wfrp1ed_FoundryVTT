@@ -16,6 +16,7 @@
 		"module/ui/SystemCheckboxIntegration.mjs",
 		"module/chat/GMGameplayNotice.mjs",
 		"module/data-models/actor/CharacterPartialMigrationFix.mjs",
+		"module/tokens/CharacterPrototypeTokenDefaults.mjs",
 		"module/forms/SelectAllOnFocus.mjs",
 		"module/careers/CareerBootstrap.mjs",
 		"module/languages/LanguageBootstrap.mjs",
