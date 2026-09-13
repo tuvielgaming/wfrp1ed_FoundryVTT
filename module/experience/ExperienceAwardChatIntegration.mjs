@@ -1,8 +1,7 @@
-import { ExperienceTransactionService } from "./ExperienceTransactionService.mjs";
+import { ExperienceLedgerService } from "./ExperienceLedgerService.mjs";
 import { refreshVisibleChatMessage } from "../chat/ChatMessagePresentationRefresh.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
-const LEDGER_FLAG = "experienceLedger";
 const MESSAGE_FLAG_KEY = "experienceAward";
 const SOCKET_CHANNEL = "system.wfrp1ed";
 const CLAIM_REQUEST = "experience-award-claim-request";
@@ -13,7 +12,7 @@ Hooks.on("renderApplicationV2", (application, element) => {
 	if (!game.user?.isGM) return;
 	if (application?.constructor?.name !== "ExperienceLogWindow") return;
 	const toolbar = element?.querySelector?.(".experience-log__toolbar");
-	if (!(toolbar instanceof HTMLElement) || toolbar.querySelector("[data-wfrp-create-xp-award]")) return;
+	if (!isElement(toolbar) || toolbar.querySelector("[data-wfrp-create-xp-award]")) return;
 
 	const ownerDocument = toolbar.ownerDocument ?? document;
 	const button = ownerDocument.createElement("button");
@@ -215,7 +214,12 @@ async function processClaim(payload) {
 	const user = game.users?.get(String(payload.requestUserId ?? ""));
 	if (!actor || !user || !canClaimActor(actor, user)) throw new Error(localize("You do not control this character.", "Nie kontrolujesz tej postaci."));
 
-	await grantAwardOnce(actor, state, message.id);
+	await ExperienceLedgerService.grantChatAward(actor, {
+		awardId: state.awardId,
+		messageId: message.id,
+		amount: state.amount,
+		reason: state.reason,
+	});
 	const latest = foundry.utils.deepClone(message.getFlag(FLAG_SCOPE, MESSAGE_FLAG_KEY));
 	const target = latest?.recipients?.find((entry) => String(entry.actorUuid ?? "") === String(payload.actorUuid ?? ""));
 	if (target && !target.claimedAt) {
@@ -225,45 +229,6 @@ async function processClaim(payload) {
 	}
 	await refreshVisibleChatMessage(message);
 	sendResponse(payload, true, "");
-}
-
-async function grantAwardOnce(actor, state, messageId) {
-	const awardId = String(state.awardId ?? "");
-	const ledger = ExperienceTransactionService.ledger(actor);
-	const existing = ledger.find((entry) => (entry.events ?? []).some((event) => String(event?.sourceAwardId ?? "") === awardId));
-	if (existing) return existing;
-
-	const amount = Math.max(1, Math.trunc(Number(state.amount) || 0));
-	const reason = String(state.reason ?? "").trim();
-	if (!reason) throw new Error(localize("Experience award has no reason.", "Nagroda PD nie ma podanego powodu."));
-	const now = Date.now();
-	const event = {
-		id: foundry.utils.randomID(),
-		kind: "experience-adjustment",
-		state: "committed",
-		amount,
-		description: reason,
-		source: "chat-award",
-		sourceAwardId: awardId,
-		sourceMessageId: String(messageId ?? ""),
-		createdAt: now,
-		userId: String(game.user?.id ?? ""),
-	};
-	const entry = {
-		id: foundry.utils.randomID(),
-		kind: "manual-experience",
-		createdAt: now,
-		committedAt: now,
-		userId: String(game.user?.id ?? ""),
-		events: [event],
-	};
-	ledger.push(entry);
-	const total = Math.max(0, Math.trunc(Number(actor.system?.experience?.totalAwarded) || 0));
-	await actor.update({
-		"system.experience.totalAwarded": total + amount,
-		[`flags.${FLAG_SCOPE}.${LEDGER_FLAG}`]: ledger,
-	});
-	return entry;
 }
 
 function sendResponse(payload, ok, error) {
@@ -294,9 +259,13 @@ function isPrimaryActiveGm() {
 }
 
 function asElement(value) {
-	if (value?.nodeType === 1 && typeof value.querySelector === "function") return value;
-	if (value?.[0]?.nodeType === 1) return value[0];
+	if (isElement(value)) return value;
+	if (isElement(value?.[0])) return value[0];
 	return null;
+}
+
+function isElement(value) {
+	return Boolean(value && value.nodeType === 1 && typeof value.querySelector === "function");
 }
 
 function escapeHtml(value) {
