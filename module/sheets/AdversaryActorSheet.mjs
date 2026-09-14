@@ -61,6 +61,7 @@ export class AdversaryActorSheet extends HandlebarsApplicationMixin(
 	static DEFAULT_OPTIONS = {
 		classes: [
 			"wfrp1ed",
+			"wfrp1ed-parchment-window",
 			"sheet",
 			"actor",
 			"adversary-actor-sheet",
