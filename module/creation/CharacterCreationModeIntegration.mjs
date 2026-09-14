@@ -1,3 +1,4 @@
+import { Wfrp1edActor } from "../documents/Wfrp1edActor.mjs";
 import { ClassicActorSheet } from "../sheets/ClassicActorSheet.mjs";
 
 const FLAG_SCOPE = "wfrp1ed";
@@ -55,28 +56,51 @@ installCharacterCreationPresentationSync();
 /**
  * Character creation is the default lifecycle state of every newly-created PC.
  *
- * This is an unconditional creation-time policy for Character Actors. The
- * current project is built from scratch, so there is no migration or
- * compatibility reason to preserve an incoming false/default flag value.
- * Existing Actors are never rewritten by this hook.
+ * Foundry v14 explicitly defines Document._preCreate as the authoritative
+ * lifecycle point for mutating pending document source data. Own this default
+ * on the system Actor class instead of relying on a free-standing preCreateActor
+ * hook. Existing Actors are never rewritten.
  */
 function installNewCharacterDefault() {
-	Hooks.on("preCreateActor", (actor) => {
-		if (actor?.type !== "character") return;
+	if (Wfrp1edActor.__wfrpCharacterCreationDefaultInstalled === true) return;
 
-		const existingFlags = foundry.utils.deepClone(actor.flags ?? {});
+	const original = Wfrp1edActor.prototype._preCreate;
+	if (typeof original !== "function") {
+		console.error(
+			"WFRP1ED | Wfrp1edActor has no _preCreate lifecycle; Character Creation default was not installed.",
+		);
+		return;
+	}
+
+	Wfrp1edActor.prototype._preCreate = async function wfrpCharacterCreationPreCreate(
+		data,
+		options,
+		user,
+	) {
+		const result = await original.call(this, data, options, user);
+		if (result === false) return false;
+		if (this.type !== "character") return result;
+
+		const existingFlags = foundry.utils.deepClone(this.flags ?? {});
 		const systemFlags = {
 			...(existingFlags?.[FLAG_SCOPE] ?? {}),
 			[FLAG_KEY]: true,
 		};
 
-		actor.updateSource({
+		this.updateSource({
 			flags: {
 				...existingFlags,
 				[FLAG_SCOPE]: systemFlags,
 			},
 		});
-	});
+		return result;
+	};
+
+	Object.defineProperty(
+		Wfrp1edActor,
+		"__wfrpCharacterCreationDefaultInstalled",
+		{ value: true, configurable: false, enumerable: false },
+	);
 }
 
 function installCharacterCreationFrameControl() {
