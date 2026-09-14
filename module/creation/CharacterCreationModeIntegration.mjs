@@ -9,11 +9,10 @@ const MODE_WINDOW_CLASS = "wfrp1ed-character-creation-mode";
 /**
  * Explicit per-Actor Character Creation Mode.
  *
- * This first integration deliberately establishes only the authoritative mode
- * state and its GM-facing sheet control. It does not yet bypass Experience,
- * progression or managed-edit rules. Those mechanics can consume this one flag
- * in later audited steps instead of inferring character creation from unrelated
- * history such as current spent Experience.
+ * New Character Actors begin in this mode so the Race/Career creation workflow
+ * is immediately available. The GM-facing sheet control remains authoritative
+ * for leaving or re-entering the mode later; normal Experience progression is
+ * deliberately not reinterpreted as character creation.
  */
 export class CharacterCreationMode {
 	static enabled(actor) {
@@ -49,8 +48,28 @@ export class CharacterCreationMode {
 	}
 }
 
+installNewCharacterDefault();
 installCharacterCreationFrameControl();
 installCharacterCreationPresentationSync();
+
+/**
+ * Character creation is the default lifecycle state of a newly-created PC.
+ *
+ * This operates only on creation source data. Existing Actors are never
+ * migrated or rewritten, which is intentional for this from-scratch system.
+ */
+function installNewCharacterDefault() {
+	Hooks.on("preCreateActor", (actor, source) => {
+		if (actor?.type !== "character" && source?.type !== "character") return;
+
+		const path = `flags.${FLAG_SCOPE}.${FLAG_KEY}`;
+		if (foundry.utils.getProperty(source ?? {}, path) !== undefined) return;
+
+		actor.updateSource({
+			[path]: true,
+		});
+	});
+}
 
 function installCharacterCreationFrameControl() {
 	if (ClassicActorSheet.__wfrpCharacterCreationModeInstalled === true) return;
