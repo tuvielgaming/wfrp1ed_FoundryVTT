@@ -11,7 +11,7 @@ Target: Foundry VTT v14
 System: Warhammer Fantasy Roleplay 1st Edition  
 Primary presentation: Polish Classic Character Sheet
 
-Current GitHub `master` is authoritative for code. This file is authoritative for current continuation context, architecture decisions, runtime verification state, protected regressions, and the next pending test.
+Current GitHub `master` is authoritative for code. This file is authoritative for current continuation context, architecture decisions, runtime verification state, protected regressions, and the next pending implementation slice.
 
 Older stable references remain useful for deeper historical/rules detail:
 
@@ -45,69 +45,61 @@ Do not infer current implementation status from those files when this handoff sa
 
 # Current runtime state
 
-## Latest runtime-verified baseline
+## Latest runtime-verified implementation baseline
 
 ```text
-84bf5c46b2930c8a3d423449312f4d94da9c5009
-Center read-only Wounds display
+a50aa4d0d95499994aec4f6b2f161f3ecf84dcd9
+Own Character Creation default in Actor lifecycle
 ```
 
-Everything through this commit is runtime-verified unless explicitly stated otherwise below.
+User runtime-verified that a brand-new Character now opens directly in Character Creation Mode and the existing mode toggle still works.
 
-## Failed checkpoint — DO NOT treat as verified
+Everything through this implementation commit is runtime-verified unless a specific section below says otherwise.
+
+The current repository HEAD may be newer than the implementation baseline because `SESSION_HANDOFF.md` itself is maintained in separate documentation commits. Documentation-only handoff commits do not require Foundry runtime verification.
+
+## Failed Character Creation default attempts — historical only
+
+Do **not** treat either of these implementations as the working design:
 
 ```text
 68698b6f26bff49f6fe2f2cf8600f495aba91fdd
 Enable Character Creation Mode for new Characters
-```
 
-User runtime test showed a newly created Character still opened in normal mode. Therefore this commit is **not verified** and its original creation-default implementation was insufficient.
-
-## Current unverified replacement
-
-```text
 912f3e6b3a29b2a14fd1068cb931b7496cb593dd
 Force Character Creation Mode for new PCs
 ```
 
-This replacement removes the conditional source check and unconditionally writes `flags.wfrp1ed.characterCreationMode = true` into the creation source of every newly created `character` Actor. Existing Actors are not rewritten.
+Both `preCreateActor`-hook approaches failed runtime verification: newly created Characters still opened in normal mode.
 
-This commit is **NOT runtime-verified yet**.
-
----
-
-# Immediate next runtime test
-
-After a full Foundry restart:
-
-1. Create a brand-new `character` Actor.
-2. Open its sheet.
-3. Confirm Character Creation Mode is active immediately:
-   - Character Creation presentation/background is active;
-   - scroll/header Character Creation control shows active state;
-   - creation-only Race controls appear once a Race is assigned.
-4. Disable Character Creation Mode using the scroll/header control and confirm normal mode returns.
-5. Enable it again and confirm creation presentation/controls return.
-6. Confirm a newly created Character still has linked prototype tokens (`prototypeToken.actorLink = true`).
-7. Create a new NPC or Creature only to confirm they do **not** receive Character Creation Mode.
-
-If the user says `Verified`, make `912f3e6...` the new runtime baseline.
+The successful design moved this mandatory default into the WFRP Actor document lifecycle (`Wfrp1edActor._preCreate` path), where pending document source is modified with `updateSource`.
 
 ---
 
-# Newly identified architectural gap: NPC / Creature sheets
+# Immediate continuation: native NPC / Creature architecture
 
 User runtime test confirmed that `npc` and `creature` Actors currently open only Foundry fallback sheets.
 
-Root cause from current source:
+Current source facts:
 
 - `module/wfrp1ed.mjs` registers `ClassicActorSheet` only for `types: ["character"]`.
-- The source comments explicitly say non-audited Actor subtypes remain on Core Foundry sheets.
-- `template.json` contains a legacy `npc` contract, but there is no proper `creature` Actor contract there even though `system.json` exposes `creature` as an Actor type.
+- Current comments explicitly leave unaudited Actor subtypes on Foundry Core sheets.
+- `template.json` contains a legacy `npc` contract.
+- `system.json` exposes `creature` as an Actor type, but there is no corresponding proper audited native Creature data model/sheet.
+- Current `Wfrp1edActor` legacy profile preparation covers `character` and `npc`, not a complete Creature contract.
 
-Therefore **do not simply register the Character sheet for NPC/Creature** as a shortcut. The next Actor-sheet architecture slice, after the Character Creation default is verified, should audit and implement native system-owned NPC/Creature data + sheet presentation deliberately.
+Therefore the next task is **not** to register the Character sheet for NPC/Creature as a shortcut.
 
-No migration compatibility is needed for existing test NPCs/Creatures.
+Next dependency-ordered work:
+
+1. Audit WFRP 1e Core requirements for NPC and Creature records against current repository data usage.
+2. Decide shared profile primitives vs subtype-specific fields.
+3. Add native Foundry v14 Actor data model(s) for NPC/Creature as appropriate.
+4. Add proper system-owned NPC/Creature sheet presentation in small checkpoints.
+5. Register those sheets only after their data contract exists.
+6. Runtime-test newly created NPC and Creature Actors.
+
+No migration compatibility is needed for existing test NPCs/Creatures; they may be deleted and recreated.
 
 ---
 
@@ -274,7 +266,7 @@ This was runtime-verified.
 
 Do not redirect XP awards to arbitrary synthetic token Actors. Chat awards target canonical world Character Actors.
 
-NPC/Creature token policy remains separate.
+NPC/Creature token policy remains separate and should be decided during the native NPC/Creature audit.
 
 Implementation:
 
@@ -292,7 +284,7 @@ Authoritative flag:
 flags.wfrp1ed.characterCreationMode
 ```
 
-Core integration:
+Core UI/state integration:
 
 ```text
 module/creation/CharacterCreationModeIntegration.mjs
@@ -304,7 +296,25 @@ Initial Career package acquisition is Character Creation and remains separate fr
 
 The GM can explicitly toggle the mode with the existing scroll/header control.
 
-Current default-on behavior for newly created Characters is pending verification at `912f3e6...`.
+## New-Character default — VERIFIED
+
+Every newly created `character` Actor now enters Character Creation Mode automatically.
+
+The working implementation is owned by the WFRP Actor document lifecycle, not a global `preCreateActor` hook:
+
+```text
+a50aa4d0d95499994aec4f6b2f161f3ecf84dcd9
+Own Character Creation default in Actor lifecycle
+```
+
+Runtime verification confirmed:
+
+- brand-new Character opens in Creation Mode;
+- creation presentation is active;
+- existing scroll/header toggle can disable and re-enable the mode;
+- linked Character prototype-token default remains intact.
+
+Do not restore either failed hook-based implementation.
 
 ---
 
@@ -372,6 +382,7 @@ Identity migration debt remains separate: some Career/reference code still conta
 - XP accounting mutations belong to Experience services.
 - Chat XP awards target canonical world Character Actors.
 - New Character tokens are linked by default.
+- Character Creation default belongs to the WFRP Actor lifecycle; do not reintroduce the failed global `preCreateActor` default hooks.
 - NPC/Creature native sheets are currently **missing** and must be implemented as a deliberate data/sheet architecture slice, not by pretending they are Characters.
 
 ---
@@ -397,22 +408,24 @@ b84b8a2e0b4b426316478eca064a8320b69725f7  Live Experience Log refresh
 3e503f3fecd06c520f1ed7767779ff745d99fac5  Canonical input focus in Experience dialog
 bb3812e1caf4b68c5ae13bebc4b0e799e48bbcfb  Audited direct XP field corrections
 cf5bcfd8b05f521cb04f3a83578dea3b2256718c  Character linked-token default loaded
-84bf5c46b2930c8a3d423449312f4d94da9c5009  Theme-aware checkbox + centered read-only Wounds verified
+84bf5c46b2930c8a3d423449312f4d94da9c5009  Theme-aware checkbox + centered read-only Wounds
+a50aa4d0d95499994aec4f6b2f161f3ecf84dcd9  Character Creation default owned by Actor lifecycle
 ```
 
-Unverified/failed after that baseline:
+Failed historical attempts after `84bf5c46...`:
 
 ```text
-68698b6f26bff49f6fe2f2cf8600f495aba91fdd  FAILED runtime test: default Character Creation Mode did not activate
-912f3e6b3a29b2a14fd1068cb931b7496cb593dd  Current replacement, awaiting runtime verification
+68698b6f26bff49f6fe2f2cf8600f495aba91fdd  FAILED: first Character Creation default hook
+912f3e6b3a29b2a14fd1068cb931b7496cb593dd  FAILED: second Character Creation default hook
 ```
 
 ---
 
 # Next implementation order
 
-1. Runtime-test `912f3e6...` with a brand-new Character.
-2. If verified, make it the new runtime baseline.
-3. Audit native NPC/Creature Actor data requirements and sheet UX.
+1. Start from verified implementation baseline `a50aa4d0...` and current `master`.
+2. Audit native NPC/Creature Actor data requirements against WFRP 1e Core and existing subsystem consumers.
+3. Define native NPC/Creature data model architecture before registering a sheet.
 4. Implement proper system-owned NPC/Creature sheet(s) in small dependency-ordered checkpoints.
-5. Continue remaining Character Creation / Career identity debt only after those checkpoints are stable.
+5. Runtime-test newly created NPC/Creature Actors.
+6. Return to remaining Character Creation / Career identity debt only after those Actor checkpoints are stable.
