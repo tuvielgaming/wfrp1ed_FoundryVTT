@@ -1,9 +1,5 @@
 .wfrp1ed.adversary-actor-sheet .window-content {
 	padding: 0;
-	background:
-		linear-gradient(rgb(255 252 238 / 94%), rgb(239 229 199 / 94%)),
-		url("../../ui/parchment.jpg");
-	color: #2b2115;
 }
 
 .wfrp1ed.adversary-actor-sheet .adversary-sheet-shell {
