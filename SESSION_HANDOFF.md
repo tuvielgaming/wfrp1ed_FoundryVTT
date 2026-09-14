@@ -1,7 +1,7 @@
 # Session Handoff
 
 **Date:** 2026-09-14  
-**Purpose:** This is the **single current continuation/source-of-truth document** for future ChatGPT sessions working on this repository. Do not create competing progress/handoff documents. Read this file first, then inspect current `master` before making any change.
+**Purpose:** This is the **single current continuation/source-of-truth document** for future ChatGPT sessions working on this repository. Do not create competing handoff/progress documents. Read this file first, then inspect current `master` before changing code.
 
 ## Repository / authority
 
@@ -11,43 +11,39 @@ Target: Foundry VTT v14
 System: Warhammer Fantasy Roleplay 1st Edition  
 Primary presentation: Polish Classic Character Sheet
 
-GitHub/current `master` is authoritative for code. This file is authoritative for **continuation context, architecture decisions, workflow, verified checkpoints, protected regressions, and the next pending runtime test**.
+Current GitHub `master` is authoritative for code. This file is authoritative for current continuation context, architecture decisions, runtime verification state, protected regressions, and the next pending test.
 
-Older stable design/rules references remain in:
+Older stable references remain useful for deeper historical/rules detail:
 
 - `PROJECT_STATE.md`
 - `RULEBOOK_IMPLEMENTATION.md`
 - `FOUNDRY_V14_GUIDELINES.md`
 
-Do not infer current implementation state from those older documents when this file says otherwise.
+Do not infer current implementation status from those files when this handoff says otherwise.
 
 ---
 
-# Mandatory implementation workflow
+# Mandatory workflow
 
-1. **Inspect current `master` first.** Never reconstruct source from memory or an older chat.
+1. Inspect current `master` first. Never reconstruct current source from memory or an older chat.
 2. Before modifying an existing file:
    - fetch current `master` HEAD;
    - fetch the exact current file and blob SHA;
-   - inspect the surrounding implementation and related consumers.
+   - inspect surrounding implementation and direct consumers.
 3. Push directly to `master` unless the user explicitly requests another workflow.
 4. Make small dependency-ordered commits/checkpoints.
-5. After each runtime-relevant checkpoint provide:
-   - commit SHA;
-   - exact files changed;
-   - what changed and why;
-   - exact Foundry runtime verification steps.
-6. **Do not call anything runtime-verified until the user explicitly tests it and says `Verified`/`verified`.**
-7. If a test fails, diagnose the source before adding another patch. Do not stack competing mechanisms.
-8. Preserve existing user-authored visual/layout work unless the task explicitly requires changing it.
-9. Foundry v14 APIs are authoritative. Avoid deprecated Foundry APIs.
-10. For WFRP mechanics, English WFRP 1e Core is primary mechanical authority; Polish Core is terminology/localization authority. Verify source material before changing a rule.
-11. `packs/` output is generated locally and gitignored; do not treat generated packs as source files.
-12. The project is being built from scratch. Current test Actors/Tokens may be deleted/recreated. **Do not add migration/compatibility machinery solely for disposable test data unless explicitly requested.**
+5. After each runtime-relevant checkpoint provide commit SHA, exact files changed, rationale, and exact Foundry verification steps.
+6. **Do not call anything runtime-verified until the user explicitly tests it and says `Verified` / `verified`.**
+7. If a test fails, diagnose source before adding another patch. Do not stack competing mechanisms.
+8. Preserve existing user-authored layout/visual work unless the task requires changing it.
+9. Foundry v14 APIs are authoritative; avoid deprecated APIs.
+10. For WFRP mechanics, English WFRP 1e Core is primary mechanics authority and Polish Core is terminology/localization authority. Verify sources before changing rules.
+11. `packs/` output is generated locally and gitignored.
+12. This is a from-scratch system. Current test Actors/Tokens are disposable. Do **not** add migration compatibility solely for test data unless explicitly requested.
 
 ---
 
-# Current baseline
+# Current runtime state
 
 ## Latest runtime-verified baseline
 
@@ -56,45 +52,68 @@ Do not infer current implementation state from those older documents when this f
 Center read-only Wounds display
 ```
 
-Everything through this commit has been runtime-verified by the user unless a specific section below says otherwise.
+Everything through this commit is runtime-verified unless explicitly stated otherwise below.
 
-## Current `master` after the latest unverified implementation
+## Failed checkpoint — DO NOT treat as verified
 
 ```text
 68698b6f26bff49f6fe2f2cf8600f495aba91fdd
 Enable Character Creation Mode for new Characters
 ```
 
-This latest commit is **NOT runtime-verified yet**. The next action must be to test it before starting another risky feature.
+User runtime test showed a newly created Character still opened in normal mode. Therefore this commit is **not verified** and its original creation-default implementation was insufficient.
+
+## Current unverified replacement
+
+```text
+912f3e6b3a29b2a14fd1068cb931b7496cb593dd
+Force Character Creation Mode for new PCs
+```
+
+This replacement removes the conditional source check and unconditionally writes `flags.wfrp1ed.characterCreationMode = true` into the creation source of every newly created `character` Actor. Existing Actors are not rewritten.
+
+This commit is **NOT runtime-verified yet**.
 
 ---
 
-# Immediate continuation / next runtime test
+# Immediate next runtime test
 
-The latest change makes every newly created `character` Actor start with Character Creation Mode enabled.
+After a full Foundry restart:
 
-Test after a full Foundry restart:
+1. Create a brand-new `character` Actor.
+2. Open its sheet.
+3. Confirm Character Creation Mode is active immediately:
+   - Character Creation presentation/background is active;
+   - scroll/header Character Creation control shows active state;
+   - creation-only Race controls appear once a Race is assigned.
+4. Disable Character Creation Mode using the scroll/header control and confirm normal mode returns.
+5. Enable it again and confirm creation presentation/controls return.
+6. Confirm a newly created Character still has linked prototype tokens (`prototypeToken.actorLink = true`).
+7. Create a new NPC or Creature only to confirm they do **not** receive Character Creation Mode.
 
-1. Create a **new Character Actor**.
-2. Open the sheet.
-3. Confirm Character Creation presentation is already active and the scroll/header control indicates Creation Mode is enabled.
-4. Add a Race as appropriate and confirm creation-only Race controls become available.
-5. Disable Character Creation Mode using the scroll/header control:
-   - normal presentation returns;
-   - creation-only controls disappear.
-6. Enable it again:
-   - creation presentation and controls return.
-7. Create a new NPC or Creature:
-   - it must **not** automatically enter Character Creation Mode.
-8. Confirm the new Character still has `prototypeToken.actorLink = true` and a scene token opens the same canonical Actor.
+If the user says `Verified`, make `912f3e6...` the new runtime baseline.
 
-If the user says `Verified`, make `68698b6...` the new runtime baseline and continue the Character Creation audit from there.
+---
+
+# Newly identified architectural gap: NPC / Creature sheets
+
+User runtime test confirmed that `npc` and `creature` Actors currently open only Foundry fallback sheets.
+
+Root cause from current source:
+
+- `module/wfrp1ed.mjs` registers `ClassicActorSheet` only for `types: ["character"]`.
+- The source comments explicitly say non-audited Actor subtypes remain on Core Foundry sheets.
+- `template.json` contains a legacy `npc` contract, but there is no proper `creature` Actor contract there even though `system.json` exposes `creature` as an Actor type.
+
+Therefore **do not simply register the Character sheet for NPC/Creature** as a shortcut. The next Actor-sheet architecture slice, after the Character Creation default is verified, should audit and implement native system-owned NPC/Creature data + sheet presentation deliberately.
+
+No migration compatibility is needed for existing test NPCs/Creatures.
 
 ---
 
 # Identity architecture
 
-Use explicit domain identities; do not introduce a new generic `rulesId` architecture.
+Use explicit domain identities; do not create a new generic `rulesId` architecture.
 
 Canonical direction:
 
@@ -105,9 +124,9 @@ Canonical direction:
 - Psychology -> `psychologyId`
 - Disease -> `diseaseId`
 - Spell -> `spellProcedureId`
-- Weapons/armour/equipment use their own structured identity as appropriate
+- weapons/armour/equipment use their own structured identity
 
-For specialised Skills the canonical identity is:
+For specialised Skills canonical identity is:
 
 ```text
 skillId + specialisation
@@ -117,144 +136,135 @@ Rules:
 
 - custom Skills may have blank `skillId`;
 - never infer canonical identity from localized/user-editable names;
-- avoid UUID/name fallback changes without a separate audit, because embedded copies receive new UUIDs;
-- Career generic grants include non-Skill document types, so generic `rulesId` fields cannot be blindly renamed.
+- avoid UUID/name fallback changes without a separate audit because embedded copies get new UUIDs;
+- Career generic grants include non-Skill document types, so generic grant `rulesId` cannot be blindly renamed.
 
-`SkillData` still temporarily exposes a compatibility `rulesId` getter backed by `skillId`; remove it only after all direct consumers are migrated.
+`SkillData` still temporarily exposes a compatibility `rulesId` getter backed by `skillId`; remove only after all direct consumers migrate.
 
-## Core Skill specialisations
+## Skill specialisation
 
-`CoreSkillSpecialisationCatalog` is the single source for finite canonical Skill specialisation choices.
+`CoreSkillSpecialisationCatalog` is the single source of finite canonical Skill specialisation options.
 
-Current catalog-driven specialised Skills include at least:
+Current catalog-driven specialised Skills include:
 
 - Specialist Weapon / Specjalna broń
 - Secret Language / Sekretny język
 - Arcane Language / Język tajemny
 
-Both Career authoring and ordinary Skill Item editing consume the same catalog. Future Skills with a finite canonical choice list should require only a catalog entry, not another Skill-specific UI patch.
-
-This generalized ordinary Skill-sheet behaviour was runtime-verified.
+Career authoring and ordinary Skill Item editing consume the same catalog. Future Skills with finite canonical choices should require only catalog data, not another Skill-specific UI patch. Runtime-verified.
 
 ---
 
 # Experience architecture
 
-## WFRP 1e rule decisions already established
+Established WFRP 1e decisions:
 
-- Characteristic advance: 100 EP.
-- Skill from current/new Career: 100 EP.
-- No invented generic Core rule for buying arbitrary off-Career Skills for increased XP.
-- Cross-Career-Class entry into a Basic Career uses the explicit 200 EP surcharge where the existing Career policy determines it.
-- Training/teacher availability is narrative permission, not a generic Intelligence roll.
-- Initial Career assignment is character creation, not a paid Career Transfer.
+- Characteristic advance = 100 EP.
+- Career Skill = 100 EP.
+- Do not invent a generic increased-cost off-Career Skill rule.
+- Cross-class Basic Career entry may cost 200 EP according to existing Career transfer policy.
+- Teacher/training availability is narrative permission, not a generic Intelligence roll.
+- Initial Career/package acquisition is Character Creation, not a paid Career Transfer.
 
-## Durable Experience transaction service
+## Durable transaction service
 
-The system uses a durable Actor-backed Experience transaction model for purchases made during an open Character Sheet session.
+Runtime-verified behavior:
 
-Required behaviour, runtime-verified:
+- first advancement in an open Character Sheet starts a durable transaction;
+- Characteristic, Career Skill and Career Transfer events are prepared before mutation and marked applied after;
+- supported current-session purchases can be undone;
+- normal sheet close commits to persistent ledger;
+- stale/crashed open transactions roll back;
+- exact pre-transaction XP/state is restored;
+- current-session purchases are visibly marked;
+- Career rollback removes later dependent purchases while preserving earlier purchases.
 
-- first advancement opens a transaction;
-- Characteristic, Career Skill and Career Transfer events are prepared before mutation and marked applied afterwards;
-- individual current-session purchases can be undone independently where supported;
-- normal sheet close commits the open transaction to the persistent ledger;
-- stale/crash/reload open transactions roll back instead of silently committing;
-- rollback restores exact pre-transaction XP/state;
-- current-session purchased items/advances are visibly highlighted;
-- Characteristic repeated purchase indicator may show `−2`, etc.;
-- Career change rollback removes dependent later purchases while preserving earlier purchases in the same session.
-
-Runtime-verified transaction checkpoints include:
+Key verified commits:
 
 ```text
 53681bddf724df6c4ef668cd3f80dd18c081b19d  Characteristic transactions
 39aa671cf89781f2b3d4d24cef8b98b8609522dc  Career Skill transactions
 0f944ff96cadcaed2225a213fb9225e462688d8f  Career change transactions
-d5736ac0775d6dd88db6034221abf3c8acdf530e  Career rollback presentation alignment
+d5736ac0775d6dd88db6034221abf3c8acdf530e  Career rollback presentation
 ```
 
-## Experience Log / persistent ledger
+## Experience Log / ledger
 
-The read-only Experience Log became the persistent audit surface and was then extended with GM accounting operations.
-
-Verified behaviour:
+Verified behavior:
 
 - separate `Dziennik PD / Experience Log` window;
 - Current / Total / Spent summary;
-- committed advancement transactions newest first;
-- open log rerenders automatically when relevant Actor XP/ledger data changes;
-- manual signed GM entries with mandatory/meaningful description;
-- manual negative corrections cannot make Total lower than Spent;
-- manual-entry descriptions are editable without changing the historical amount;
-- automated mechanical purchase rows remain protected;
-- direct GM edits of Total and Current on the Character Sheet are now audited as explicit ledger corrections instead of silent mutations.
+- committed transactions newest first;
+- open log updates live when Actor XP/ledger changes;
+- GM manual signed entries with description;
+- negative correction cannot make Total lower than Spent;
+- manual description can be edited without changing historical amount;
+- automated purchase rows remain protected;
+- direct edits of Current/Total on Character Sheet are audited as ledger corrections.
 
 Relevant verified commits:
 
 ```text
-0ad445e50264559143c1e24ddf311b1c92896119  Read-only Experience Log
-b84b8a2e0b4b426316478eca064a8320b69725f7  Live Experience Log refresh
+0ad445e50264559143c1e24ddf311b1c92896119  Experience Log
+b84b8a2e0b4b426316478eca064a8320b69725f7  Live log refresh
 9f89d202e8d5f6471594b64a5be4d537ca3306df  Manual ledger controls
-3e503f3fecd06c520f1ed7767779ff745d99fac5  Global replace-on-focus in Experience dialog
-bb3812e1caf4b68c5ae13bebc4b0e799e48bbcfb  Audited direct Current/Total corrections
+3e503f3fecd06c520f1ed7767779ff745d99fac5  Input replace-on-focus fix
+bb3812e1caf4b68c5ae13bebc4b0e799e48bbcfb  Audited Current/Total corrections
 ```
 
-Input UX rule: system-owned editable value inputs should use the existing global replace-on-first-focus behaviour (`SelectAllOnFocus.mjs`), with a second deliberate click allowing normal caret editing. New system dialogs must use the normal `.wfrp1ed` root so they inherit this behaviour.
+All XP accounting mutations should go through established Experience services rather than parallel ledger writes.
 
 ---
 
 # Claimable XP awards through Chat
 
-This workflow is implemented and runtime-verified end-to-end.
+Implemented and runtime-verified end-to-end.
 
-GM workflow:
+GM:
 
 - open Experience Log;
 - choose `Przyznaj PD przez czat / Award XP in chat`;
 - enter positive XP amount;
-- **reason is mandatory**;
-- explicitly choose entitled player-owned Character Actors;
-- post a persistent chat card.
+- reason is mandatory;
+- explicitly select entitled player-owned Character Actors;
+- post persistent chat card.
 
-Player workflow:
+Player:
 
-- an owner sees `Odbierz / Claim` for an entitled Actor;
-- each entitled Actor may claim exactly once;
-- claim grants XP through `ExperienceLedgerService`;
-- the exact GM reason is written to that Actor's ledger;
-- chat card persists claimed state.
+- owner sees `Odbierz / Claim` for entitled Actor;
+- each entitled Actor can claim exactly once;
+- award goes through `ExperienceLedgerService`;
+- exact GM reason is written to Actor ledger;
+- ChatMessage persists claimed state.
 
-Integrity architecture:
+Integrity:
 
 - primary active GM is authoritative for socket-driven claim mutation;
-- ChatMessage stores recipient claim state;
-- Actor ledger also stores the award identity, so a retry cannot double-grant even if message-state update is interrupted;
-- one user owning multiple entitled Actors may claim once for each Actor;
-- XP award chat integration does not maintain a second accounting system.
+- message stores recipient claim state;
+- Actor ledger stores award identity, preventing duplicate grant even after partial failure/retry;
+- one user owning multiple entitled Actors may claim once per Actor;
+- no second XP accounting system exists in chat integration.
 
-Relevant implementation:
+Relevant files:
 
 ```text
 module/experience/ExperienceAwardChatIntegration.mjs
 module/experience/ExperienceLedgerService.mjs
 ```
 
-The XP chat mechanics were functionally confirmed, then checkbox/token issues were fixed and the complete slice was verified through `84bf5c46...`.
-
 ---
 
 # Character Actor / Token identity policy
 
-For player Characters, common-sense Foundry behaviour is required:
+For player Characters:
 
 ```text
-sidebar Character Actor
+sidebar world Actor
 == linked scene Token Actor
 == Actor opened by double-clicking that Token
 ```
 
-Therefore every newly created `character` Actor defaults to:
+Every newly created `character` Actor defaults to:
 
 ```text
 prototypeToken.actorLink = true
@@ -262,11 +272,9 @@ prototypeToken.actorLink = true
 
 This was runtime-verified.
 
-Do not change XP awards to target arbitrary synthetic Token Actors. Awards target the canonical world Character Actor.
+Do not redirect XP awards to arbitrary synthetic token Actors. Chat awards target canonical world Character Actors.
 
-NPC/Creature/etc. token-link policy is not forced by this Character rule.
-
-Because this system is being built from scratch, do not add migration tooling for old unlinked test Character tokens unless explicitly requested.
+NPC/Creature token policy remains separate.
 
 Implementation:
 
@@ -276,156 +284,135 @@ module/tokens/CharacterPrototypeTokenDefaults.mjs
 
 ---
 
-# Character Creation Mode
+# Character Creation Mode architecture
 
-Authoritative mode flag:
+Authoritative flag:
 
 ```text
 flags.wfrp1ed.characterCreationMode
 ```
 
-Implementation:
+Core integration:
 
 ```text
 module/creation/CharacterCreationModeIntegration.mjs
 ```
 
-The mode already existed before the current checkpoint and is consumed by creation tooling. It is not merely visual.
+The mode is functional state, not only presentation. Existing creation tooling consumes it, including Race-driven generation and initial Career assignment/package acquisition.
 
-Existing creation architecture includes Race-driven generation such as:
+Initial Career package acquisition is Character Creation and remains separate from normal XP purchases. Do not create a generic “Creation Mode means all progression is free” shortcut.
 
-- starting characteristic generation;
-- starting Skills;
-- age/height/secondary details where implemented;
-- Career Class handling;
-- random initial Career from Race tables;
-- free initial Career package acquisition (Skills/trappings/magic where defined).
+The GM can explicitly toggle the mode with the existing scroll/header control.
 
-Important boundary:
-
-- initial Career/package acquisition is **character creation**, not a zero-cost version of normal XP advancement;
-- do not route normal Characteristic/Career Skill/Career Transfer purchases through a generic “free because Creation Mode” shortcut without an explicit audited design;
-- GM can explicitly toggle Creation Mode with the existing scroll/header control.
-
-Current unverified change:
-
-```text
-68698b6f26bff49f6fe2f2cf8600f495aba91fdd
-Enable Character Creation Mode for new Characters
-```
-
-No migration logic was added; only new Character creation defaults are affected.
+Current default-on behavior for newly created Characters is pending verification at `912f3e6...`.
 
 ---
 
-# Canonical UI contracts / presentation rules
+# Canonical UI contracts
+
+## Inputs
+
+System-owned editable value inputs use the global replace-on-first-focus behavior (`SelectAllOnFocus.mjs`). First typing replaces the old value; a deliberate second click permits caret editing. New system DialogV2 content should use the normal `.wfrp1ed` root so it inherits this behavior.
 
 ## Checkboxes
 
-All system-owned custom sheets/dialogs/popups/configuration windows must use the canonical `.wfrp1ed-checkbox` contract or `WfrpCheckbox` helper rather than raw browser-specific presentation.
+Use canonical `.wfrp1ed-checkbox` / WFRP checkbox integration rather than browser-default checkbox presentation.
 
-Global checkbox geometry lives in:
+Global implementation:
 
 ```text
 css/forms/checkbox.css
-module/ui/WfrpCheckbox.mjs
 module/ui/SystemCheckboxIntegration.mjs
 ```
 
-The global checkbox presentation is theme-aware via `currentColor`, so it remains visible on parchment and Foundry dark DialogV2 surfaces. This was runtime-verified.
+Checkbox presentation uses `currentColor`, so it remains visible on parchment and dark DialogV2 surfaces. Runtime-verified.
 
-## Wounds display
+## Wounds
 
-Editable Wounds (`current / max`) and read-only `current/max` must share the same visual centre in the Classic Żw cell.
+Editable `current / max` and read-only `current/max` must share the same center in the Classic Żw cell. Runtime-verified at `84bf5c46...`.
 
-The read-only value spans the entire three-column Wounds grid. Runtime-verified at:
+## Current Career transaction marker
 
-```text
-84bf5c46b2930c8a3d423449312f4d94da9c5009
-```
+During an open Career transfer:
 
-## Current Career transaction indicator
+- Current Career geometry must not move;
+- green indication must not disturb layout;
+- minus badge sits immediately left of Career action badge;
+- Shift-click is rollback affordance.
 
-During an open Career-transfer transaction:
-
-- normal Current Career geometry must not move;
-- green transaction indication must not disturb layout;
-- minus badge sits immediately left of the existing Career action/roll badge;
-- Shift-click remains the rollback affordance.
-
-Runtime-verified at `d5736ac...`.
+Runtime-verified.
 
 ---
 
-# Career state / architecture
+# Career architecture
 
-Career progression is no longer at the old August-stage described by previous handoff text.
+Implemented now (do not rely on obsolete August handoff statements):
 
-Implemented architecture now includes:
-
-- initial Career assignment/replacement during character creation;
-- initial Career package acquisition;
+- initial Career assignment/replacement during Character Creation;
+- free initial Career package acquisition;
 - active Career Advance Scheme application;
 - Career Skill offers and 100 EP purchases;
-- Career Transfer policy/cost/restriction path;
-- 100/200 EP Career transfer costs according to the existing rule policy;
-- durable Career Skill and Career Transfer Experience transactions;
-- rollback/current-session indicator behaviour;
-- Career history/exits derived from progression rather than free Actor text.
+- Career Transfer policy/cost/restrictions;
+- 100/200 EP transfer costs according to rule policy;
+- durable Career Skill and Career Transfer transactions;
+- rollback/current-session indicators;
+- progression-owned Career history/exits.
 
-Do not reintroduce the old statement that Career Transfer or Advance Scheme replacement are “not implemented”.
-
-Identity migration debt remains separate: some Career/reference code still has transitional `rulesId` fallback paths. Audit those deliberately; do not bulk-rename generic Career grants because trappings and other non-Skill types share parts of the grant schema.
+Identity migration debt remains separate: some Career/reference code still contains transitional `rulesId` fallback paths. Audit deliberately; do not bulk-rename generic grants.
 
 ---
 
-# Protected regressions / do not casually change
+# Protected regressions / boundaries
 
-- Classic Character Sheet registration/context/render path has previous regression history. Avoid broad sheet rewrites for narrow features.
-- Chat compatibility regression was previously fixed; do not revive old chat hacks without a concrete reproduced problem.
-- Specialist Weapon / Skill specialisation behaviour is now catalog-driven. Do not re-hardcode Specialist Weapon-only logic.
-- Standard Tests have protected explicit Skill identity behaviour; do not replace it with broad catalog inference without a separate audit.
-- Existing global input-focus and checkbox systems are canonical; new dialogs should join those contracts instead of adding local duplicate handlers/styles.
-- Experience accounting mutations should go through the established Experience services rather than writing parallel ledger structures.
-- Chat XP grants target canonical world Character Actors, not arbitrary scene synthetic Actors.
+- Classic Character Sheet registration/context/render has prior regression history; avoid broad rewrites for narrow tasks.
+- Do not revive old chat compatibility hacks without a concrete reproduced issue.
+- Skill specialisation is catalog-driven; do not re-hardcode Specialist Weapon-only behavior.
+- Standard Tests have explicit protected Skill identity behavior; do not replace with broad inference without audit.
+- Global input-focus and checkbox integrations are canonical; new UIs should join those contracts.
+- XP accounting mutations belong to Experience services.
+- Chat XP awards target canonical world Character Actors.
+- New Character tokens are linked by default.
+- NPC/Creature native sheets are currently **missing** and must be implemented as a deliberate data/sheet architecture slice, not by pretending they are Characters.
 
 ---
 
-# Relevant verified recent commit chain
+# Recent verified continuation chain
 
-This is not an exhaustive repository history; it is the recent continuation chain most likely needed by a future session.
+Not exhaustive; only the recent chain most relevant to continuation:
 
 ```text
-551df7844b07f9075752773325adab17f21f114e  Foundry v14 TextEditor drag data
-6c7cc5a5a46e8ffb2112f11a3856b7f2ca7c804e  Race mandatory Skill threshold guard verified
+551df7844b07f9075752773325adab17f21f114e  v14 TextEditor drag data
+6c7cc5a5a46e8ffb2112f11a3856b7f2ca7c804e  Race mandatory Skill threshold guard
 489df063acb7e4dc8986a1ede2d563aa84ed7621  Canonicalize Career Skill grants to skillId
-e0a1d15c946d4733f3f981378d874fb4a69de92b  v14 drag compatibility + Career Skill tooltip verified
-53681bddf724df6c4ef668cd3f80dd18c081b19d  Characteristic Experience transactions verified
-39aa671cf89781f2b3d4d24cef8b98b8609522dc  Career Skill Experience transactions verified
-d6ae20f99a02c72463b291a43bd29f77970a35b5  Current-transaction indicator verified
-0f944ff96cadcaed2225a213fb9225e462688d8f  Career change transactions verified
-d5736ac0775d6dd88db6034221abf3c8acdf530e  Career transaction presentation verified
-4add39460357f5b70825805e6768e1417009ed61  Generalized Core Skill specialisation authoring verified
-0ad445e50264559143c1e24ddf311b1c92896119  Experience Log verified
-b84b8a2e0b4b426316478eca064a8320b69725f7  Live Experience Log refresh verified
-9f89d202e8d5f6471594b64a5be4d537ca3306df  Manual Experience ledger controls verified
-3e503f3fecd06c520f1ed7767779ff745d99fac5  Replace-on-focus Experience dialog verified
-bb3812e1caf4b68c5ae13bebc4b0e799e48bbcfb  Audited direct XP corrections verified
-cf5bcfd8b05f521cb04f3a83578dea3b2256718c  XP chat award + linked Character token implementation functionally verified
-84bf5c46b2930c8a3d423449312f4d94da9c5009  Checkbox theme + read-only Wounds presentation verified
-68698b6f26bff49f6fe2f2cf8600f495aba91fdd  New Characters default to Creation Mode — NOT YET VERIFIED
+e0a1d15c946d4733f3f981378d874fb4a69de92b  v14 drag compatibility + Career Skill tooltip
+53681bddf724df6c4ef668cd3f80dd18c081b19d  Characteristic transactions
+39aa671cf89781f2b3d4d24cef8b98b8609522dc  Career Skill transactions
+d6ae20f99a02c72463b291a43bd29f77970a35b5  Current transaction indicator
+0f944ff96cadcaed2225a213fb9225e462688d8f  Career change transactions
+d5736ac0775d6dd88db6034221abf3c8acdf530e  Career transaction presentation
+4add39460357f5b70825805e6768e1417009ed61  Generalized Skill specialisation authoring
+0ad445e50264559143c1e24ddf311b1c92896119  Experience Log
+b84b8a2e0b4b426316478eca064a8320b69725f7  Live Experience Log refresh
+9f89d202e8d5f6471594b64a5be4d537ca3306df  Manual Experience ledger controls
+3e503f3fecd06c520f1ed7767779ff745d99fac5  Canonical input focus in Experience dialog
+bb3812e1caf4b68c5ae13bebc4b0e799e48bbcfb  Audited direct XP field corrections
+cf5bcfd8b05f521cb04f3a83578dea3b2256718c  Character linked-token default loaded
+84bf5c46b2930c8a3d423449312f4d94da9c5009  Theme-aware checkbox + centered read-only Wounds verified
+```
+
+Unverified/failed after that baseline:
+
+```text
+68698b6f26bff49f6fe2f2cf8600f495aba91fdd  FAILED runtime test: default Character Creation Mode did not activate
+912f3e6b3a29b2a14fd1068cb931b7496cb593dd  Current replacement, awaiting runtime verification
 ```
 
 ---
 
-# Future-session startup checklist
+# Next implementation order
 
-A future chat should do this before implementation:
-
-1. Read `SESSION_HANDOFF.md`.
-2. Fetch current `master` HEAD and confirm whether it moved beyond the commit recorded here.
-3. If current HEAD differs, inspect intervening commits/files before assuming this handoff is complete.
-4. Check the **Immediate continuation / next runtime test** section.
-5. Do not begin the next feature while the latest checkpoint is still unverified unless the user explicitly redirects the work.
-6. For any edit, fetch the current target file + SHA first.
-7. After a successful runtime verification, update this handoff when the accumulated state materially changes or before ending/handing off a long implementation session.
+1. Runtime-test `912f3e6...` with a brand-new Character.
+2. If verified, make it the new runtime baseline.
+3. Audit native NPC/Creature Actor data requirements and sheet UX.
+4. Implement proper system-owned NPC/Creature sheet(s) in small dependency-ordered checkpoints.
+5. Continue remaining Character Creation / Career identity debt only after those checkpoints are stable.
