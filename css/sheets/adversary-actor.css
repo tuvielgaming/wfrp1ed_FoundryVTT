@@ -1,0 +1,237 @@
+.wfrp1ed.adversary-actor-sheet .window-content {
+	padding: 0;
+	background:
+		linear-gradient(rgb(255 252 238 / 94%), rgb(239 229 199 / 94%)),
+		url("../../ui/parchment.jpg");
+	color: #2b2115;
+}
+
+.wfrp1ed.adversary-actor-sheet .adversary-sheet-shell {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 16px;
+	min-height: 100%;
+}
+
+.wfrp1ed.adversary-actor-sheet .adversary-header {
+	display: grid;
+	grid-template-columns: 112px 1fr;
+	gap: 16px;
+	align-items: center;
+}
+
+.wfrp1ed.adversary-actor-sheet .adversary-portrait-wrap {
+	display: grid;
+	place-items: center;
+	width: 112px;
+	height: 112px;
+	border: 1px solid currentColor;
+	background: rgb(255 255 255 / 38%);
+}
+
+.wfrp1ed.adversary-actor-sheet .adversary-portrait {
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
+}
+
+.wfrp1ed.adversary-actor-sheet .adversary-identity {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(220px, 0.6fr);
+	gap: 8px 12px;
+	align-items: end;
+}
+
+.wfrp1ed.adversary-actor-sheet .adversary-type-label {
+	grid-column: 1 / -1;
+	font-variant: small-caps;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	opacity: 0.75;
+}
+
+.wfrp1ed.adversary-actor-sheet .adversary-name {
+	font-size: 1.8rem;
+	font-weight: 700;
+}
+
+.wfrp1ed.adversary-actor-sheet .adversary-field,
+.wfrp1ed.adversary-actor-sheet .adversary-resource-grid label,
+.wfrp1ed.adversary-actor-sheet .adversary-armour-grid label {
+	display: grid;
+	gap: 4px;
+	font-weight: 700;
+}
+
+.wfrp1ed.adversary-actor-sheet .adversary-section {
+	border: 1px solid rgb(71 49 29 / 58%);
+	background: rgb(255 255 255 / 28%);
+	padding: 10px;
+}
+
+.wfrp1ed.adversary-actor-sheet .adversary-section > h2,
+.wfrp1ed.adversary-actor-sheet .adversary-item-group-header h2 {
+	margin: 0;
+	font-size: 1rem;
+	font-variant: small-caps;
+	letter-spacing: 0.04em;
+}
+
+.wfrp1ed.adversary-actor-sheet .adversary-profile-grid {
+	display: grid;
+	grid-template-columns: repeat(14, minmax(42px, 1fr));
+	gap: 4px;
+	margin-top: 8px;
+}
+
+.wfrp1ed.adversary-actor-sheet .adversary-characteristic {
+	position: relative;
+	display: grid;
+	grid-template-rows: auto 32px 24px;
+	gap: 3px;
+	min-width: 0;
+	text-align: center;
+}
+
+.wfrp1ed.adversary-actor-sheet .adversary-characteristic-label {
+	font-weight: 800;
+	font-size: 0.82rem;
+}
+
+.wfrp1ed.adversary-actor-sheet .adversary-characteristic input,
+.wfrp1ed.adversary-actor-sheet .adversary-resource-grid input,
+.wfrp1ed.adversary-actor-sheet .adversary-armour-grid input {
+	text-align: center;
+}
+
+.wfrp1ed.adversary-actor-sheet .adversary-roll-button {
+	min-height: 22px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	box-shadow: none;
+	color: inherit;
+}
+
+.wfrp1ed.adversary-actor-sheet .adversary-roll-button:hover {
+	text-shadow: 0 0 4px currentColor;
+}
+
+.wfrp1ed.adversary-actor-sheet .adversary-two-column {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 12px;
+}
+
+.wfrp1ed.adversary-actor-sheet .adversary-resource-grid,
+.wfrp1ed.adversary-actor-sheet .adversary-armour-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 8px;
+	margin-top: 8px;
+}
+
+.wfrp1ed.adversary-actor-sheet .adversary-wounds-control {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 6px;
+	align-items: center;
+}
+
+.wfrp1ed.adversary-actor-sheet .adversary-items-section {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 10px;
+}
+
+.wfrp1ed.adversary-actor-sheet .adversary-item-group {
+	min-width: 0;
+	border: 1px solid rgb(71 49 29 / 32%);
+	background: rgb(255 255 255 / 22%);
+}
+
+.wfrp1ed.adversary-actor-sheet .adversary-item-group-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 6px 8px;
+	border-bottom: 1px solid rgb(71 49 29 / 32%);
+}
+
+.wfrp1ed.adversary-actor-sheet .adversary-add-item,
+.wfrp1ed.adversary-actor-sheet .adversary-delete-item {
+	flex: 0 0 auto;
+	width: 24px;
+	height: 24px;
+	min-height: 24px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	box-shadow: none;
+	color: inherit;
+}
+
+.wfrp1ed.adversary-actor-sheet .adversary-item-list {
+	display: grid;
+	max-height: 150px;
+	overflow: auto;
+}
+
+.wfrp1ed.adversary-actor-sheet .adversary-item-row {
+	display: grid;
+	grid-template-columns: 28px minmax(0, 1fr) 24px;
+	gap: 6px;
+	align-items: center;
+	padding: 4px 6px;
+	border-bottom: 1px solid rgb(71 49 29 / 18%);
+}
+
+.wfrp1ed.adversary-actor-sheet .adversary-item-row:last-child {
+	border-bottom: 0;
+}
+
+.wfrp1ed.adversary-actor-sheet .adversary-item-row img {
+	width: 28px;
+	height: 28px;
+	object-fit: cover;
+	border: 0;
+}
+
+.wfrp1ed.adversary-actor-sheet .adversary-item-name {
+	min-width: 0;
+	padding: 2px 4px;
+	border: 0;
+	background: transparent;
+	box-shadow: none;
+	color: inherit;
+	text-align: left;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.wfrp1ed.adversary-actor-sheet .adversary-text-sections textarea {
+	min-height: 120px;
+	resize: vertical;
+}
+
+.wfrp1ed.adversary-actor-sheet input:disabled,
+.wfrp1ed.adversary-actor-sheet textarea:disabled {
+	color: inherit;
+	opacity: 1;
+	background: transparent;
+	border-color: transparent;
+}
+
+@media (max-width: 760px) {
+	.wfrp1ed.adversary-actor-sheet .adversary-profile-grid {
+		grid-template-columns: repeat(7, minmax(42px, 1fr));
+	}
+
+	.wfrp1ed.adversary-actor-sheet .adversary-two-column,
+	.wfrp1ed.adversary-actor-sheet .adversary-items-section {
+		grid-template-columns: 1fr;
+	}
+}
