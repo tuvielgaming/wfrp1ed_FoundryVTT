@@ -1,0 +1,203 @@
+<div class="adversary-sheet-shell">
+	<header class="adversary-header">
+		<div class="adversary-portrait-wrap">
+			<img
+				class="adversary-portrait"
+				src="{{document.img}}"
+				alt="{{document.name}}"
+			/>
+		</div>
+
+		<div class="adversary-identity">
+			<div class="adversary-type-label">{{actorTypeLabel}}</div>
+			<input
+				class="adversary-name"
+				name="name"
+				type="text"
+				value="{{document.name}}"
+				{{#unless editable}}disabled{{/unless}}
+			/>
+
+			<label class="adversary-field">
+				<span>{{labels.species}}</span>
+				<input
+					name="system.details.species"
+					type="text"
+					value="{{system.details.species}}"
+					{{#unless editable}}disabled{{/unless}}
+				/>
+			</label>
+		</div>
+	</header>
+
+	<section class="adversary-section adversary-profile-section">
+		<h2>{{labels.profile}}</h2>
+		<div class="adversary-profile-grid">
+			{{#each characteristics as |characteristic|}}
+				<div class="adversary-characteristic" title="{{characteristic.label}}">
+					<div class="adversary-characteristic-label">
+						{{characteristic.abbreviation}}
+					</div>
+
+					<input
+						name="system.characteristics.{{characteristic.id}}.initial"
+						type="number"
+						step="1"
+						min="0"
+						value="{{characteristic.initial}}"
+						{{#unless ../editable}}disabled{{/unless}}
+					/>
+
+					{{#if characteristic.rollable}}
+						<button
+							type="button"
+							class="adversary-roll-button"
+							data-action="rollCharacteristic"
+							data-characteristic="{{characteristic.id}}"
+							title="{{characteristic.label}}"
+						>
+							<i class="fa-solid fa-dice-d100"></i>
+						</button>
+					{{/if}}
+				</div>
+			{{/each}}
+		</div>
+	</section>
+
+	<div class="adversary-two-column">
+		<section class="adversary-section">
+			<h2>{{labels.wounds}}</h2>
+			<div class="adversary-resource-grid">
+				<label>
+					<span>{{labels.wounds}}</span>
+					<div class="adversary-wounds-control">
+						<input
+							name="system.status.wounds.value"
+							type="number"
+							step="1"
+							min="0"
+							value="{{system.status.wounds.value}}"
+							{{#unless editable}}disabled{{/unless}}
+						/>
+						<span>/ {{woundsMaximum}}</span>
+					</div>
+				</label>
+
+				<label>
+					<span>{{labels.magicPoints}}</span>
+					<input
+						name="system.status.magicPoints"
+						type="number"
+						step="1"
+						min="0"
+						value="{{system.status.magicPoints}}"
+						{{#unless editable}}disabled{{/unless}}
+					/>
+				</label>
+
+				<label>
+					<span>{{labels.powerLevel}}</span>
+					<input
+						name="system.status.powerLevel"
+						type="number"
+						step="1"
+						min="0"
+						value="{{system.status.powerLevel}}"
+						{{#unless editable}}disabled{{/unless}}
+					/>
+				</label>
+
+				<label>
+					<span>{{labels.insanity}}</span>
+					<input
+						name="system.status.insanity"
+						type="number"
+						step="1"
+						min="0"
+						value="{{system.status.insanity}}"
+						{{#unless editable}}disabled{{/unless}}
+					/>
+				</label>
+			</div>
+		</section>
+
+		<section class="adversary-section">
+			<h2>{{labels.armourPoints}}</h2>
+			<div class="adversary-armour-grid">
+				<label><span>{{labels.head}}</span><input name="system.status.armourPoints.head" type="number" min="0" step="1" value="{{system.status.armourPoints.head}}" {{#unless editable}}disabled{{/unless}} /></label>
+				<label><span>{{labels.body}}</span><input name="system.status.armourPoints.body" type="number" min="0" step="1" value="{{system.status.armourPoints.body}}" {{#unless editable}}disabled{{/unless}} /></label>
+				<label><span>{{labels.rightArm}}</span><input name="system.status.armourPoints.rightArm" type="number" min="0" step="1" value="{{system.status.armourPoints.rightArm}}" {{#unless editable}}disabled{{/unless}} /></label>
+				<label><span>{{labels.leftArm}}</span><input name="system.status.armourPoints.leftArm" type="number" min="0" step="1" value="{{system.status.armourPoints.leftArm}}" {{#unless editable}}disabled{{/unless}} /></label>
+				<label><span>{{labels.rightLeg}}</span><input name="system.status.armourPoints.rightLeg" type="number" min="0" step="1" value="{{system.status.armourPoints.rightLeg}}" {{#unless editable}}disabled{{/unless}} /></label>
+				<label><span>{{labels.leftLeg}}</span><input name="system.status.armourPoints.leftLeg" type="number" min="0" step="1" value="{{system.status.armourPoints.leftLeg}}" {{#unless editable}}disabled{{/unless}} /></label>
+			</div>
+		</section>
+	</div>
+
+	<section class="adversary-section adversary-items-section">
+		{{#each itemGroups as |group|}}
+			<div class="adversary-item-group">
+				<div class="adversary-item-group-header">
+					<h2>{{group.label}}</h2>
+					{{#if ../editable}}
+						<button
+							type="button"
+							class="adversary-add-item"
+							data-action="createItem"
+							data-item-type="{{group.type}}"
+							title="{{../labels.add}}"
+						>
+							<i class="fa-solid fa-plus"></i>
+						</button>
+					{{/if}}
+				</div>
+
+				<div class="adversary-item-list">
+					{{#each group.items as |item|}}
+						<div class="adversary-item-row" data-item-id="{{item.id}}">
+							<img src="{{item.img}}" alt="" />
+							<button
+								type="button"
+								class="adversary-item-name"
+								data-action="openItem"
+								data-item-id="{{item.id}}"
+								title="{{../../labels.open}}"
+							>
+								{{item.name}}
+							</button>
+							{{#if ../../editable}}
+								<button
+									type="button"
+									class="adversary-delete-item"
+									data-action="deleteItem"
+									data-item-id="{{item.id}}"
+									title="{{../../labels.remove}}"
+								>
+									<i class="fa-solid fa-trash"></i>
+								</button>
+							{{/if}}
+						</div>
+					{{/each}}
+				</div>
+			</div>
+		{{/each}}
+	</section>
+
+	<div class="adversary-two-column adversary-text-sections">
+		<section class="adversary-section">
+			<h2>{{labels.description}}</h2>
+			<textarea
+				name="system.details.description"
+				{{#unless editable}}disabled{{/unless}}
+			>{{system.details.description}}</textarea>
+		</section>
+
+		<section class="adversary-section">
+			<h2>{{labels.notes}}</h2>
+			<textarea
+				name="system.details.notes"
+				{{#unless editable}}disabled{{/unless}}
+			>{{system.details.notes}}</textarea>
+		</section>
+	</div>
+</div>
