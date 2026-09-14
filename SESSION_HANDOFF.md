@@ -1,510 +1,431 @@
 # Session Handoff
 
-**Date:** 2026-08-15  
-**Purpose:** Single current implementation/architecture checkpoint. Do not create competing progress documents.
+**Date:** 2026-09-14  
+**Purpose:** This is the **single current continuation/source-of-truth document** for future ChatGPT sessions working on this repository. Do not create competing progress/handoff documents. Read this file first, then inspect current `master` before making any change.
 
-## Source of truth
+## Repository / authority
 
 Repository: `tuvielgaming/wfrp1ed_FoundryVTT`  
-Branch: `master`
+Branch: `master`  
+Target: Foundry VTT v14  
+System: Warhammer Fantasy Roleplay 1st Edition  
+Primary presentation: Polish Classic Character Sheet
 
-GitHub/current `master` is authoritative. Fetch the exact current file + blob SHA before every write and preserve user commits/visual adjustments.
+GitHub/current `master` is authoritative for code. This file is authoritative for **continuation context, architecture decisions, workflow, verified checkpoints, protected regressions, and the next pending runtime test**.
 
-Latest implementation commit before this handoff save:
+Older stable design/rules references remain in:
 
-```text
-653cde793e1379d107010711317ff5f1369b0c0f
-Move adjudication rebuilds to the authoritative client
-```
+- `PROJECT_STATE.md`
+- `RULEBOOK_IMPLEMENTATION.md`
+- `FOUNDRY_V14_GUIDELINES.md`
 
-Important user-authored visual commits to preserve:
-
-```text
-d07a488171e7d58981b55b2fa724b81ee2e42ece  Attack debt marker position fix
-84108b417bcae42666182e45292b3efb051fca3f  Player edit toggle style update
-308b5fdd996a3683e67da68e096f0eb9c79cc347  Adjust melee weapon table top display
-39a9b2bb288e74f5e451fcde9e08780b67806ec6  Crit wound placement
-91b3fd95b3d4300b51ef1cd0a45fecff19249892  Small Wound lock marker alignment
-```
-
-Older stable architecture/rule decisions remain documented in:
-
-```text
-PROJECT_STATE.md
-RULEBOOK_IMPLEMENTATION.md
-FOUNDRY_V14_GUIDELINES.md
-```
-
-This file is only the current continuation checkpoint.
+Do not infer current implementation state from those older documents when this file says otherwise.
 
 ---
 
-# Immediate continuation
+# Mandatory implementation workflow
 
-The latest session returned to the combat Damage → Critical → persistent consequence → rollback lifecycle and fixed four runtime problems found during player/GM testing.
-
-**First action next session:** pull current `master`, fully restart Foundry so all changed ES modules reload, then runtime-test the combat fixes below before doing more implementation work.
-
-Test in this order:
-
-1. Generate a **fresh Leg #7** detailed Critical and apply the Critical Wound.
-   - proper Core injury description must be visible;
-   - Critical Wounds window must show `Efekty: 1`;
-   - one managed Active Effect must exist;
-   - for the test Ork shown during this session, `Sz 3 → 1` and `I 27 → 13` are expected under the agreed flooring behavior.
-
-2. Invalidate that damage.
-   - linked Critical Wound disappears;
-   - its managed Active Effect disappears with the Item;
-   - Movement and Initiative return to their original values;
-   - Wounds restore from the recorded transaction.
-
-3. Generate a lethal detailed Critical.
-   - resolving the table result alone must not mark the Actor Dead;
-   - applying the fatal consequence must mark Dead/Defeated according to the fatal lifecycle;
-   - **Invalidate Damage** must restore Wounds, revert the fatal application and remove the derived Dead/Defeated mark.
-   - if a Fate Point has already been spent for that fatal transaction, damage rollback is intentionally blocked until Fate rollback exists/is performed.
-
-4. As a Player, adjudicate a Parry Test from failure → success after the attack damage die has already been rolled.
-   - no permission/database error should appear on the Player client;
-   - the original attack damage die must be preserved;
-   - if the newly successful Parry has no existing reduction die, lifecycle must move to the normal `Roll Parry Reduction 1d6` stage rather than rerolling attack damage.
-
-5. Apply Damage from the Player-facing damage card.
-   - damage applies exactly once;
-   - `Apply Damage` / `Zastosuj obrażenia` must disappear after authoritative state refresh on both GM and Player;
-   - if a stale copy survives for one render frame and is clicked again, the click must be harmless/idempotent and must not produce the previous `damage packet has already been applied` error.
-
-After this combat verification pass, return to the Career Item assignment runtime test saved below unless a combat regression remains.
+1. **Inspect current `master` first.** Never reconstruct source from memory or an older chat.
+2. Before modifying an existing file:
+   - fetch current `master` HEAD;
+   - fetch the exact current file and blob SHA;
+   - inspect the surrounding implementation and related consumers.
+3. Push directly to `master` unless the user explicitly requests another workflow.
+4. Make small dependency-ordered commits/checkpoints.
+5. After each runtime-relevant checkpoint provide:
+   - commit SHA;
+   - exact files changed;
+   - what changed and why;
+   - exact Foundry runtime verification steps.
+6. **Do not call anything runtime-verified until the user explicitly tests it and says `Verified`/`verified`.**
+7. If a test fails, diagnose the source before adding another patch. Do not stack competing mechanisms.
+8. Preserve existing user-authored visual/layout work unless the task explicitly requires changing it.
+9. Foundry v14 APIs are authoritative. Avoid deprecated Foundry APIs.
+10. For WFRP mechanics, English WFRP 1e Core is primary mechanical authority; Polish Core is terminology/localization authority. Verify source material before changing a rule.
+11. `packs/` output is generated locally and gitignored; do not treat generated packs as source files.
+12. The project is being built from scratch. Current test Actors/Tokens may be deleted/recreated. **Do not add migration/compatibility machinery solely for disposable test data unless explicitly requested.**
 
 ---
 
-# Combat damage / detailed Critical lifecycle — LATEST SESSION
+# Current baseline
 
-The user runtime-tested a damage result which generated a Leg #7 Critical Wound and found four distinct issues:
-
-1. invalidating damage after an applied lethal Critical restored Wounds/removed the Critical consequence but left the Actor marked Dead;
-2. a generated Leg #7 Critical Wound displayed no proper Core description and `Efekty: 0`, therefore Movement and Initiative were not affected;
-3. when a Player edited their Parry Test from failure to success, their client logged Foundry permission/database errors even though the attack lifecycle continued;
-4. after applying damage, the `Apply Damage` button could remain rendered, and clicking it again produced `This damage packet has already been applied to the target Actor.`
-
-These were treated as separate lifecycle defects rather than patched as one UI symptom.
-
-## Fatal consequence rollback now belongs to damage rollback
-
-Damage rollback now inspects the linked fatal application transaction. If the DamagePacket owns an applied fatal Critical consequence, rollback also changes that fatal application to `reverted`, restores Wounds, and then asks the fatal-status integration to recompute the derived Dead/Defeated state.
-
-Safety boundary:
+## Latest runtime-verified baseline
 
 ```text
-fatal consequence applied
-+ Fate Point already spent for that packet
-→ damage rollback refuses
+84bf5c46b2930c8a3d423449312f4d94da9c5009
+Center read-only Wounds display
 ```
 
-A permanent Fate expenditure must never be silently undone by a lower-level Damage rollback.
+Everything through this commit has been runtime-verified by the user unless a specific section below says otherwise.
 
-Commit:
+## Current `master` after the latest unverified implementation
 
 ```text
-208169b2e540829ca278c39702bff1e2e0f4a90d  Revert fatal consequences with damage rollback
+68698b6f26bff49f6fe2f2cf8600f495aba91fdd
+Enable Character Creation Mode for new Characters
 ```
 
-Expected lifecycle:
-
-```text
-Damage applied
-→ lethal detailed Critical resolved
-→ fatal consequence applied
-→ Actor marked Dead/Defeated
-→ Invalidate Damage
-→ Wounds restored
-→ fatal application reverted
-→ derived Dead/Defeated status removed
-```
-
-## Persistent Critical Wounds now store effectNumber directly
-
-Root cause of the Leg #7 `Efekty: 0` defect was provenance loss.
-
-The detailed resolver knew the result was Leg effect #7, but the persistent Critical Wound originally stored only RollTable UUID/result provenance and not the resolved `effectNumber` itself. A Player can own the Actor while lacking permission/visibility to read the system-managed RollTable, so the Player-side consequence builder could not reliably reconstruct `#7` and concluded that no automatic Core effect existed.
-
-New boundary:
-
-```text
-resolved detailed Critical
-→ persistent Critical Wound stores effectNumber directly
-→ automatic consequence generation reads persisted effectNumber first
-→ RollTable lookup is migration fallback only
-```
-
-Relevant commits:
-
-```text
-b77b9491703a7f9fdb36ac68e2204d48ffdacaab  Persist detailed critical effect number on wounds
-651796d18dcfcfe1bd1567a9a13aadfb89226797  Use persisted critical effect numbers for wound effects
-ce78a90e3e0a9d218488806e4ecc6e74b304bf3e  Read persisted effect numbers on critical wound sheets
-```
-
-Current Core automatic characteristic mapping deliberately includes Leg #5, #6 and #7 because they halve Movement and Initiative until medical attention. Leg #4 remains intentionally unautomated for now because it lasts D4 rounds and applying it indefinitely would be wrong without an authoritative duration-expiration lifecycle.
-
-For Leg #7 a newly created wound should therefore contain one managed Active Effect with two rule changes:
-
-```text
-Movement × 0.5
-Initiative × 0.5
-```
-
-The Critical Wound Item sheet should also resolve the correct Core text from the persisted effect number without depending on Player access to the managed RollTable.
-
-## Defence adjudication reconciliation is now single-writer
-
-The Player-side console errors came from every connected client reacting to the same `updateChatMessage` hook and attempting to mutate the authoritative attack ChatMessage. The GM succeeded, so lifecycle continued, while the Player often lacked permission to perform the same write and saw noisy Foundry errors.
-
-New rule:
-
-```text
-active GM exists
-→ only primary active GM mutates authoritative combat damage/adjudication state
-
-no active GM
-→ only a client that can actually update the source message may mutate it
-```
-
-The reconciliation layer also preserves the previously rolled attack-damage die when a later defence Test is adjudicated. Failure → successful Parry therefore changes only the dependent stages; it must never become a way to reroll known attack damage.
-
-Relevant commits:
-
-```text
-dd66f4c766d7141445d6483b7918004c4a645c18  Restrict combat damage reconciliation to authority
-653cde793e1379d107010711317ff5f1369b0c0f  Move adjudication rebuilds to the authoritative client
-```
-
-## Apply Damage is now idempotent at the Chat boundary
-
-The Actor damage application transaction remains authoritative. A visible button can survive for one render frame after another client has already applied the packet. Previously that stale UI click entered `DamageApplication.apply()` and raised an already-applied error even though no duplicate damage was possible.
-
-Now `DamageChat.applyMessage()` first checks the authoritative Actor transaction. If the packet is already `applied`, it refreshes Actor-targeting damage cards/chat and returns the existing transaction instead of reporting an error.
-
-Successful first application also requests broader Chat refresh so Player and GM result cards converge more reliably.
-
-Commit:
-
-```text
-a39ad6d787d62ba0a37e6ef28dee8568b4c3616f  Make damage application UI idempotent
-```
+This latest commit is **NOT runtime-verified yet**. The next action must be to test it before starting another risky feature.
 
 ---
 
-# Career design — CURRENT DECISION
+# Immediate continuation / next runtime test
 
-Initial Career selection is part of **character creation**, not an XP-paid career transfer.
+The latest change makes every newly created `character` Actor start with Character Creation Mode enabled.
 
-The user explicitly requires the same edit gate as initial characteristic values:
+Test after a full Foundry restart:
 
-```text
-sheet editing OFF
-→ initial Career cannot be assigned/replaced
+1. Create a **new Character Actor**.
+2. Open the sheet.
+3. Confirm Character Creation presentation is already active and the scroll/header control indicates Creation Mode is enabled.
+4. Add a Race as appropriate and confirm creation-only Race controls become available.
+5. Disable Character Creation Mode using the scroll/header control:
+   - normal presentation returns;
+   - creation-only controls disappear.
+6. Enable it again:
+   - creation presentation and controls return.
+7. Create a new NPC or Creature:
+   - it must **not** automatically enter Character Creation Mode.
+8. Confirm the new Character still has `prototypeToken.actorLink = true` and a scene token opens the same canonical Actor.
 
-sheet editing ON + XP spending has never begun
-→ Career Item may be dropped to assign/replace the initial Career
-```
-
-Initial Career may therefore be corrected during character creation, including replacing a mistaken first choice.
-
-Once the first XP points are actually spent, initial-career replacement is permanently closed. This is a lifecycle boundary, not merely a check that `experience.spent > 0` right now. Undoing/refunding the first XP purchase must not reopen character creation.
-
-The free pre-adventure advance is not XP spending and therefore does not itself lock initial Career selection.
-
-Current Career must not be free text. Career identity belongs to a Career Item. Legacy Actor string fields may temporarily survive for migration compatibility but must not remain authoritative.
-
-Career History is progression-owned:
-
-- first entry = final initial Career chosen during character creation;
-- discarded character-creation Career choices are not history;
-- later Careers are appended only by a successful Career Transfer transaction.
-
-Career Exits are also progression-owned and should come from the active Career Item rather than manual Actor text.
-
-The Classic Career History and Career Exits rows are display summaries only; manual `+` / remove controls were removed.
-
-Recent Career commits:
-
-```text
-c3b9d4a26a458a08723a97e32e6ab4e00dff80c9  Make career history and exits read-only summaries
-3680166271b7ded29ce39e6e1007e7115a2c7827  Link initial career assignment to Career Items
-7d4216326f941009b639690c2acf3a9a23285d7e  Load Career Item sheet integration
-```
-
-Current Career integration module:
-
-```text
-module/careers/CareerSheetIntegration.mjs
-```
-
-Current limitations intentionally left for next Career audit:
-
-- legacy Career Item is not yet a complete audited native Career data model;
-- Career Exits are not yet canonical Career references;
-- Career Advance Scheme is not yet automatically applied from the Career Item;
-- Career Transfer rules/costs are not implemented yet;
-- Current Career / Career Class legacy Actor fields still exist for migration compatibility.
-
-## Pending Career runtime test
-
-After the current combat lifecycle fixes are verified, test:
-
-1. Character sheet editing OFF → dropping a Career Item must not assign/replace the initial Career.
-2. Editing ON and no XP has ever been spent → dropping a Career Item assigns it as Initial/Current Career.
-3. Drop a second Career Item before XP spending → it replaces the first character-creation choice; Career History remains a single entry for the newly selected initial Career.
-4. Spend the first XP on a real advancement → initial Career becomes permanently locked.
-5. Undo that XP purchase so current spent XP can return to zero → initial Career must remain locked; character creation must not reopen.
-6. Re-enable sheet editing later and drop another Career → it must be rejected and reserved for the future paid Career Transfer workflow.
-7. Current Career and Career Class on the Classic header must be linked/read-only, not free text.
-
-Do not yet implement Career Transfer, Career Exits automation, or Career Advance Scheme replacement until the Career Item data model is audited against the Core rules.
+If the user says `Verified`, make `68698b6...` the new runtime baseline and continue the Character Creation audit from there.
 
 ---
 
-# Combat Tracker / turn order — runtime-confirmed
+# Identity architecture
 
-Initiative dragging/postponement now works correctly according to user runtime testing.
+Use explicit domain identities; do not introduce a new generic `rulesId` architecture.
 
-Persistent round-completion state is independent of initiative order:
+Canonical direction:
+
+- Skill -> `skillId`
+- Race -> `raceId`
+- Career -> `careerId`
+- Language -> `languageId`
+- Psychology -> `psychologyId`
+- Disease -> `diseaseId`
+- Spell -> `spellProcedureId`
+- Weapons/armour/equipment use their own structured identity as appropriate
+
+For specialised Skills the canonical identity is:
 
 ```text
-flags.wfrp1ed.roundTurnState = {
-    round,
-    completed
-}
+skillId + specialisation
 ```
 
-Contract:
+Rules:
 
-- drag/reorder never completes a turn;
-- only Next Turn completes the focused Combatant's turn;
-- postponing the active Combatant transfers focus to the next unfinished Combatant;
-- temporary initiative order resets at the next round;
-- initiative lifecycle owner survives reorder correctly.
+- custom Skills may have blank `skillId`;
+- never infer canonical identity from localized/user-editable names;
+- avoid UUID/name fallback changes without a separate audit, because embedded copies receive new UUIDs;
+- Career generic grants include non-Skill document types, so generic `rulesId` fields cannot be blindly renamed.
 
-The user confirmed dragging and initiative-order change are now working correctly.
+`SkillData` still temporarily exposes a compatibility `rulesId` getter backed by `skillId`; remove it only after all direct consumers are migrated.
+
+## Core Skill specialisations
+
+`CoreSkillSpecialisationCatalog` is the single source for finite canonical Skill specialisation choices.
+
+Current catalog-driven specialised Skills include at least:
+
+- Specialist Weapon / Specjalna broń
+- Secret Language / Sekretny język
+- Arcane Language / Język tajemny
+
+Both Career authoring and ordinary Skill Item editing consume the same catalog. Future Skills with a finite canonical choice list should require only a catalog entry, not another Skill-specific UI patch.
+
+This generalized ordinary Skill-sheet behaviour was runtime-verified.
 
 ---
 
-# Parry / Dodge — current state
+# Experience architecture
 
-## Core/default Parry interpretation
+## WFRP 1e rule decisions already established
 
-Rulebook interpretation remains:
+- Characteristic advance: 100 EP.
+- Skill from current/new Career: 100 EP.
+- No invented generic Core rule for buying arbitrary off-Career Skills for increased XP.
+- Cross-Career-Class entry into a Basic Career uses the explicit 200 EP surcharge where the existing Career policy determines it.
+- Training/teacher availability is narrative permission, not a generic Intelligence roll.
+- Initial Career assignment is character creation, not a paid Career Transfer.
 
-- Parry is a WS test;
-- successful Parry reduces the damaging blow by `1d6`;
-- at most `A` Parry attempts per round;
-- ordinary Parry loses the next Attack whether successful or failed;
-- Shield Parry gives `+20 WS` and loses all following attacks;
-- if the relevant following attacks occur in the next round/turn opportunity, default mode carries bounded debt forward.
+## Durable Experience transaction service
 
-Important clarified example:
+The system uses a durable Actor-backed Experience transaction model for purchases made during an open Character Sheet session.
 
-```text
-A=2 actor acts first
-→ voluntarily ends turn without attacking
-→ later parries with ordinary weapon
-→ unused attacks from the finished turn are not a bank of reactions
-→ parry costs the actor's next attack opportunity, therefore 1 debt into next turn
-```
+Required behaviour, runtime-verified:
 
-Shield after a completed turn analogously removes all next following attacks, so an `A=2` actor can begin the next turn effectively at `0/2`.
+- first advancement opens a transaction;
+- Characteristic, Career Skill and Career Transfer events are prepared before mutation and marked applied afterwards;
+- individual current-session purchases can be undone independently where supported;
+- normal sheet close commits the open transaction to the persistent ledger;
+- stale/crash/reload open transactions roll back instead of silently committing;
+- rollback restores exact pre-transaction XP/state;
+- current-session purchased items/advances are visibly highlighted;
+- Characteristic repeated purchase indicator may show `−2`, etc.;
+- Career change rollback removes dependent later purchases while preserving earlier purchases in the same session.
 
-The user re-confirmed this interpretation after reviewing the rule logic; no change requested.
-
-## Default debt marker
-
-Debt marker lifecycle requirement:
+Runtime-verified transaction checkpoints include:
 
 ```text
-debt created
-→ survives round end
-→ survives next round start
-→ debt is paid when affected turn begins
-→ marker stays visible during that actor's turn to explain reduced A
-→ marker disappears only when that actor clicks Next Turn
+53681bddf724df6c4ef668cd3f80dd18c081b19d  Characteristic transactions
+39aa671cf89781f2b3d4d24cef8b98b8609522dc  Career Skill transactions
+0f944ff96cadcaed2225a213fb9225e462688d8f  Career change transactions
+d5736ac0775d6dd88db6034221abf3c8acdf530e  Career rollback presentation alignment
 ```
 
-Relevant recent fixes:
+## Experience Log / persistent ledger
+
+The read-only Experience Log became the persistent audit surface and was then extended with GM accounting operations.
+
+Verified behaviour:
+
+- separate `Dziennik PD / Experience Log` window;
+- Current / Total / Spent summary;
+- committed advancement transactions newest first;
+- open log rerenders automatically when relevant Actor XP/ledger data changes;
+- manual signed GM entries with mandatory/meaningful description;
+- manual negative corrections cannot make Total lower than Spent;
+- manual-entry descriptions are editable without changing the historical amount;
+- automated mechanical purchase rows remain protected;
+- direct GM edits of Total and Current on the Character Sheet are now audited as explicit ledger corrections instead of silent mutations.
+
+Relevant verified commits:
 
 ```text
-ebc28e3254af0cb84d3c5e6fbbac972e4b34cbe4  Preserve parry debt reminder through round transition
-35f8538e23b59ebf777d3c022bc3fe4100a0ba2d  Keep parry debt badge across initiative focus changes
-ecc7e8a8e26b0ea250c7e47b63f17868dbd45c07  Tie parry debt badge to real turn completion
-f04fe3a90205069ee23a213a60b19cb069f2a93b  Refresh parry debt badge after reminder update
+0ad445e50264559143c1e24ddf311b1c92896119  Read-only Experience Log
+b84b8a2e0b4b426316478eca064a8320b69725f7  Live Experience Log refresh
+9f89d202e8d5f6471594b64a5be4d537ca3306df  Manual ledger controls
+3e503f3fecd06c520f1ed7767779ff745d99fac5  Global replace-on-focus in Experience dialog
+bb3812e1caf4b68c5ae13bebc4b0e799e48bbcfb  Audited direct Current/Total corrections
 ```
 
-## Optional round-contract Parry
-
-Optional world rule remains distinct from default:
-
-- no future parry debt;
-- ordinary weapon Parry consumes one current-round A;
-- Shield Full Defence commits remaining offensive A for the round;
-- total Parry attempts are still capped by permanent A;
-- state resets on Next Round.
+Input UX rule: system-owned editable value inputs should use the existing global replace-on-first-focus behaviour (`SelectAllOnFocus.mjs`), with a second deliberate click allowing normal caret editing. New system dialogs must use the normal `.wfrp1ed` root so they inherit this behaviour.
 
 ---
 
-# Character-sheet defence shortcuts — IMPLEMENTED
+# Claimable XP awards through Chat
 
-When a successful melee attack is waiting for defence, the target Actor's Classic sheet exposes the same legal defence choices directly on the relevant sheet entries:
+This workflow is implemented and runtime-verified end-to-end.
 
-- Dodge Blow skill, when legal;
-- equipped legal parry weapon;
-- equipped legal Shield.
+GM workflow:
 
-Clicking the sheet entry calls the same authoritative defence transaction as the Chat dropdown; it is not a second defence system.
+- open Experience Log;
+- choose `Przyznaj PD przez czat / Award XP in chat`;
+- enter positive XP amount;
+- **reason is mandatory**;
+- explicitly choose entitled player-owned Character Actors;
+- post a persistent chat card.
 
-Normal Chat dropdown + Confirm Defence remains available.
+Player workflow:
 
-For multiple unresolved successful melee attacks against the same Actor, sheet defence always resolves the **latest unresolved attack first**. After resolution, the sheet recalculates and the next click can resolve the previous unresolved attack.
+- an owner sees `Odbierz / Claim` for an entitled Actor;
+- each entitled Actor may claim exactly once;
+- claim grants XP through `ExperienceLedgerService`;
+- the exact GM reason is written to that Actor's ledger;
+- chat card persists claimed state.
 
-Example:
+Integrity architecture:
+
+- primary active GM is authoritative for socket-driven claim mutation;
+- ChatMessage stores recipient claim state;
+- Actor ledger also stores the award identity, so a retry cannot double-grant even if message-state update is interrupted;
+- one user owning multiple entitled Actors may claim once for each Actor;
+- XP award chat integration does not maintain a second accounting system.
+
+Relevant implementation:
 
 ```text
-Attack 1 pending
-Attack 2 pending
-click Axe → resolves Attack 2
-click Axe again → resolves Attack 1, if still legal after resource recalculation
+module/experience/ExperienceAwardChatIntegration.mjs
+module/experience/ExperienceLedgerService.mjs
 ```
 
-Relevant commits:
+The XP chat mechanics were functionally confirmed, then checkbox/token issues were fixed and the complete slice was verified through `84bf5c46...`.
+
+---
+
+# Character Actor / Token identity policy
+
+For player Characters, common-sense Foundry behaviour is required:
 
 ```text
-df4d69ae656d6db90ace48fe23509d0c205be8cb  Add character sheet defence shortcuts
-39f12e9818391fa25e305cbbbc2ee6358e511ce2  Load character sheet defence shortcuts
-41054529dc7c6ef3c615a5e3db35deb44062140d  Style character sheet defence shortcuts
-ef545bb0c03c0691ade33f198ee57bc4d65e94e8  Load character sheet defence styles
-2db7f3b3287db442a00dbeb3ed24c5807fc44d93  Resolve latest pending defence from character sheet
+sidebar Character Actor
+== linked scene Token Actor
+== Actor opened by double-clicking that Token
+```
+
+Therefore every newly created `character` Actor defaults to:
+
+```text
+prototypeToken.actorLink = true
+```
+
+This was runtime-verified.
+
+Do not change XP awards to target arbitrary synthetic Token Actors. Awards target the canonical world Character Actor.
+
+NPC/Creature/etc. token-link policy is not forced by this Character rule.
+
+Because this system is being built from scratch, do not add migration tooling for old unlinked test Character tokens unless explicitly requested.
+
+Implementation:
+
+```text
+module/tokens/CharacterPrototypeTokenDefaults.mjs
 ```
 
 ---
 
-# Combat transaction rollback — IMPLEMENTED, runtime verification still incomplete
+# Character Creation Mode
 
-GM mistake correction uses reversible combat transactions with Actor-local LIFO safety.
-
-## Defence rollback
-
-GM may invalidate the latest valid Defence transaction for that Actor.
-
-Invalidation:
-
-- leaves the Test message in Chat and marks it INVALIDATED;
-- refunds the exact recorded defence-resource state rather than guessing `+1 A`;
-- restores Dodge availability / parry resource / debt / Shield commitment as appropriate;
-- reopens the linked original attack to pending defence;
-- character-sheet defence shortcuts become available again after recalculation.
-
-The first rollback implementation had a Foundry recursive-merge bug: deleting nested `attackState.defence` from a cloned flag did not reliably remove the old resolved defence object. This was fixed by explicitly replacing it with `null`, plus a startup repair for already-stuck invalidated transactions.
-
-Relevant commits:
+Authoritative mode flag:
 
 ```text
-dbafa4fc90350ae8baddb75ae425ef704506453f  Add safe LIFO combat transaction rollback
-4857631d0cc03ecfbf6637e72726c7613ded0f8f  Style invalidated combat transactions
-be6067986f50af8c5607cb75629bec84ec6b7ddb  Load combat rollback and header guard
-a58d10aaab437bfce9b8d528c73a649970ff5695  Reopen rolled-back defence state reliably
-77bf303d3e4b095868442ff81a6d45a9f294a9aa  Load defence rollback update guard
-f80c546b3c754d870316d22ca1012cf81fb0af42  Repair previously stuck invalidated defences
+flags.wfrp1ed.characterCreationMode
 ```
 
-User runtime result before the latest damage/critical pass:
-
-**Defence invalidation/reopen is working correctly for the tested case.**
-
-## Damage rollback design/current implementation
-
-Rollback supports the latest applied Damage transaction for an Actor.
-
-Cascade when invalidating a Defence with downstream applied damage is intended to be:
+Implementation:
 
 ```text
-Critical created by that DamagePacket
-→ revert/remove exact critical consequence
-→ if fatal application exists, revert it too
-→ restore Wounds from recorded before/after state
-→ mark damage transaction REVERTED with visible information
-→ refund defence resource
-→ reopen original attack
+module/creation/CharacterCreationModeIntegration.mjs
 ```
 
-Rollback must not be silent. Chat/notifications should explain what was reverted.
+The mode already existed before the current checkpoint and is consumed by creation tooling. It is not merely visual.
 
-Safety rule: current state must still match the expected post-transaction state; otherwise rollback refuses and asks GM to revert newer dependent transaction first.
+Existing creation architecture includes Race-driven generation such as:
 
-A fatal transaction that has already consumed Fate is also protected from lower-level rollback.
+- starting characteristic generation;
+- starting Skills;
+- age/height/secondary details where implemented;
+- Career Class handling;
+- random initial Career from Race tables;
+- free initial Career package acquisition (Skills/trappings/magic where defined).
 
-**Important:** the newest fatal-status rollback integration and full Defence → Damage → Critical cascade still require the runtime test described at the top of this handoff.
+Important boundary:
+
+- initial Career/package acquisition is **character creation**, not a zero-cost version of normal XP advancement;
+- do not route normal Characteristic/Career Skill/Career Transfer purchases through a generic “free because Creation Mode” shortcut without an explicit audited design;
+- GM can explicitly toggle Creation Mode with the existing scroll/header control.
+
+Current unverified change:
+
+```text
+68698b6f26bff49f6fe2f2cf8600f495aba91fdd
+Enable Character Creation Mode for new Characters
+```
+
+No migration logic was added; only new Character creation defaults are affected.
 
 ---
 
-# Header Career `+` bug — RESOLVED BY DESIGN CHANGE
+# Canonical UI contracts / presentation rules
 
-The Career History / Career Exits `+` controls were causing Character header sibling fields to be erased because `details` is a native SchemaField and partial nested updates could be cleaned as replacements.
+## Checkboxes
 
-A guard was initially added, but the user correctly questioned why these controls should exist at all.
+All system-owned custom sheets/dialogs/popups/configuration windows must use the canonical `.wfrp1ed-checkbox` contract or `WfrpCheckbox` helper rather than raw browser-specific presentation.
 
-Final direction:
-
-- remove manual Career History `+` / remove controls;
-- remove manual Career Exits `+` / remove controls;
-- render both as progression-owned read-only summaries;
-- Current Career is also no longer intended to be free text and is now linked from the active Career Item.
-
-`CharacterDetailsUpdateGuard.mjs` remains loaded for compatibility/safety but manual career-list editing is no longer the desired workflow.
-
----
-
-# Existing foundations to preserve
-
-Do not regress these established decisions:
-
-- WFRP 1e authenticity first; English Core controls mechanics, Polish Core controls Polish terminology.
-- Classic sheet visually follows the original paper sheet.
-- Foundry V14 native architecture and APIs should be used rather than legacy patterns when audited replacements exist.
-- Generic Test engine remains the single d100 resolution engine; combat must not create a parallel percentile roller.
-- Attack/defence procedure can work outside Combat Tracker; Tracker adds automation, not permission to perform the core procedure.
-- Wounds never persist below zero; overflow becomes critical value.
-- Combat damage and critical provenance must remain traceable for safe rollback.
-- A persistent detailed Critical Wound stores its resolved effect number directly; it must not depend on current client visibility of a managed RollTable to recover its mechanical identity.
-- Fatal/death state is a derived consequence owned by the fatal lifecycle; lower-level rollback must reconcile it through that owner rather than manually toggling unrelated status.
-- Authoritative combat reconciliation must be single-writer when several connected clients observe the same ChatMessage update.
-- GM/Actor-owner visibility boundaries on test and defence mechanics remain as implemented.
-- Equipped melee row interaction remains:
+Global checkbox geometry lives in:
 
 ```text
-left-click         → attack / defence shortcut when a legal pending defence owns the click
-Shift + left-click → open Item
+css/forms/checkbox.css
+module/ui/WfrpCheckbox.mjs
+module/ui/SystemCheckboxIntegration.mjs
 ```
 
-- Manual/physical d100 editing remains auditable and recalculates from persisted Test snapshot.
-- Current `A` sheet display stays simple (`2/2`, `1/2`, `0/2`) with default-mode debt reminder layered beside it.
+The global checkbox presentation is theme-aware via `currentColor`, so it remains visible on parchment and Foundry dark DialogV2 surfaces. This was runtime-verified.
+
+## Wounds display
+
+Editable Wounds (`current / max`) and read-only `current/max` must share the same visual centre in the Classic Żw cell.
+
+The read-only value spans the entire three-column Wounds grid. Runtime-verified at:
+
+```text
+84bf5c46b2930c8a3d423449312f4d94da9c5009
+```
+
+## Current Career transaction indicator
+
+During an open Career-transfer transaction:
+
+- normal Current Career geometry must not move;
+- green transaction indication must not disturb layout;
+- minus badge sits immediately left of the existing Career action/roll badge;
+- Shift-click remains the rollback affordance.
+
+Runtime-verified at `d5736ac...`.
 
 ---
 
-# Recommended next work order
+# Career state / architecture
 
-1. Runtime-test the newest Damage/Critical/rollback/adjudication fixes exactly as listed in **Immediate continuation**.
-2. Fix only regressions proven by that runtime pass; do not expand the Critical automation surface until the current lifecycle is stable.
-3. Runtime-test the initial Career Item assignment/replacement/permanent-lock lifecycle.
-4. Audit the Career Item against English + Polish WFRP 1e Core:
-   - Career Class;
-   - Advance Scheme;
-   - Skills;
-   - trappings where relevant;
-   - Career Exits;
-   - Basic vs Advanced Career identity;
-   - stable Career references for exits.
-5. Implement a native Career data model / sheet contract.
-6. Make active Career drive Current Career, Career Class, Advance Scheme and Career Exits.
-7. Only then implement paid Career Transfer as a real XP transaction and Career History append.
+Career progression is no longer at the old August-stage described by previous handoff text.
 
-Do not reintroduce free-text Current Career or manual Career History/Career Exits editing as a temporary shortcut.
+Implemented architecture now includes:
+
+- initial Career assignment/replacement during character creation;
+- initial Career package acquisition;
+- active Career Advance Scheme application;
+- Career Skill offers and 100 EP purchases;
+- Career Transfer policy/cost/restriction path;
+- 100/200 EP Career transfer costs according to the existing rule policy;
+- durable Career Skill and Career Transfer Experience transactions;
+- rollback/current-session indicator behaviour;
+- Career history/exits derived from progression rather than free Actor text.
+
+Do not reintroduce the old statement that Career Transfer or Advance Scheme replacement are “not implemented”.
+
+Identity migration debt remains separate: some Career/reference code still has transitional `rulesId` fallback paths. Audit those deliberately; do not bulk-rename generic Career grants because trappings and other non-Skill types share parts of the grant schema.
+
+---
+
+# Protected regressions / do not casually change
+
+- Classic Character Sheet registration/context/render path has previous regression history. Avoid broad sheet rewrites for narrow features.
+- Chat compatibility regression was previously fixed; do not revive old chat hacks without a concrete reproduced problem.
+- Specialist Weapon / Skill specialisation behaviour is now catalog-driven. Do not re-hardcode Specialist Weapon-only logic.
+- Standard Tests have protected explicit Skill identity behaviour; do not replace it with broad catalog inference without a separate audit.
+- Existing global input-focus and checkbox systems are canonical; new dialogs should join those contracts instead of adding local duplicate handlers/styles.
+- Experience accounting mutations should go through the established Experience services rather than writing parallel ledger structures.
+- Chat XP grants target canonical world Character Actors, not arbitrary scene synthetic Actors.
+
+---
+
+# Relevant verified recent commit chain
+
+This is not an exhaustive repository history; it is the recent continuation chain most likely needed by a future session.
+
+```text
+551df7844b07f9075752773325adab17f21f114e  Foundry v14 TextEditor drag data
+6c7cc5a5a46e8ffb2112f11a3856b7f2ca7c804e  Race mandatory Skill threshold guard verified
+489df063acb7e4dc8986a1ede2d563aa84ed7621  Canonicalize Career Skill grants to skillId
+e0a1d15c946d4733f3f981378d874fb4a69de92b  v14 drag compatibility + Career Skill tooltip verified
+53681bddf724df6c4ef668cd3f80dd18c081b19d  Characteristic Experience transactions verified
+39aa671cf89781f2b3d4d24cef8b98b8609522dc  Career Skill Experience transactions verified
+d6ae20f99a02c72463b291a43bd29f77970a35b5  Current-transaction indicator verified
+0f944ff96cadcaed2225a213fb9225e462688d8f  Career change transactions verified
+d5736ac0775d6dd88db6034221abf3c8acdf530e  Career transaction presentation verified
+4add39460357f5b70825805e6768e1417009ed61  Generalized Core Skill specialisation authoring verified
+0ad445e50264559143c1e24ddf311b1c92896119  Experience Log verified
+b84b8a2e0b4b426316478eca064a8320b69725f7  Live Experience Log refresh verified
+9f89d202e8d5f6471594b64a5be4d537ca3306df  Manual Experience ledger controls verified
+3e503f3fecd06c520f1ed7767779ff745d99fac5  Replace-on-focus Experience dialog verified
+bb3812e1caf4b68c5ae13bebc4b0e799e48bbcfb  Audited direct XP corrections verified
+cf5bcfd8b05f521cb04f3a83578dea3b2256718c  XP chat award + linked Character token implementation functionally verified
+84bf5c46b2930c8a3d423449312f4d94da9c5009  Checkbox theme + read-only Wounds presentation verified
+68698b6f26bff49f6fe2f2cf8600f495aba91fdd  New Characters default to Creation Mode — NOT YET VERIFIED
+```
+
+---
+
+# Future-session startup checklist
+
+A future chat should do this before implementation:
+
+1. Read `SESSION_HANDOFF.md`.
+2. Fetch current `master` HEAD and confirm whether it moved beyond the commit recorded here.
+3. If current HEAD differs, inspect intervening commits/files before assuming this handoff is complete.
+4. Check the **Immediate continuation / next runtime test** section.
+5. Do not begin the next feature while the latest checkpoint is still unverified unless the user explicitly redirects the work.
+6. For any edit, fetch the current target file + SHA first.
+7. After a successful runtime verification, update this handoff when the accumulated state materially changes or before ending/handing off a long implementation session.
