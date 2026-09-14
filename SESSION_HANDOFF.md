@@ -19,7 +19,7 @@ Older stable references remain useful for deeper historical/rules detail:
 - `RULEBOOK_IMPLEMENTATION.md`
 - `FOUNDRY_V14_GUIDELINES.md`
 
-Do not infer current implementation status from those files when this handoff says otherwise.
+Do not infer current implementation status from those older files when this handoff says otherwise.
 
 ---
 
@@ -48,50 +48,72 @@ Do not infer current implementation status from those files when this handoff sa
 ## Latest runtime-verified implementation baseline
 
 ```text
-a50aa4d0d95499994aec4f6b2f161f3ecf84dcd9
-Own Character Creation default in Actor lifecycle
-```
-
-User runtime-verified that a brand-new Character opens directly in Character Creation Mode and the existing mode toggle still works.
-
-Everything through this implementation commit is runtime-verified unless a specific section below says otherwise.
-
-## Current unverified implementation checkpoint
-
-```text
 1175243d85962ee9f34be46fe6c4feecd0b4c91e
 Align adversary sheet with parchment window contract
 ```
 
-This checkpoint adds the first native NPC/Creature Actor architecture and **has not been runtime-verified yet**.
+User runtime-verified the native NPC/Creature architecture through this commit:
 
-The current repository HEAD can be newer than the implementation checkpoint because this handoff is maintained in separate documentation commits. Documentation-only commits do not require Foundry runtime verification.
+- newly created NPC and Creature open native WFRP adversary sheets rather than Foundry fallback;
+- NPC/Creature type labels differ correctly;
+- characteristics persist and roll through the existing WFRP test/chat pipeline;
+- Wounds/resources/armour fields persist;
+- embedded Skills/Weapons/Armour/Equipment/Traits/Spells can be created/opened/deleted;
+- normal Character sheet/Character Creation behavior remains intact.
 
-## Failed Character Creation default attempts — historical only
+Everything through this implementation commit is runtime-verified unless a specific section below says otherwise.
 
-Do **not** treat either of these as the working design:
+## Current unverified presentation checkpoint
 
 ```text
-68698b6f26bff49f6fe2f2cf8600f495aba91fdd
-Enable Character Creation Mode for new Characters
-
-912f3e6b3a29b2a14fd1068cb931b7496cb593dd
-Force Character Creation Mode for new PCs
+8d3d3616ac2e3a52ab960102136511af26385fd3  Use visible adversary roll icon
+25cc8d4034c7a7889748ead3250679e5f3cd8b74  Improve adversary sheet readability
 ```
 
-Both global `preCreateActor`-hook approaches failed runtime verification. The successful design owns the mandatory default in the WFRP Actor document lifecycle and modifies pending source with `updateSource`.
+These commits are **presentation-only** and are not yet runtime-verified.
+
+They fix two issues visible in the user's screenshots:
+
+- adversary section headings inherited an almost-white Foundry heading color against pale parchment;
+- characteristic roll buttons used nonexistent `fa-dice-d100`, so they rendered as empty beige rectangles.
+
+The template now uses `fa-dice`; adversary CSS explicitly uses parchment-ink headings, stronger section separation, and visible compact roll controls.
+
+The current repository HEAD may be newer because this handoff is maintained in separate documentation commits. Documentation-only commits do not require runtime verification.
 
 ---
 
-# Immediate continuation: native NPC / Creature checkpoint
+# Immediate runtime test
 
-The user previously confirmed that `npc` and `creature` Actors opened only Foundry fallback sheets. We deliberately did **not** register the Character sheet for them.
+After a Foundry reload/restart, open the same NPC and Creature sheets used in the previous test.
 
-## Architecture decision
+Verify:
 
-NPC and Creature share the WFRP **adversary profile/combat domain**:
+1. `PROFIL`, `ŻYWOTNOŚĆ`, `PUNKTY PANCERZA`, `UMIEJĘTNOŚCI`, `BROŃ`, etc. are clearly readable in dark parchment ink.
+2. Section headings remain visually consistent with the standard parchment-window theme.
+3. Every rollable characteristic now shows a visible dice icon instead of an empty rectangle.
+4. Hover/focus on the roll control is visible but does not change sheet geometry.
+5. Clicking the roll control still executes the same verified characteristic test/chat flow.
+6. `Sz/M`, `Żyw/W`, and `A` still have no percentile-roll action.
+7. Existing embedded Item controls remain readable and functional.
+8. No Character/Career/Experience UI appears on NPC/Creature.
+9. Console remains clean.
 
-- the canonical 14-characteristic WFRP profile;
+If the user says `Verified`, make `25cc8d4...` the new runtime implementation baseline.
+
+### Separate observation to audit later
+
+One runtime screenshot showed an NPC with remaining Wounds displayed as `67 / 7`. If that state is reproducible rather than disposable test input, audit Wounds integrity separately. Do **not** mix that possible mechanics/integrity issue into the current presentation-only checkpoint.
+
+---
+
+# Native NPC / Creature architecture
+
+NPC and Creature now share a dedicated WFRP **adversary profile/combat domain**. They do **not** use the Character sheet as a shortcut.
+
+## Shared adversary domain
+
+- canonical 14-characteristic WFRP profile;
 - remaining Wounds and derived Wounds maximum;
 - armour points by hit location;
 - Insanity, Magic Points and Power Level;
@@ -106,11 +128,11 @@ They deliberately do **not** own Character-only concepts:
 - Career history/exits;
 - Fate-generation workflow.
 
-For this first slice, `AdversaryData` has neutral zero-valued `purchased` and `career` characteristic fields because several current shared profile helpers expect the Character-shaped characteristic record. They are compatibility structure only and are **not** exposed as NPC/Creature advancement mechanics. Do not add XP advancement UI for adversaries.
+For this first architecture slice, `AdversaryData` contains neutral zero-valued `purchased` and `career` characteristic fields because current shared profile/test helpers expect the Character-shaped characteristic record. They are compatibility structure only and are **not** adversary advancement mechanics. Do not add XP advancement UI for NPC/Creature.
 
-We intentionally did not refactor verified `CharacterData` in the same checkpoint. A future common profile base can be considered only after the adversary slice is stable.
+We intentionally did not refactor verified `CharacterData` while introducing adversaries. Consider a common profile base only after the adversary path is stable and consumers are audited.
 
-## Files introduced
+## Native adversary files
 
 ```text
 module/data-models/actor/AdversaryData.mjs
@@ -120,7 +142,7 @@ css/sheets/adversary-actor.css
 module/adversaries/AdversaryBootstrap.mjs
 ```
 
-`system.json` now loads `AdversaryBootstrap.mjs` and `adversary-actor.css`.
+`system.json` loads the bootstrap and stylesheet.
 
 `AdversaryBootstrap.mjs` registers:
 
@@ -131,9 +153,9 @@ CONFIG.Actor.dataModels.creature = AdversaryData
 
 and makes `AdversaryActorSheet` the default sheet for `npc` and `creature`.
 
-The sheet opts into the existing canonical `wfrp1ed-parchment-window` visual contract rather than inventing a separate parchment theme.
+The sheet opts into the canonical `wfrp1ed-parchment-window` contract.
 
-## Commit chain for this unverified slice
+## Verified native adversary implementation chain
 
 ```text
 40b74a1aad3e8bce3c56f636b0e20b069bae6e1f  Add native NPC and Creature profile data model
@@ -146,34 +168,15 @@ ea3854942749679a7521ecd00577f8409949765a  Add native NPC and Creature actor shee
 1175243d85962ee9f34be46fe6c4feecd0b4c91e  Align adversary sheet with parchment window contract
 ```
 
-## Required runtime verification before further risky work
+## Still not implemented/audited for adversaries
 
-After a full Foundry restart, delete/recreate disposable test objects and test **new** NPC and Creature Actors:
+- drag/drop Item authoring parity with Character;
+- final NPC/Creature token-link policy;
+- detailed subtype-specific creature mechanics/traits beyond embedded Items;
+- removal of duplicate legacy NPC profile preparation in `Wfrp1edActor`;
+- any adversary XP/Career advancement (intentionally absent).
 
-1. Create a new NPC and a new Creature.
-2. Both must open the WFRP-owned parchment adversary sheet, not Foundry fallback.
-3. Confirm the type label differs correctly (`BN/NPC` versus `Stworzenie/Creature`).
-4. Edit name and `Gatunek / Typ`; close/reopen and confirm persistence.
-5. Confirm all 14 characteristics appear in canonical order: `M, WS, BS, S, T, W, I, A, Dex, Ld, Int, Cl, WP, Fel` (localized labels/abbreviations as appropriate).
-6. Edit several characteristic base values; close/reopen and confirm persistence.
-7. Set Wounds characteristic and remaining Wounds; confirm `current / max` reflects the characteristic maximum correctly.
-8. Click a rollable characteristic such as WS/WW and verify it uses the existing characteristic-roll/chat pipeline.
-9. Movement, Wounds and Attacks must not expose d100 roll buttons.
-10. Edit Magic Points, Power Level, Insanity and armour points; close/reopen and confirm persistence.
-11. Use `+` in Skills, Weapons, Armour, Equipment, Traits and Spells. A new embedded Item should be created and its Item sheet should open.
-12. Close the Item sheet and confirm the Item is listed in the correct adversary section.
-13. Click an Item name to reopen it.
-14. Delete an Item and confirm the confirmation dialog and deletion work.
-15. Reopen the adversary Actor and confirm embedded Items persist.
-16. Confirm there are **no** Career, Experience or Character Creation controls.
-17. Open a normal Character and verify the Classic Character Sheet and automatic Character Creation Mode still behave as before.
-18. Console should remain clean.
-
-Do **not** claim drag/drop authoring onto the adversary sheet yet. It was not implemented/audited in this first slice; test it separately after the basic native sheet is stable.
-
-### Runtime concern to remember
-
-`Wfrp1edActor.prepareDerivedData()` still has a legacy profile path for `npc`. Native `AdversaryData` already derives the same `current = initial + purchased * advanceStep` fields, so the duplicate legacy calculation should currently be harmless for NPC and does not run for Creature. If runtime exposes a discrepancy, fix the document/model ownership at the source instead of patching the UI.
+`Wfrp1edActor.prepareDerivedData()` still has a legacy profile path for `npc`. Native `AdversaryData` derives the same `current = initial + purchased * advanceStep` values, so this was harmless in runtime testing. Remove/refactor only after auditing direct consumers; do not patch the UI around it.
 
 ---
 
@@ -272,10 +275,10 @@ Relevant verified commits:
 
 ```text
 0ad445e50264559143c1e24ddf311b1c92896119  Experience Log
-b84b8a2e0b4b426316478eca064a8320b69725f7  Live log refresh
-9f89d202e8d5f6471594b64a5be4d537ca3306df  Manual ledger controls
+b84b8a2e0b4b426316478eca064a8320b69725f7  Live Experience Log refresh
+9f89d202e8d5f6471594b64a5be4d537ca3306df  Manual Experience ledger controls
 3e503f3fecd06c520f1ed7767779ff745d99fac5  Input replace-on-focus fix
-bb3812e1caf4b68c5ae13bebc4b0e799e48bbcfb  Audited Current/Total corrections
+bb3812e1caf4b68c5ae13bebc4b0e799e48bbcfb  Audited direct XP field corrections
 ```
 
 All XP accounting mutations should go through established Experience services rather than parallel ledger writes.
@@ -340,7 +343,7 @@ This was runtime-verified.
 
 Do not redirect XP awards to arbitrary synthetic token Actors. Chat awards target canonical world Character Actors.
 
-NPC/Creature token policy remains separate; this first adversary checkpoint does not force linked-token behavior for them.
+NPC/Creature token policy remains separate. Native adversary sheets do not currently force linked-token behavior.
 
 Implementation:
 
@@ -390,13 +393,20 @@ Runtime verification confirmed:
 
 Do not restore either failed hook-based implementation.
 
+Failed historical attempts:
+
+```text
+68698b6f26bff49f6fe2f2cf8600f495aba91fdd  FAILED: first Character Creation default hook
+912f3e6b3a29b2a14fd1068cb931b7496cb593dd  FAILED: second Character Creation default hook
+```
+
 ---
 
 # Canonical UI contracts
 
 ## Inputs
 
-System-owned editable value inputs use the global replace-on-first-focus behavior (`SelectAllOnFocus.mjs`). First typing replaces the old value; a deliberate second click permits caret editing. New system DialogV2/ApplicationV2 content should use the normal `.wfrp1ed` ownership class so it inherits canonical system behavior where applicable.
+System-owned editable value inputs use the global replace-on-first-focus behavior (`SelectAllOnFocus.mjs`). First typing replaces the old value; a deliberate second click permits caret editing. New system DialogV2/ApplicationV2 content should use normal `.wfrp1ed` ownership classes so it inherits canonical system behavior where applicable.
 
 ## Checkboxes
 
@@ -419,7 +429,7 @@ Small/native WFRP ApplicationV2 windows that need the standard parchment treatme
 wfrp1ed-parchment-window
 ```
 
-from `css/sheets/parchment-window.css` rather than inventing per-sheet parchment backgrounds. The new adversary sheet follows this contract.
+from `css/sheets/parchment-window.css` rather than inventing per-sheet parchment backgrounds.
 
 ## Wounds
 
@@ -440,7 +450,7 @@ Runtime-verified.
 
 # Career architecture
 
-Implemented now (do not rely on obsolete August handoff statements):
+Implemented now:
 
 - initial Career assignment/replacement during Character Creation;
 - free initial Career package acquisition;
@@ -468,13 +478,13 @@ Identity migration debt remains separate: some Career/reference code still conta
 - New Character tokens are linked by default.
 - Character Creation default belongs to the WFRP Actor lifecycle; do not reintroduce failed global `preCreateActor` default hooks.
 - NPC/Creature use dedicated adversary architecture; do not register the Character sheet for them or add Character Career/XP controls.
-- Current test NPC/Creature data is disposable; no migration layer is needed unless the project later reaches release data compatibility requirements.
+- Current test NPC/Creature data is disposable; no migration layer is needed solely for current test data.
 
 ---
 
 # Recent verified continuation chain
 
-Not exhaustive; only the recent chain most relevant to continuation:
+Not exhaustive; recent checkpoints most relevant to continuation:
 
 ```text
 551df7844b07f9075752773325adab17f21f114e  v14 TextEditor drag data
@@ -483,7 +493,6 @@ Not exhaustive; only the recent chain most relevant to continuation:
 e0a1d15c946d4733f3f981378d874fb4a69de92b  v14 drag compatibility + Career Skill tooltip
 53681bddf724df6c4ef668cd3f80dd18c081b19d  Characteristic transactions
 39aa671cf89781f2b3d4d24cef8b98b8609522dc  Career Skill transactions
-d6ae20f99a02c72463b291a43bd29f77970a35b5  Current transaction indicator
 0f944ff96cadcaed2225a213fb9225e462688d8f  Career change transactions
 d5736ac0775d6dd88db6034221abf3c8acdf530e  Career transaction presentation
 4add39460357f5b70825805e6768e1417009ed61  Generalized Skill specialisation authoring
@@ -495,28 +504,24 @@ bb3812e1caf4b68c5ae13bebc4b0e799e48bbcfb  Audited direct XP field corrections
 cf5bcfd8b05f521cb04f3a83578dea3b2256718c  Character linked-token default loaded
 84bf5c46b2930c8a3d423449312f4d94da9c5009  Theme-aware checkbox + centered read-only Wounds
 a50aa4d0d95499994aec4f6b2f161f3ecf84dcd9  Character Creation default owned by Actor lifecycle
+1175243d85962ee9f34be46fe6c4feecd0b4c91e  Native NPC/Creature architecture runtime-verified
 ```
 
-Failed historical attempts after `84bf5c46...`:
+Current unverified presentation commits:
 
 ```text
-68698b6f26bff49f6fe2f2cf8600f495aba91fdd  FAILED: first Character Creation default hook
-912f3e6b3a29b2a14fd1068cb931b7496cb593dd  FAILED: second Character Creation default hook
-```
-
-Current unverified adversary chain ends at:
-
-```text
-1175243d85962ee9f34be46fe6c4feecd0b4c91e  Native NPC/Creature model + sheet loaded, awaiting runtime verification
+8d3d3616ac2e3a52ab960102136511af26385fd3  Visible adversary roll icon
+25cc8d4034c7a7889748ead3250679e5f3cd8b74  Adversary readability polish
 ```
 
 ---
 
 # Next implementation order
 
-1. Runtime-test the native NPC/Creature checkpoint through `1175243d...` with newly created disposable Actors.
-2. If verified, make `1175243d...` the new runtime implementation baseline and update this handoff.
-3. Audit adversary drag/drop and item-authoring parity with Character only after the basic sheet is stable.
-4. Audit remaining NPC/Creature combat/status integration differences revealed by runtime tests; fix document/model ownership rather than UI patches.
-5. Decide NPC/Creature token-link policy separately from Character token policy.
-6. Return to remaining Character Creation / Career identity debt only after adversary checkpoints are stable.
+1. Runtime-test adversary readability checkpoint through `25cc8d4...`.
+2. If verified, make `25cc8d4...` the new runtime implementation baseline and update this handoff.
+3. Audit/reproduce the possible remaining-Wounds-above-maximum issue separately if it is real.
+4. Audit adversary drag/drop and Item-authoring parity with Character.
+5. Audit remaining NPC/Creature combat/status integration differences and remove duplicate legacy NPC profile ownership only after direct consumers are known.
+6. Decide NPC/Creature token-link policy separately from Character token policy.
+7. Return to remaining Character Creation / Career identity debt only after adversary checkpoints are stable.
