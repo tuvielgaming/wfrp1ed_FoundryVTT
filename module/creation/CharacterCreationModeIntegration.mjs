@@ -53,20 +53,28 @@ installCharacterCreationFrameControl();
 installCharacterCreationPresentationSync();
 
 /**
- * Character creation is the default lifecycle state of a newly-created PC.
+ * Character creation is the default lifecycle state of every newly-created PC.
  *
- * This operates only on creation source data. Existing Actors are never
- * migrated or rewritten, which is intentional for this from-scratch system.
+ * This is an unconditional creation-time policy for Character Actors. The
+ * current project is built from scratch, so there is no migration or
+ * compatibility reason to preserve an incoming false/default flag value.
+ * Existing Actors are never rewritten by this hook.
  */
 function installNewCharacterDefault() {
-	Hooks.on("preCreateActor", (actor, source) => {
-		if (actor?.type !== "character" && source?.type !== "character") return;
+	Hooks.on("preCreateActor", (actor) => {
+		if (actor?.type !== "character") return;
 
-		const path = `flags.${FLAG_SCOPE}.${FLAG_KEY}`;
-		if (foundry.utils.getProperty(source ?? {}, path) !== undefined) return;
+		const existingFlags = foundry.utils.deepClone(actor.flags ?? {});
+		const systemFlags = {
+			...(existingFlags?.[FLAG_SCOPE] ?? {}),
+			[FLAG_KEY]: true,
+		};
 
 		actor.updateSource({
-			[path]: true,
+			flags: {
+				...existingFlags,
+				[FLAG_SCOPE]: systemFlags,
+			},
 		});
 	});
 }
