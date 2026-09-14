@@ -71,7 +71,15 @@
 	margin: 0;
 	font-size: 1rem;
 	font-variant: small-caps;
+	font-weight: 800;
 	letter-spacing: 0.04em;
+	color: var(--wfrp-parchment-ink, #211d17);
+	text-shadow: 0 1px 0 rgb(255 255 255 / 38%);
+}
+
+.wfrp1ed.adversary-actor-sheet .adversary-section > h2 {
+	padding-bottom: 5px;
+	border-bottom: 1px solid rgb(71 49 29 / 34%);
 }
 
 .wfrp1ed.adversary-actor-sheet .adversary-profile-grid {
@@ -102,16 +110,29 @@
 }
 
 .wfrp1ed.adversary-actor-sheet .adversary-roll-button {
+	display: inline-grid;
+	place-items: center;
+	width: 100%;
 	min-height: 22px;
 	padding: 0;
-	border: 0;
-	background: transparent;
-	box-shadow: none;
-	color: inherit;
+	border: 1px solid rgb(71 49 29 / 44%);
+	border-radius: 3px;
+	background: rgb(214 194 151 / 46%);
+	box-shadow: inset 0 1px 0 rgb(255 255 255 / 34%);
+	font-size: 0.78rem;
+	line-height: 1;
+	color: var(--wfrp-parchment-ink, #211d17);
 }
 
-.wfrp1ed.adversary-actor-sheet .adversary-roll-button:hover {
-	text-shadow: 0 0 4px currentColor;
+.wfrp1ed.adversary-actor-sheet .adversary-roll-button:hover,
+.wfrp1ed.adversary-actor-sheet .adversary-roll-button:focus-visible {
+	border-color: var(--wfrp-parchment-focus, #7a0019);
+	background: rgb(238 222 187 / 78%);
+	box-shadow:
+		inset 0 0 0 1px rgb(122 0 25 / 10%),
+		0 0 4px rgb(122 0 25 / 20%);
+	color: var(--wfrp-parchment-focus, #7a0019);
+	text-shadow: none;
 }
 
 .wfrp1ed.adversary-actor-sheet .adversary-two-column {
@@ -153,7 +174,8 @@
 	justify-content: space-between;
 	gap: 8px;
 	padding: 6px 8px;
-	border-bottom: 1px solid rgb(71 49 29 / 32%);
+	border-bottom: 1px solid rgb(71 49 29 / 36%);
+	background: rgb(96 71 42 / 8%);
 }
 
 .wfrp1ed.adversary-actor-sheet .adversary-add-item,
